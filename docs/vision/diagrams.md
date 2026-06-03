@@ -1,6 +1,56 @@
 # Nexus — Architecture Diagrams
 
-All diagrams are in Mermaid. Render with any Mermaid-compatible tool (GitHub, mermaid.live, VS Code extension, etc.).
+Rendered images are in `docs/images/`. Remaining sequence diagrams are in Mermaid (render with [mermaid.live](https://mermaid.live) or VS Code extension).
+
+---
+
+## 1. Complete project overview
+
+The full system at target state: engine, product layer, SDK ecosystem, and consumers.
+
+<p align="center">
+  <img src="../images/ideal_vision.png" alt="Complete project overview" width="900">
+</p>
+
+---
+
+## 2. nexus-engine internal architecture
+
+Package-level dependency map inside the engine.
+
+<p align="center">
+  <img src="../images/architecture_nexus-engine.png" alt="nexus-engine internal architecture" width="900">
+</p>
+
+---
+
+## 3. Agent execution loop — state machine
+
+One turn: from user prompt to final response.
+
+<p align="center">
+  <img src="../images/agent_loop.png" alt="Agent execution loop state machine" width="800">
+</p>
+
+---
+
+## 4. Provider routing
+
+Retry, circuit breaker, and fallback chain.
+
+<p align="center">
+  <img src="../images/provider_routing.png" alt="Provider routing" width="800">
+</p>
+
+---
+
+## 5. Permission pipeline
+
+How each tool call is evaluated before execution.
+
+<p align="center">
+  <img src="../images/permission_pipeline.png" alt="Permission pipeline" width="700">
+</p>
 
 ---
 
@@ -52,6 +102,16 @@ sequenceDiagram
     Store-->>Client: metadata and messages
     Client->>S: NewSessionFromState
 ```
+
+---
+
+## 7. Level 1 → Level 2 → Level 3 progression
+
+How the runtime capability grows across levels.
+
+<p align="center">
+  <img src="../images/runtime_progession.png" alt="Level 1 to Level 3 progression" width="900">
+</p>
 
 ---
 
@@ -149,3 +209,23 @@ sequenceDiagram
     Board-->>CEO: all tasks complete
     CEO->>Mission: mission_complete("PR opened: #142")
 ```
+
+---
+
+## 10. Prompt assembly — 4-layer pipeline
+
+How the system prompt is built each turn.
+
+<p align="center">
+  <img src="../images/prompt_assembly.png" alt="Prompt assembly 4-layer pipeline" width="700">
+</p>
+
+---
+
+## 11. Artifact storage and GC
+
+How files, screenshots, and documents are stored and cleaned up.
+
+<p align="center">
+  <img src="../images/artifact.png" alt="Artifact storage and GC" width="750">
+</p>
