@@ -111,13 +111,13 @@ func (t *SendAgentMessageTool) Call(
 
 	// Emit interaction.begin — mirrors Codex CollabAgentInteractionBeginEvent.
 	emitAgentEvent(ctx, types.RuntimeEventTypeAgentInteractionBegin, &types.AgentRuntimeEvent{
-		CallID:      callID,
-		AgentID:     agentID,
+		CallID:        callID,
+		AgentID:       agentID,
 		AgentNickname: ag.Nickname,
-		AgentRole:   ag.Role,
-		Message:     message,
-		Status:      ag.CollabStatus(),
-		StartedAtMs: nowMs(),
+		AgentRole:     ag.Role,
+		Message:       message,
+		Status:        ag.CollabStatus(),
+		StartedAtMs:   nowMs(),
 	})
 
 	if sendErr := t.manager.SendMessage(agentID, message); sendErr != nil {

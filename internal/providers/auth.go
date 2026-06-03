@@ -1,3 +1,12 @@
+// CLI-era credential helpers.
+//
+// LoginProvider, WaitForLogin, GetOAuthToken, SetAPIKey and LoginCommand are
+// designed for headless / CLI use. They store credentials in a local file
+// (~/.nexus/auth.json via internal/auth/store.FileStore) and are NOT suited
+// for multi-user server deployments.
+//
+// In server mode, pass credentials to the engine via sdk.ClientConfig.APIKey
+// or by implementing sdk.CredentialResolver for per-user resolution.
 package providers
 
 import (
@@ -14,7 +23,7 @@ import (
 )
 
 // ============================================================================
-// OAuth Login Implementation
+// OAuth Login Implementation — CLI-era
 // ============================================================================
 
 // chatGPTClientID is the public OAuth client ID used by Codex CLI (github.com/openai/codex)
@@ -37,7 +46,8 @@ func InitOAuth(clientID string) {
 	oauthHandler = oauth.NewSimpleAuthenticator(clientID)
 }
 
-// LoginProvider starts the ChatGPT device-code flow and returns the user code + URL to display.
+// LoginProvider starts the ChatGPT device-code flow and returns the user code
+// + URL to display. CLI-era: saves result to ~/.nexus/auth.json.
 func LoginProvider(ctx context.Context, provider string) (string, string, error) {
 	if oauthHandler == nil {
 		InitOAuth(os.Getenv("OPENAI_CLIENT_ID"))
@@ -49,8 +59,8 @@ func LoginProvider(ctx context.Context, provider string) (string, string, error)
 	return userCode, verificationURL, nil
 }
 
-// WaitForLogin polls Auth0 until the user completes authentication, then persists
-// the full token (access + refresh + expiry) to the credential store.
+// WaitForLogin polls Auth0 until the user completes authentication, then
+// persists the full token to ~/.nexus/auth.json. CLI-era.
 func WaitForLogin(ctx context.Context, provider string) error {
 	if oauthHandler == nil {
 		return fmt.Errorf("OAuth not initialized — call LoginProvider first")
@@ -190,7 +200,8 @@ func NewAuthClientWithConfig(ctx context.Context, config *Config) (*AuthClient, 
 }
 
 // getAPIKeyForProvider returns the API key (or OAuth access token) for a provider.
-// For OAuth credentials it auto-refreshes the token when it's about to expire.
+// Resolution order: env var → FileStore (~/.nexus/auth.json). CLI-era.
+// In server mode, use sdk.ClientConfig.CredentialResolver instead.
 func getAPIKeyForProvider(ctx context.Context, provider types.APIProvider) (string, error) {
 	// Environment variable always wins.
 	if key := os.Getenv(providerEnvVar(provider)); key != "" {

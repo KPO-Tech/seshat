@@ -117,8 +117,8 @@ func TestIsApplyPatchInvocation_DirectCall(t *testing.T) {
 		{"cd /tmp && apply_patch some_patch", true},
 		{"ls -la", false},
 		{"git status", false},
-		{"grep apply_patch file.txt", false},       // grep mentions it but doesn't run it
-		{"echo apply_patch", false},                 // echo mentions it but doesn't run it
+		{"grep apply_patch file.txt", false}, // grep mentions it but doesn't run it
+		{"echo apply_patch", false},          // echo mentions it but doesn't run it
 		{"bash -c 'git log'", false},
 	}
 	for _, tc := range cases {

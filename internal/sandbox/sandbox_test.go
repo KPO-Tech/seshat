@@ -249,9 +249,9 @@ func TestIsKnownSafeRejectsGitMutatingCommands(t *testing.T) {
 	unsafe := []string{
 		"git push", "git fetch", "git pull", "git clone https://example.com/repo",
 		"git branch -d feature", "git branch new-branch",
-		"git -C /tmp status",          // unsafe global option
-		"git --git-dir=.evil status",  // unsafe global option
-		"git log --output=/tmp/out",   // unsafe subcommand option
+		"git -C /tmp status",         // unsafe global option
+		"git --git-dir=.evil status", // unsafe global option
+		"git log --output=/tmp/out",  // unsafe subcommand option
 	}
 	for _, cmd := range unsafe {
 		if policy.IsKnownSafe(cmd) {
@@ -349,10 +349,10 @@ func TestEvaluateSearchCommandNotInSafelistAsks(t *testing.T) {
 		cmd  string
 		want Decision
 	}{
-		{"find . -exec rm {} ;", DecisionAsk},       // dangerous find option
-		{"rg --pre=evil pattern", DecisionAsk},       // dangerous rg option
-		{"ag foo bar", DecisionAsk},                  // not in safelist → unknown → ask
-		{"find . -delete", DecisionAsk},              // -delete is destructive
+		{"find . -exec rm {} ;", DecisionAsk},  // dangerous find option
+		{"rg --pre=evil pattern", DecisionAsk}, // dangerous rg option
+		{"ag foo bar", DecisionAsk},            // not in safelist → unknown → ask
+		{"find . -delete", DecisionAsk},        // -delete is destructive
 	}
 	for _, tc := range cases {
 		result := policy.Evaluate(tc.cmd)

@@ -17,12 +17,12 @@ const MaxObjectiveChars = 4_000
 type Status string
 
 const (
-	StatusActive       Status = "active"
-	StatusPaused       Status = "paused"
-	StatusBlocked      Status = "blocked"
-	StatusUsageLimited Status = "usageLimited"
+	StatusActive        Status = "active"
+	StatusPaused        Status = "paused"
+	StatusBlocked       Status = "blocked"
+	StatusUsageLimited  Status = "usageLimited"
 	StatusBudgetLimited Status = "budgetLimited"
-	StatusComplete     Status = "complete"
+	StatusComplete      Status = "complete"
 )
 
 // IsFinal returns true for terminal statuses where the goal is no longer actionable.
@@ -33,14 +33,14 @@ func IsFinal(s Status) bool {
 // Goal mirrors Codex's ThreadGoal struct (protocol.rs:3651).
 // Keyed by SessionID in the Store.
 type Goal struct {
-	SessionID       string  `json:"session_id"`
-	Objective       string  `json:"objective"`
-	Status          Status  `json:"status"`
-	TokenBudget     *int64  `json:"token_budget,omitempty"`
-	TokensUsed      int64   `json:"tokens_used"`
-	TimeUsedSeconds int64   `json:"time_used_seconds"`
-	CreatedAt       int64   `json:"created_at"`
-	UpdatedAt       int64   `json:"updated_at"`
+	SessionID       string `json:"session_id"`
+	Objective       string `json:"objective"`
+	Status          Status `json:"status"`
+	TokenBudget     *int64 `json:"token_budget,omitempty"`
+	TokensUsed      int64  `json:"tokens_used"`
+	TimeUsedSeconds int64  `json:"time_used_seconds"`
+	CreatedAt       int64  `json:"created_at"`
+	UpdatedAt       int64  `json:"updated_at"`
 
 	// startedAt is the wall-clock time the goal was created, used to compute TimeUsedSeconds.
 	startedAt time.Time

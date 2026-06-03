@@ -98,12 +98,12 @@ func (t *CloseAgentTool) Call(
 
 	// Emit close.begin — mirrors Codex CollabCloseBeginEvent.
 	emitAgentEvent(ctx, types.RuntimeEventTypeAgentCloseBegin, &types.AgentRuntimeEvent{
-		CallID:      callID,
-		AgentID:     agentID,
+		CallID:        callID,
+		AgentID:       agentID,
 		AgentNickname: ag.Nickname,
-		AgentRole:   ag.Role,
-		Status:      statusBefore,
-		StartedAtMs: nowMs(),
+		AgentRole:     ag.Role,
+		Status:        statusBefore,
+		StartedAtMs:   nowMs(),
 	})
 
 	if closeErr := t.manager.CloseAgent(agentID); closeErr != nil {

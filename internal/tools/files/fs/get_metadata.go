@@ -14,10 +14,10 @@ import (
 
 // FileMetadata is the structured metadata returned by GetMetadataTool.
 type FileMetadata struct {
-	Path        string    `json:"path"`
-	IsFile      bool      `json:"is_file"`
-	IsDirectory bool      `json:"is_directory"`
-	IsSymlink   bool      `json:"is_symlink"`
+	Path        string `json:"path"`
+	IsFile      bool   `json:"is_file"`
+	IsDirectory bool   `json:"is_directory"`
+	IsSymlink   bool   `json:"is_symlink"`
 	// SymlinkTarget is set when IsSymlink is true.
 	SymlinkTarget string    `json:"symlink_target,omitempty"`
 	SizeBytes     int64     `json:"size_bytes"`
@@ -107,10 +107,10 @@ func (t *GetMetadataTool) Call(
 	return tool.NewJSONResult(meta), nil
 }
 
-func (t *GetMetadataTool) IsEnabled() bool                              { return true }
-func (t *GetMetadataTool) IsReadOnly(_ map[string]any) bool             { return true }
-func (t *GetMetadataTool) IsConcurrencySafe(_ map[string]any) bool      { return true }
-func (t *GetMetadataTool) FormatResult(data any) string                 { return fmt.Sprintf("%v", data) }
+func (t *GetMetadataTool) IsEnabled() bool                         { return true }
+func (t *GetMetadataTool) IsReadOnly(_ map[string]any) bool        { return true }
+func (t *GetMetadataTool) IsConcurrencySafe(_ map[string]any) bool { return true }
+func (t *GetMetadataTool) FormatResult(data any) string            { return fmt.Sprintf("%v", data) }
 func (t *GetMetadataTool) BackfillInput(_ context.Context, in map[string]any) map[string]any {
 	return in
 }

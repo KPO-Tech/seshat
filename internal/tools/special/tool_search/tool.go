@@ -251,7 +251,9 @@ func truncateText(s string, max int) string {
 
 // ─── Tool interface boilerplate ───────────────────────────────────────────────
 
-func (t *ToolSearchTool) Description(_ context.Context) (string, error) { return ToolSearchDescription, nil }
+func (t *ToolSearchTool) Description(_ context.Context) (string, error) {
+	return ToolSearchDescription, nil
+}
 func (t *ToolSearchTool) ValidateInput(_ context.Context, in map[string]any) (map[string]any, error) {
 	return in, nil
 }
@@ -259,8 +261,8 @@ func (t *ToolSearchTool) CheckPermissions(_ context.Context, in map[string]any, 
 	return types.PermissionResult{Behavior: types.PermissionBehaviorPassthrough}
 }
 func (t *ToolSearchTool) IsConcurrencySafe(_ map[string]any) bool { return true }
-func (t *ToolSearchTool) IsReadOnly(_ map[string]any) bool         { return true }
-func (t *ToolSearchTool) IsEnabled() bool                          { return IsToolSearchEnabledOptimistic() }
+func (t *ToolSearchTool) IsReadOnly(_ map[string]any) bool        { return true }
+func (t *ToolSearchTool) IsEnabled() bool                         { return IsToolSearchEnabledOptimistic() }
 func (t *ToolSearchTool) FormatResult(data any) string {
 	if out, ok := data.(ToolSearchOutput); ok {
 		return formatSearchResult(out)

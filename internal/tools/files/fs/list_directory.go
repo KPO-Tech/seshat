@@ -131,10 +131,10 @@ func (t *ListDirectoryTool) Call(
 	return tool.NewJSONResult(result), nil
 }
 
-func (t *ListDirectoryTool) IsEnabled() bool                              { return true }
-func (t *ListDirectoryTool) IsReadOnly(_ map[string]any) bool             { return true }
-func (t *ListDirectoryTool) IsConcurrencySafe(_ map[string]any) bool      { return true }
-func (t *ListDirectoryTool) FormatResult(data any) string                 { return fmt.Sprintf("%v", data) }
+func (t *ListDirectoryTool) IsEnabled() bool                         { return true }
+func (t *ListDirectoryTool) IsReadOnly(_ map[string]any) bool        { return true }
+func (t *ListDirectoryTool) IsConcurrencySafe(_ map[string]any) bool { return true }
+func (t *ListDirectoryTool) FormatResult(data any) string            { return fmt.Sprintf("%v", data) }
 func (t *ListDirectoryTool) BackfillInput(_ context.Context, in map[string]any) map[string]any {
 	return in
 }

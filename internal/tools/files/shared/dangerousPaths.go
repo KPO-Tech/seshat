@@ -38,8 +38,8 @@ var DangerousFiles = []string{
 	".yarnrc",
 	".pypirc",
 	// Cloud credentials
-	"credentials",     // .aws/credentials, etc.
-	"config",          // .aws/config (matched by dir check below)
+	"credentials", // .aws/credentials, etc.
+	"config",      // .aws/config (matched by dir check below)
 	// AI tooling
 	".mcp.json",
 	".claude.json",

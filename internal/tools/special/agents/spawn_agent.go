@@ -140,13 +140,13 @@ func (t *SpawnAgentTool) Call(
 
 	// Emit spawn.begin — mirrors Codex CollabAgentSpawnBeginEvent.
 	emitAgentEvent(ctx, types.RuntimeEventTypeAgentSpawnBegin, &types.AgentRuntimeEvent{
-		CallID:      callID,
-		AgentID:     "",
+		CallID:        callID,
+		AgentID:       "",
 		AgentNickname: nickname,
-		AgentRole:   role,
-		Prompt:      prompt,
-		Status:      "pendingInit",
-		StartedAtMs: nowMs(),
+		AgentRole:     role,
+		Prompt:        prompt,
+		Status:        "pendingInit",
+		StartedAtMs:   nowMs(),
 	})
 
 	config := &coreagent.RunConfig{

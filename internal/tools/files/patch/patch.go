@@ -28,8 +28,8 @@ const (
 // computed BEFORE the patch is applied. Used for approval previews and progress events.
 type PatchChange struct {
 	Kind        ChangeKind `json:"kind"`
-	Path        string     `json:"path"`                  // absolute resolved source path
-	MovePath    string     `json:"move_path,omitempty"`   // non-empty for ChangeKindMove
+	Path        string     `json:"path"`                   // absolute resolved source path
+	MovePath    string     `json:"move_path,omitempty"`    // non-empty for ChangeKindMove
 	DiffPreview string     `json:"diff_preview,omitempty"` // compact diff for updates
 }
 
@@ -122,15 +122,15 @@ type changeLine struct {
 
 // changeBlock is one @@ region within an update hunk.
 type changeBlock struct {
-	hint  string       // text after "@@ " — informational only
+	hint  string // text after "@@ " — informational only
 	lines []changeLine
 }
 
 // hunk is a single file operation in the patch.
 type hunk struct {
 	typ      hunkType
-	path     string // source path (as written in patch)
-	moveTo   string // non-empty when "*** Move to:" is present
+	path     string        // source path (as written in patch)
+	moveTo   string        // non-empty when "*** Move to:" is present
 	addLines []string      // content lines for hunkAdd (already stripped of leading '+')
 	blocks   []changeBlock // change blocks for hunkUpdate
 }
@@ -435,7 +435,7 @@ func findLinesMatch(fileLines, searchLines []string) (start, end int, found bool
 	if len(searchLines) == 0 {
 		return 0, 0, true
 	}
-	outer:
+outer:
 	for i := 0; i <= len(fileLines)-len(searchLines); i++ {
 		for j, sl := range searchLines {
 			if fileLines[i+j] != sl {
@@ -454,9 +454,7 @@ func splitLines(content string) []string {
 		return nil
 	}
 	// Remove exactly one trailing newline to avoid a phantom empty last element.
-	if strings.HasSuffix(content, "\n") {
-		content = content[:len(content)-1]
-	}
+	content = strings.TrimSuffix(content, "\n")
 	return strings.Split(content, "\n")
 }
 

@@ -1,0 +1,19 @@
+# CODEOWNERS — Nexus Engine
+# https://docs.github.com/en/repositories/managing-your-repositorys-settings-and-features/customizing-your-repository/about-code-owners
+
+# Default owner for everything
+* @EngineerProjects/nexus-core
+
+# Security-sensitive paths — require explicit maintainer review
+internal/permissions/         @EngineerProjects/nexus-core
+internal/tools/bash/          @EngineerProjects/nexus-core
+internal/sandbox/             @EngineerProjects/nexus-core
+SECURITY.md                   @EngineerProjects/nexus-core
+
+# Public API — changes affect downstream consumers
+pkg/sdk/                      @EngineerProjects/nexus-core
+pkg/grpc/proto/               @EngineerProjects/nexus-core
+
+# CI / release pipelines
+.github/workflows/            @EngineerProjects/nexus-core
+Makefile                      @EngineerProjects/nexus-core

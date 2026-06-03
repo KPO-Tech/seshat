@@ -1,18 +1,18 @@
 BINARY   := nexus-engine
-CMD_API  := ./cmd/api
 CMD_CLI  := ./cmd/cli
+CMD_GRPC := ./cmd/grpc
 
-.PHONY: all build build-api build-cli test test-race lint clean tidy
+.PHONY: all build build-cli build-grpc test test-race lint fmt vet tidy clean hooks
 
 all: build
 
-build: build-api build-cli
-
-build-api:
-	go build -o bin/$(BINARY)-api $(CMD_API)
+build: build-cli build-grpc
 
 build-cli:
 	go build -o bin/$(BINARY)-cli $(CMD_CLI)
+
+build-grpc:
+	go build -o bin/$(BINARY)-grpc $(CMD_GRPC)
 
 test:
 	go test ./... -timeout 300s
@@ -20,8 +20,11 @@ test:
 test-race:
 	go test -race ./... -timeout 300s
 
-test-db:
-	go test -race ./internal/db/... -v -timeout 120s
+fmt:
+	gofmt -w .
+
+vet:
+	go vet ./...
 
 lint:
 	@which golangci-lint > /dev/null 2>&1 || (echo "golangci-lint not installed — run: go install github.com/golangci/golangci-lint/cmd/golangci-lint@latest" && exit 1)
@@ -32,3 +35,8 @@ tidy:
 
 clean:
 	rm -rf bin/
+
+# Install git hooks from .githooks/ (run once after cloning).
+hooks:
+	git config core.hooksPath .githooks
+	@echo "Git hooks installed from .githooks/"

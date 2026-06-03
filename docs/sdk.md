@@ -15,14 +15,14 @@ import "github.com/EngineerProjects/nexus-engine/pkg/sdk"
 ```go
 client, err := sdk.NewClient(&sdk.ClientConfig{
     APIKey: os.Getenv("ANTHROPIC_API_KEY"),
-    Model:  sdk.ParseModelIdentifier("anthropic:claude-sonnet-4-6"),
+    Model:  sdk.ModelIdentifier{Provider: "anthropic", Model: "claude-sonnet-4-20250514"},
 })
 if err != nil {
     log.Fatal(err)
 }
 defer client.Close()
 
-response, err := client.Ask(ctx, "Explain how goroutines work.")
+response, err := client.Ask(ctx, "Explain how goroutines work.", nil)
 if err != nil {
     log.Fatal(err)
 }
@@ -48,23 +48,20 @@ fmt.Println(r2.Content)
 ### Resume a persisted session
 
 ```go
-// Session IDs are returned in every SessionResponse
+// Session IDs are returned in every response
 savedID := r1.SessionID
 
 restored, err := client.LoadSession(ctx, sdk.SessionID(savedID))
-// Continue the session from where it was left
+// Continue the session from where it was left off
 ```
 
-### Inject a session backend
+### Inject a custom session backend
 
 ```go
 client, err := sdk.NewClient(&sdk.ClientConfig{
     PersistSessions: false,
     SessionBackend:  sdk.NewMemorySessionBackend(),
 })
-if err != nil {
-    log.Fatal(err)
-}
 ```
 
 ### Inject artifact storage
@@ -74,16 +71,10 @@ store, err := sdk.NewArtifactStoreFromConfig(sdk.StorageConfig{
     Provider:  sdk.StorageProviderLocal,
     LocalPath: "/tmp/nexus-artifacts",
 })
-if err != nil {
-    log.Fatal(err)
-}
 
 client, err := sdk.NewClient(&sdk.ClientConfig{
     ArtifactStore: store,
 })
-if err != nil {
-    log.Fatal(err)
-}
 ```
 
 ---
@@ -94,48 +85,58 @@ if err != nil {
 type ClientConfig struct {
     // ── Provider ──────────────────────────────────────────────────────────
     APIKey    string               // required for cloud providers
-    Model     types.ModelIdentifier // "provider:model", e.g. "anthropic:claude-sonnet-4-6"
+    Model     ModelIdentifier      // {Provider: "anthropic", Model: "claude-sonnet-4-20250514"}
     MaxTokens int                  // max output tokens (default 8192)
+
+    // Injected per-request resolver — takes precedence over APIKey.
+    // Useful for multi-user deployments where each request has its own key.
+    CredentialResolver CredentialResolver
 
     // ── Loop limits ───────────────────────────────────────────────────────
     MaxTurns      int // total turns per session (default 100)
-    MaxIterations int // model→tool cycles per turn (default 10)
+    MaxIterations int // model→tool cycles per turn (default 100)
 
     // ── Context management ────────────────────────────────────────────────
-    AutoCompact        bool // compact transcript when context window fills (default true)
-    TurnTokenBudget    int  // if set, pause when budget exhausted
-    BudgetContinuationLimit int // how many budget continuations per turn
+    AutoCompact             bool // compact transcript when context window fills (default true)
+    TurnTokenBudget         int  // if set, pause when budget is exhausted per turn
+    BudgetContinuationLimit int  // max budget-continuation cycles (0 = unlimited)
+    ContinuationNudgeLimit  int  // max text nudges before giving up (default 3)
 
     // ── Permissions ───────────────────────────────────────────────────────
-    PermissionMode sdk.PermissionMode // bypass | auto | acceptEdits | onRequest | never
+    PermissionMode PermissionMode // bypass | auto | acceptEdits | onRequest | never | granular
 
     // ── Persistence ───────────────────────────────────────────────────────
     PersistSessions   bool             // enable default filesystem persistence
-    SessionSQLitePath string           // enable SQLite-backed session persistence
-    SessionBackend    sdk.SessionBackend // inject a custom persistence backend
-    SessionStore      sdk.SessionStore   // inject a fully-built session store
-    WorkingDir        string // root for file tool operations
+    SessionSQLitePath string           // use SQLite-backed session persistence
+    SessionBackend    SessionBackend   // inject a custom persistence backend
+    SessionStore      SessionStore     // inject a fully-built session store
+    WorkingDir        string           // root for file tool operations (default: os.Getwd())
 
     // ── Features ──────────────────────────────────────────────────────────
-    EnableMemory   bool // long-term memory (project/user/cross-session)
-    EnableHooks    bool // lifecycle hooks
-    EnableMonitoring bool
+    EnableMemory    bool // long-term memory (project/user/cross-session), default true
+    MemoryFailFast  bool // return error if memory init fails (default false)
+    EnableHooks     bool // lifecycle hooks, default true
+    EnableMonitoring bool // Prometheus metrics, default true
 
     // ── MCP ───────────────────────────────────────────────────────────────
-    MCPServers []sdk.MCPServerConfig // MCP servers to connect on startup
+    MCPServers []MCPServerConfig // MCP servers to connect on startup
 
     // ── Storage / artifacts ──────────────────────────────────────────────
-    StorageConfig *sdk.StorageConfig // per-client artifact storage config
-    ArtifactStore sdk.ArtifactStore  // inject a fully-built artifact store
+    StorageConfig *StorageConfig // per-client artifact storage config
+    ArtifactStore ArtifactStore  // inject a fully-built artifact store
 
     // ── Callbacks ─────────────────────────────────────────────────────────
-    ResponseChunkFn func(sdk.ResponseChunk) // called for each streaming chunk
-    ProgressFn      func(sdk.ToolProgress)  // called for tool execution events
-    PromptFn        func(ctx, prompt) (string, error) // user input callback
+    ResponseChunkFn func(ResponseChunk)  // streaming text chunks
+    RuntimeEventFn  func(RuntimeEvent)   // structured engine events (turns, tools, permissions, …)
+    ProgressFn      func(ToolProgress)   // tool execution progress
+    PromptFn        PromptFn             // user input callback (headless: return empty string)
 
     // ── Prompt customization ──────────────────────────────────────────────
     SystemPromptTemplate string       // replace default system prompt
     PromptConfig         *PromptConfig // stage overlays, tool hints, append text
+
+    // ── Stop hooks ────────────────────────────────────────────────────────
+    StopHooks []StopHook // post-turn policy checks (append messages, request continuation)
 }
 ```
 
@@ -145,7 +146,7 @@ type ClientConfig struct {
 
 ```go
 type PromptConfig struct {
-    // Replace the entire system prompt (overrides all defaults)
+    // Replaces the entire system prompt (overrides all defaults)
     SystemPrompt *string
 
     // Text appended after all assembled sections
@@ -157,7 +158,7 @@ type PromptConfig struct {
     // Per-stage custom overlay text (overrides built-in templates)
     StageOverrides map[ExecutionStage]string
 
-    // Per-tool extra guidance appended to the tool's description
+    // Per-tool extra guidance appended to each tool's description
     ToolHints map[string]string
 }
 ```
@@ -165,27 +166,27 @@ type PromptConfig struct {
 Example — restrict bash to read-only and activate plan stage:
 
 ```go
-cfg := &sdk.ClientConfig{
-    APIKey: key,
-    Model:  sdk.ParseModelIdentifier("anthropic:claude-sonnet-4-6"),
+client, _ := sdk.NewClient(&sdk.ClientConfig{
+    APIKey: os.Getenv("ANTHROPIC_API_KEY"),
+    Model:  sdk.ModelIdentifier{Provider: "anthropic", Model: "claude-sonnet-4-20250514"},
     PromptConfig: &sdk.PromptConfig{
         Stage: sdk.StagePlan,
         ToolHints: map[string]string{
             "bash": "Only run read-only commands. Do not modify any files.",
         },
     },
-}
+})
 ```
 
 ---
 
 ## Streaming
 
-### ResponseChunkFn callback
+### ResponseChunkFn — text deltas
 
 ```go
 client, _ := sdk.NewClient(&sdk.ClientConfig{
-    APIKey: key,
+    APIKey: os.Getenv("ANTHROPIC_API_KEY"),
     ResponseChunkFn: func(chunk sdk.ResponseChunk) {
         if chunk.Type == sdk.ResponseChunkTypeContentBlockDelta {
             fmt.Print(chunk.Delta)
@@ -194,21 +195,44 @@ client, _ := sdk.NewClient(&sdk.ClientConfig{
 })
 ```
 
-### EventQueue (per-session)
+`SubmitMessage` always streams internally. The callback fires on each text delta. The returned `*SessionResponse` is delivered when the turn is complete.
+
+### RuntimeEventFn — structured engine events
+
+```go
+client, _ := sdk.NewClient(&sdk.ClientConfig{
+    APIKey: os.Getenv("ANTHROPIC_API_KEY"),
+    RuntimeEventFn: func(event sdk.RuntimeEvent) {
+        switch event.Type {
+        case sdk.RuntimeEventTypeTurnStarted:
+            fmt.Printf("turn %d started\n", event.TurnNumber)
+        case sdk.RuntimeEventTypeToolProgress:
+            fmt.Printf("tool %s: %s\n", event.ToolProgress.ToolName, event.ToolProgress.Message)
+        case sdk.RuntimeEventTypeToolPermissionRequired:
+            fmt.Printf("permission required: %s\n", event.PermissionRequest.ToolName)
+        case sdk.RuntimeEventTypeTurnCompleted:
+            fmt.Printf("turn complete: %s\n", event.StopReason)
+        }
+    },
+})
+```
+
+Full event type list: `turn.started`, `turn.completed`, `turn.failed`, `response.chunk`, `tool.progress`, `tool.permission_required`, `prompt.request`, `plan.submitted`, `plan.status_changed`, `goal.updated`, `agent.spawn.begin`, `agent.spawn.end`.
+
+### EventQueue — per-session async channel
 
 ```go
 session, _ := client.CreateSession(ctx)
 queue := session.GetEventQueue()
 
-// Drain in a separate goroutine before calling SubmitMessage
+// Drain in a goroutine before calling SubmitMessage
 go func() {
     for chunk := range queue.Recv() {
-        fmt.Printf("[chunk] %s: %s\n", chunk.Type, chunk.Delta)
+        fmt.Printf("[chunk] %s\n", chunk.Delta)
     }
 }()
 
 response, _ := session.SubmitMessage(ctx, "hello")
-// queue is drained; goroutine exits when session is closed
 ```
 
 ---
@@ -217,15 +241,15 @@ response, _ := session.SubmitMessage(ctx, "hello")
 
 ```go
 const (
-    PermissionModeBypass      = "bypass"       // skip all checks
-    PermissionModeAuto        = "auto"         // ML classifier auto-approves safe actions
-    PermissionModeAcceptEdits = "acceptEdits"  // auto-approve safe file ops in working dir
-    PermissionModeOnRequest   = "onRequest"    // ask user (default)
-    PermissionModeNever       = "never"        // deny non-trivially-safe uses
+    PermissionModeBypass      = "bypass"       // skip all checks — fully autonomous
+    PermissionModeAuto        = "auto"         // LLM classifier auto-approves safe actions
+    PermissionModeAcceptEdits = "acceptEdits"  // auto-approve file operations in working dir
+    PermissionModeOnRequest   = "onRequest"    // ask user for each action (default)
+    PermissionModeNever       = "never"        // deny anything non-trivially safe (headless)
 )
 ```
 
-For headless automation use `bypass` or `never` depending on trust level.
+For fully automated pipelines use `bypass`. For headless servers where no user is present use `never`.
 
 ---
 
@@ -234,10 +258,12 @@ For headless automation use `bypass` or `never` depending on trust level.
 ```go
 type SessionResponse struct {
     SessionID   string
+    Content     string            // extracted final text
     Messages    []types.Message   // full updated transcript
     StopReason  string            // "end_turn" | "max_tokens" | "stop_sequence"
     TurnNumber  int
     IsComplete  bool
+    Compacted   bool              // true if auto-compact ran during this turn
     Usage       *types.TokenUsage // InputTokens, OutputTokens, CacheReadTokens, CacheWriteTokens
     ToolUses    []types.ToolUseContent
     ToolResults []tool.CallResult
@@ -246,7 +272,147 @@ type SessionResponse struct {
 
 ---
 
-## Monitoring
+## Session methods reference
+
+```go
+// Message submission
+func (s *Session) SubmitMessage(ctx context.Context, content string) (*SessionResponse, error)
+func (s *Session) SubmitMessageWithContent(ctx context.Context, text string, images []ImageContent) (*SessionResponse, error)
+
+// Session metadata
+func (s *Session) GetID() SessionID
+func (s *Session) GetStatus() SessionStatus
+func (s *Session) GetMetadata() *SessionMetadata
+func (s *Session) GetMessages() []Message    // full transcript
+func (s *Session) GetTurnNumber() int
+
+// Configuration (per-session overrides)
+func (s *Session) SetPermissionMode(mode PermissionMode)
+func (s *Session) SetSystemPromptTemplate(text string)
+func (s *Session) SetAppendSystemPrompt(text string)
+func (s *Session) SetWorkingDirectory(path string)
+
+// Callbacks (override client-level callbacks for this session)
+func (s *Session) SetResponseChunkFn(fn func(ResponseChunk))
+func (s *Session) SetRuntimeEventFn(fn func(RuntimeEvent))
+func (s *Session) SetProgressFn(fn func(ToolProgress))
+
+// Queues
+func (s *Session) GetEventQueue() *EventQueue
+func (s *Session) GetRuntimeEventQueue() *RuntimeEventQueue
+
+// Tool management
+func (s *Session) RegisterTool(tool Tool) error
+func (s *Session) UnregisterTool(name string) error
+
+// Lifecycle
+func (s *Session) Interrupt() error
+func (s *Session) Close() error
+```
+
+---
+
+## Long-term memory
+
+Enable long-term memory to persist learnings across sessions:
+
+```go
+client, _ := sdk.NewClient(&sdk.ClientConfig{
+    EnableMemory:   true,   // default: true
+    MemoryFailFast: false,  // continue without memory on init failure (default)
+})
+
+// Check if memory init had issues (non-fatal)
+if err := client.MemoryInitError(); err != nil {
+    log.Printf("memory unavailable: %v", err)
+}
+```
+
+Three memory tiers are loaded automatically:
+- **Project memory** — scoped to the current working directory
+- **User memory** — user-wide (`~/.nexus/memory/`)
+- **Cross-session** — patterns learned across all sessions
+
+---
+
+## Custom tool
+
+Implement the `Tool` interface from `internal/tools/contract/`:
+
+```go
+type MyTool struct{}
+
+func (t *MyTool) Definition() tool.Definition {
+    return tool.Definition{
+        Name:        "my_tool",
+        Description: "Does something useful.",
+        InputSchema: map[string]any{
+            "type": "object",
+            "properties": map[string]any{
+                "input": map[string]any{"type": "string"},
+            },
+            "required": []string{"input"},
+        },
+        IsReadOnly:        true,
+        IsConcurrencySafe: true,
+    }
+}
+
+func (t *MyTool) Call(ctx context.Context, input tool.CallInput, _ types.CanUseToolFn) (tool.CallResult, error) {
+    value, _ := input.Parsed["input"].(string)
+    return tool.NewTextResult("result: " + value), nil
+}
+
+// Remaining interface methods: ValidateInput, BackfillInput, CheckPermissions,
+// IsConcurrencySafe, IsReadOnly, IsEnabled, FormatResult, Description
+```
+
+Register before creating sessions:
+
+```go
+client.RegisterTool(&MyTool{})
+// or per-session:
+session.RegisterTool(&MyTool{})
+```
+
+---
+
+## Hook lifecycle
+
+```go
+// Events: HookEventPreTool, HookEventPostTool,
+//         HookEventSessionStart, HookEventSessionEnd,
+//         HookEventTurnStart, HookEventTurnEnd
+id := client.RegisterHook(sdk.HookEventPreTool, func(ctx context.Context, event sdk.HookEvent, data map[string]any) (sdk.HookResult, error) {
+    toolName, _ := data["tool_name"].(string)
+    fmt.Printf("about to call tool: %s\n", toolName)
+    return sdk.HookResult{Action: sdk.HookActionContinue}, nil
+})
+
+client.HookRegistry().Unregister(id)
+```
+
+---
+
+## MCP servers
+
+```go
+client, _ := sdk.NewClient(&sdk.ClientConfig{
+    MCPServers: []sdk.MCPServerConfig{
+        {Name: "github",   Command: "npx", Args: []string{"-y", "@modelcontextprotocol/server-github"}},
+        {Name: "postgres", Command: "npx", Args: []string{"-y", "@modelcontextprotocol/server-postgres", "postgresql://..."}},
+    },
+})
+
+// Hot-reload MCP servers without recreating the client
+client.ReloadMCPServers(ctx, newServers)
+```
+
+---
+
+## Observability
+
+### Prometheus metrics
 
 ```go
 m := client.GetMonitoring()
@@ -255,101 +421,26 @@ m := client.GetMonitoring()
 snapshot, _ := m.GetMetricsSnapshot("prometheus")
 fmt.Println(snapshot)
 
-// JSON format
+// JSON
 snapshot, _ = m.GetMetricsSnapshot("json")
 ```
 
----
+Tracked: API request counts/latency, tool call counts/latency, permission denials, circuit breaker state, prompt cache hits/writes, active sessions, memory usage.
 
-## Custom tool implementation
-
-Implement the `Tool` interface from `internal/tools/registry`:
+### OpenTelemetry tracing
 
 ```go
-type MyTool struct{}
+import "github.com/EngineerProjects/nexus-engine/internal/monitoring"
 
-func (t *MyTool) Definition() tool.Definition {
-    return tool.Definition{
-        Name:               "my_tool",
-        DisplayName:        "My Tool",
-        Description:        "What it does and when to use it",
-        Category:           "custom",
-        InputSchema:        schema.FromMap(map[string]any{
-            "type": "object",
-            "properties": map[string]any{
-                "input": map[string]any{"type": "string", "description": "The input"},
-            },
-            "required": []string{"input"},
-        }),
-        IsReadOnly:         true,
-        RequiresPermission: false,
-    }
-}
-
-func (t *MyTool) Call(ctx context.Context, input tool.CallInput, _ types.CanUseToolFn) (tool.CallResult, error) {
-    val, _ := input.Parsed["input"].(string)
-    return tool.NewTextResult("processed: " + val), nil
-}
-
-func (t *MyTool) ValidateInput(_ context.Context, input map[string]any) (map[string]any, error) {
-    if _, ok := input["input"].(string); !ok {
-        return nil, fmt.Errorf("input must be a string")
-    }
-    return input, nil
-}
-
-func (t *MyTool) CheckPermissions(_ context.Context, _ map[string]any, _ tool.ToolUseContext) types.PermissionResult {
-    return types.Passthrough(nil)
-}
-
-func (t *MyTool) BackfillInput(_ context.Context, input map[string]any) map[string]any { return input }
-func (t *MyTool) FormatResult(data any) string                                          { return fmt.Sprintf("%v", data) }
-func (t *MyTool) Description(_ context.Context) (string, error)                         { return t.Definition().Description, nil }
-func (t *MyTool) IsConcurrencySafe(_ map[string]any) bool                               { return true }
-func (t *MyTool) IsReadOnly(_ map[string]any) bool                                      { return true }
-func (t *MyTool) IsEnabled() bool                                                       { return true }
+shutdown, err := monitoring.InitTracer(ctx, "my-service")
+defer shutdown(ctx)
 ```
 
-Register with the client before creating sessions:
-
-```go
-client.RegisterTool(&MyTool{})
-```
-
----
-
-## Hook lifecycle
-
-Hooks run at specific points in the session turn cycle. Register a handler with `RegisterHook`:
-
-```go
-// Available events: HookEventPreTool, HookEventPostTool,
-//                  HookEventSessionStart, HookEventSessionEnd,
-//                  HookEventTurnStart, HookEventTurnEnd
-id := client.RegisterHook(sdk.HookEventPreTool, func(ctx context.Context, event sdk.HookEvent, data map[string]any) (sdk.HookResult, error) {
-    toolName, _ := data["tool_name"].(string)
-    fmt.Printf("about to call tool: %s\n", toolName)
-    return sdk.HookResult{Action: sdk.HookActionContinue}, nil
-})
-
-// Remove when no longer needed.
-client.HookRegistry().Unregister(id)
-```
-
-To stop execution from a hook:
-
-```go
-return sdk.HookResult{
-    Action:  sdk.HookActionStop,
-    Message: "blocked by policy",
-}, nil
-```
+Sends spans to `OTEL_EXPORTER_OTLP_ENDPOINT` (gRPC). If the env var is unset, a no-op provider is installed and nothing is exported. Set `OTEL_EXPORTER_OTLP_INSECURE=false` to enable TLS.
 
 ---
 
 ## Error handling
-
-SDK functions return `(result, error)`. Errors wrap a structured `types.EngineError`:
 
 ```go
 resp, err := session.SubmitMessage(ctx, "prompt")
@@ -358,11 +449,11 @@ if err != nil {
     if errors.As(err, &engineErr) {
         switch engineErr.Code {
         case types.ErrCodeAPIRateLimit:
-            // back off and retry
+            // transient — internally retried with backoff; reaching here means retries exhausted
         case types.ErrCodeAPIAuth:
             // invalid or expired API key
         case types.ErrCodeContextOverflow:
-            // conversation too long; compaction may help
+            // conversation too long; enable AutoCompact or start a new session
         case types.ErrCodePermissionDenied:
             // tool call blocked by permission mode
         }
@@ -370,87 +461,4 @@ if err != nil {
 }
 ```
 
-Permanent errors (auth, invalid model) are never retried internally. Transient errors (rate limit, network) are retried with exponential backoff up to `RetryConfig.MaxAttempts`.
-
----
-
-## Memory features
-
-Enable long-term memory to persist learnings across sessions:
-
-```go
-config := sdk.DefaultClientConfig()
-config.EnableMemory = true
-config.MemoryConfig = &sdk.MemoryConfig{
-    UserID:    "user-123",
-    ProjectID: "proj-abc",
-    Backend:   "sqlite", // or "qdrant", "chroma", "pgvector"
-}
-client, _ := sdk.NewClient(config)
-```
-
-The memory service automatically:
-- Learns from tool usage patterns
-- Stores session summaries
-- Injects relevant context into future sessions
-- Scopes memories per user / per project
-
-Access errors during memory init via `client.MemoryInitError()` — non-fatal, the client still works.
-
----
-
-## Session methods reference
-
-```go
-type Session struct { /* ... */ }
-
-// SubmitMessage sends a prompt and returns the full result.
-func (s *Session) SubmitMessage(ctx context.Context, prompt string) (*SessionResponse, error)
-
-// SubmitMessageStream sends a prompt with streaming chunks via the configured
-// ResponseChunkFn callback. Returns the final result when streaming ends.
-func (s *Session) SubmitMessageStream(ctx context.Context, prompt string) (*SessionResponse, error)
-
-// GetTranscript returns all messages in the current session.
-func (s *Session) GetTranscript() []Message
-
-// GetEventQueue returns the per-session event queue for consuming RuntimeEvents.
-func (s *Session) GetEventQueue() *EventQueue
-
-// SessionID returns the unique identifier for this session.
-func (s *Session) SessionID() SessionID
-
-// Close persists session state and releases resources.
-func (s *Session) Close() error
-```
-
-`SessionResponse` fields:
-
-```go
-type SessionResponse struct {
-    Content     string         // Final text output
-    Thinking    string         // Extended thinking (if enabled)
-    SessionID   SessionID
-    TurnNumber  int
-    StopReason  string         // "end_turn" | "tool_use" | "max_tokens"
-    IsComplete  bool
-    Usage       *TokenUsage    // Input/output/cache token counts
-    ToolUses    []ToolUseContent
-    ToolResults []CallResult
-}
-```
-
----
-
-## Monitoring
-
-```go
-m := client.GetMonitoring()
-
-// Prometheus text format
-snapshot, _ := m.GetMetricsSnapshot("prometheus")
-fmt.Println(snapshot)
-
-// JSON format
-snapshot, _ = m.GetMetricsSnapshot("json")
-```
+Permanent errors (auth, invalid input) are never retried. Transient errors (rate limit, network, server overload) are retried with exponential backoff.

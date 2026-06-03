@@ -1,0 +1,34 @@
+#!/usr/bin/env bash
+# Go pre-commit checks: gofmt format, go vet, golangci-lint (fast pass).
+# Install once after cloning: make hooks
+set -euo pipefail
+
+ROOT="$(git rev-parse --show-toplevel)"
+cd "$ROOT"
+
+echo "→ gofmt check..."
+UNFORMATTED=$(gofmt -l . 2>/dev/null || true)
+if [ -n "$UNFORMATTED" ]; then
+    echo "✗ Files need formatting (run: make fmt):"
+    echo "$UNFORMATTED"
+    exit 1
+fi
+echo "  ✓ gofmt"
+
+echo "→ go vet..."
+if ! go vet ./... 2>&1; then
+    echo "✗ go vet failed"
+    exit 1
+fi
+echo "  ✓ go vet"
+
+if command -v golangci-lint &>/dev/null; then
+    echo "→ golangci-lint (fast)..."
+    if ! golangci-lint run --fast --timeout=2m ./... 2>&1; then
+        echo "✗ golangci-lint failed"
+        exit 1
+    fi
+    echo "  ✓ golangci-lint"
+fi
+
+echo "✓ pre-commit passed"

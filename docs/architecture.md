@@ -19,16 +19,16 @@
 
 Nexus Engine is a **headless AI coding runtime**. It connects an LLM provider to a set of tools (file system, bash, web, LSP, etc.) and orchestrates multi-turn conversations where the model can invoke tools, observe results, and continue reasoning.
 
-The engine is accessed through three entry points:
+The engine exposes two built-in entry points. A third (HTTP REST + SSE) is provided by nexus-product and built on top of the Go SDK.
 
 ```
-              ┌─────────────┐   ┌──────────────────┐   ┌──────────────┐
-              │  cmd/cli    │   │    cmd/api       │   │  cmd/grpc    │
-              │  Terminal   │   │  HTTP REST + SSE │   │  gRPC server │
-              │  chat/run   │   │  port 8090       │   │  port 50051  │
-              └──────┬──────┘   └────────┬─────────┘   └──────┬───────┘
-                    │                   │                     │
-                    └───────────────────┼─────────────────────┘
+              ┌─────────────┐                           ┌──────────────┐
+              │  cmd/cli    │                           │  cmd/grpc    │
+              │  Terminal   │                           │  gRPC server │
+              │  chat/run   │                           │  port 50051  │
+              └──────┬──────┘                           └──────┬───────┘
+                    │                                         │
+                    └─────────────────┬───────────────────────┘
                                         │
                                   ┌──────▼──────┐
                                   │   pkg/sdk   │
@@ -69,8 +69,9 @@ The system is organized in four layers:
 
 ```
             ╔══════════════════════════════════════════════════════════════════╗
-            ║  ENTRY POINTS                                                    ║
-            ║  cmd/cli · cmd/api (HTTP+SSE) · cmd/grpc                         ║
+            ║  ENTRY POINTS (nexus-engine)                                     ║
+            ║  cmd/cli (terminal) · cmd/grpc (gRPC :50051)                     ║
+            ║  + cmd/api (HTTP+SSE) lives in nexus-product, uses pkg/sdk       ║
             ╚══════════════════════════╤═══════════════════════════════════════╝
                                       │ uses
             ╔══════════════════════════▼═══════════════════════════════════════╗

@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"log"
 	"os"
 	"strings"
 	"sync"
@@ -17,8 +18,8 @@ import (
 	compact "github.com/EngineerProjects/nexus-engine/internal/runtime/memory"
 	coretasks "github.com/EngineerProjects/nexus-engine/internal/runtime/tasks"
 	"github.com/EngineerProjects/nexus-engine/internal/storage"
-	agentTool "github.com/EngineerProjects/nexus-engine/internal/tools/special/agents"
 	"github.com/EngineerProjects/nexus-engine/internal/tools/registry"
+	agentTool "github.com/EngineerProjects/nexus-engine/internal/tools/special/agents"
 	"github.com/EngineerProjects/nexus-engine/internal/tools/system/mcp"
 	browsercore "github.com/EngineerProjects/nexus-engine/internal/web/browser"
 )
@@ -58,6 +59,16 @@ func NewClient(config *ClientConfig) (*Client, error) {
 		config.WorkingDir = workingDir
 	}
 
+	// Resolve API key: CredentialResolver takes precedence over APIKey.
+	apiKey := config.APIKey
+	if config.CredentialResolver != nil {
+		if resolved, resolveErr := config.CredentialResolver.ResolveAPIKey(context.Background(), string(config.Model.Provider)); resolveErr == nil && resolved != "" {
+			apiKey = resolved
+		} else if resolveErr != nil {
+			log.Printf("[sdk] CredentialResolver failed for provider %s: %v", config.Model.Provider, resolveErr)
+		}
+	}
+
 	// Provider
 	var apiClient *providers.Client
 	if config.ProviderConfig != nil {
@@ -66,11 +77,11 @@ func NewClient(config *ClientConfig) (*Client, error) {
 			pc.Provider = config.Model.Provider
 		}
 		if pc.APIKey == "" {
-			pc.APIKey = config.APIKey
+			pc.APIKey = apiKey
 		}
-		apiClient = providers.NewClientWithConfig(config.APIKey, &pc)
+		apiClient = providers.NewClientWithConfig(apiKey, &pc)
 	} else {
-		apiClient = providers.NewClient(config.APIKey, config.Model.Provider)
+		apiClient = providers.NewClient(apiKey, config.Model.Provider)
 	}
 
 	artifactStore := initArtifactStore(config)

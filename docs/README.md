@@ -1,53 +1,59 @@
 # Nexus Engine — Documentation
 
-Nexus Engine is a headless AI coding runtime written in Go. It orchestrates multi-turn LLM conversations with tool use, session persistence, streaming, and multi-provider routing.
+Technical documentation for the nexus-engine runtime. For project overview and quick start, see the [root README](../README.md).
 
 ## Contents
 
 | Document | What it covers |
 |---|---|
-| [Architecture](./architecture.md) | Full system design, layer diagrams, data flows |
-| [Prompt System](./prompt-system.md) | Section assembly, stage overlays, caching, tool hints |
-| [Tool System](./tools.md) | Contract interface, built-in tools, permission pipeline |
+| [**Vision**](./vision/README.md) | Project idea, design principles, roadmap |
+| [Architecture](./architecture.md) | Full system design, layer diagrams, query loop state machine, data flows |
+| [Prompt System](./prompt-system.md) | Section assembly, stage overlays, cache control, tool hints |
+| [Tools](./tools.md) | Tool contract interface, built-in tools reference, permission pipeline |
 | [Providers](./providers.md) | Multi-provider routing, retry, circuit breaker, streaming |
-| [SDK Guide](./sdk.md) | Go SDK usage, ClientConfig, sessions, callbacks |
-| [Transports And Setup](./transports.md) | Installation, env, HTTP API, gRPC, protobuf, curl/grpcurl |
+| [SDK Guide](./sdk.md) | Go SDK usage, `ClientConfig`, sessions, callbacks, MCP |
+| [Skills](./skills.md) | Skills system, loading order, injection into prompt |
+| [Transports & Setup](./transports.md) | gRPC setup, proto codegen, env vars |
 
 ## Quick orientation
 
 ```
-cmd/api        HTTP REST + SSE server (port 8090)
-cmd/cli        Interactive terminal chat
-cmd/grpc       gRPC server (port 50051)
+cmd/
+  cli/       Interactive terminal agent (nexus binary)
+  grpc/      gRPC server (port 50051)
+
+pkg/
+  sdk/       Public Go SDK — main consumer entry point
+  grpc/      gRPC proto bindings (generated stubs + .proto)
+  mcp/       MCP protocol wrapper
+  skills/    Skills loading and resolution
+  config/    Config loader (env, .env, .nexus.yaml)
 
 internal/
   engine/      Session lifecycle, main query loop
-  execution/   Tool orchestration, EventQueue
-  prompt/      System prompt assembly
-  providers/   LLM clients (Anthropic, Bedrock, Vertex, …)
-  tools/       30+ built-in tools
-  permissions/ Permission engine and auto-mode classifier
+  execution/   Tool orchestration, EventQueue, streaming
+  prompt/      System prompt assembly (4-layer pipeline)
+  providers/   LLM clients (Anthropic, OpenAI, Gemini, Ollama, …)
+  tools/       30+ built-in tool implementations
+  permissions/ Permission engine and auto-mode LLM classifier
   memory/      Long-term memory (project / user / cross-session)
   modes/       Execution modes (plan, execute, browse, pair)
-  runtime/     Compaction engine, state persistence
+  runtime/     Compaction engine, session state persistence
   hooks/       Lifecycle hook system
   monitoring/  Prometheus metrics
   db/          SQLite schema and session store
-  auth/        OAuth and identity
-
-pkg/
-  sdk/         Public Go SDK
-  mcp/         MCP protocol wrapper
-  skills/      Skills system
-  config/      Config loader
-  grpc/        gRPC proto bindings
+  auth/        OAuth device flow and credential store (CLI-era)
+  web/         Browser (Playwright), fetch, search providers
+  storage/     ArtifactStore (local + S3)
+  vector/      Vector store (memory + SQLite)
+  rag/         RAG ingestion and search primitives
 ```
 
 ## Build
 
 ```bash
-go build ./cmd/api   # HTTP server
-go build ./cmd/cli   # CLI
-go build ./cmd/grpc  # gRPC server
-go test ./...        # Run all tests
+make build          # builds CLI + gRPC → bin/
+go build ./cmd/cli
+go build ./cmd/grpc
+go test ./...
 ```

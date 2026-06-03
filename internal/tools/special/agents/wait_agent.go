@@ -110,12 +110,12 @@ func (t *WaitAgentTool) Call(
 
 	// Emit wait.begin — mirrors Codex CollabWaitingBeginEvent.
 	emitAgentEvent(ctx, types.RuntimeEventTypeAgentWaitBegin, &types.AgentRuntimeEvent{
-		CallID:      callID,
-		AgentID:     agentID,
+		CallID:        callID,
+		AgentID:       agentID,
 		AgentNickname: ag.Nickname,
-		AgentRole:   ag.Role,
-		Status:      ag.CollabStatus(),
-		StartedAtMs: nowMs(),
+		AgentRole:     ag.Role,
+		Status:        ag.CollabStatus(),
+		StartedAtMs:   nowMs(),
 	})
 
 	// Wait with timeout (non-blocking if already done).
@@ -131,10 +131,10 @@ func (t *WaitAgentTool) Call(
 				CompletedAtMs: nowMs(),
 			})
 			resp := map[string]any{
-				"agent_id": agentID,
-				"status":   ag.CollabStatus(),
+				"agent_id":  agentID,
+				"status":    ag.CollabStatus(),
 				"timed_out": true,
-				"message":  fmt.Sprintf("Timeout after %.0fs — agent still running. Call wait_agent again or close_agent to cancel.", timeout.Seconds()),
+				"message":   fmt.Sprintf("Timeout after %.0fs — agent still running. Call wait_agent again or close_agent to cancel.", timeout.Seconds()),
 			}
 			res := tool.NewJSONResult(resp)
 			res.Content = fmt.Sprintf("Agent %s still running after %.0fs timeout.", agentID, timeout.Seconds())

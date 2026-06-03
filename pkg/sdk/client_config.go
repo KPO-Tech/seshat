@@ -1,12 +1,26 @@
 package sdk
 
 import (
+	"context"
 	"time"
 
 	"github.com/EngineerProjects/nexus-engine/internal/providers"
 	"github.com/EngineerProjects/nexus-engine/internal/storage"
 	"github.com/EngineerProjects/nexus-engine/pkg/runtimepath"
 )
+
+// CredentialResolver resolves the API key for an LLM provider at client
+// creation time. The provider argument matches types.APIProvider values
+// (e.g. "anthropic", "openai", "codex").
+//
+// CLI / headless mode: not needed — the default env-var → FileStore
+// resolution in internal/providers/auth.go applies automatically.
+//
+// Server mode: implement this interface to inject per-user credentials
+// from a database instead of relying on a single global API key.
+type CredentialResolver interface {
+	ResolveAPIKey(ctx context.Context, provider string) (string, error)
+}
 
 // ClientConfig represents the client configuration.
 type ClientConfig struct {
@@ -46,6 +60,11 @@ type ClientConfig struct {
 	StorageGCInterval   time.Duration  `json:"storage_gc_interval"`
 	StorageGCLimit      int            `json:"storage_gc_limit"`
 	StorageGCNamespaces []string       `json:"storage_gc_namespaces"`
+
+	// CredentialResolver, if set, is called at client creation to resolve the
+	// API key for the configured provider. Takes precedence over APIKey.
+	// Use in server mode to inject per-user credentials from a database.
+	CredentialResolver CredentialResolver `json:"-"`
 
 	// Provider override
 	ProviderConfig *providers.Config `json:"-"`

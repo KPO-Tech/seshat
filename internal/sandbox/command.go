@@ -572,12 +572,12 @@ func isShellIdentifier(s string) bool {
 type cmdType int
 
 const (
-	cmdTypeRead          cmdType = iota
-	cmdTypeSearch        cmdType = iota
-	cmdTypeStateChange   cmdType = iota
-	cmdTypeWrite         cmdType = iota
+	cmdTypeRead           cmdType = iota
+	cmdTypeSearch         cmdType = iota
+	cmdTypeStateChange    cmdType = iota
+	cmdTypeWrite          cmdType = iota
 	cmdTypeVersionControl cmdType = iota
-	cmdTypeUnknown       cmdType = iota
+	cmdTypeUnknown        cmdType = iota
 )
 
 func classifyCommandToken(cmd string) cmdType {
