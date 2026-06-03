@@ -1,0 +1,83 @@
+run:
+  timeout: 5m
+  tests: true
+
+linters:
+  disable-all: true
+  enable:
+    - govet
+    - staticcheck
+    - gosimple
+    - ineffassign
+    - errcheck
+    - gofmt
+    - misspell
+
+linters-settings:
+  errcheck:
+    # Intentional fire-and-forget calls throughout the codebase.
+    exclude-functions:
+      - fmt.Fprintf
+      - fmt.Fprintln
+      - fmt.Printf
+      - fmt.Println
+      - (io.Writer).Write
+      - (*os.File).Close
+      - os.Remove
+      - os.RemoveAll
+
+issues:
+  max-issues-per-linter: 0
+  max-same-issues: 0
+
+  exclude-rules:
+    # errcheck: known intentional fire-and-forget patterns
+    - linters: [errcheck]
+      text: "json.Unmarshal"
+    - linters: [errcheck]
+      text: "os.MkdirAll"
+    - linters: [errcheck]
+      text: "os.Chdir"
+    - linters: [errcheck]
+      text: "fmt.Sscanf"
+    - linters: [errcheck]
+      text: "Disconnect"
+    - linters: [errcheck]
+      text: '\.Stop'
+    - linters: [errcheck]
+      text: '\.Notify'
+    - linters: [errcheck]
+      text: "BindEnv"
+    - linters: [errcheck]
+      text: "loadEnvFile"
+    - linters: [errcheck]
+      text: "learnProjectPatternToStore"
+    - linters: [errcheck]
+      text: "SetText|SetBold|SetItalic|SetUnderline|SetColor|SetSize|AddRun"
+
+    # errcheck: test helpers and HTTP handlers in tests
+    - linters: [errcheck]
+      path: '_test\.go'
+    - linters: [ineffassign]
+      path: '_test\.go'
+    - linters: [staticcheck]
+      path: '_test\.go'
+      text: "SA4006"
+
+    # errcheck: w.Write in HTTP handlers — standard pattern, errors are network-level
+    - linters: [errcheck]
+      text: 'w\.Write'
+
+    # staticcheck: deprecated gRPC DialContext — migrating separately
+    - linters: [staticcheck]
+      text: "SA1019.*grpc.DialContext"
+
+    # staticcheck: string context keys and nil context in tests — cosmetic
+    - linters: [staticcheck]
+      path: '_test\.go'
+      text: "SA1029|SA1012"
+
+    # staticcheck: empty branch in test — intentional placeholder
+    - linters: [staticcheck]
+      path: '_test\.go'
+      text: "SA9003"

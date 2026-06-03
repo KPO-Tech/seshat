@@ -1,0 +1,315 @@
+// ============================================================================
+// Nexus AI Engine - Protocole gRPC
+// ============================================================================
+//
+// Ce fichier définit les services gRPC pour l'API Nexus.
+// À compiler avec: protoc --go_out=. --go-grpc_out=. nexus.proto
+//
+// ============================================================================
+
+syntax = "proto3";
+
+package nexus;
+
+// Option pour générer le code Go
+option go_package = "github.com/EngineerProjects/nexus-engine/pkg/grpc/nexus";
+
+// ============================================================================
+// Services
+// ============================================================================
+
+// NexusService est le service principal pour les interactions avec le moteur IA
+service NexusService {
+    // Exécute une requête simple (non-streaming)
+    rpc Query(QueryRequest) returns (QueryResponse);
+
+    // Exécute une requête en mode streaming (pour les réponses longues)
+    rpc QueryStream(QueryRequest) returns (stream QueryResponse);
+
+    // Liste tous les skills disponibles
+    rpc ListSkills(ListSkillsRequest) returns (ListSkillsResponse);
+
+    // Retourne les détails d'un skill spécifique
+    rpc GetSkillDetails(GetSkillDetailsRequest) returns (GetSkillDetailsResponse);
+
+    // Liste les serveurs MCP connectés
+    rpc ListMCP(ListMCPRequest) returns (ListMCPResponse);
+
+    // Connecte à un serveur MCP
+    rpc ConnectMCP(ConnectMCPRequest) returns (ConnectMCPResponse);
+
+    // Déconnecte un serveur MCP
+    rpc DisconnectMCP(DisconnectMCPRequest) returns (DisconnectMCPResponse);
+
+    // Liste les modèles disponibles
+    rpc GetModels(GetModelsRequest) returns (GetModelsResponse);
+
+    // Health check pour le monitoring
+    rpc HealthCheck(HealthCheckRequest) returns (HealthCheckResponse);
+}
+
+// ============================================================================
+// Messages de requête
+// ============================================================================
+
+// Requête pour exécuter une requête IA
+message QueryRequest {
+    string prompt = 1;           // Le prompt à exécuter
+    string model = 2;            // Modèle à utiliser (ex: "claude-3-5-sonnet-20241022")
+    repeated string tools = 3;   // Liste des tools à activer
+    bool stream = 4;             // Mode streaming
+    string context_id = 5;       // ID de contexte pour la continuité de conversation
+
+    // Paramètres optionnels
+    float temperature = 10;     // Temperature (0.0 - 1.0)
+    int32 max_tokens = 11;       // Nombre max de tokens en sortie
+}
+
+// Requête pour lister les skills
+message ListSkillsRequest {
+    string source_filter = 1;    // Filter par source: "all", "bundled", "mcp", "file"
+}
+
+// Requête pour obtenir les détails d'un skill
+message GetSkillDetailsRequest {
+    string name = 1;             // Nom du skill
+}
+
+// Requête pour lister les serveurs MCP
+message ListMCPRequest {}
+
+// Requête pour connecter un serveur MCP
+message ConnectMCPRequest {
+    string name = 1;             // Nom du serveur
+    string type = 2;             // Type: "stdio", "http", "sse", "ws"
+    string command = 3;          // Commande (pour stdio)
+    repeated string args = 4;     // Arguments de la commande
+    string url = 5;              // URL (pour http/sse/ws)
+    map<string, string> env = 6; // Variables d'environnement
+    int32 timeout = 7;          // Timeout en secondes
+}
+
+// Requête pour déconnecter un serveur MCP
+message DisconnectMCPRequest {
+    string name = 1;             // Nom du serveur à déconnecter
+}
+
+// Requête pour lister les modèles
+message GetModelsRequest {}
+
+// Requête pour health check
+message HealthCheckRequest {}
+
+// ============================================================================
+// Messages de réponse
+// ============================================================================
+
+// Réponse à une requête Query
+message QueryResponse {
+    string content = 1;           // Contenu de la réponse
+    string model = 2;            // Modèle utilisé
+    TokenUsage token_usage = 3;  // Utilisation des tokens
+
+    // Métadonnées additionnelles
+    string conversation_id = 10; // ID de conversation
+    bool stopped = 11;           // Si la réponse a été coupée
+    string item_type = 12;       // "chunk", "runtime_event", "final"
+    ChunkDelta chunk = 13;       // Détails structurés pour un delta streamé
+    RuntimeEvent runtime_event = 14; // Événement runtime structuré
+}
+
+// Delta de réponse streamé
+message ChunkDelta {
+    string type = 1;
+    string delta_type = 2;
+    string delta = 3;
+}
+
+// Événement runtime structuré du moteur
+message RuntimeEvent {
+    string type = 1;
+    string session_id = 2;
+    string turn_id = 3;
+    int32 turn_number = 4;
+    string timestamp = 5;
+    string stop_reason = 6;
+    TokenUsage token_usage = 7;
+    ChunkDelta chunk = 8;
+    string tool_name = 9;
+    string tool_stage = 10;
+    string tool_message = 11;
+    float tool_percent_complete = 12;
+    string error = 13;
+}
+
+// Utilisation des tokens
+message TokenUsage {
+    int64 input_tokens = 1;
+    int64 output_tokens = 2;
+    int64 total_tokens = 3;
+}
+
+// Réponse pour ListSkills
+message ListSkillsResponse {
+    repeated Skill skills = 1;    // Liste des skills
+    int32 total_count = 2;        // Nombre total
+}
+
+// Informations sur un skill
+message Skill {
+    string name = 1;
+    string description = 2;
+    string source = 3;           // "bundled", "file", "mcp"
+    string when_to_use = 4;      // Quand utiliser ce skill
+    repeated string allowed_tools = 5;
+}
+
+// Réponse pour GetSkillDetails
+message GetSkillDetailsResponse {
+    Skill skill = 1;             // Détails du skill
+    string prompt = 2;           // Contenu du skill (si autorisé)
+}
+
+// Réponse pour ListMCP
+message ListMCPResponse {
+    repeated MCPServer servers = 1;
+    int32 total_count = 2;
+}
+
+// Informations sur un serveur MCP
+message MCPServer {
+    string name = 1;
+    string status = 2;          // "connected", "disconnected", "error"
+    int32 tool_count = 3;        // Nombre de tools
+    string last_error = 4;       // Dernière erreur si applicable
+}
+
+// Réponse pour ConnectMCP
+message ConnectMCPResponse {
+    bool success = 1;
+    string error = 2;            // Message d'erreur si échec
+}
+
+// Réponse pour DisconnectMCP
+message DisconnectMCPResponse {
+    bool success = 1;
+    string error = 2;
+}
+
+// Réponse pour GetModels
+message GetModelsResponse {
+    repeated ModelInfo models = 1;
+}
+
+// Informations sur un modèle
+message ModelInfo {
+    string id = 1;               // ID du modèle (ex: "claude-3-5-sonnet-20241022")
+    string name = 2;            // Nom lisible (ex: "Claude 3.5 Sonnet")
+    string provider = 3;        // Provider (ex: "anthropic")
+    int32 max_tokens = 4;       // Token max en entrée
+    // Ajouter d'autres champs selon les besoins
+}
+
+// Réponse pour HealthCheck
+message HealthCheckResponse {
+    string status = 1;          // "ok", "degraded", "down"
+    string version = 2;          // Version du serveur
+    string uptime = 3;          // Durée de fonctionnement
+}
+
+// ============================================================================
+// Services additionnels (optionnels)
+// ============================================================================
+
+// Service pour les opérations de fichiers
+service FileService {
+    rpc Read(FileReadRequest) returns (FileReadResponse);
+    rpc Write(FileWriteRequest) returns (FileWriteResponse);
+    rpc Edit(FileEditRequest) returns (FileEditResponse);
+    rpc Glob(FileGlobRequest) returns (FileGlobResponse);
+    rpc Grep(FileGrepRequest) returns (FileGrepResponse);
+}
+
+// Service pour les opérations système
+service SystemService {
+    rpc Bash(BashRequest) returns (BashResponse);
+    rpc GetSystemInfo(SystemInfoRequest) returns (SystemInfoResponse);
+}
+
+// ============================================================================
+// Messages additionnels pour FileService
+// ============================================================================
+
+message FileReadRequest {
+    string path = 1;
+    int32 offset = 2;
+    int32 limit = 3;
+}
+message FileReadResponse {
+    string content = 1;
+    bool error = 2;
+    string error_message = 3;
+}
+
+message FileWriteRequest {
+    string path = 1;
+    string content = 2;
+}
+message FileWriteResponse {
+    bool success = 1;
+    string error = 2;
+}
+
+message FileEditRequest {
+    string path = 1;
+    string old_string = 2;
+    string new_string = 3;
+}
+message FileEditResponse {
+    bool success = 1;
+    string error = 2;
+}
+
+message FileGlobRequest {
+    string pattern = 1;
+    string path = 2;
+}
+message FileGlobResponse {
+    repeated string files = 1;
+}
+
+message FileGrepRequest {
+    string pattern = 1;
+    string path = 2;
+    bool recursive = 3;
+}
+message FileGrepResponse {
+    repeated GrepMatch matches = 1;
+}
+message GrepMatch {
+    string file = 1;
+    int32 line = 2;
+    string content = 3;
+}
+
+// ============================================================================
+// Messages additionnels pour SystemService
+// ============================================================================
+
+message BashRequest {
+    string command = 1;
+    string cwd = 2;
+}
+message BashResponse {
+    string output = 1;
+    int32 exit_code = 2;
+    string error = 3;
+}
+
+message SystemInfoRequest {}
+message SystemInfoResponse {
+    string os = 1;
+    string arch = 2;
+    int32 cpu_count = 3;
+    int64 memory_total = 4;
+}

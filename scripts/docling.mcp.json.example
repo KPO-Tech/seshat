@@ -1,0 +1,13 @@
+{
+  "mcpServers": {
+    "docling": {
+      "type": "stdio",
+      "command": "python3",
+      "args": ["/absolute/path/to/nexus-engine/scripts/docling-mcp-bridge.py"],
+      "env": {
+        "DOCLING_URL": "http://localhost:5001",
+        "DOCLING_TIMEOUT": "120"
+      }
+    }
+  }
+}

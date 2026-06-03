@@ -1,0 +1,100 @@
+package engine
+
+import (
+	"context"
+	"fmt"
+
+	"github.com/EngineerProjects/nexus-engine/internal/prompt"
+	tool "github.com/EngineerProjects/nexus-engine/internal/tools/registry"
+	"github.com/EngineerProjects/nexus-engine/internal/types"
+)
+
+// buildAPIRequest builds the provider-facing request data for the current turn.
+func (s *Session) buildAPIRequest(ctx context.Context) (types.APIRequest, error) {
+	runtimeTools := s.state.EffectiveToolSurface(s.engine.toolRegistry)
+	return s.buildAPIRequestForRuntimeTools(ctx, runtimeTools, s.state.PendingDeferredToolNames(s.engine.toolRegistry), prompt.StageDefault)
+}
+
+func (s *Session) refreshSystemPrompt(ctx context.Context, tools map[string]tool.Tool, pendingDeferred []string, stage prompt.ExecutionStage) (PromptRefresh, error) {
+	apiReq, err := s.buildAPIRequestForRuntimeTools(ctx, tools, pendingDeferred, stage)
+	if err != nil {
+		return PromptRefresh{}, err
+	}
+	return PromptRefresh{
+		SystemPrompt:       apiReq.SystemPrompt,
+		SystemPromptBlocks: append([]types.SystemPromptBlock(nil), apiReq.SystemPromptBlocks...),
+	}, nil
+}
+
+func (s *Session) workingDirectory() string {
+	if s != nil && s.workingDirectoryOverride != nil && *s.workingDirectoryOverride != "" {
+		return *s.workingDirectoryOverride
+	}
+	if s != nil && s.state != nil && s.state.Metadata != nil && s.state.Metadata.RootPath != "" {
+		return s.state.Metadata.RootPath
+	}
+	if s != nil && s.engine != nil {
+		return s.engine.workingDirectory()
+	}
+	return "."
+}
+
+func (s *Session) buildAPIRequestForRuntimeTools(ctx context.Context, runtimeTools map[string]tool.Tool, pendingDeferred []string, detectedStage prompt.ExecutionStage) (types.APIRequest, error) {
+	customSystemPrompt := trimmedStringPtr(s.config.SystemPromptTemplate)
+	if s.systemPromptTemplateOverride != nil {
+		customSystemPrompt = s.systemPromptTemplateOverride
+	}
+	appendPrompt := trimmedStringPtr(s.config.AppendSystemPrompt)
+	if s.appendSystemPromptOverride != nil {
+		appendPrompt = s.appendSystemPromptOverride
+	}
+	workingDirectory := s.workingDirectory()
+
+	stage := s.config.PromptStage
+	if stage == prompt.StageDefault && detectedStage != prompt.StageDefault {
+		stage = detectedStage
+	}
+
+	partsInput := prompt.FetchSystemPromptPartsInput{
+		Tools:               runtimeTools,
+		Model:               s.config.Model,
+		WorkingDirectory:    workingDirectory,
+		DeferredToolNames:   pendingDeferred,
+		MemoryContext:       s.engine.memoryContext(),
+		CustomSystemPrompt:  customSystemPrompt,
+		AppendSystemPrompt:  nil,
+		Stage:               stage,
+		StageOverrides:      s.config.PromptStageOverrides,
+		ToolHints:           s.config.PromptToolHints,
+		ProjectInstructions: readProjectInstructions(workingDirectory),
+	}
+
+	parts, err := s.engine.promptBuilder.FetchSystemPromptParts(ctx, partsInput)
+	if err != nil {
+		return types.APIRequest{}, fmt.Errorf("failed to fetch system prompt parts: %w", err)
+	}
+
+	apiReq, err := prompt.BuildProviderRequestWithAppendPrompt(
+		ctx,
+		s.engine.promptBuilder,
+		s.state.SessionID,
+		s.state.TurnNumber,
+		workingDirectory,
+		parts,
+		appendPrompt,
+		s.state.CloneMessages(),
+		runtimeTools,
+		s.config.Model,
+		s.config.MaxTokens,
+		s.engine.loop.config.EnableStreaming,
+	)
+	if err != nil {
+		return types.APIRequest{}, fmt.Errorf("failed to compose canonical prompt request: %w", err)
+	}
+
+	if len(s.config.PromptToolHints) > 0 {
+		apiReq.Tools = prompt.BuildProviderToolDefinitionsWithHints(runtimeTools, s.config.PromptToolHints)
+	}
+
+	return apiReq, nil
+}

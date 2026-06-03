@@ -1,0 +1,176 @@
+package types
+
+import (
+	"time"
+)
+
+// SessionID uniquely identifies a session
+type SessionID string
+
+// TurnID uniquely identifies a turn within a session
+type TurnID string
+
+// AgentID uniquely identifies an agent/subagent
+type AgentID string
+
+// MessageID uniquely identifies a message
+type MessageID string
+
+// SessionStatus represents the status of a session
+type SessionStatus string
+
+const (
+	SessionStatusActive    SessionStatus = "active"
+	SessionStatusIdle      SessionStatus = "idle"
+	SessionStatusInterrupt SessionStatus = "interrupted"
+	SessionStatusClosed    SessionStatus = "closed"
+)
+
+// SessionMetadataSchemaVersion is the current schema version for persisted session metadata.
+// Increment this constant whenever SessionMetadata gains a breaking structural change,
+// and add migration logic in engine.migrateSessionMetadata.
+const SessionMetadataSchemaVersion = 1
+
+// SessionMetadata contains metadata about a session
+type SessionMetadata struct {
+	// ID is the unique session identifier
+	ID SessionID `json:"id"`
+
+	// Status is the current status
+	Status SessionStatus `json:"status"`
+
+	// CreatedAt is when the session was created
+	CreatedAt time.Time `json:"created_at"`
+
+	// UpdatedAt is when the session was last updated
+	UpdatedAt time.Time `json:"updated_at"`
+
+	// RootPath is the working directory for this session
+	RootPath string `json:"root_path,omitempty"`
+
+	// Model is the model being used
+	Model string `json:"model,omitempty"`
+
+	// TotalTurns is the total number of turns completed
+	TotalTurns int `json:"total_turns"`
+
+	// TotalTokens is the total tokens used across all turns
+	TotalTokens int `json:"total_tokens"`
+
+	// MaxTokens is the context window for the current model
+	MaxTokens int `json:"max_tokens,omitempty"`
+
+	// CompactCount tracks how many times we've compacted
+	CompactCount int `json:"compact_count"`
+
+	// LastCompactedAt tracks when we last compacted
+	LastCompactedAt *time.Time `json:"last_compacted_at,omitempty"`
+
+	// Additional metadata
+	Additional map[string]any `json:"additional,omitempty"`
+
+	// SchemaVersion is the schema version of this persisted metadata.
+	// Zero means pre-versioning (treat as v0 / legacy).
+	SchemaVersion int `json:"schema_version,omitempty"`
+}
+
+// TurnMetadata contains metadata about a turn
+type TurnMetadata struct {
+	// TurnID is the unique turn identifier
+	TurnID TurnID `json:"turn_id"`
+
+	// SessionID is the parent session
+	SessionID SessionID `json:"session_id"`
+
+	// TurnNumber is the sequential turn number (1-indexed)
+	TurnNumber int `json:"turn_number"`
+
+	// StartedAt is when the turn started
+	StartedAt time.Time `json:"started_at"`
+
+	// CompletedAt is when the turn completed
+	CompletedAt *time.Time `json:"completed_at,omitempty"`
+
+	// StopReason is why the turn stopped
+	StopReason string `json:"stop_reason,omitempty"`
+
+	// ToolUses is the number of tools used in this turn
+	ToolUses int `json:"tool_uses,omitempty"`
+
+	// InputTokens is the tokens used for input
+	InputTokens int `json:"input_tokens"`
+
+	// OutputTokens is the tokens used for output
+	OutputTokens int `json:"output_tokens"`
+
+	// IsCompacted indicates if this turn was after a compaction
+	IsCompacted bool `json:"is_compacted"`
+
+	// Additional metadata
+	Additional map[string]any `json:"additional,omitempty"`
+}
+
+// TranscriptEntry represents a single entry in the transcript
+type TranscriptEntry struct {
+	// ID uniquely identifies this entry
+	ID MessageID `json:"id"`
+
+	// Type is the type of entry
+	Type EntryType `json:"type"`
+
+	// Role is the message role (for message entries)
+	Role Role `json:"role,omitempty"`
+
+	// Content is the message content (for message entries)
+	Content []ContentBlock `json:"content,omitempty"`
+
+	// Timestamp is when this entry was created
+	Timestamp time.Time `json:"timestamp"`
+
+	// TurnID indicates which turn this belongs to
+	TurnID TurnID `json:"turn_id,omitempty"`
+
+	// Metadata contains additional information
+	Metadata map[string]any `json:"metadata,omitempty"`
+}
+
+// EntryType represents the type of transcript entry
+type EntryType string
+
+const (
+	EntryTypeMessage EntryType = "message"
+	EntryTypeTurn    EntryType = "turn"
+	EntryTypeCompact EntryType = "compact"
+	EntryTypeSystem  EntryType = "system"
+	EntryTypeControl EntryType = "control"
+)
+
+// NewSessionID creates a new session ID (wrapper for clarity)
+func NewSessionID(id string) SessionID {
+	return SessionID(id)
+}
+
+// NewTurnID creates a new turn ID (wrapper for clarity)
+func NewTurnID(id string) TurnID {
+	return TurnID(id)
+}
+
+// NewMessageID creates a new message ID (wrapper for clarity)
+func NewMessageID(id string) MessageID {
+	return MessageID(id)
+}
+
+// String returns the string representation
+func (s SessionID) String() string {
+	return string(s)
+}
+
+// String returns the string representation
+func (t TurnID) String() string {
+	return string(t)
+}
+
+// String returns the string representation
+func (m MessageID) String() string {
+	return string(m)
+}

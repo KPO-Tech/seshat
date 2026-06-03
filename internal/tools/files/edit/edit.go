@@ -1,0 +1,683 @@
+package edit
+
+import (
+	"context"
+	"fmt"
+	"os"
+	"path/filepath"
+	"strings"
+	"time"
+	"unicode"
+
+	"github.com/EngineerProjects/nexus-engine/internal/sandbox"
+	fileReadTool "github.com/EngineerProjects/nexus-engine/internal/tools/files/read"
+	"github.com/EngineerProjects/nexus-engine/internal/tools/files/shared"
+	tool "github.com/EngineerProjects/nexus-engine/internal/tools/registry"
+	"github.com/EngineerProjects/nexus-engine/internal/tools/schema"
+	"github.com/EngineerProjects/nexus-engine/internal/types"
+)
+
+const (
+	// ToolName is the name of the edit tool
+	ToolName = "edit_file"
+
+	// ToolDescription is the description of the edit tool
+	ToolDescription = "Edit a file by replacing text. Finds and replaces 'old_string' with 'new_string'. Use replace_all to replace all occurrences.\n\n" +
+		"Usage:\n" +
+		"- You must use your FileRead tool at least once in the conversation before editing. This tool will error if you attempt an edit without reading the file.\n" +
+		"- When editing text from Read tool output, ensure you preserve the exact indentation (tabs/spaces) as it appears AFTER the line number prefix. The line number prefix format is: line number + arrow (or spaces + line number + arrow). Everything after that is the actual file content to match. Never include any part of the line number prefix in the old_string or new_string.\n" +
+		"- ALWAYS prefer editing existing files in the codebase. NEVER write new files unless explicitly required.\n" +
+		"- Only use emojis if the user explicitly requests it. Avoid adding emojis to files unless asked.\n" +
+		"- The edit will FAIL if `old_string` is not unique in the file. Either provide a larger string with more surrounding context to make it unique or use `replace_all` to change every instance of `old_string`.\n" +
+		"- Use `replace_all` for replacing and renaming strings across the file. This parameter is useful if you want to rename a variable for instance.\n" +
+		"- Use the smallest old_string that's clearly unique - usually 2-4 adjacent lines is sufficient. Avoid including 10+ lines of context when less uniquely identifies the target.\n"
+
+	leftSingleCurlyQuote  = '‘'
+	rightSingleCurlyQuote = '’'
+	leftDoubleCurlyQuote  = '“'
+	rightDoubleCurlyQuote = '”'
+	patchContextLines     = 3
+)
+
+// StructuredPatchHunk represents a single structured diff hunk.
+type StructuredPatchHunk struct {
+	OldStart int      `json:"oldStart"`
+	OldLines int      `json:"oldLines"`
+	NewStart int      `json:"newStart"`
+	NewLines int      `json:"newLines"`
+	Lines    []string `json:"lines"`
+}
+
+// GitDiff is the shared git diff summary, re-aliased here for backward compat.
+type GitDiff = shared.GitDiff
+
+// Tool implements the edit file tool
+type Tool struct {
+	workingDir       string
+	filesystemPolicy *sandbox.FilesystemPolicy
+}
+
+// NewEditTool creates a new edit file tool
+func NewEditTool(workingDir string) *Tool {
+	return &Tool{
+		workingDir:       workingDir,
+		filesystemPolicy: sandbox.NewDefaultFilesystemPolicy(),
+	}
+}
+
+// Definition returns the tool definition
+func (e *Tool) Definition() tool.Definition {
+	return tool.Definition{
+		Name:        ToolName,
+		DisplayName: "Edit File",
+		SearchHint:  SearchHint,
+		Description: ToolDescription,
+		Category:    "filesystem",
+		InputSchema: schema.FromMap(map[string]any{
+			"type": "object",
+			"properties": map[string]any{
+				"file_path": map[string]any{
+					"type":        "string",
+					"description": "The path to the file to edit",
+				},
+				"old_string": map[string]any{
+					"type":        "string",
+					"description": "The text to replace",
+				},
+				"new_string": map[string]any{
+					"type":        "string",
+					"description": "The text to replace it with (must be different from old_string)",
+				},
+				"replace_all": map[string]any{
+					"type":        "boolean",
+					"description": "Replace all occurrences of old_string (default false)",
+				},
+			},
+			"required": []string{"file_path", "old_string", "new_string"},
+		}),
+		IsReadOnly:         false,
+		IsConcurrencySafe:  false,
+		IsDestructive:      true,
+		RequiresPermission: true,
+	}
+}
+
+// Call executes the tool
+func (e *Tool) Call(
+	ctx context.Context,
+	input tool.CallInput,
+	permissionCheck types.CanUseToolFn,
+) (tool.CallResult, error) {
+	filePath, ok := input.Parsed["file_path"].(string)
+	if !ok || filePath == "" {
+		return tool.NewErrorResult(fmt.Errorf("file_path is required and must be a string")), nil
+	}
+
+	oldString, ok := input.Parsed["old_string"].(string)
+	if !ok {
+		return tool.NewErrorResult(fmt.Errorf("old_string is required and must be a string")), nil
+	}
+
+	newString, ok := input.Parsed["new_string"].(string)
+	if !ok {
+		return tool.NewErrorResult(fmt.Errorf("new_string is required and must be a string")), nil
+	}
+
+	if oldString == newString {
+		return tool.NewErrorResult(fmt.Errorf("old_string and new_string must be different")), nil
+	}
+
+	replaceAll := false
+	if replaceAllVal, ok := input.Parsed["replace_all"].(bool); ok {
+		replaceAll = replaceAllVal
+	}
+
+	if err := shared.ValidateFilePath(filePath, "editing"); err != nil {
+		return tool.NewErrorResult(err), nil
+	}
+
+	absolutePath, err := e.resolvePath(filePath, input.ToolContextValue())
+	if err != nil {
+		return tool.NewErrorResult(err), nil
+	}
+
+	if err := shared.ValidateUNCPathSecurity(absolutePath); err != nil {
+		return tool.NewErrorResult(err), nil
+	}
+
+	if strings.EqualFold(filepath.Ext(absolutePath), ".ipynb") {
+		return tool.NewErrorResult(fmt.Errorf("file is a Jupyter Notebook. Use a notebook editing tool instead: %s", filePath)), nil
+	}
+
+	if err := shared.ValidateSensitivePath(absolutePath, "editTool", newString); err != nil {
+		return tool.NewErrorResult(err), nil
+	}
+
+	rawOriginalContent, fileExists, err := readFileIfExists(absolutePath)
+	if err != nil {
+		return tool.NewErrorResult(err), nil
+	}
+
+	if info, statErr := os.Stat(absolutePath); statErr == nil && info.IsDir() {
+		return tool.NewErrorResult(fmt.Errorf("path is a directory, not a file: %s", filePath)), nil
+	}
+
+	normalizedOriginalContent := normalizeLineEndings(rawOriginalContent)
+	normalizedOldString := normalizeLineEndings(oldString)
+	normalizedNewString := normalizeLineEndings(newString)
+	preferredLineEnding := detectPreferredLineEnding(rawOriginalContent)
+	if preferredLineEnding == "" {
+		preferredLineEnding = "\n"
+	}
+
+	if fileExists {
+		if normalizedOldString == "" {
+			if strings.TrimSpace(normalizedOriginalContent) != "" {
+				return tool.NewErrorResult(fmt.Errorf("cannot create new file - file already exists: %s", filePath)), nil
+			}
+		} else {
+			readState, hasReadState := fileReadTool.GetLastReadState(absolutePath)
+			if !hasReadState {
+				return tool.NewErrorResult(fmt.Errorf("file has not been read yet. Read it first before editing it: %s", filePath)), nil
+			}
+			if readState.IsPartialView {
+				return tool.NewErrorResult(fmt.Errorf("file has not been fully read yet. Read it first before editing it: %s", filePath)), nil
+			}
+
+			if currentInfo, statErr := os.Stat(absolutePath); statErr == nil {
+				readModTime := time.Unix(readState.Timestamp, 0)
+				if currentInfo.ModTime().After(readModTime) {
+					currentNormalized := normalizeLineEndings(rawOriginalContent)
+					if currentNormalized != normalizeLineEndings(readState.Content) {
+						return tool.NewErrorResult(fmt.Errorf("file has been modified since read (read at %s, file modified at %s). Read it again first: %s",
+							readModTime.Format(time.RFC3339),
+							currentInfo.ModTime().Format(time.RFC3339),
+							filePath)), nil
+					}
+				}
+			}
+		}
+	} else if normalizedOldString != "" {
+		return tool.NewErrorResult(fmt.Errorf("file not found: %s", filePath)), nil
+	}
+
+	toolCtx := input.ToolContextValue()
+	sandboxCtx := sandbox.Context{
+		WorkingDirectory: strings.TrimSpace(toolCtx.WorkingDirectory),
+		Environment:      sandbox.EnvironmentLocal,
+		SandboxEnabled:   toolCtx.EnableSandbox,
+	}
+	if ws := toolCtx.Workspace; ws != nil {
+		sandboxCtx.WorkspaceRoot = strings.TrimSpace(ws.Root)
+	}
+	policyDecision, policyErr := e.filesystemPolicy.EvaluatePath(sandboxCtx, absolutePath, sandbox.AccessWrite)
+	if policyErr != nil {
+		return tool.NewErrorResult(policyErr), nil
+	}
+	if err := sandbox.ErrorForDecision(policyDecision.DecisionResult); err != nil {
+		return tool.NewErrorResult(err), nil
+	}
+
+	if permissionCheck != nil {
+		effectiveDir := strings.TrimSpace(toolCtx.WorkingDirectory)
+		if effectiveDir == "" {
+			effectiveDir = strings.TrimSpace(e.workingDir)
+		}
+		req := sandbox.PermissionRequest{
+			ToolName:      ToolName,
+			Environment:   sandbox.EnvironmentLocal,
+			Access:        sandbox.AccessWrite,
+			Paths:         []string{absolutePath},
+			Justification: "Edit file content",
+			Scope:         sandbox.ApprovalScopeToolCall,
+		}
+		res, err := sandbox.ResolveToolPermission(ctx, permissionCheck, req, sandbox.ToolPermissionOptions{
+			ToolInput: map[string]any{
+				"file_path":   absolutePath,
+				"old_string":  oldString,
+				"new_string":  newString,
+				"replace_all": replaceAll,
+			},
+			ToolUseID:              toolCtx.ToolUseID,
+			SessionID:              toolCtx.SessionID,
+			TurnID:                 toolCtx.TurnID,
+			PermissionMode:         toolCtx.PermissionMode,
+			WorkingDirectory:       effectiveDir,
+			IsToolRunningInSandbox: toolCtx.EnableSandbox,
+		})
+		if err != nil {
+			return tool.NewErrorResult(err), nil
+		}
+		if err := sandbox.ErrorForPermissionResult(res, "file editing requires approval"); err != nil {
+			return tool.NewErrorResult(err), nil
+		}
+	}
+
+	actualOldString := ""
+	actualNewString := normalizedNewString
+	replacementsMade := 0
+	var updatedNormalizedContent string
+
+	if normalizedOldString == "" {
+		updatedNormalizedContent = actualNewString
+		replacementsMade = 1
+	} else {
+		actualOldString = findActualString(normalizedOriginalContent, normalizedOldString)
+		if actualOldString == "" {
+			return tool.NewErrorResult(fmt.Errorf("old_string not found in file: %s", filePath)), nil
+		}
+
+		occurrences := strings.Count(normalizedOriginalContent, actualOldString)
+		if occurrences > 1 && !replaceAll {
+			return tool.NewErrorResult(fmt.Errorf("found %d matches of old_string in file. Set replace_all=true or provide more context to make old_string unique: %s", occurrences, filePath)), nil
+		}
+
+		actualNewString = preserveQuoteStyle(normalizedOldString, actualOldString, normalizedNewString)
+		if replaceAll {
+			updatedNormalizedContent = strings.ReplaceAll(normalizedOriginalContent, actualOldString, actualNewString)
+			replacementsMade = occurrences
+		} else {
+			updatedNormalizedContent = strings.Replace(normalizedOriginalContent, actualOldString, actualNewString, 1)
+			replacementsMade = 1
+		}
+	}
+
+	oldLines := countLines(normalizedOriginalContent)
+	newLines := countLines(updatedNormalizedContent)
+	linesAdded := 0
+	linesRemoved := 0
+	if newLines > oldLines {
+		linesAdded = newLines - oldLines
+	} else {
+		linesRemoved = oldLines - newLines
+	}
+
+	structuredPatch := buildStructuredPatch(normalizedOriginalContent, updatedNormalizedContent)
+
+	if err := os.MkdirAll(filepath.Dir(absolutePath), 0755); err != nil {
+		return tool.NewErrorResult(fmt.Errorf("failed to create parent directories: %w", err)), nil
+	}
+
+	contentToWrite := applyLineEnding(updatedNormalizedContent, preferredLineEnding)
+	if err := os.WriteFile(absolutePath, []byte(contentToWrite), 0644); err != nil {
+		return tool.NewErrorResult(fmt.Errorf("failed to write file: %w", err)), nil
+	}
+
+	if info, statErr := os.Stat(absolutePath); statErr == nil {
+		fileReadTool.RecordExternalRead(absolutePath, info.ModTime(), updatedNormalizedContent, true)
+	}
+
+	output := map[string]any{
+		"file_path":         filePath,
+		"old_string":        actualOldString,
+		"new_string":        actualNewString,
+		"replace_all":       replaceAll,
+		"replacements_made": replacementsMade,
+		"lines_added":       linesAdded,
+		"lines_removed":     linesRemoved,
+		"success":           true,
+		"original_file":     normalizedOriginalContent,
+		"structured_patch":  structuredPatch,
+		"user_modified":     false,
+	}
+	if gitDiff, ok := shared.ComputeGitDiff(absolutePath); ok {
+		output["git_diff"] = gitDiff
+	}
+
+	return tool.NewJSONResult(output), nil
+}
+
+func normalizedBaseName(filePath string) string {
+	return strings.ToLower(filepath.Base(filePath))
+}
+
+// Description returns the tool description
+func (e *Tool) Description(ctx context.Context) (string, error) {
+	return ToolDescription, nil
+}
+
+// ValidateInput validates and normalizes edit input.
+func (e *Tool) ValidateInput(ctx context.Context, input map[string]any) (map[string]any, error) {
+	_ = ctx
+	filePath, ok := input["file_path"].(string)
+	if !ok || strings.TrimSpace(filePath) == "" {
+		return nil, fmt.Errorf("file_path is required and must be a string")
+	}
+	oldString, ok := input["old_string"].(string)
+	if !ok {
+		return nil, fmt.Errorf("old_string is required and must be a string")
+	}
+	newString, ok := input["new_string"].(string)
+	if !ok {
+		return nil, fmt.Errorf("new_string is required and must be a string")
+	}
+	if oldString == newString {
+		return nil, fmt.Errorf("old_string and new_string must be different")
+	}
+	return input, nil
+}
+
+// CheckPermissions performs edit-specific permission checks before the global pipeline.
+func (e *Tool) CheckPermissions(ctx context.Context, input map[string]any, toolCtx tool.ToolUseContext) types.PermissionResult {
+	_ = ctx
+	filePath, _ := input["file_path"].(string)
+	absolutePath, err := e.resolvePath(filePath, toolCtx)
+	if err != nil {
+		return types.Deny(err.Error())
+	}
+	if err := shared.ValidateFilePath(filePath, "editing"); err != nil {
+		return types.Deny(err.Error())
+	}
+	if err := shared.ValidateUNCPathSecurity(absolutePath); err != nil {
+		return types.Deny(err.Error())
+	}
+	newString, _ := input["new_string"].(string)
+	if err := shared.ValidateSensitivePath(absolutePath, "editTool", newString); err != nil {
+		return types.Deny(err.Error())
+	}
+	return types.Passthrough(input)
+}
+
+// IsConcurrencySafe reports that edits are not safe to run concurrently.
+func (e *Tool) IsConcurrencySafe(input map[string]any) bool {
+	_ = input
+	return false
+}
+
+// IsReadOnly reports that edits modify state.
+func (e *Tool) IsReadOnly(input map[string]any) bool {
+	_ = input
+	return false
+}
+
+// IsEnabled returns whether this tool is currently active.
+func (e *Tool) IsEnabled() bool { return true }
+
+// FormatResult serialises the tool output into the tool_result content string.
+func (e *Tool) FormatResult(data any) string {
+	if s, ok := data.(string); ok {
+		return s
+	}
+	return fmt.Sprintf("%v", data)
+}
+
+func (e *Tool) resolvePath(path string, toolCtx tool.ToolUseContext) (string, error) {
+	if toolCtx.Workspace != nil {
+		return toolCtx.Workspace.Resolve(path)
+	}
+	workingDir := e.effectiveWorkingDir(toolCtx)
+	if filepath.IsAbs(path) || strings.TrimSpace(workingDir) == "" {
+		return path, nil
+	}
+	return filepath.Join(workingDir, path), nil
+}
+
+func (e *Tool) effectiveWorkingDir(toolCtx tool.ToolUseContext) string {
+	if strings.TrimSpace(toolCtx.WorkingDirectory) != "" {
+		return toolCtx.WorkingDirectory
+	}
+	if strings.TrimSpace(e.workingDir) != "" {
+		return e.workingDir
+	}
+	return "."
+}
+
+// BackfillInput enriches a shallow clone of the parsed input with derived fields.
+func (e *Tool) BackfillInput(ctx context.Context, input map[string]any) map[string]any {
+	return input
+}
+
+// SetWorkingDir sets the working directory for the tool
+func (e *Tool) SetWorkingDir(dir string) {
+	e.workingDir = dir
+}
+
+// GetWorkingDir returns the current working directory
+func (e *Tool) GetWorkingDir() string {
+	return e.workingDir
+}
+
+func readFileIfExists(filePath string) (string, bool, error) {
+	content, err := os.ReadFile(filePath)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return "", false, nil
+		}
+		return "", false, fmt.Errorf("failed to read file: %w", err)
+	}
+	return string(content), true, nil
+}
+
+func normalizeLineEndings(s string) string {
+	return strings.ReplaceAll(s, "\r\n", "\n")
+}
+
+func detectPreferredLineEnding(s string) string {
+	if strings.Contains(s, "\r\n") {
+		return "\r\n"
+	}
+	if strings.Contains(s, "\n") {
+		return "\n"
+	}
+	return ""
+}
+
+func applyLineEnding(s string, lineEnding string) string {
+	if lineEnding == "\r\n" {
+		return strings.ReplaceAll(s, "\n", "\r\n")
+	}
+	return s
+}
+
+func normalizeQuoteRune(r rune) rune {
+	switch r {
+	case leftSingleCurlyQuote, rightSingleCurlyQuote:
+		return '\''
+	case leftDoubleCurlyQuote, rightDoubleCurlyQuote:
+		return '"'
+	default:
+		return r
+	}
+}
+
+func findActualString(fileContent string, searchString string) string {
+	if strings.Contains(fileContent, searchString) {
+		return searchString
+	}
+
+	fileRunes := []rune(fileContent)
+	searchRunes := []rune(searchString)
+	if len(searchRunes) == 0 || len(searchRunes) > len(fileRunes) {
+		return ""
+	}
+
+	for start := 0; start <= len(fileRunes)-len(searchRunes); start++ {
+		matched := true
+		for i := range searchRunes {
+			if normalizeQuoteRune(fileRunes[start+i]) != normalizeQuoteRune(searchRunes[i]) {
+				matched = false
+				break
+			}
+		}
+		if matched {
+			return string(fileRunes[start : start+len(searchRunes)])
+		}
+	}
+
+	return ""
+}
+
+func preserveQuoteStyle(oldString string, actualOldString string, newString string) string {
+	if oldString == actualOldString {
+		return newString
+	}
+
+	hasDoubleQuotes := strings.ContainsRune(actualOldString, leftDoubleCurlyQuote) || strings.ContainsRune(actualOldString, rightDoubleCurlyQuote)
+	hasSingleQuotes := strings.ContainsRune(actualOldString, leftSingleCurlyQuote) || strings.ContainsRune(actualOldString, rightSingleCurlyQuote)
+	if !hasDoubleQuotes && !hasSingleQuotes {
+		return newString
+	}
+
+	result := newString
+	if hasDoubleQuotes {
+		result = applyCurlyDoubleQuotes(result)
+	}
+	if hasSingleQuotes {
+		result = applyCurlySingleQuotes(result)
+	}
+	return result
+}
+
+func isOpeningContext(runes []rune, index int) bool {
+	if index == 0 {
+		return true
+	}
+	prev := runes[index-1]
+	return unicode.IsSpace(prev) || strings.ContainsRune("([{—–", prev)
+}
+
+func applyCurlyDoubleQuotes(s string) string {
+	runes := []rune(s)
+	result := make([]rune, 0, len(runes))
+	for i, r := range runes {
+		if r == '"' {
+			if isOpeningContext(runes, i) {
+				result = append(result, leftDoubleCurlyQuote)
+			} else {
+				result = append(result, rightDoubleCurlyQuote)
+			}
+			continue
+		}
+		result = append(result, r)
+	}
+	return string(result)
+}
+
+func applyCurlySingleQuotes(s string) string {
+	runes := []rune(s)
+	result := make([]rune, 0, len(runes))
+	for i, r := range runes {
+		if r == '\'' {
+			var prev rune
+			var next rune
+			prevIsLetter := false
+			nextIsLetter := false
+			if i > 0 {
+				prev = runes[i-1]
+				prevIsLetter = unicode.IsLetter(prev)
+			}
+			if i < len(runes)-1 {
+				next = runes[i+1]
+				nextIsLetter = unicode.IsLetter(next)
+			}
+			if prevIsLetter && nextIsLetter {
+				result = append(result, rightSingleCurlyQuote)
+			} else if isOpeningContext(runes, i) {
+				result = append(result, leftSingleCurlyQuote)
+			} else {
+				result = append(result, rightSingleCurlyQuote)
+			}
+			continue
+		}
+		result = append(result, r)
+	}
+	return string(result)
+}
+
+func splitLines(s string) []string {
+	if s == "" {
+		return []string{}
+	}
+	lines := strings.Split(s, "\n")
+	if len(lines) > 0 && lines[len(lines)-1] == "" {
+		lines = lines[:len(lines)-1]
+	}
+	return lines
+}
+
+func buildStructuredPatch(oldContent, newContent string) []StructuredPatchHunk {
+	if oldContent == newContent {
+		return []StructuredPatchHunk{}
+	}
+
+	oldLines := splitLines(oldContent)
+	newLines := splitLines(newContent)
+	minLen := len(oldLines)
+	if len(newLines) < minLen {
+		minLen = len(newLines)
+	}
+
+	prefix := 0
+	for prefix < minLen && oldLines[prefix] == newLines[prefix] {
+		prefix++
+	}
+
+	suffix := 0
+	for suffix < minLen-prefix && oldLines[len(oldLines)-1-suffix] == newLines[len(newLines)-1-suffix] {
+		suffix++
+	}
+
+	beforeStart := maxInt(0, prefix-patchContextLines)
+	oldChangeEnd := len(oldLines) - suffix
+	newChangeEnd := len(newLines) - suffix
+	afterOldEnd := minInt(len(oldLines), oldChangeEnd+patchContextLines)
+	afterNewEnd := minInt(len(newLines), newChangeEnd+patchContextLines)
+
+	lines := make([]string, 0)
+	for _, line := range oldLines[beforeStart:prefix] {
+		lines = append(lines, " "+line)
+	}
+	for _, line := range oldLines[prefix:oldChangeEnd] {
+		lines = append(lines, "-"+line)
+	}
+	for _, line := range newLines[prefix:newChangeEnd] {
+		lines = append(lines, "+"+line)
+	}
+	for _, line := range newLines[newChangeEnd:afterNewEnd] {
+		lines = append(lines, " "+line)
+	}
+
+	return []StructuredPatchHunk{{
+		OldStart: beforeStart + 1,
+		OldLines: afterOldEnd - beforeStart,
+		NewStart: beforeStart + 1,
+		NewLines: afterNewEnd - beforeStart,
+		Lines:    lines,
+	}}
+}
+
+func minInt(a, b int) int {
+	if a < b {
+		return a
+	}
+	return b
+}
+
+func maxInt(a, b int) int {
+	if a > b {
+		return a
+	}
+	return b
+}
+
+// countLines counts the number of lines in a string
+func countLines(s string) int {
+	if s == "" {
+		return 0
+	}
+	count := 0
+	for _, c := range s {
+		if c == '\n' {
+			count++
+		}
+	}
+	if !strings.HasSuffix(s, "\n") && len(s) > 0 {
+		count++
+	}
+	return count
+}
+
+// ── Tool metadata ──────────────────────────────────────────────────────────────
+
+// SearchHint is a hint for tool search functionality.
+const SearchHint = "edit text in a file by finding and replacing strings"

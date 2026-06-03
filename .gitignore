@@ -24,9 +24,33 @@ profile.cov
 go.work
 go.work.sum
 
-# env file
+# Environment files
 .env
+.env.*
+!.env.example
+!.env.sample
 
 # Editor/IDE
-# .idea/
-# .vscode/
+.idea/
+.vscode/
+
+# OS generated files
+.DS_Store
+Thumbs.db
+
+# Local tool state
+.gemini/
+.antigravity/
+.claude/
+.nexus/
+.openclaude-profile.json
+.blackboxcli/
+claude-code/
+
+# Temporary files
+*.log
+tmp/
+.temp/
+.cache/
+openclaude
+multica
