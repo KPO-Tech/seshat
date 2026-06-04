@@ -417,7 +417,7 @@ func newChat(styles Styles, width, height int) *chat {
 	vp.SetContent("")
 	r, _ := glamour.NewTermRenderer(
 		glamour.WithEnvironmentConfig(),
-		glamour.WithWordWrap(clampInt(width-4, 1, 100)),
+		glamour.WithWordWrap(clampInt(width-4, 20, width)),
 	)
 	return &chat{
 		styles:   styles,
@@ -436,7 +436,7 @@ func (c *chat) SetSize(width, height int) {
 	c.viewport.SetHeight(height)
 	if r, err := glamour.NewTermRenderer(
 		glamour.WithEnvironmentConfig(),
-		glamour.WithWordWrap(clampInt(width-4, 1, 100)),
+		glamour.WithWordWrap(clampInt(width-4, 20, width)),
 	); err == nil {
 		c.renderer = r
 	}

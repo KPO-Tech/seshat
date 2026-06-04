@@ -104,6 +104,16 @@ func defaultPaletteItems() []paletteItem {
 			},
 		},
 		{
+			id:       "provider-config",
+			name:     "Provider Config",
+			shortcut: "ctrl+,",
+			desc:     "Configure API keys and providers",
+			action: func(m *Model) tea.Cmd {
+				m.state = stateProviderConfig
+				return m.loadProviderConfig()
+			},
+		},
+		{
 			id:       "clear",
 			name:     "/clear",
 			shortcut: "",

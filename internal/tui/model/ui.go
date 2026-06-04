@@ -26,6 +26,7 @@ const (
 	statePermission
 	stateModelSelect
 	stateCommands
+	stateProviderConfig
 )
 
 // uiFocus mirrors crush's focus model: editor has the cursor / main lets
@@ -58,13 +59,14 @@ type Model struct {
 	width  int
 	height int
 
-	chat        *chat
-	sessions    *sessionList
-	permission  *permissionDialog
-	modelSelect *modelDialog
-	commands    *commandPalette
-	completions *fileCompletions
-	attachments *attachments
+	chat         *chat
+	sessions     *sessionList
+	permission   *permissionDialog
+	modelSelect  *modelDialog
+	commands     *commandPalette
+	configPanel  *configPanel
+	completions  *fileCompletions
+	attachments  *attachments
 	input       textarea.Model
 	spinner     spinner.Model
 
@@ -109,6 +111,7 @@ func New(ws tui.Workspace, ctx context.Context) Model {
 		permission:  newPermissionDialog(styles),
 		modelSelect: newModelDialog(styles),
 		commands:    newCommandPalette(styles),
+		configPanel: newConfigPanel(styles),
 		completions: newFileCompletions(styles, ws.WorkingDir()),
 		attachments: newAttachments(styles),
 		input:       ta,
@@ -215,6 +218,16 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case clearCopyNoticeMsg:
 		m.copyNotice = ""
 
+	case providerConfigLoadedMsg:
+		m.configPanel.SetProviders(msg.providers)
+
+	case cfgSaveResultMsg:
+		if msg.err != nil {
+			m.configPanel.SetError(msg.err.Error())
+		} else {
+			m.configPanel.SetSaved()
+		}
+
 	// v2 uses KeyPressMsg instead of KeyMsg
 	case tea.KeyPressMsg:
 		consumed, cmd := m.handleKey(msg)
@@ -272,6 +285,8 @@ func (m Model) View() tea.View {
 		content = m.viewModelSelect()
 	case stateCommands:
 		content = m.viewCommands()
+	case stateProviderConfig:
+		content = m.viewProviderConfig()
 	case stateChat, statePermission:
 		content = m.viewChat()
 	default:
@@ -374,6 +389,66 @@ func (m *Model) handleKey(msg tea.KeyPressMsg) (bool, tea.Cmd) {
 		return true, nil
 	}
 
+	// ── Provider config panel (all keys consumed) ───────────────────────
+	if m.state == stateProviderConfig {
+		cp := m.configPanel
+		if cp.editing {
+			switch k {
+			case "esc":
+				m.state = m.prevChatState()
+			case "left":
+				cp.ExitEdit()
+				// Reload provider status after editing.
+				return true, m.loadProviderConfig()
+			case "up", "k":
+				cp.Up()
+			case "down", "j":
+				cp.Down()
+			case "tab":
+				cp.Down()
+			case "enter":
+				draft, _, fieldKey := cp.CurrentFieldDraft()
+				if strings.TrimSpace(draft) == "" {
+					return true, nil
+				}
+				providerID := cp.editProvider.ID
+				return true, func() tea.Msg {
+					err := m.workspace.SaveProviderField(m.ctx, providerID, fieldKey, strings.TrimSpace(draft))
+					if err != nil {
+						return cfgSaveResultMsg{err: err}
+					}
+					return cfgSaveResultMsg{}
+				}
+			case "backspace":
+				cp.DeleteChar()
+			case "ctrl+v":
+				cp.ToggleReveal()
+			default:
+				if len(k) == 1 {
+					cp.TypeChar(k)
+				}
+			}
+		} else {
+			switch k {
+			case "esc", "ctrl+,":
+				m.state = m.prevChatState()
+			case "up", "k":
+				cp.Up()
+			case "down", "j":
+				cp.Down()
+			case "enter":
+				cp.EnterEdit()
+			case "backspace":
+				cp.DeleteFilter()
+			default:
+				if len(k) == 1 {
+					cp.TypeFilter(k)
+				}
+			}
+		}
+		return true, nil
+	}
+
 	// ── Session browser (all keys consumed) ─────────────────────────────
 	if m.state == stateSessions {
 		switch k {
@@ -426,6 +501,12 @@ func (m *Model) handleKey(msg tea.KeyPressMsg) (bool, tea.Cmd) {
 		if m.state != stateCommands {
 			m.commands.Open("")
 			m.state = stateCommands
+		}
+		return true, nil
+	case "ctrl+,":
+		if m.state != stateProviderConfig {
+			m.state = stateProviderConfig
+			return true, m.loadProviderConfig()
 		}
 		return true, nil
 	case "ctrl+s":
@@ -601,10 +682,19 @@ type pendingSubmitMsg struct{ prompt string }
 // clearCopyNoticeMsg clears the transient "Copied!" footer message.
 type clearCopyNoticeMsg struct{}
 
+// cfgSaveResultMsg is sent after attempting to save a provider credential.
+type cfgSaveResultMsg struct{ err error }
+
+// providerConfigLoadedMsg carries a refreshed provider list.
+type providerConfigLoadedMsg struct{ providers []tui.ProviderStatus }
+
 // ─── Views ────────────────────────────────────────────────────────────────────
 
 func (m Model) viewWelcome() string {
-	logo := m.styles.Logo.Render("◉ NEXUS")
+	// Braille logo rendered in orange primary colour.
+	logoArt := lipgloss.NewStyle().Foreground(colorPrimary).Render(nexusLogo)
+
+	wordmark := m.styles.Logo.Render("◉ NEXUS")
 	tagline := m.styles.HeaderModel.Render("One runtime. Any LLM. Any language.")
 
 	hint := strings.Join([]string{
@@ -617,7 +707,7 @@ func (m Model) viewWelcome() string {
 		Width(m.width).
 		Height(m.height - 2).
 		Align(lipgloss.Center, lipgloss.Center).
-		Render(logo + "\n\n" + tagline + "\n\n" + hint)
+		Render(logoArt + "\n" + wordmark + "\n\n" + tagline + "\n\n" + hint)
 
 	return m.header() + "\n" + body
 }
@@ -669,6 +759,18 @@ func (m Model) viewModelSelect() string {
 func (m Model) viewCommands() string {
 	m.commands.SetSize(m.width, m.height)
 	overlay := m.commands.centred()
+	var backdrop string
+	if m.activeSession != "" {
+		backdrop = m.viewChat()
+	} else {
+		backdrop = m.viewWelcome()
+	}
+	return overlayOn(backdrop, overlay, m.width, m.height)
+}
+
+func (m Model) viewProviderConfig() string {
+	m.configPanel.SetSize(m.width, m.height)
+	overlay := m.configPanel.centred()
 	var backdrop string
 	if m.activeSession != "" {
 		backdrop = m.viewChat()
@@ -772,6 +874,7 @@ func (m Model) relayout() Model {
 	m.permission.SetSize(m.width, m.height)
 	m.modelSelect.SetSize(m.width, m.height)
 	m.commands.SetSize(m.width, m.height)
+	m.configPanel.SetSize(m.width, m.height)
 	m.chat.SetSize(m.width, max(1, m.height-headerHeight-footerHeight-inputMinH-inputPadding))
 	return m
 }
@@ -825,6 +928,13 @@ func (m Model) createSession() tea.Cmd {
 
 func (m Model) loadSession(id string) tea.Cmd {
 	return func() tea.Msg { m.workspace.LoadSession(m.ctx, id); return nil }
+}
+
+func (m Model) loadProviderConfig() tea.Cmd {
+	return func() tea.Msg {
+		providers := m.workspace.LoadProviderConfig(m.ctx)
+		return providerConfigLoadedMsg{providers: providers}
+	}
 }
 
 func (m Model) deleteSession(id string) tea.Cmd {

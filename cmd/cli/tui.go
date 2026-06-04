@@ -6,6 +6,7 @@ import (
 	"log"
 	"os"
 	"path/filepath"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -15,6 +16,7 @@ import (
 	"github.com/EngineerProjects/nexus-engine/internal/providers"
 	"github.com/EngineerProjects/nexus-engine/internal/tui"
 	tuimodel "github.com/EngineerProjects/nexus-engine/internal/tui/model"
+	engineconfig "github.com/EngineerProjects/nexus-engine/pkg/config"
 	"github.com/EngineerProjects/nexus-engine/pkg/sdk"
 )
 
@@ -71,10 +73,11 @@ func (d *chunkDebounce) forceFlush() {
 // It bridges the engine's callback-based event model with the BubbleTea
 // tea.Program.Send() pattern, with 33ms streaming debounce (crush pattern).
 type nexusWorkspace struct {
-	client   *sdk.Client
-	model    string
-	workDir  string
-	permMode string
+	client     *sdk.Client
+	model      string
+	workDir    string
+	permMode   string
+	sqlitePath string // path to credentials DB, used by LoadProviderConfig
 
 	mu      sync.RWMutex
 	program *tea.Program
@@ -90,9 +93,10 @@ type nexusWorkspace struct {
 // callbacks on the ClientConfig so that events are forwarded to the TUI.
 func newNexusWorkspace(options runtimeOptions) (*nexusWorkspace, error) {
 	w := &nexusWorkspace{
-		model:    options.Model.String(),
-		workDir:  options.WorkingDir,
-		permMode: string(options.PermissionMode),
+		model:      options.Model.String(),
+		workDir:    options.WorkingDir,
+		permMode:   string(options.PermissionMode),
+		sqlitePath: options.SQLitePath,
 	}
 	w.debounce = newChunkDebounce(33*time.Millisecond, func(text string) {
 		w.send(tui.ChunkMsg{Text: text})
@@ -264,6 +268,87 @@ func (w *nexusWorkspace) SetModel(providerID, modelID string) {
 	w.model = providerID + ":" + modelID
 	w.mu.Unlock()
 	w.send(tui.ModelChangedMsg{Provider: providerID, Model: modelID})
+}
+
+// ─── Provider configuration ────────────────────────────────────────────────────
+
+// providerCredKey returns the scoped credential key for a provider field.
+// Format: "fieldKey:providerID" (e.g. "api_key:anthropic").
+func providerCredKey(fieldKey, providerID string) string {
+	return fieldKey + ":" + strings.ToLower(providerID)
+}
+
+func (w *nexusWorkspace) LoadProviderConfig(_ context.Context) []tui.ProviderStatus {
+	// Load config so we can check current values.
+	cfg, err := engineconfig.Load()
+	if err != nil {
+		cfg = engineconfig.Config{}
+	}
+
+	// Open DB (best-effort — if it fails we show all fields as unset).
+	database, dbErr := openCredentialsDB(cfg)
+	if dbErr == nil {
+		defer database.Close()
+	}
+
+	getField := func(providerID, fieldKey string) (string, bool) {
+		if database == nil {
+			return "", false
+		}
+		// Per-provider key first, then global fallback.
+		if v, ok, _ := database.GetCredential(context.Background(), providerCredKey(fieldKey, providerID)); ok && v != "" {
+			return v, true
+		}
+		if v, ok, _ := database.GetCredential(context.Background(), fieldKey); ok && v != "" {
+			return v, true
+		}
+		return "", false
+	}
+
+	providers := engineconfig.AvailableProviders()
+	result := make([]tui.ProviderStatus, 0, len(providers))
+	for _, p := range providers {
+		fields := make([]tui.ProviderFieldStatus, 0, len(p.SetupFields))
+		for _, f := range p.SetupFields {
+			_, isSet := getField(string(p.Name), f.Key)
+			fields = append(fields, tui.ProviderFieldStatus{
+				Key:      f.Key,
+				Label:    f.Label,
+				EnvVar:   f.EnvVar,
+				Secret:   f.Secret,
+				Required: f.Required,
+				IsSet:    isSet,
+			})
+		}
+		result = append(result, tui.ProviderStatus{
+			ID:          string(p.Name),
+			DisplayName: p.DisplayName,
+			Description: p.Description,
+			NeedsKey:    len(p.SetupFields) > 0,
+			Fields:      fields,
+		})
+	}
+	return result
+}
+
+func (w *nexusWorkspace) SaveProviderField(ctx context.Context, providerID, fieldKey, value string) error {
+	cfg, _ := engineconfig.Load()
+	database, err := openCredentialsDB(cfg)
+	if err != nil {
+		return err
+	}
+	defer database.Close()
+	return database.UpsertCredential(ctx, providerCredKey(fieldKey, providerID), value)
+}
+
+func (w *nexusWorkspace) DeleteProviderField(ctx context.Context, providerID, fieldKey string) error {
+	cfg, _ := engineconfig.Load()
+	database, err := openCredentialsDB(cfg)
+	if err != nil {
+		return err
+	}
+	defer database.Close()
+	return database.DeleteCredential(ctx, providerCredKey(fieldKey, providerID))
 }
 
 func (w *nexusWorkspace) Close() {

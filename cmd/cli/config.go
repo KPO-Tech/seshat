@@ -407,19 +407,36 @@ func loadCredsIntoConfig(database *db.DB, config *engineconfig.Config) {
 		}
 		return val
 	}
-	if v := loadCred(credKeyAPIKey); v != "" {
+	// loadCredScoped checks the per-provider scoped key first (written by the
+	// TUI config panel), then falls back to the global key (written by `nexus config`).
+	loadCredScoped := func(fieldKey, providerID string) string {
+		if providerID != "" {
+			if v := loadCred(fieldKey + ":" + strings.ToLower(providerID)); v != "" {
+				return v
+			}
+		}
+		return loadCred(fieldKey)
+	}
+
+	// Determine the active provider from the config model string.
+	activeProvider := ""
+	if m := resolveModel(*config); m.Provider != "" {
+		activeProvider = string(m.Provider)
+	}
+
+	if v := loadCredScoped(credKeyAPIKey, activeProvider); v != "" {
 		config.APIKey = v
 	}
-	if v := loadCred(credKeyBaseURL); v != "" {
+	if v := loadCredScoped(credKeyBaseURL, activeProvider); v != "" {
 		config.ProviderBaseURL = v
 	}
-	if v := loadCred(credKeyRegion); v != "" {
+	if v := loadCredScoped(credKeyRegion, activeProvider); v != "" {
 		config.ProviderRegion = v
 	}
-	if v := loadCred(credKeyProjectID); v != "" {
+	if v := loadCredScoped(credKeyProjectID, activeProvider); v != "" {
 		config.ProviderProjectID = v
 	}
-	if v := loadCred(credKeyResource); v != "" {
+	if v := loadCredScoped(credKeyResource, activeProvider); v != "" {
 		config.ProviderResource = v
 	}
 	config.TavilyAPIKey = loadCred(credKeyTavily)

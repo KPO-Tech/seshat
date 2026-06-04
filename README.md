@@ -19,6 +19,47 @@
 
 ---
 
+## Terminal UI
+
+`nexus chat` drops you into a full-featured terminal interface built for long-running agent sessions.
+
+<table>
+  <tr>
+    <td align="center" width="50%">
+      <img src="docs/captures/home.png" alt="Welcome screen" width="100%">
+      <br><sub><b>Welcome screen</b> — braille logo, quick-start shortcuts</sub>
+    </td>
+    <td align="center" width="50%">
+      <img src="docs/captures/commands_pannel.png" alt="Commands palette" width="100%">
+      <br><sub><b>Commands palette</b> — <code>ctrl+p</code> or <code>/</code> to open</sub>
+    </td>
+  </tr>
+  <tr>
+    <td align="center" width="50%">
+      <img src="docs/captures/model_selction.png" alt="Model selection" width="100%">
+      <br><sub><b>Model selection</b> — grouped by provider, filterable</sub>
+    </td>
+    <td align="center" width="50%">
+      <img src="docs/captures/provider_config.png" alt="Provider configuration" width="100%">
+      <br><sub><b>Provider config</b> — API keys stored encrypted per provider</sub>
+    </td>
+  </tr>
+  <tr>
+    <td align="center" width="50%">
+      <img src="docs/captures/working1.png" alt="Agent working" width="100%">
+      <br><sub><b>Agent at work</b> — thinking blocks, interleaved tool calls</sub>
+    </td>
+    <td align="center" width="50%">
+      <img src="docs/captures/working2.png" alt="Agent completing task" width="100%">
+      <br><sub><b>Streaming results</b> — markdown rendering, tool durations</sub>
+    </td>
+  </tr>
+</table>
+
+> **Keyboard shortcuts:** `ctrl+p` commands · `ctrl+m` model · `ctrl+s` sessions · `ctrl+,` provider config · `ctrl+e` select mode · `ctrl+c` cancel/quit
+
+---
+
 ## Three ways to use it
 
 ### 1. CLI — `nexus`

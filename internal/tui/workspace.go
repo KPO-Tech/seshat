@@ -110,6 +110,27 @@ type ModelChangedMsg struct {
 	Model    string
 }
 
+// ─── Provider config types ────────────────────────────────────────────────────
+
+// ProviderFieldStatus describes one credential field for a provider.
+type ProviderFieldStatus struct {
+	Key      string // credential DB key (e.g. "api_key", "provider_base_url")
+	Label    string // human label (e.g. "API Key")
+	EnvVar   string // associated env var (e.g. "ANTHROPIC_API_KEY")
+	Secret   bool
+	Required bool
+	IsSet    bool   // whether a value is currently stored
+}
+
+// ProviderStatus summarises one provider and its current credential state.
+type ProviderStatus struct {
+	ID          string // "anthropic", "openai", …
+	DisplayName string
+	Description string
+	NeedsKey    bool   // false for Ollama and similar local providers
+	Fields      []ProviderFieldStatus
+}
+
 // ─── Value types ──────────────────────────────────────────────────────────────
 
 // SessionInfo is the TUI's lightweight view of a persisted session.
@@ -161,4 +182,19 @@ type Workspace interface {
 
 	// Close releases all resources.
 	Close()
+
+	// ── Provider configuration ────────────────────────────────────────────
+
+	// LoadProviderConfig returns all available providers with their current
+	// credential status read from the credentials DB.
+	LoadProviderConfig(ctx context.Context) []ProviderStatus
+
+	// SaveProviderField persists a credential field for a provider.
+	// fieldKey is the DB key (e.g. "api_key", "provider_base_url").
+	// Stored under the scoped key "fieldKey:providerID" so each provider
+	// keeps its own credentials independently.
+	SaveProviderField(ctx context.Context, providerID, fieldKey, value string) error
+
+	// DeleteProviderField removes a credential field for a provider.
+	DeleteProviderField(ctx context.Context, providerID, fieldKey string) error
 }

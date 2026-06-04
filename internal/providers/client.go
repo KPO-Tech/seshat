@@ -36,6 +36,31 @@ func getCodexHTTPClient() *http.Client {
 	}
 }
 
+// newStreamingHTTPClient returns an http.Client suitable for long-running LLM
+// streaming responses. The key difference from a standard client is that
+// http.Client.Timeout is NOT set — that field applies to the entire request
+// lifetime including reading the response body, which would cut off any stream
+// that takes longer than the timeout (e.g. complex multi-step tasks).
+//
+// Instead we apply transport-level timeouts only to the connection setup phase:
+//   - TLSHandshakeTimeout: timeout for TLS negotiation
+//   - ResponseHeaderTimeout: timeout to receive the first response byte (headers)
+//
+// The stream body itself is bounded only by context cancellation (user ctrl+c,
+// session close, or the engine's own cancellation logic).
+func newStreamingHTTPClient() *http.Client {
+	return &http.Client{
+		Transport: &http.Transport{
+			TLSHandshakeTimeout:   15 * time.Second,
+			ResponseHeaderTimeout: 60 * time.Second,
+			ExpectContinueTimeout: 1 * time.Second,
+			MaxIdleConns:          20,
+			IdleConnTimeout:       90 * time.Second,
+		},
+		// No Timeout here — streaming responses are unbounded in duration.
+	}
+}
+
 // Client represents an API client
 type Client struct {
 	// apiKey is the API key
@@ -91,7 +116,7 @@ func NewClient(apiKey string, providerType types.APIProvider) *Client {
 	if providerType == types.APIProviderCodex {
 		httpClient = getCodexHTTPClient()
 	} else {
-		httpClient = &http.Client{Timeout: 120 * time.Second}
+		httpClient = newStreamingHTTPClient()
 	}
 
 	return &Client{
@@ -150,7 +175,7 @@ func newClientWithConfig(apiKey string, config *Config) *Client {
 	if config.Provider == types.APIProviderCodex {
 		httpClient = getCodexHTTPClient()
 	} else {
-		httpClient = &http.Client{Timeout: 120 * time.Second}
+		httpClient = newStreamingHTTPClient()
 	}
 
 	return &Client{
