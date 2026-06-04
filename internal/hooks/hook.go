@@ -276,7 +276,7 @@ func aggregate(results []HookResult, inputJSON string) AggregateResult {
 
 func buildEnv(sessionID, toolName, cwd, projectDir, inputJSON string) []string {
 	return []string{
-		fmt.Sprintf("NEXUS_HOOK_EVENT=pre_tool_use"),
+		"NEXUS_HOOK_EVENT=pre_tool_use",
 		fmt.Sprintf("NEXUS_TOOL_NAME=%s", toolName),
 		fmt.Sprintf("NEXUS_SESSION_ID=%s", sessionID),
 		fmt.Sprintf("NEXUS_CWD=%s", cwd),
