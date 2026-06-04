@@ -27,31 +27,31 @@
   <tr>
     <td align="center" width="50%">
       <img src="docs/captures/home.png" alt="Welcome screen" width="100%">
-      <br><sub><b>Welcome screen</b> — braille logo, quick-start shortcuts</sub>
+      <br><sub><b>Welcome</b> — up and running in 10 seconds</sub>
     </td>
     <td align="center" width="50%">
       <img src="docs/captures/commands_pannel.png" alt="Commands palette" width="100%">
-      <br><sub><b>Commands palette</b> — <code>ctrl+p</code> or <code>/</code> to open</sub>
+      <br><sub><b>Commands palette</b> — every shortcut, one keystroke away (<code>ctrl+p</code>)</sub>
     </td>
   </tr>
   <tr>
     <td align="center" width="50%">
       <img src="docs/captures/model_selction.png" alt="Model selection" width="100%">
-      <br><sub><b>Model selection</b> — grouped by provider, filterable</sub>
+      <br><sub><b>Model selection</b> — switch across 20+ models in 2 keystrokes</sub>
     </td>
     <td align="center" width="50%">
       <img src="docs/captures/provider_config.png" alt="Provider configuration" width="100%">
-      <br><sub><b>Provider config</b> — API keys stored encrypted per provider</sub>
+      <br><sub><b>Provider config</b> — API keys encrypted, scoped per provider</sub>
     </td>
   </tr>
   <tr>
     <td align="center" width="50%">
       <img src="docs/captures/working1.png" alt="Agent working" width="100%">
-      <br><sub><b>Agent at work</b> — thinking blocks, interleaved tool calls</sub>
+      <br><sub><b>Agent at work</b> — full reasoning trace, thinking blocks + tool calls</sub>
     </td>
     <td align="center" width="50%">
       <img src="docs/captures/working2.png" alt="Agent completing task" width="100%">
-      <br><sub><b>Streaming results</b> — markdown rendering, tool durations</sub>
+      <br><sub><b>Streaming results</b> — streamed responses with markdown + tool timings</sub>
     </td>
   </tr>
 </table>
