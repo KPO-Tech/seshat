@@ -38,24 +38,24 @@ type Styles struct {
 	ErrorMsg       lipgloss.Style
 
 	// Input
-	InputBorder   lipgloss.Style
-	InputPrompt   lipgloss.Style
+	InputBorder      lipgloss.Style
+	InputPrompt      lipgloss.Style
 	InputPlaceholder lipgloss.Style
 
 	// Session browser
-	BrowserBorder  lipgloss.Style
-	BrowserTitle   lipgloss.Style
-	BrowserItem    lipgloss.Style
+	BrowserBorder   lipgloss.Style
+	BrowserTitle    lipgloss.Style
+	BrowserItem     lipgloss.Style
 	BrowserSelected lipgloss.Style
-	BrowserFilter  lipgloss.Style
+	BrowserFilter   lipgloss.Style
 
 	// Permission dialog
-	PermBorder  lipgloss.Style
-	PermTitle   lipgloss.Style
-	PermBody    lipgloss.Style
-	PermYes     lipgloss.Style
-	PermNo      lipgloss.Style
-	PermAlways  lipgloss.Style
+	PermBorder lipgloss.Style
+	PermTitle  lipgloss.Style
+	PermBody   lipgloss.Style
+	PermYes    lipgloss.Style
+	PermNo     lipgloss.Style
+	PermAlways lipgloss.Style
 
 	// Footer
 	Footer lipgloss.Style

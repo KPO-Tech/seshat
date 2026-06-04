@@ -13,14 +13,14 @@ import (
 	"charm.land/bubbles/v2/textarea"
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
-	clipboard "github.com/atotto/clipboard"
 	"github.com/EngineerProjects/nexus-engine/internal/tui"
+	clipboard "github.com/atotto/clipboard"
 )
 
 type uiState uint8
 
 const (
-	stateWelcome    uiState = iota
+	stateWelcome uiState = iota
 	stateChat
 	stateSessions
 	statePermission
@@ -59,14 +59,14 @@ type Model struct {
 	width  int
 	height int
 
-	chat         *chat
-	sessions     *sessionList
-	permission   *permissionDialog
-	modelSelect  *modelDialog
-	commands     *commandPalette
-	configPanel  *configPanel
-	completions  *fileCompletions
-	attachments  *attachments
+	chat        *chat
+	sessions    *sessionList
+	permission  *permissionDialog
+	modelSelect *modelDialog
+	commands    *commandPalette
+	configPanel *configPanel
+	completions *fileCompletions
+	attachments *attachments
 	input       textarea.Model
 	spinner     spinner.Model
 
@@ -705,7 +705,7 @@ func (m Model) viewWelcome() string {
 
 	body := lipgloss.NewStyle().
 		Width(m.width).
-		Height(m.height - 2).
+		Height(m.height-2).
 		Align(lipgloss.Center, lipgloss.Center).
 		Render(logoArt + "\n" + wordmark + "\n\n" + tagline + "\n\n" + hint)
 
