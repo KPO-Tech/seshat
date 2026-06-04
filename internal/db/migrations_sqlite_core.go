@@ -32,6 +32,11 @@ func sqliteCoreMigrations() []schemaMigration {
 			Scope: migrationScopeCoreSQLite,
 			Run:   migrateSQLiteAgentProfiles,
 		},
+		{
+			ID:    "20260604_006_mailbox_messages",
+			Scope: migrationScopeCoreSQLite,
+			Run:   migrateSQLiteMailboxMessages,
+		},
 	}
 }
 
@@ -125,4 +130,8 @@ func migrateSQLiteCredentials(ctx context.Context, db *DB) error {
 
 func migrateSQLiteAgentProfiles(ctx context.Context, db *DB) error {
 	return db.gormDB.WithContext(ctx).AutoMigrate(&GAgentProfile{})
+}
+
+func migrateSQLiteMailboxMessages(ctx context.Context, db *DB) error {
+	return db.gormDB.WithContext(ctx).AutoMigrate(&GMailboxMessage{})
 }
