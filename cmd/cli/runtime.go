@@ -105,6 +105,18 @@ func newClient(
 	progressFn func(sdk.ToolProgress),
 	chunkFn func(sdk.ResponseChunk),
 ) (*sdk.Client, error) {
+	// Load pre_tool_use hooks from config if any are defined.
+	var preToolHooks []sdk.PreToolHookConfig
+	if rawCfg, err := engineconfig.Load(); err == nil {
+		for _, entry := range rawCfg.Hooks["pre_tool_use"] {
+			preToolHooks = append(preToolHooks, sdk.PreToolHookConfig{
+				Matcher: entry.Matcher,
+				Command: entry.Command,
+				Timeout: entry.Timeout,
+			})
+		}
+	}
+
 	client, err := sdk.NewClient(&sdk.ClientConfig{
 		APIKey:                  options.APIKey,
 		Model:                   options.Model,
@@ -123,6 +135,7 @@ func newClient(
 		StorageGCInterval:       options.StorageGCInterval,
 		StorageGCLimit:          options.StorageGCLimit,
 		StorageGCNamespaces:     options.StorageGCNamespaces,
+		PreToolHooks:            preToolHooks,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("create SDK client: %w", err)

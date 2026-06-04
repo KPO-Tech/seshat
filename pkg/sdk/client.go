@@ -159,7 +159,7 @@ func NewClient(config *ClientConfig) (*Client, error) {
 		return nil, fmt.Errorf("failed to register spawn_agent tool: %w", err)
 	}
 
-	return &Client{
+	client := &Client{
 		queryEngine:   queryEngine,
 		orchestrator:  orchestrator,
 		registry:      reg,
@@ -171,7 +171,14 @@ func NewClient(config *ClientConfig) (*Client, error) {
 		browser:       browserManager,
 		artifacts:     artifactStore,
 		reaper:        reaper,
-	}, nil
+	}
+
+	// Register shell pre-tool hooks from ClientConfig.
+	if len(config.PreToolHooks) > 0 {
+		client.registerShellPreToolHooks(config.PreToolHooks, config.WorkingDir)
+	}
+
+	return client, nil
 }
 
 // buildEngineConfig converts ClientConfig into engine.Config.

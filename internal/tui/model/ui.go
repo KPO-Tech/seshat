@@ -50,6 +50,8 @@ type Model struct {
 	sessions    *sessionList
 	permission  *permissionDialog
 	modelSelect *modelDialog
+	completions *fileCompletions
+	attachments *attachments
 	input       textarea.Model
 	spinner     spinner.Model
 
@@ -88,6 +90,8 @@ func New(ws tui.Workspace, ctx context.Context) Model {
 		sessions:    newSessionList(styles),
 		permission:  newPermissionDialog(styles),
 		modelSelect: newModelDialog(styles),
+		completions: newFileCompletions(styles, ws.WorkingDir()),
+		attachments: newAttachments(styles),
 		input:       ta,
 		spinner:     sp,
 	}
@@ -333,18 +337,63 @@ func (m *Model) handleKey(msg tea.KeyPressMsg) tea.Cmd {
 	}
 
 	if m.state == stateChat || m.state == stateWelcome {
+		// ── File completions (@) ────────────────────────────────────────────
+		if m.completions.IsOpen() {
+			switch k {
+			case "esc":
+				m.completions.Close()
+				return nil
+			case "up":
+				m.completions.Up()
+				return nil
+			case "down":
+				m.completions.Down()
+				return nil
+			case "enter", "tab":
+				if sel := m.completions.Selected(); sel != "" {
+					// Replace "@query" in input with the selected path.
+					query := m.completions.Query()
+					val := m.input.Value()
+					atIdx := strings.LastIndex(val, "@"+query)
+					if atIdx >= 0 {
+						m.input.SetValue(val[:atIdx] + sel + val[atIdx+len("@"+query):])
+					}
+					m.completions.Close()
+				}
+				return nil
+			case "backspace":
+				m.completions.Backspace()
+				return nil
+			default:
+				if len(k) == 1 && k != "@" {
+					m.completions.TypeChar(k)
+					return nil
+				}
+			}
+		}
+
 		switch k {
+		case "@":
+			// Open file completions popup.
+			m.completions.Open(m.workspace.WorkingDir())
+			var cmd tea.Cmd
+			m.input, cmd = m.input.Update(msg)
+			return cmd
+
 		case "enter":
 			text := strings.TrimSpace(m.input.Value())
 			if text == "" || m.busy {
 				return nil
 			}
 			if m.activeSession == "" {
-				// Auto-create session on first message
 				return tea.Batch(m.createSession(), func() tea.Msg {
 					return pendingSubmitMsg{prompt: text}
 				})
 			}
+			// Pass attachments with the message.
+			atts := m.attachments.List()
+			_ = atts // TODO: pass to workspace.Submit when SDK supports attachments
+			m.attachments.Reset()
 			m.input.Reset()
 			m.chat.AddUserMessage(text)
 			m.workspace.Submit(m.ctx, text)
@@ -354,6 +403,10 @@ func (m *Model) handleKey(msg tea.KeyPressMsg) tea.Cmd {
 			var cmd tea.Cmd
 			m.input, cmd = m.input.Update(msg)
 			return cmd
+
+		case "ctrl+a":
+			// Ctrl+A = add attachment (open file dialog stub for now)
+			return nil
 
 		case "up":
 			if m.input.Value() == "" {
@@ -474,13 +527,28 @@ func (m Model) footer() string {
 		m.styles.Key.Render("ctrl+n") + " " + m.styles.Desc.Render("new"),
 		m.styles.Key.Render("ctrl+s") + " " + m.styles.Desc.Render("sessions"),
 		m.styles.Key.Render("ctrl+m") + " " + m.styles.Desc.Render("model"),
+		m.styles.Key.Render("@") + " " + m.styles.Desc.Render("file"),
 		m.styles.Key.Render("ctrl+c") + " " + m.styles.Desc.Render("cancel/quit"),
 	}
 	return m.styles.Footer.Render(strings.Join(items, "  "))
 }
 
 func (m Model) inputView() string {
-	return m.styles.InputBorder.Width(m.width - 2).Render(m.input.View())
+	inner := m.input.View()
+
+	// Attachments strip above the textarea.
+	if attView := m.attachments.View(m.width - 4); attView != "" {
+		inner = attView + "\n" + inner
+	}
+
+	box := m.styles.InputBorder.Width(m.width - 2).Render(inner)
+
+	// File completions popup rendered directly above the input box.
+	if m.completions.IsOpen() {
+		popup := m.completions.View(m.width - 4)
+		return popup + "\n" + box
+	}
+	return box
 }
 
 // ─── Layout ───────────────────────────────────────────────────────────────────

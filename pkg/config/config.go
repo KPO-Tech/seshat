@@ -116,6 +116,24 @@ type Config struct {
 	// repo. Set to "none" to disable automatic install.
 	// Example: NEXUS_DEFAULT_SKILL_REPO=https://github.com/EngineerProjects/nexus-skills
 	DefaultSkillRepo string `mapstructure:"default_skill_repo" yaml:"default_skill_repo,omitempty"`
+
+	// Hooks — user-defined shell commands that fire on lifecycle events.
+	// Currently supported event: pre_tool_use (fires before every tool call).
+	//
+	// Example .nexus.yaml:
+	//   hooks:
+	//     pre_tool_use:
+	//       - command: "jq '.command' && exit 0"
+	//         matcher: "bash"
+	//         timeout: 10
+	Hooks map[string][]HookEntry `mapstructure:"hooks" yaml:"hooks,omitempty"`
+}
+
+// HookEntry mirrors hooks.HookConfig but lives in pkg/config to avoid import cycles.
+type HookEntry struct {
+	Matcher string `mapstructure:"matcher" yaml:"matcher,omitempty"`
+	Command string `mapstructure:"command" yaml:"command"`
+	Timeout int    `mapstructure:"timeout" yaml:"timeout,omitempty"`
 }
 
 // DefaultConfig returns the shared defaults used by host applications.

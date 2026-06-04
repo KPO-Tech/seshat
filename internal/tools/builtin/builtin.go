@@ -78,6 +78,8 @@ func RegisterBuiltinToolsWithConfig(reg *tool.Registry, config *Config) error {
 	tools := []tool.Tool{
 		bashTool.NewTool(bashTool.DefaultToolConfig()),
 		bashTool.NewWriteStdinTool(),
+		bashTool.NewJobOutputTool(),
+		bashTool.NewJobKillTool(),
 		fileReadTool.NewTool(fileReadConfig),
 		readURLTool.NewTool(readURLConfig),
 		globTool.NewGlobTool(config.WorkingDir),

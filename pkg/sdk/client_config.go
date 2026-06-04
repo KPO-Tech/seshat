@@ -98,6 +98,18 @@ type ClientConfig struct {
 	// Stop hooks
 	StopHooks []StopHook `json:"-"`
 
+	// PreToolHooks are shell-based hooks that fire before each tool execution.
+	// Each entry is a HookConfig: {Matcher, Command, Timeout}.
+	// Compatible with crush's pre_tool_use hook format:
+	//   - exit 0 + no JSON → allow (no-op)
+	//   - exit 0 + {"decision":"allow"} → allow + skip permission prompt
+	//   - exit 0 + {"updatedInput":"..."} → rewrite tool input
+	//   - exit 2 + stderr → deny with reason
+	//   - exit 49 → halt entire turn
+	// Set via ClientConfig.PreToolHooks or loaded automatically from
+	// config.Hooks["pre_tool_use"] by newClient().
+	PreToolHooks []PreToolHookConfig `json:"-"`
+
 	// RAG / Plan / Memory
 	RAGService     *RAGService    `json:"-"`
 	PlanStore      PlanStore      `json:"-"`
@@ -105,6 +117,13 @@ type ClientConfig struct {
 
 	// Document conversion
 	DoclingURL string `json:"docling_url,omitempty"`
+}
+
+// PreToolHookConfig is a single shell hook that runs before a tool call.
+type PreToolHookConfig struct {
+	Matcher string // regex against tool name; empty = match all
+	Command string // shell command to execute
+	Timeout int    // timeout in seconds (default 30)
 }
 
 // DefaultClientConfig returns default client configuration.
