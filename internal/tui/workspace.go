@@ -36,12 +36,12 @@ type TurnStartMsg struct {
 
 // TurnDoneMsg signals a turn has completed (success or error).
 type TurnDoneMsg struct {
-	SessionID     string
-	TurnID        string
-	Err           error
-	InputTokens   int
-	OutputTokens  int
-	StopReason    string
+	SessionID    string
+	TurnID       string
+	Err          error
+	InputTokens  int
+	OutputTokens int
+	StopReason   string
 }
 
 // PromptRequestMsg carries a blocking prompt from the engine.
@@ -119,7 +119,7 @@ type ProviderFieldStatus struct {
 	EnvVar   string // associated env var (e.g. "ANTHROPIC_API_KEY")
 	Secret   bool
 	Required bool
-	IsSet    bool   // whether a value is currently stored
+	IsSet    bool // whether a value is currently stored
 }
 
 // ProviderStatus summarises one provider and its current credential state.
@@ -127,7 +127,7 @@ type ProviderStatus struct {
 	ID          string // "anthropic", "openai", …
 	DisplayName string
 	Description string
-	NeedsKey    bool   // false for Ollama and similar local providers
+	NeedsKey    bool // false for Ollama and similar local providers
 	Fields      []ProviderFieldStatus
 }
 
@@ -136,7 +136,7 @@ type ProviderStatus struct {
 // SessionInfo is the TUI's lightweight view of a persisted session.
 type SessionInfo struct {
 	ID        string
-	ShortID   string    // first 8 chars of ID for display
+	ShortID   string // first 8 chars of ID for display
 	UpdatedAt time.Time
 	CreatedAt time.Time
 	Turns     int
@@ -149,10 +149,10 @@ type SessionInfo struct {
 // The cmd/cli package provides the implementation that wraps pkg/sdk.
 type Workspace interface {
 	// Session management
-	ListSessions(ctx context.Context)                    // async, sends SessionListMsg
-	CreateSession(ctx context.Context)                   // async, sends SessionCreatedMsg
-	LoadSession(ctx context.Context, id string)          // async, sends SessionLoadedMsg
-	DeleteSession(ctx context.Context, id string) error  // synchronous
+	ListSessions(ctx context.Context)                   // async, sends SessionListMsg
+	CreateSession(ctx context.Context)                  // async, sends SessionCreatedMsg
+	LoadSession(ctx context.Context, id string)         // async, sends SessionLoadedMsg
+	DeleteSession(ctx context.Context, id string) error // synchronous
 
 	// Agent interaction
 	// Submit starts a new turn in the active session (non-blocking).

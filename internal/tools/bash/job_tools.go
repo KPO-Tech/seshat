@@ -29,7 +29,7 @@ func (t *JobOutputTool) Definition() tool.Definition {
 		Description: "Read the latest buffered stdout/stderr from a background bash job. Returns the output since the last call plus the current job status.",
 		Category:    "filesystem",
 		InputSchema: schema.FromMap(map[string]any{
-			"type": "object",
+			"type":     "object",
 			"required": []string{"job_id"},
 			"properties": map[string]any{
 				"job_id": map[string]any{
@@ -123,7 +123,7 @@ func (t *JobKillTool) Definition() tool.Definition {
 		Description: "Kill a running background bash job. Returns any buffered output before termination.",
 		Category:    "filesystem",
 		InputSchema: schema.FromMap(map[string]any{
-			"type": "object",
+			"type":     "object",
 			"required": []string{"job_id"},
 			"properties": map[string]any{
 				"job_id": map[string]any{
@@ -212,7 +212,7 @@ func (t *JobOutputTool) IsEnabled() bool                         { return true }
 func (t *JobOutputTool) ValidateInput(_ context.Context, in map[string]any) (map[string]any, error) {
 	return in, nil
 }
-func (t *JobOutputTool) RequiresUserInteraction() bool          { return false }
+func (t *JobOutputTool) RequiresUserInteraction() bool            { return false }
 func (t *JobOutputTool) ExecutesInPlanMode(_ map[string]any) bool { return false }
 
 func (t *JobKillTool) IsConcurrencySafe(_ map[string]any) bool { return false }
@@ -221,5 +221,5 @@ func (t *JobKillTool) IsEnabled() bool                         { return true }
 func (t *JobKillTool) ValidateInput(_ context.Context, in map[string]any) (map[string]any, error) {
 	return in, nil
 }
-func (t *JobKillTool) RequiresUserInteraction() bool          { return false }
+func (t *JobKillTool) RequiresUserInteraction() bool            { return false }
 func (t *JobKillTool) ExecutesInPlanMode(_ map[string]any) bool { return false }

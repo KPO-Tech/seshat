@@ -9,19 +9,19 @@ type KeyMap struct {
 	Newline     key.Binding
 
 	// Chat navigation
-	ScrollUp    key.Binding
-	ScrollDown  key.Binding
-	PageUp      key.Binding
-	PageDown    key.Binding
-	ScrollHome  key.Binding
-	ScrollEnd   key.Binding
+	ScrollUp   key.Binding
+	ScrollDown key.Binding
+	PageUp     key.Binding
+	PageDown   key.Binding
+	ScrollHome key.Binding
+	ScrollEnd  key.Binding
 
 	// Global
-	NewSession  key.Binding
-	Sessions    key.Binding
-	Cancel      key.Binding
-	Quit        key.Binding
-	Help        key.Binding
+	NewSession key.Binding
+	Sessions   key.Binding
+	Cancel     key.Binding
+	Quit       key.Binding
+	Help       key.Binding
 
 	// Session browser
 	BrowseUp    key.Binding
@@ -31,10 +31,10 @@ type KeyMap struct {
 	BrowseDel   key.Binding
 
 	// Permission dialog
-	PermYes     key.Binding
-	PermNo      key.Binding
-	PermAlways  key.Binding
-	PermClose   key.Binding
+	PermYes    key.Binding
+	PermNo     key.Binding
+	PermAlways key.Binding
+	PermClose  key.Binding
 }
 
 // DefaultKeys returns the default key map.

@@ -24,11 +24,11 @@ import (
 // High-frequency token callbacks don't cause a TUI re-render on every token;
 // instead they are accumulated and flushed as a single ChunkMsg tick.
 type chunkDebounce struct {
-	mu      sync.Mutex
-	buf     string
-	timer   *time.Timer
-	flush   func(string)
-	delay   time.Duration
+	mu    sync.Mutex
+	buf   string
+	timer *time.Timer
+	flush func(string)
+	delay time.Duration
 }
 
 func newChunkDebounce(delay time.Duration, flush func(string)) *chunkDebounce {
@@ -85,7 +85,7 @@ type nexusWorkspace struct {
 	sessionMu sync.Mutex
 	session   *sdk.Session
 
-	busy    atomic.Bool
+	busy     atomic.Bool
 	debounce *chunkDebounce
 }
 

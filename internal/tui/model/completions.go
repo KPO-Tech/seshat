@@ -61,8 +61,16 @@ func (c *fileCompletions) Backspace() {
 	}
 }
 
-func (c *fileCompletions) Up()   { if c.cursor > 0 { c.cursor-- } }
-func (c *fileCompletions) Down() { if c.cursor < len(c.filtered)-1 { c.cursor++ } }
+func (c *fileCompletions) Up() {
+	if c.cursor > 0 {
+		c.cursor--
+	}
+}
+func (c *fileCompletions) Down() {
+	if c.cursor < len(c.filtered)-1 {
+		c.cursor++
+	}
+}
 
 // Selected returns the currently highlighted item, or "".
 func (c *fileCompletions) Selected() string {

@@ -35,7 +35,7 @@ func (d *modelDialog) SetSize(width, height int) {
 	d.height = height
 }
 
-func (d *modelDialog) TypeFilter(ch string)  { d.filter += ch; d.cursor = 0; d.applyFilter() }
+func (d *modelDialog) TypeFilter(ch string) { d.filter += ch; d.cursor = 0; d.applyFilter() }
 func (d *modelDialog) DeleteFilter() {
 	if len(d.filter) > 0 {
 		d.filter = d.filter[:len(d.filter)-1]

@@ -34,8 +34,8 @@ func (a *attachments) AddPath(path string) {
 }
 
 func (a *attachments) List() []Attachment { return a.list }
-func (a *attachments) Count() int          { return len(a.list) }
-func (a *attachments) Reset()              { a.list = nil; a.deleting = false }
+func (a *attachments) Count() int         { return len(a.list) }
+func (a *attachments) Reset()             { a.list = nil; a.deleting = false }
 
 // EnterDeleteMode activates attachment-delete mode.
 func (a *attachments) EnterDeleteMode() {
