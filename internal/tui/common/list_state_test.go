@@ -1,4 +1,4 @@
-package list
+package common
 
 import (
 	"strings"
@@ -6,7 +6,7 @@ import (
 )
 
 func TestStateFiltersAndNavigates(t *testing.T) {
-	state := NewState(func(item string, needle string) bool {
+	state := NewListState(func(item string, needle string) bool {
 		return strings.Contains(strings.ToLower(item), needle)
 	})
 	state.SetItems([]string{"alpha", "beta", "betamax"})
@@ -30,7 +30,7 @@ func TestStateFiltersAndNavigates(t *testing.T) {
 }
 
 func TestStateResetItemsPreservesCursorWhenPossible(t *testing.T) {
-	state := NewState(func(item string, needle string) bool {
+	state := NewListState(func(item string, needle string) bool {
 		return strings.Contains(strings.ToLower(item), needle)
 	})
 	state.SetItems([]string{"alpha", "beta", "betamax"})
@@ -46,7 +46,7 @@ func TestStateResetItemsPreservesCursorWhenPossible(t *testing.T) {
 }
 
 func TestStateClearFilterRestoresAllItems(t *testing.T) {
-	state := NewState(func(item string, needle string) bool {
+	state := NewListState(func(item string, needle string) bool {
 		return strings.Contains(strings.ToLower(item), needle)
 	})
 	state.SetItems([]string{"alpha", "beta"})

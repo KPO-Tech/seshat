@@ -15,7 +15,7 @@ import (
 	"github.com/EngineerProjects/nexus-engine/internal/monitoring"
 	"github.com/EngineerProjects/nexus-engine/internal/providers"
 	"github.com/EngineerProjects/nexus-engine/internal/tui"
-	tuimodel "github.com/EngineerProjects/nexus-engine/internal/tui/model"
+	tuiapp "github.com/EngineerProjects/nexus-engine/internal/tui/app"
 	engineconfig "github.com/EngineerProjects/nexus-engine/pkg/config"
 	"github.com/EngineerProjects/nexus-engine/pkg/sdk"
 )
@@ -433,7 +433,7 @@ func runInteractive(ctx context.Context, options runtimeOptions) error {
 	}
 	defer ws.Close()
 
-	return tuimodel.Run(ws, ctx)
+	return tuiapp.Run(ws, ctx)
 }
 
 // buildTUIMonitoring creates a monitoring system that writes to a log file

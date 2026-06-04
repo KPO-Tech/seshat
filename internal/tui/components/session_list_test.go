@@ -1,15 +1,16 @@
-package model
+package components
 
 import (
 	"testing"
 	"time"
 
 	"github.com/EngineerProjects/nexus-engine/internal/tui"
+	"github.com/EngineerProjects/nexus-engine/internal/tui/common"
 )
 
 func TestSessionListFilterAndDeleteSelected(t *testing.T) {
 	now := time.Now()
-	s := newSessionList(DefaultStyles())
+	s := NewSessionList(common.DefaultStyles())
 	s.SetSessions([]tui.SessionInfo{
 		{ID: "sess-1", ShortID: "alpha123", UpdatedAt: now, Turns: 1},
 		{ID: "sess-2", ShortID: "beta456", UpdatedAt: now, Turns: 2},
@@ -51,7 +52,7 @@ func TestSessionListFilterAndDeleteSelected(t *testing.T) {
 
 func TestSessionListClearFilterRestoresAllSessions(t *testing.T) {
 	now := time.Now()
-	s := newSessionList(DefaultStyles())
+	s := NewSessionList(common.DefaultStyles())
 	s.SetSessions([]tui.SessionInfo{
 		{ID: "sess-1", ShortID: "alpha123", UpdatedAt: now},
 		{ID: "sess-2", ShortID: "beta456", UpdatedAt: now},

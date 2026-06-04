@@ -1,6 +1,7 @@
-package model
+package components
 
 import (
+	"github.com/EngineerProjects/nexus-engine/internal/tui/common"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -12,7 +13,7 @@ import (
 var ansiPattern = regexp.MustCompile(`\x1b\[[0-9;]*[A-Za-z]`)
 
 func TestChatGoldenTurnWithTool(t *testing.T) {
-	c := newChat(DefaultStyles(), 60, 40)
+	c := NewChat(common.DefaultStyles(), 60, 40)
 	fixed := time.Date(2026, 6, 4, 14, 5, 0, 0, time.UTC)
 
 	c.messages = []msgItem{
@@ -27,7 +28,7 @@ func TestChatGoldenTurnWithTool(t *testing.T) {
 }
 
 func TestChatGoldenCollapsedThinking(t *testing.T) {
-	c := newChat(DefaultStyles(), 60, 40)
+	c := NewChat(common.DefaultStyles(), 60, 40)
 	fixed := time.Date(2026, 6, 4, 14, 5, 0, 0, time.UTC)
 	thinking := &thinkingBlock{
 		content: strings.Join([]string{

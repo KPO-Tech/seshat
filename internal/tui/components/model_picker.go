@@ -1,4 +1,4 @@
-package model
+package components
 
 import (
 	"fmt"
@@ -7,23 +7,22 @@ import (
 	"charm.land/lipgloss/v2"
 	"github.com/EngineerProjects/nexus-engine/internal/tui"
 	"github.com/EngineerProjects/nexus-engine/internal/tui/common"
-	tuilist "github.com/EngineerProjects/nexus-engine/internal/tui/list"
 )
 
 // modelDialog is the Ctrl+M model selection overlay.
 // Models are grouped by provider, with providers shown as headers.
-type modelDialog struct {
-	styles Styles
+type ModelPicker struct {
+	styles common.Styles
 	models []tui.ProviderModel
-	list   tuilist.State[tui.ProviderModel]
+	list   common.ListState[tui.ProviderModel]
 	width  int
 	height int
 }
 
-func newModelDialog(styles Styles) *modelDialog {
-	return &modelDialog{
+func NewModelPicker(styles common.Styles) *ModelPicker {
+	return &ModelPicker{
 		styles: styles,
-		list: tuilist.NewState(func(m tui.ProviderModel, needle string) bool {
+		list: common.NewListState(func(m tui.ProviderModel, needle string) bool {
 			return strings.Contains(strings.ToLower(m.DisplayName), needle) ||
 				strings.Contains(strings.ToLower(m.Description), needle) ||
 				strings.Contains(strings.ToLower(m.Provider), needle)
@@ -31,24 +30,24 @@ func newModelDialog(styles Styles) *modelDialog {
 	}
 }
 
-func (d *modelDialog) SetModels(models []tui.ProviderModel) {
+func (d *ModelPicker) SetModels(models []tui.ProviderModel) {
 	d.models = models
 	d.list.SetItems(models)
 }
 
-func (d *modelDialog) SetSize(width, height int) {
+func (d *ModelPicker) SetSize(width, height int) {
 	d.width = width
 	d.height = height
 }
 
-func (d *modelDialog) TypeFilter(ch string) { d.list.TypeFilter(ch) }
-func (d *modelDialog) DeleteFilter()        { d.list.DeleteFilter() }
-func (d *modelDialog) ClearFilter()         { d.list.ClearFilter() }
-func (d *modelDialog) Up()                  { d.list.Up() }
-func (d *modelDialog) Down()                { d.list.Down() }
+func (d *ModelPicker) TypeFilter(ch string) { d.list.TypeFilter(ch) }
+func (d *ModelPicker) DeleteFilter()        { d.list.DeleteFilter() }
+func (d *ModelPicker) ClearFilter()         { d.list.ClearFilter() }
+func (d *ModelPicker) Up()                  { d.list.Up() }
+func (d *ModelPicker) Down()                { d.list.Down() }
 
 // Selected returns the currently highlighted model, or nil.
-func (d *modelDialog) Selected() *tui.ProviderModel {
+func (d *ModelPicker) Selected() *tui.ProviderModel {
 	m, ok := d.list.Selected()
 	if !ok {
 		return nil
@@ -93,7 +92,7 @@ type visualRow struct {
 }
 
 // buildVisualRows groups filtered models by provider and returns visual rows.
-func (d *modelDialog) buildVisualRows(innerW int) []visualRow {
+func (d *ModelPicker) buildVisualRows(innerW int) []visualRow {
 	type group struct {
 		provider string
 		models   []tui.ProviderModel
@@ -116,7 +115,7 @@ func (d *modelDialog) buildVisualRows(innerW int) []visualRow {
 
 	headerStyle := lipgloss.NewStyle().
 		Bold(true).
-		Foreground(colorSecondary).
+		Foreground(common.ColorSecondary).
 		Padding(0, 1)
 
 	var rows []visualRow
@@ -161,7 +160,7 @@ func (d *modelDialog) buildVisualRows(innerW int) []visualRow {
 
 			var text string
 			if selected {
-				nameStr := lipgloss.NewStyle().Bold(true).Foreground(colorPrimary).Render(name)
+				nameStr := lipgloss.NewStyle().Bold(true).Foreground(common.ColorPrimary).Render(name)
 				left := "    ▶ " + nameStr
 				if info != "" {
 					left += "  " + info
@@ -174,7 +173,7 @@ func (d *modelDialog) buildVisualRows(innerW int) []visualRow {
 					left + strings.Repeat(" ", pad) + ctxStr,
 				)
 			} else {
-				nameStr := lipgloss.NewStyle().Foreground(colorText).Render(name)
+				nameStr := lipgloss.NewStyle().Foreground(common.ColorText).Render(name)
 				left := "      " + nameStr
 				if info != "" {
 					left += "  " + info
@@ -196,9 +195,9 @@ func (d *modelDialog) buildVisualRows(innerW int) []visualRow {
 }
 
 // View renders the model selection panel.
-func (d *modelDialog) View() string {
+func (d *ModelPicker) View() string {
 	// Width: 80% of terminal, capped at 90, minimum 54.
-	w := clamp(d.width*4/5, 54, 90)
+	w := common.Clamp(d.width*4/5, 54, 90)
 	innerW := w - 4 // account for border + padding
 
 	title := d.styles.BrowserTitle.Render("  Switch Model")
@@ -219,7 +218,7 @@ func (d *modelDialog) View() string {
 
 	// Determine the scroll window — max lines in the content area.
 	// Available content height: terminal height minus chrome (title, filter, seps, hint = ~6 lines).
-	maxVisible := clamp(d.height-10, 6, 18)
+	maxVisible := common.Clamp(d.height-10, 6, 18)
 
 	start := 0
 	if selectedVR >= maxVisible {
@@ -267,6 +266,6 @@ func (d *modelDialog) View() string {
 
 // centred returns the panel positioned horizontally centred.
 // Vertical centering is handled by overlayOn().
-func (d *modelDialog) centred() string {
+func (d *ModelPicker) Centered() string {
 	return common.CenterHorizontally(d.View(), d.width)
 }

@@ -1,4 +1,4 @@
-package model
+package common
 
 import "charm.land/bubbles/v2/key"
 

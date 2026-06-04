@@ -1,13 +1,14 @@
-package model
+package components
 
 import (
 	"testing"
 
 	"github.com/EngineerProjects/nexus-engine/internal/tui"
+	"github.com/EngineerProjects/nexus-engine/internal/tui/common"
 )
 
 func TestConfigPanelFilterAndEnterEdit(t *testing.T) {
-	p := newConfigPanel(DefaultStyles())
+	p := NewConfigPanel(common.DefaultStyles())
 	p.SetProviders([]tui.ProviderStatus{
 		{
 			ID:          "anthropic",
@@ -47,7 +48,7 @@ func TestConfigPanelFilterAndEnterEdit(t *testing.T) {
 }
 
 func TestConfigPanelSetSavedRefreshesProviderState(t *testing.T) {
-	p := newConfigPanel(DefaultStyles())
+	p := NewConfigPanel(common.DefaultStyles())
 	p.SetProviders([]tui.ProviderStatus{
 		{
 			ID:          "openai",

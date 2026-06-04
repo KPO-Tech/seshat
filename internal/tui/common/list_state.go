@@ -1,9 +1,9 @@
-package list
+package common
 
 import "strings"
 
 // State manages filter text, cursor movement, and filtered items for overlay lists.
-type State[T any] struct {
+type ListState[T any] struct {
 	items    []T
 	filtered []T
 	filter   string
@@ -11,18 +11,18 @@ type State[T any] struct {
 	match    func(item T, needle string) bool
 }
 
-// NewState constructs a filterable list state with the supplied matcher.
-func NewState[T any](match func(item T, needle string) bool) State[T] {
-	return State[T]{match: match}
+// NewListState constructs a filterable list state with the supplied matcher.
+func NewListState[T any](match func(item T, needle string) bool) ListState[T] {
+	return ListState[T]{match: match}
 }
 
 // SetItems replaces the backing items and resets the cursor to the first row.
-func (s *State[T]) SetItems(items []T) {
+func (s *ListState[T]) SetItems(items []T) {
 	s.ResetItems(items, false)
 }
 
 // ResetItems replaces the backing items and optionally keeps the current cursor.
-func (s *State[T]) ResetItems(items []T, preserveCursor bool) {
+func (s *ListState[T]) ResetItems(items []T, preserveCursor bool) {
 	s.items = clone(items)
 	if !preserveCursor {
 		s.cursor = 0
@@ -31,19 +31,19 @@ func (s *State[T]) ResetItems(items []T, preserveCursor bool) {
 }
 
 // SetFilter replaces the filter text and resets the cursor.
-func (s *State[T]) SetFilter(filter string) {
+func (s *ListState[T]) SetFilter(filter string) {
 	s.filter = filter
 	s.cursor = 0
 	s.apply()
 }
 
 // TypeFilter appends one character to the current filter.
-func (s *State[T]) TypeFilter(ch string) {
+func (s *ListState[T]) TypeFilter(ch string) {
 	s.SetFilter(s.filter + ch)
 }
 
 // DeleteFilter removes the last character from the current filter.
-func (s *State[T]) DeleteFilter() {
+func (s *ListState[T]) DeleteFilter() {
 	if len(s.filter) == 0 {
 		return
 	}
@@ -51,31 +51,31 @@ func (s *State[T]) DeleteFilter() {
 }
 
 // ClearFilter clears the current filter.
-func (s *State[T]) ClearFilter() {
+func (s *ListState[T]) ClearFilter() {
 	s.SetFilter("")
 }
 
 // Refilter reapplies the current filter against the current items.
-func (s *State[T]) Refilter() {
+func (s *ListState[T]) Refilter() {
 	s.apply()
 }
 
 // Up moves the cursor one row up.
-func (s *State[T]) Up() {
+func (s *ListState[T]) Up() {
 	if s.cursor > 0 {
 		s.cursor--
 	}
 }
 
 // Down moves the cursor one row down.
-func (s *State[T]) Down() {
+func (s *ListState[T]) Down() {
 	if s.cursor < len(s.filtered)-1 {
 		s.cursor++
 	}
 }
 
 // Selected returns the currently selected filtered item.
-func (s *State[T]) Selected() (T, bool) {
+func (s *ListState[T]) Selected() (T, bool) {
 	var zero T
 	if s.cursor < 0 || s.cursor >= len(s.filtered) {
 		return zero, false
@@ -84,21 +84,21 @@ func (s *State[T]) Selected() (T, bool) {
 }
 
 // FilteredItems returns the filtered items in display order.
-func (s *State[T]) FilteredItems() []T {
+func (s *ListState[T]) FilteredItems() []T {
 	return s.filtered
 }
 
 // Filter returns the current filter text.
-func (s *State[T]) Filter() string {
+func (s *ListState[T]) Filter() string {
 	return s.filter
 }
 
 // Cursor returns the current filtered cursor position.
-func (s *State[T]) Cursor() int {
+func (s *ListState[T]) Cursor() int {
 	return s.cursor
 }
 
-func (s *State[T]) apply() {
+func (s *ListState[T]) apply() {
 	if s.filter == "" {
 		s.filtered = clone(s.items)
 	} else {

@@ -1,7 +1,8 @@
-package model
+package components
 
 import (
 	"fmt"
+	"github.com/EngineerProjects/nexus-engine/internal/tui/common"
 	"strings"
 	"time"
 
@@ -41,7 +42,7 @@ func toolIconFor(name string) string {
 
 // msgItem is the renderable unit in the chat viewport.
 type msgItem interface {
-	render(c *chat, width int) string
+	render(c *Chat, width int) string
 	isFinished() bool
 	invalidate()
 }
@@ -87,7 +88,7 @@ func (tb *thinkingBlock) toggle() {
 	tb.cacheWidth = 0
 }
 
-func (tb *thinkingBlock) render(styles Styles, width int) string {
+func (tb *thinkingBlock) render(styles common.Styles, width int) string {
 	if !tb.streaming && tb.cacheWidth == width && tb.cacheRender != "" {
 		return tb.cacheRender
 	}
@@ -122,7 +123,7 @@ func (tb *thinkingBlock) render(styles Styles, width int) string {
 
 	boxStyle := lipgloss.NewStyle().
 		Border(lipgloss.RoundedBorder()).
-		BorderForeground(colorBorder).
+		BorderForeground(common.ColorBorder).
 		Padding(0, 1).
 		Width(width - 2)
 
@@ -214,7 +215,7 @@ func (a *assistantItem) finish() {
 func (a *assistantItem) isFinished() bool { return !a.streaming }
 func (a *assistantItem) invalidate()      { a.contentCacheWidth = 0 }
 
-func (a *assistantItem) render(c *chat, width int) string {
+func (a *assistantItem) render(c *Chat, width int) string {
 	var sb strings.Builder
 
 	// Only the first item per turn shows the "Nexus" label.
@@ -265,7 +266,7 @@ type userItem struct {
 func (u *userItem) isFinished() bool { return true }
 func (u *userItem) invalidate()      { u.cacheW = 0 }
 
-func (u *userItem) render(c *chat, width int) string {
+func (u *userItem) render(c *Chat, width int) string {
 	if u.cacheW == width && u.cacheR != "" {
 		return u.cacheR
 	}
@@ -310,7 +311,7 @@ func (t *toolItem) isDone() bool {
 func (t *toolItem) isFinished() bool { return t.isDone() }
 func (t *toolItem) invalidate()      { t.cacheW = 0 }
 
-func (t *toolItem) renderIcon(styles Styles) string {
+func (t *toolItem) renderIcon(styles common.Styles) string {
 	switch {
 	case t.status == "completed" || t.status == "done":
 		return styles.ToolDone.Render("✓")
@@ -321,7 +322,7 @@ func (t *toolItem) renderIcon(styles Styles) string {
 	}
 }
 
-func (t *toolItem) render(c *chat, width int) string {
+func (t *toolItem) render(c *Chat, width int) string {
 	if t.isDone() && t.cacheW == width && t.cacheR != "" {
 		return t.cacheR
 	}
@@ -383,7 +384,7 @@ type systemItem struct {
 func (s *systemItem) isFinished() bool { return true }
 func (s *systemItem) invalidate()      {}
 
-func (s *systemItem) render(c *chat, _ int) string {
+func (s *systemItem) render(c *Chat, _ int) string {
 	return c.styles.MsgTimestamp.Render("─ " + s.content)
 }
 
@@ -396,14 +397,14 @@ type errorItem struct {
 func (e *errorItem) isFinished() bool { return true }
 func (e *errorItem) invalidate()      {}
 
-func (e *errorItem) render(c *chat, _ int) string {
+func (e *errorItem) render(c *Chat, _ int) string {
 	return c.styles.ToolError.Render("✗ " + e.content)
 }
 
 // ─── chat ────────────────────────────────────────────────────────────────────
 
-type chat struct {
-	styles   Styles
+type Chat struct {
+	styles   common.Styles
 	viewport *viewport.Model
 	renderer *glamour.TermRenderer
 	messages []msgItem
@@ -412,14 +413,14 @@ type chat struct {
 	follow   bool
 }
 
-func newChat(styles Styles, width, height int) *chat {
+func NewChat(styles common.Styles, width, height int) *Chat {
 	vp := viewport.New(viewport.WithWidth(width), viewport.WithHeight(height))
 	vp.SetContent("")
 	r, _ := glamour.NewTermRenderer(
 		glamour.WithEnvironmentConfig(),
-		glamour.WithWordWrap(clampInt(width-4, 20, width)),
+		glamour.WithWordWrap(common.ClampInt(width-4, 20, width)),
 	)
-	return &chat{
+	return &Chat{
 		styles:   styles,
 		viewport: &vp,
 		renderer: r,
@@ -429,14 +430,14 @@ func newChat(styles Styles, width, height int) *chat {
 	}
 }
 
-func (c *chat) SetSize(width, height int) {
+func (c *Chat) SetSize(width, height int) {
 	c.width = width
 	c.height = height
 	c.viewport.SetWidth(width)
 	c.viewport.SetHeight(height)
 	if r, err := glamour.NewTermRenderer(
 		glamour.WithEnvironmentConfig(),
-		glamour.WithWordWrap(clampInt(width-4, 20, width)),
+		glamour.WithWordWrap(common.ClampInt(width-4, 20, width)),
 	); err == nil {
 		c.renderer = r
 	}
@@ -448,7 +449,7 @@ func (c *chat) SetSize(width, height int) {
 
 // ─── Public mutation API ──────────────────────────────────────────────────────
 
-func (c *chat) AddUserMessage(text string) {
+func (c *Chat) AddUserMessage(text string) {
 	c.messages = append(c.messages, &userItem{
 		content:   text,
 		timestamp: time.Now(),
@@ -456,12 +457,12 @@ func (c *chat) AddUserMessage(text string) {
 	c.refresh()
 }
 
-func (c *chat) StartAssistantMessage() {
+func (c *Chat) StartAssistantMessage() {
 	c.messages = append(c.messages, newAssistantItem())
 	c.refresh()
 }
 
-func (c *chat) AppendChunk(text string, isThinking bool) {
+func (c *Chat) AppendChunk(text string, isThinking bool) {
 	if text == "" {
 		return // nothing to render; avoid creating empty items
 	}
@@ -497,7 +498,7 @@ func (c *chat) AppendChunk(text string, isThinking bool) {
 	c.AppendChunk(text, isThinking)
 }
 
-func (c *chat) FinishAssistantMessage() {
+func (c *Chat) FinishAssistantMessage() {
 	for i := len(c.messages) - 1; i >= 0; i-- {
 		if a, ok := c.messages[i].(*assistantItem); ok && a.streaming {
 			a.finish()
@@ -510,7 +511,7 @@ func (c *chat) FinishAssistantMessage() {
 // AddToolProgress adds or updates a tool call entry.
 // toolUseID is the unique per-call identifier; if empty, falls back to
 // name-based matching on the most recent undone tool with that name.
-func (c *chat) AddToolProgress(toolUseID, toolName, status, label string) {
+func (c *Chat) AddToolProgress(toolUseID, toolName, status, label string) {
 	// Update existing tool item if found.
 	if toolUseID != "" {
 		for i := len(c.messages) - 1; i >= 0; i-- {
@@ -551,7 +552,7 @@ func (c *chat) AddToolProgress(toolUseID, toolName, status, label string) {
 // sealActiveAssistant closes the last streaming assistantItem so subsequent
 // ChunkMsgs create a new one. An empty item (no content, no thinking) is
 // removed rather than kept as a blank entry.
-func (c *chat) sealActiveAssistant() {
+func (c *Chat) sealActiveAssistant() {
 	for i := len(c.messages) - 1; i >= 0; i-- {
 		a, ok := c.messages[i].(*assistantItem)
 		if !ok || !a.streaming {
@@ -568,24 +569,24 @@ func (c *chat) sealActiveAssistant() {
 	}
 }
 
-func (c *chat) AddError(err error) {
+func (c *Chat) AddError(err error) {
 	c.messages = append(c.messages, &errorItem{content: err.Error()})
 	c.refresh()
 }
 
-func (c *chat) AddSystem(text string) {
+func (c *Chat) AddSystem(text string) {
 	c.messages = append(c.messages, &systemItem{content: text})
 	c.refresh()
 }
 
-func (c *chat) Clear() {
+func (c *Chat) Clear() {
 	c.messages = c.messages[:0]
 	c.refresh()
 }
 
 // GetLastAssistantText returns the plain-text content of the most recent
 // completed assistant turn (all segments concatenated, no markdown symbols).
-func (c *chat) GetLastAssistantText() string {
+func (c *Chat) GetLastAssistantText() string {
 	var parts []string
 	inCurrentTurn := false
 	for i := len(c.messages) - 1; i >= 0; i-- {
@@ -607,7 +608,7 @@ done:
 }
 
 // GetLastUserText returns the text of the most recent user message.
-func (c *chat) GetLastUserText() string {
+func (c *Chat) GetLastUserText() string {
 	for i := len(c.messages) - 1; i >= 0; i-- {
 		if u, ok := c.messages[i].(*userItem); ok {
 			return u.content
@@ -617,7 +618,7 @@ func (c *chat) GetLastUserText() string {
 }
 
 // ToggleThinking toggles the collapse state of the most recent thinking block.
-func (c *chat) ToggleThinking() {
+func (c *Chat) ToggleThinking() {
 	for i := len(c.messages) - 1; i >= 0; i-- {
 		if a, ok := c.messages[i].(*assistantItem); ok {
 			if a.thinking != nil {
@@ -630,7 +631,7 @@ func (c *chat) ToggleThinking() {
 }
 
 // HasThinking reports whether the most recent assistant item has a thinking block.
-func (c *chat) HasThinking() bool {
+func (c *Chat) HasThinking() bool {
 	for i := len(c.messages) - 1; i >= 0; i-- {
 		if a, ok := c.messages[i].(*assistantItem); ok {
 			return a.thinking != nil
@@ -641,18 +642,18 @@ func (c *chat) HasThinking() bool {
 
 // ─── Scroll ──────────────────────────────────────────────────────────────────
 
-func (c *chat) ScrollUp(n int)   { c.follow = false; c.viewport.ScrollUp(n) }
-func (c *chat) ScrollDown(n int) { c.viewport.ScrollDown(n); c.follow = c.viewport.AtBottom() }
-func (c *chat) PageUp()          { c.follow = false; c.viewport.HalfPageUp() }
-func (c *chat) PageDown()        { c.viewport.HalfPageDown(); c.follow = c.viewport.AtBottom() }
-func (c *chat) GotoTop()         { c.follow = false; c.viewport.GotoTop() }
-func (c *chat) GotoBottom()      { c.follow = true; c.viewport.GotoBottom() }
+func (c *Chat) ScrollUp(n int)   { c.follow = false; c.viewport.ScrollUp(n) }
+func (c *Chat) ScrollDown(n int) { c.viewport.ScrollDown(n); c.follow = c.viewport.AtBottom() }
+func (c *Chat) PageUp()          { c.follow = false; c.viewport.HalfPageUp() }
+func (c *Chat) PageDown()        { c.viewport.HalfPageDown(); c.follow = c.viewport.AtBottom() }
+func (c *Chat) GotoTop()         { c.follow = false; c.viewport.GotoTop() }
+func (c *Chat) GotoBottom()      { c.follow = true; c.viewport.GotoBottom() }
 
-func (c *chat) View() string { return c.viewport.View() }
+func (c *Chat) View() string { return c.viewport.View() }
 
 // ─── Internal ────────────────────────────────────────────────────────────────
 
-func (c *chat) refresh() {
+func (c *Chat) refresh() {
 	var sb strings.Builder
 	lastWasTool := false
 	wroteAny := false
@@ -685,20 +686,11 @@ func headerLine(style lipgloss.Style, width int) string {
 	return style.Render(strings.Repeat("─", max(0, width)))
 }
 
-// clampInt clamps v to [lo, hi].
-func clampInt(v, lo, hi int) int {
-	if v < lo {
-		return lo
-	}
-	if v > hi {
-		return hi
-	}
-	return v
-}
-
 func truncate(s string, maxLen int) string {
 	if maxLen <= 0 || len(s) <= maxLen {
 		return s
 	}
 	return s[:maxLen-1] + "…"
 }
+
+func (c *Chat) Size() (int, int) { return c.width, c.height }

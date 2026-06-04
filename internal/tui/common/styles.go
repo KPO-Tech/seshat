@@ -1,20 +1,20 @@
-package model
+package common
 
 import "charm.land/lipgloss/v2"
 
 // Palette — orange / grey accent matching the Nexus logo.
 // lipgloss/v2 Color returns an interface, so these must be var not const.
 var (
-	colorPrimary   = lipgloss.Color("#E8630A") // orange
-	colorSecondary = lipgloss.Color("#FF8C42") // lighter orange
-	colorMuted     = lipgloss.Color("#6B7280") // grey
-	colorBorder    = lipgloss.Color("#374151") // dark border
-	colorText      = lipgloss.Color("#F9FAFB") // near-white text
-	colorGreen     = lipgloss.Color("#10B981")
-	colorRed       = lipgloss.Color("#EF4444")
-	colorYellow    = lipgloss.Color("#F59E0B")
-	colorBlue      = lipgloss.Color("#3B82F6")
-	colorUserMsg   = lipgloss.Color("#A5B4FC") // lavender for user messages
+	ColorPrimary   = lipgloss.Color("#E8630A") // orange
+	ColorSecondary = lipgloss.Color("#FF8C42") // lighter orange
+	ColorMuted     = lipgloss.Color("#6B7280") // grey
+	ColorBorder    = lipgloss.Color("#374151") // dark border
+	ColorText      = lipgloss.Color("#F9FAFB") // near-white text
+	ColorGreen     = lipgloss.Color("#10B981")
+	ColorRed       = lipgloss.Color("#EF4444")
+	ColorYellow    = lipgloss.Color("#F59E0B")
+	ColorBlue      = lipgloss.Color("#3B82F6")
+	ColorUserMsg   = lipgloss.Color("#A5B4FC") // lavender for user messages
 )
 
 // Styles groups all lipgloss styles used by the TUI.
@@ -70,100 +70,100 @@ func DefaultStyles() Styles {
 	// Header
 	s.Logo = lipgloss.NewStyle().
 		Bold(true).
-		Foreground(colorPrimary)
+		Foreground(ColorPrimary)
 	s.HeaderModel = lipgloss.NewStyle().
-		Foreground(colorMuted)
+		Foreground(ColorMuted)
 	s.HeaderSep = lipgloss.NewStyle().
-		Foreground(colorBorder)
+		Foreground(ColorBorder)
 	s.HeaderID = lipgloss.NewStyle().
-		Foreground(colorMuted).
+		Foreground(ColorMuted).
 		Faint(true)
 	s.HeaderBusy = lipgloss.NewStyle().
-		Foreground(colorYellow)
+		Foreground(ColorYellow)
 	s.HeaderReady = lipgloss.NewStyle().
-		Foreground(colorGreen)
+		Foreground(ColorGreen)
 
 	// Chat
 	s.UserLabel = lipgloss.NewStyle().
 		Bold(true).
-		Foreground(colorUserMsg)
+		Foreground(ColorUserMsg)
 	s.AssistantLabel = lipgloss.NewStyle().
 		Bold(true).
-		Foreground(colorSecondary)
+		Foreground(ColorSecondary)
 	s.UserMsg = lipgloss.NewStyle().
-		Foreground(colorText)
+		Foreground(ColorText)
 	s.MsgTimestamp = lipgloss.NewStyle().
-		Foreground(colorMuted).
+		Foreground(ColorMuted).
 		Faint(true)
 	s.ToolProgress = lipgloss.NewStyle().
-		Foreground(colorYellow)
+		Foreground(ColorYellow)
 	s.ToolDone = lipgloss.NewStyle().
-		Foreground(colorGreen)
+		Foreground(ColorGreen)
 	s.ToolError = lipgloss.NewStyle().
-		Foreground(colorRed)
+		Foreground(ColorRed)
 	s.ErrorMsg = lipgloss.NewStyle().
-		Foreground(colorRed).
+		Foreground(ColorRed).
 		Bold(true)
 
 	// Input
 	s.InputBorder = lipgloss.NewStyle().
 		Border(lipgloss.RoundedBorder()).
-		BorderForeground(colorBorder).
+		BorderForeground(ColorBorder).
 		PaddingLeft(1).PaddingRight(1)
 	s.InputPrompt = lipgloss.NewStyle().
-		Foreground(colorPrimary).
+		Foreground(ColorPrimary).
 		Bold(true)
 
 	// Session browser
 	s.BrowserBorder = lipgloss.NewStyle().
 		Border(lipgloss.RoundedBorder()).
-		BorderForeground(colorPrimary).
+		BorderForeground(ColorPrimary).
 		PaddingLeft(1).PaddingRight(1)
 	s.BrowserTitle = lipgloss.NewStyle().
 		Bold(true).
-		Foreground(colorPrimary).
+		Foreground(ColorPrimary).
 		Padding(0, 1)
 	s.BrowserItem = lipgloss.NewStyle().
-		Foreground(colorText).
+		Foreground(ColorText).
 		Padding(0, 1)
 	s.BrowserSelected = lipgloss.NewStyle().
 		Bold(true).
-		Foreground(colorPrimary).
+		Foreground(ColorPrimary).
 		Background(lipgloss.Color("#1F2937")).
 		Padding(0, 1)
 	s.BrowserFilter = lipgloss.NewStyle().
-		Foreground(colorText).
+		Foreground(ColorText).
 		Padding(0, 1)
 
 	// Permission dialog
 	s.PermBorder = lipgloss.NewStyle().
 		Border(lipgloss.RoundedBorder()).
-		BorderForeground(colorYellow).
+		BorderForeground(ColorYellow).
 		PaddingLeft(2).PaddingRight(2).
 		PaddingTop(1).PaddingBottom(1)
 	s.PermTitle = lipgloss.NewStyle().
 		Bold(true).
-		Foreground(colorYellow)
+		Foreground(ColorYellow)
 	s.PermBody = lipgloss.NewStyle().
-		Foreground(colorText)
+		Foreground(ColorText)
 	s.PermYes = lipgloss.NewStyle().
 		Bold(true).
-		Foreground(colorGreen)
+		Foreground(ColorGreen)
 	s.PermNo = lipgloss.NewStyle().
 		Bold(true).
-		Foreground(colorRed)
+		Foreground(ColorRed)
 	s.PermAlways = lipgloss.NewStyle().
 		Bold(true).
-		Foreground(colorBlue)
+		Foreground(ColorBlue)
 
 	// Footer
 	s.Footer = lipgloss.NewStyle().
-		Foreground(colorMuted)
+		Foreground(ColorMuted)
 	s.Key = lipgloss.NewStyle().
-		Foreground(colorPrimary).
+		Foreground(ColorPrimary).
 		Bold(true)
 	s.Desc = lipgloss.NewStyle().
-		Foreground(colorMuted)
+		Foreground(ColorMuted)
 
 	return s
 }

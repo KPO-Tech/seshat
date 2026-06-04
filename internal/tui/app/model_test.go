@@ -1,4 +1,4 @@
-package model
+package app
 
 import (
 	"context"
@@ -6,7 +6,6 @@ import (
 
 	tea "charm.land/bubbletea/v2"
 	"github.com/EngineerProjects/nexus-engine/internal/tui"
-	"github.com/EngineerProjects/nexus-engine/internal/tui/common"
 )
 
 type mockWorkspace struct{}
@@ -43,17 +42,19 @@ func TestModelRelayoutPropagatesChildSizes(t *testing.T) {
 
 	m = m.relayout()
 
-	if got := m.chat.width; got != 80 {
-		t.Fatalf("expected chat width 80, got %d", got)
+	cw, ch := m.chat.Size()
+	if cw != 80 {
+		t.Fatalf("expected chat width 80, got %d", cw)
 	}
-	if got := m.chat.height; got != 17 {
-		t.Fatalf("expected chat height 17, got %d", got)
+	if ch != 17 {
+		t.Fatalf("expected chat height 17, got %d", ch)
 	}
-	if got := m.sessions.width; got != 80 {
-		t.Fatalf("expected session width 80, got %d", got)
+	sw, sh := m.sessions.Size()
+	if sw != 80 {
+		t.Fatalf("expected session width 80, got %d", sw)
 	}
-	if got := m.sessions.height; got != 24 {
-		t.Fatalf("expected session height 24, got %d", got)
+	if sh != 24 {
+		t.Fatalf("expected session height 24, got %d", sh)
 	}
 }
 
@@ -67,15 +68,5 @@ func TestModelPrevChatStateDependsOnActiveSession(t *testing.T) {
 	m.activeSession = "sess-1"
 	if got := m.prevChatState(); got != stateChat {
 		t.Fatalf("expected chat state with active session, got %v", got)
-	}
-}
-
-func TestSessionBrowserUsesSharedCentering(t *testing.T) {
-	s := newSessionList(DefaultStyles())
-	s.SetSize(80, 20)
-
-	expected := common.CenterHorizontally(s.View(), 80)
-	if got := s.centred(); got != expected {
-		t.Fatalf("expected session browser to use shared centering helper")
 	}
 }

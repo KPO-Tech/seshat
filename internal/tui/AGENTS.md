@@ -22,11 +22,11 @@ Do not move engine logic into the TUI layer.
 
 The TUI currently follows a **single top-level Bubble Tea model** pattern:
 
-- `model/ui.go` owns the main `Model`, the high-level UI state, and the message
+- `app/model.go` owns the main `Model`, the high-level UI state, and the message
   switch in `Update`.
-- Sub-components in `model/` are stateful structs with imperative methods:
-  `chat`, `sessionList`, `permissionDialog`, `modelDialog`,
-  `commandPalette`, `configPanel`, `fileCompletions`, and `attachments`.
+- Sub-components in `components/` are stateful structs with imperative methods:
+  `chat`, `session_list`, `permission_dialog`, `model_picker`,
+  `command_palette`, `config_panel`, `file_completions`, and `attachments`.
 - `workspace.go` defines the interface used by the TUI. The CLI provides the
   concrete implementation and pushes `tea.Msg` events into the model.
 
@@ -55,7 +55,7 @@ This is already close to Crush's architecture. Keep going in that direction.
 
 ## Component Guidance
 
-### `model/ui.go`
+### `app/model.go`
 
 Own here:
 
@@ -68,7 +68,7 @@ Own here:
 Do not let sub-components start calling each other directly in complex ways.
 Route transitions through the main model.
 
-### `model/chat.go`
+### `components/chat.go`
 
 Keep chat behavior deterministic and testable:
 
@@ -127,11 +127,9 @@ discipline without copying its full complexity.
 
 Recommended future extraction order:
 
-1. `internal/tui/chat`
-2. `internal/tui/dialog`
-3. `internal/tui/list`
-4. `internal/tui/common`
-5. `internal/tui/styles`
+1. `internal/tui/common`
+2. `internal/tui/components`
+3. `internal/tui/app`
 
 Do this gradually. Do not attempt a one-shot rewrite.
 

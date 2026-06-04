@@ -1,12 +1,13 @@
-package model
+package components
 
 import (
+	"github.com/EngineerProjects/nexus-engine/internal/tui/common"
 	"strings"
 	"testing"
 )
 
 func TestChatAddToolProgressSealsAssistantAndCreatesContinuation(t *testing.T) {
-	c := newChat(DefaultStyles(), 80, 20)
+	c := NewChat(common.DefaultStyles(), 80, 20)
 
 	c.AddUserMessage("user prompt")
 	c.StartAssistantMessage()
@@ -49,7 +50,7 @@ func TestChatAddToolProgressSealsAssistantAndCreatesContinuation(t *testing.T) {
 }
 
 func TestChatAddToolProgressDropsEmptyAssistantPlaceholder(t *testing.T) {
-	c := newChat(DefaultStyles(), 80, 20)
+	c := NewChat(common.DefaultStyles(), 80, 20)
 
 	c.StartAssistantMessage()
 	c.AddToolProgress("tool-1", "bash", "running", "running")
@@ -73,7 +74,7 @@ func TestThinkingBlockToggleChangesCollapsedState(t *testing.T) {
 		t.Fatalf("expected thinking block to start collapsed")
 	}
 
-	collapsed := tb.render(DefaultStyles(), 50)
+	collapsed := tb.render(common.DefaultStyles(), 50)
 	if want := "2 lines hidden"; !strings.Contains(collapsed, want) {
 		t.Fatalf("expected collapsed render to mention %q, got %q", want, collapsed)
 	}
@@ -83,7 +84,7 @@ func TestThinkingBlockToggleChangesCollapsedState(t *testing.T) {
 		t.Fatalf("expected toggle to expand thinking block")
 	}
 
-	expanded := tb.render(DefaultStyles(), 50)
+	expanded := tb.render(common.DefaultStyles(), 50)
 	if strings.Contains(expanded, "lines hidden") {
 		t.Fatalf("expected expanded render to show all lines, got %q", expanded)
 	}

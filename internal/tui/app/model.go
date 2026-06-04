@@ -1,11 +1,10 @@
 // Package model implements the BubbleTea TUI for nexus-engine, adapted from
 // Charm's crush project architecture (BubbleTea state machine, workspace
 // abstraction, draw cache, permission dialog, session browser).
-package model
+package app
 
 import (
 	"context"
-	"fmt"
 	"strings"
 	"time"
 
@@ -15,6 +14,7 @@ import (
 	"charm.land/lipgloss/v2"
 	"github.com/EngineerProjects/nexus-engine/internal/tui"
 	"github.com/EngineerProjects/nexus-engine/internal/tui/common"
+	"github.com/EngineerProjects/nexus-engine/internal/tui/components"
 	clipboard "github.com/atotto/clipboard"
 )
 
@@ -54,20 +54,20 @@ type Model struct {
 	cancel    context.CancelFunc
 
 	state  uiState
-	keys   KeyMap
-	styles Styles
+	keys   common.KeyMap
+	styles common.Styles
 
 	width  int
 	height int
 
-	chat        *chat
-	sessions    *sessionList
-	permission  *permissionDialog
-	modelSelect *modelDialog
-	commands    *commandPalette
-	configPanel *configPanel
-	completions *fileCompletions
-	attachments *attachments
+	chat        *components.Chat
+	sessions    *components.SessionList
+	permission  *components.PermissionDialog
+	modelSelect *components.ModelPicker
+	commands    *components.CommandPalette
+	configPanel *components.ConfigPanel
+	completions *components.FileCompletions
+	attachments *components.Attachments
 	input       textarea.Model
 	spinner     spinner.Model
 
@@ -84,8 +84,8 @@ type Model struct {
 func New(ws tui.Workspace, ctx context.Context) Model {
 	ctx, cancel := context.WithCancel(ctx)
 
-	styles := DefaultStyles()
-	keys := DefaultKeys()
+	styles := common.DefaultStyles()
+	keys := common.DefaultKeys()
 
 	ta := textarea.New()
 	ta.Placeholder = "Type a message… (enter to send, shift+enter for newline)"
@@ -97,7 +97,7 @@ func New(ws tui.Workspace, ctx context.Context) Model {
 
 	sp := spinner.New()
 	sp.Spinner = spinner.Dot
-	sp.Style = lipgloss.NewStyle().Foreground(colorYellow)
+	sp.Style = lipgloss.NewStyle().Foreground(common.ColorYellow)
 
 	return Model{
 		workspace:   ws,
@@ -107,14 +107,14 @@ func New(ws tui.Workspace, ctx context.Context) Model {
 		focus:       uiFocusEditor,
 		keys:        keys,
 		styles:      styles,
-		chat:        newChat(styles, 80, 20),
-		sessions:    newSessionList(styles),
-		permission:  newPermissionDialog(styles),
-		modelSelect: newModelDialog(styles),
-		commands:    newCommandPalette(styles),
-		configPanel: newConfigPanel(styles),
-		completions: newFileCompletions(styles, ws.WorkingDir()),
-		attachments: newAttachments(styles),
+		chat:        components.NewChat(styles, 80, 20),
+		sessions:    components.NewSessionList(styles),
+		permission:  components.NewPermissionDialog(styles),
+		modelSelect: components.NewModelPicker(styles),
+		commands:    components.NewCommandPalette(styles),
+		configPanel: components.NewConfigPanel(styles),
+		completions: components.NewFileCompletions(styles, ws.WorkingDir()),
+		attachments: components.NewAttachments(styles),
 		input:       ta,
 		spinner:     sp,
 	}
@@ -189,7 +189,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.state = stateChat
 			m.focus = uiFocusEditor
 			m.chat.Clear()
-			m.chat.AddSystem("New session · " + shortID(msg.ID))
+			m.chat.AddSystem("New session · " + common.ShortID(msg.ID))
 			cmds = append(cmds, m.input.Focus()) // v2: Focus() returns a Cmd
 		}
 
@@ -201,7 +201,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.state = stateChat
 			m.focus = uiFocusEditor
 			m.chat.Clear()
-			m.chat.AddSystem("Resumed session · " + shortID(msg.ID))
+			m.chat.AddSystem("Resumed session · " + common.ShortID(msg.ID))
 			cmds = append(cmds, m.input.Focus()) // v2: Focus() returns a Cmd
 		}
 
@@ -375,7 +375,10 @@ func (m *Model) handleKey(msg tea.KeyPressMsg) (bool, tea.Cmd) {
 		case "down", "j":
 			m.commands.Down()
 		case "enter":
-			cmd := m.commands.Execute(m)
+			var cmd tea.Cmd
+			if sel := m.commands.Selected(); sel != nil {
+				cmd = m.executeCommand(sel.ID)
+			}
 			if m.state == stateCommands {
 				m.state = m.prevChatState()
 			}
@@ -393,7 +396,7 @@ func (m *Model) handleKey(msg tea.KeyPressMsg) (bool, tea.Cmd) {
 	// ── Provider config panel (all keys consumed) ───────────────────────
 	if m.state == stateProviderConfig {
 		cp := m.configPanel
-		if cp.editing {
+		if cp.IsEditing() {
 			switch k {
 			case "esc":
 				m.state = m.prevChatState()
@@ -412,7 +415,7 @@ func (m *Model) handleKey(msg tea.KeyPressMsg) (bool, tea.Cmd) {
 				if strings.TrimSpace(draft) == "" {
 					return true, nil
 				}
-				providerID := cp.editProvider.ID
+				providerID := cp.EditedProviderID()
 				return true, func() tea.Msg {
 					err := m.workspace.SaveProviderField(m.ctx, providerID, fieldKey, strings.TrimSpace(draft))
 					if err != nil {
@@ -677,6 +680,47 @@ func (m *Model) handleKey(msg tea.KeyPressMsg) (bool, tea.Cmd) {
 	return false, nil
 }
 
+func (m *Model) executeCommand(id string) tea.Cmd {
+	switch id {
+	case "new-session":
+		return m.createSession()
+	case "sessions":
+		m.state = stateSessions
+		return m.loadSessions()
+	case "model":
+		m.returnState = stateCommands
+		m.state = stateModelSelect
+		m.modelSelect.ClearFilter()
+		return m.listModels()
+	case "thinking":
+		m.chat.ToggleThinking()
+		return nil
+	case "select":
+		m.selectMode = !m.selectMode
+		return nil
+	case "copy-msg":
+		text := m.chat.GetLastUserText()
+		if text != "" {
+			return m.copyToClipboard(text, "Message copied")
+		}
+		return nil
+	case "provider-config":
+		m.state = stateProviderConfig
+		return m.loadProviderConfig()
+	case "clear":
+		m.chat.Clear()
+		if m.activeSession != "" {
+			m.chat.AddSystem("Chat cleared")
+		}
+		return nil
+	case "quit":
+		m.cancel()
+		return tea.Quit
+	default:
+		return nil
+	}
+}
+
 // pendingSubmitMsg is used to queue a prompt while session creation is pending.
 type pendingSubmitMsg struct{ prompt string }
 
@@ -693,7 +737,7 @@ type providerConfigLoadedMsg struct{ providers []tui.ProviderStatus }
 
 func (m Model) viewWelcome() string {
 	// Braille logo rendered in orange primary colour.
-	logoArt := lipgloss.NewStyle().Foreground(colorPrimary).Render(nexusLogo)
+	logoArt := lipgloss.NewStyle().Foreground(common.ColorPrimary).Render(common.NexusLogo)
 
 	wordmark := m.styles.Logo.Render("◉ NEXUS")
 	tagline := m.styles.HeaderModel.Render("One runtime. Any LLM. Any language.")
@@ -735,7 +779,7 @@ func (m Model) viewChat() string {
 
 func (m Model) viewSessions() string {
 	m.sessions.SetSize(m.width, m.height)
-	overlay := m.sessions.centred()
+	overlay := m.sessions.Centered()
 	var backdrop string
 	if m.activeSession != "" {
 		backdrop = m.viewChat()
@@ -747,7 +791,7 @@ func (m Model) viewSessions() string {
 
 func (m Model) viewModelSelect() string {
 	m.modelSelect.SetSize(m.width, m.height)
-	overlay := m.modelSelect.centred()
+	overlay := m.modelSelect.Centered()
 	var backdrop string
 	if m.activeSession != "" {
 		backdrop = m.viewChat()
@@ -759,7 +803,7 @@ func (m Model) viewModelSelect() string {
 
 func (m Model) viewCommands() string {
 	m.commands.SetSize(m.width, m.height)
-	overlay := m.commands.centred()
+	overlay := m.commands.Centered()
 	var backdrop string
 	if m.activeSession != "" {
 		backdrop = m.viewChat()
@@ -771,7 +815,7 @@ func (m Model) viewCommands() string {
 
 func (m Model) viewProviderConfig() string {
 	m.configPanel.SetSize(m.width, m.height)
-	overlay := m.configPanel.centred()
+	overlay := m.configPanel.Centered()
 	var backdrop string
 	if m.activeSession != "" {
 		backdrop = m.viewChat()
@@ -792,7 +836,7 @@ func (m Model) header() string {
 	} else if m.focus == uiFocusMain && m.state == stateChat {
 		status = m.styles.HeaderBusy.Render("↕ scroll") + "  " + m.styles.HeaderID.Render("tab: back to input")
 	} else if m.activeSession != "" {
-		status = m.styles.HeaderReady.Render("●") + " " + m.styles.HeaderID.Render(shortID(m.activeSession))
+		status = m.styles.HeaderReady.Render("●") + " " + m.styles.HeaderID.Render(common.ShortID(m.activeSession))
 	} else {
 		status = m.styles.HeaderReady.Render("ready")
 	}
@@ -809,7 +853,7 @@ func (m Model) footer() string {
 	// Select mode banner takes priority.
 	if m.selectMode {
 		return lipgloss.NewStyle().
-			Foreground(colorPrimary).Bold(true).
+			Foreground(common.ColorPrimary).Bold(true).
 			Render("SELECT MODE") +
 			"  " +
 			m.styles.Desc.Render("select text with mouse · copy with ctrl+c ·") +
@@ -882,7 +926,7 @@ func (m Model) relayout() Model {
 
 func (m Model) resizeInput() Model {
 	lines := strings.Count(m.input.Value(), "\n") + 1
-	h := clamp(lines, inputMinH, inputMaxH)
+	h := common.Clamp(lines, inputMinH, inputMaxH)
 	m.input.SetHeight(h)
 	return m
 }
@@ -948,13 +992,6 @@ func (m Model) deleteSession(id string) tea.Cmd {
 
 // ─── Utilities ────────────────────────────────────────────────────────────────
 
-func shortID(id string) string {
-	if len(id) > 8 {
-		return id[:8]
-	}
-	return id
-}
-
 func clamp(v, lo, hi int) int {
 	if v < lo {
 		return lo
@@ -973,5 +1010,3 @@ func Run(ws tui.Workspace, ctx context.Context) error {
 	_, err := p.Run()
 	return err
 }
-
-var _ = fmt.Sprintf

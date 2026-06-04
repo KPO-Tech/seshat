@@ -1,7 +1,8 @@
-package model
+package components
 
 import (
 	"fmt"
+	"github.com/EngineerProjects/nexus-engine/internal/tui/common"
 	"strings"
 
 	"charm.land/lipgloss/v2"
@@ -9,32 +10,32 @@ import (
 )
 
 // permissionDialog is the modal overlay shown when the agent needs approval.
-type permissionDialog struct {
-	styles  Styles
+type PermissionDialog struct {
+	styles  common.Styles
 	pending *tui.PromptRequestMsg
 	width   int
 	height  int
 }
 
-func newPermissionDialog(styles Styles) *permissionDialog {
-	return &permissionDialog{styles: styles}
+func NewPermissionDialog(styles common.Styles) *PermissionDialog {
+	return &PermissionDialog{styles: styles}
 }
 
-func (p *permissionDialog) SetSize(width, height int) {
+func (p *PermissionDialog) SetSize(width, height int) {
 	p.width = width
 	p.height = height
 }
 
-func (p *permissionDialog) SetPending(msg *tui.PromptRequestMsg) {
+func (p *PermissionDialog) SetPending(msg *tui.PromptRequestMsg) {
 	p.pending = msg
 }
 
-func (p *permissionDialog) HasPending() bool {
+func (p *PermissionDialog) HasPending() bool {
 	return p.pending != nil
 }
 
 // Resolve sends the user's response and clears the pending request.
-func (p *permissionDialog) Resolve(value any, cancelled bool) {
+func (p *PermissionDialog) Resolve(value any, cancelled bool) {
 	if p.pending == nil {
 		return
 	}
@@ -46,7 +47,7 @@ func (p *permissionDialog) Resolve(value any, cancelled bool) {
 }
 
 // View renders the permission dialog centred on the screen.
-func (p *permissionDialog) View() string {
+func (p *PermissionDialog) View() string {
 	if p.pending == nil {
 		return ""
 	}

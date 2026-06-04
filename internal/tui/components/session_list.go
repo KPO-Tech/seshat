@@ -1,4 +1,4 @@
-package model
+package components
 
 import (
 	"fmt"
@@ -7,47 +7,46 @@ import (
 
 	"github.com/EngineerProjects/nexus-engine/internal/tui"
 	"github.com/EngineerProjects/nexus-engine/internal/tui/common"
-	tuilist "github.com/EngineerProjects/nexus-engine/internal/tui/list"
 )
 
 // sessionList is the session browser overlay.
-type sessionList struct {
-	styles   Styles
+type SessionList struct {
+	styles   common.Styles
 	sessions []tui.SessionInfo
-	list     tuilist.State[tui.SessionInfo]
+	list     common.ListState[tui.SessionInfo]
 	width    int
 	height   int
 	editing  bool // whether the filter input has focus
 }
 
-func newSessionList(styles Styles) *sessionList {
-	return &sessionList{
+func NewSessionList(styles common.Styles) *SessionList {
+	return &SessionList{
 		styles: styles,
-		list: tuilist.NewState(func(sess tui.SessionInfo, needle string) bool {
+		list: common.NewListState(func(sess tui.SessionInfo, needle string) bool {
 			return strings.Contains(strings.ToLower(sess.ShortID), needle)
 		}),
 		editing: true,
 	}
 }
 
-func (s *sessionList) SetSessions(sessions []tui.SessionInfo) {
+func (s *SessionList) SetSessions(sessions []tui.SessionInfo) {
 	s.sessions = sessions
 	s.list.SetItems(sessions)
 }
 
-func (s *sessionList) SetSize(width, height int) {
+func (s *SessionList) SetSize(width, height int) {
 	s.width = width
 	s.height = height
 }
 
-func (s *sessionList) TypeFilter(ch string) { s.list.TypeFilter(ch) }
-func (s *sessionList) DeleteFilter()        { s.list.DeleteFilter() }
-func (s *sessionList) ClearFilter()         { s.list.ClearFilter() }
-func (s *sessionList) Up()                  { s.list.Up() }
-func (s *sessionList) Down()                { s.list.Down() }
+func (s *SessionList) TypeFilter(ch string) { s.list.TypeFilter(ch) }
+func (s *SessionList) DeleteFilter()        { s.list.DeleteFilter() }
+func (s *SessionList) ClearFilter()         { s.list.ClearFilter() }
+func (s *SessionList) Up()                  { s.list.Up() }
+func (s *SessionList) Down()                { s.list.Down() }
 
 // Selected returns the session ID at the current cursor position, or "".
-func (s *sessionList) Selected() string {
+func (s *SessionList) Selected() string {
 	sess, ok := s.list.Selected()
 	if !ok {
 		return ""
@@ -56,7 +55,7 @@ func (s *sessionList) Selected() string {
 }
 
 // DeleteSelected returns the session ID to delete, if any.
-func (s *sessionList) DeleteSelected() string {
+func (s *SessionList) DeleteSelected() string {
 	id := s.Selected()
 	if id == "" {
 		return ""
@@ -73,7 +72,7 @@ func (s *sessionList) DeleteSelected() string {
 }
 
 // View renders the session browser in a box centred on (width, height).
-func (s *sessionList) View() string {
+func (s *SessionList) View() string {
 	const boxWidth = 60
 	const maxItems = 10
 
@@ -138,7 +137,7 @@ func (s *sessionList) View() string {
 
 // centred returns the box horizontally centred.
 // Vertical centering is handled by overlayOn().
-func (s *sessionList) centred() string {
+func (s *SessionList) Centered() string {
 	return common.CenterHorizontally(s.View(), s.width)
 }
 
@@ -160,3 +159,5 @@ func formatAge(t time.Time) string {
 		return t.Format("Jan 2")
 	}
 }
+
+func (s *SessionList) Size() (int, int) { return s.width, s.height }
