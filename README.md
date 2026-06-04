@@ -66,16 +66,44 @@
 
 An AI agent in your terminal. Multi-provider, local-first, skills-aware.
 
-```bash
-go install github.com/EngineerProjects/nexus-engine/cmd/cli@latest
+**Build from source**
 
-nexus run "refactor the auth module to use context properly"
-nexus chat                             # interactive multi-turn session
-nexus sessions                         # list and resume sessions
-nexus config set model anthropic:claude-sonnet-4-20250514
+```bash
+git clone https://github.com/EngineerProjects/nexus-engine
+cd nexus-engine
+make build           # produces bin/nexus and bin/nexus-grpc
 ```
 
-Sessions are persisted locally. Skills are loaded from your project. The full tool set is available — file edits, sandboxed bash, web search, browser, MCP servers, sub-agents.
+Add `bin/` to your PATH, or copy `bin/nexus` to `/usr/local/bin`:
+
+```bash
+export PATH="$PATH:$(pwd)/bin"
+# or
+sudo cp bin/nexus /usr/local/bin/nexus
+```
+
+**Configure a provider**
+
+```bash
+# Set your API key and default model
+nexus config --provider anthropic --api-key sk-ant-...
+nexus config --model anthropic:claude-sonnet-4-20250514
+
+# Check current config
+nexus config --print
+```
+
+**Run**
+
+```bash
+nexus chat                                   # interactive TUI session
+nexus run "list all TODO comments in this codebase"  # one-shot task
+nexus sessions list                          # browse past sessions
+nexus sessions list --status active          # active sessions only
+nexus help                                   # full command reference
+```
+
+Sessions are persisted locally in SQLite. Skills are loaded from `.nexus/skills/` in your project. The full tool set is available — file edits, sandboxed bash, web search, browser, MCP servers, sub-agents.
 
 ---
 
@@ -84,10 +112,14 @@ Sessions are persisted locally. Skills are loaded from your project. The full to
 Run nexus-engine as a gRPC service and generate clients for any language.
 
 ```bash
-go run ./cmd/grpc   # starts on :50051
+# Development
+ANTHROPIC_API_KEY=sk-ant-... go run ./cmd/grpc
+
+# From build
+ANTHROPIC_API_KEY=sk-ant-... ./bin/nexus-grpc
 ```
 
-The contract lives in `pkg/grpc/proto/nexus.proto`. Generate a client for Python, TypeScript, Java, Rust, or any gRPC-supported language:
+Server starts on `:50051`. The contract lives in `pkg/grpc/proto/nexus.proto`. Generate a client for Python, TypeScript, Java, Rust, or any gRPC-supported language:
 
 ```bash
 # Python
@@ -104,6 +136,10 @@ One runtime. Every language.
 ### 3. Go SDK
 
 Embed the full runtime in your own Go application.
+
+```bash
+go get github.com/EngineerProjects/nexus-engine/pkg/sdk
+```
 
 ```go
 import "github.com/EngineerProjects/nexus-engine/pkg/sdk"
@@ -168,20 +204,29 @@ Full model listings and capabilities: [`docs/providers.md`](./docs/providers.md)
 ## Quick start
 
 ```bash
+# 1. Clone and build
 git clone https://github.com/EngineerProjects/nexus-engine
 cd nexus-engine
+make build                    # → bin/nexus  and  bin/nexus-grpc
+export PATH="$PATH:$(pwd)/bin"
 
-export ANTHROPIC_API_KEY=sk-ant-...
+# 2. Set your API key and model
+nexus config --provider anthropic --api-key sk-ant-...
+nexus config --model anthropic:claude-sonnet-4-20250514
 
-# Interactive chat
-go run ./cmd/cli chat
+# 3. Start chatting
+nexus chat
 
-# One-shot run in the current directory
-go run ./cmd/cli run "list all TODO comments in this codebase"
+# One-shot task in the current directory
+nexus run "list all TODO comments in this codebase"
 
-# gRPC server (port 50051)
-go run ./cmd/grpc
+# Start the gRPC server (port 50051)
+ANTHROPIC_API_KEY=sk-ant-... ./bin/nexus-grpc
 ```
+
+> **No API key?** Use Ollama for free local inference:
+> `nexus config --provider ollama --model ollama:llama3.2`
+> (requires [Ollama](https://ollama.com) running locally)
 
 ---
 
