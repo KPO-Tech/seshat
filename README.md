@@ -244,6 +244,7 @@ If you need multi-user auth, organizations, workspaces, per-user provider creden
 | [Prompt System](./docs/prompt-system.md) | Section assembly, stage overlays, cache control |
 | [Skills](./docs/skills.md) | Skills system, loading order, injection |
 | [Transports & Setup](./docs/transports.md) | gRPC setup, proto codegen, env vars |
+| [Multi-Agent Teams](./docs/team.md) | Agent profiles, mailbox, dispatcher, TeamBus |
 
 ---
 
