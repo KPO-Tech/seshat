@@ -25,6 +25,11 @@ type runtimeOptions struct {
 	StorageGCLimit          int
 	StorageGCNamespaces     []string
 	Debug                   bool
+
+	// Monitoring is an optional pre-built monitoring system.
+	// Set by runInteractive to redirect logs away from stdout/stderr when
+	// running in TUI (alt-screen) mode.
+	Monitoring *sdk.MonitoringSystem
 }
 
 type runtimeOverrides struct {
@@ -117,6 +122,9 @@ func newClient(
 		}
 	}
 
+	// EnableMonitoring must be true so initMonitoringSystem honours
+	// options.Monitoring (the TUI file logger) instead of short-circuiting.
+	enableMonitoring := options.Monitoring != nil
 	client, err := sdk.NewClient(&sdk.ClientConfig{
 		APIKey:                  options.APIKey,
 		Model:                   options.Model,
@@ -136,6 +144,8 @@ func newClient(
 		StorageGCLimit:          options.StorageGCLimit,
 		StorageGCNamespaces:     options.StorageGCNamespaces,
 		PreToolHooks:            preToolHooks,
+		EnableMonitoring:        enableMonitoring,
+		Monitoring:              options.Monitoring,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("create SDK client: %w", err)

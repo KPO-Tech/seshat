@@ -21,8 +21,9 @@ type ChunkMsg struct {
 
 // ToolProgressMsg reports a tool starting, completing, or failing.
 type ToolProgressMsg struct {
+	ToolUseID string // unique per-call ID (empty for legacy callers)
 	ToolName  string
-	Status    string // "running" | "done" | "error"
+	Status    string // "pending" | "running" | "completed" | "failed"
 	Label     string // human-readable status label
 	SessionID string
 }

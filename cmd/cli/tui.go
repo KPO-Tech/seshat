@@ -2,14 +2,19 @@ package main
 
 import (
 	"context"
+	"io"
+	"log"
+	"os"
+	"path/filepath"
 	"sync"
 	"sync/atomic"
 	"time"
 
 	tea "charm.land/bubbletea/v2"
+	"github.com/EngineerProjects/nexus-engine/internal/monitoring"
+	"github.com/EngineerProjects/nexus-engine/internal/providers"
 	"github.com/EngineerProjects/nexus-engine/internal/tui"
 	tuimodel "github.com/EngineerProjects/nexus-engine/internal/tui/model"
-	"github.com/EngineerProjects/nexus-engine/internal/providers"
 	"github.com/EngineerProjects/nexus-engine/pkg/sdk"
 )
 
@@ -290,9 +295,10 @@ func (w *nexusWorkspace) onProgress(progress sdk.ToolProgress) {
 		label = string(progress.Stage)
 	}
 	w.send(tui.ToolProgressMsg{
-		ToolName: progress.ToolName,
-		Status:   string(progress.Stage),
-		Label:    label,
+		ToolUseID: progress.ToolUseID,
+		ToolName:  progress.ToolName,
+		Status:    string(progress.Stage),
+		Label:     label,
 	})
 }
 
@@ -331,6 +337,11 @@ func runInteractive(ctx context.Context, options runtimeOptions) error {
 		return err
 	}
 
+	// Redirect all log output to a file before entering alt-screen (crush pattern).
+	// Without this, monitoring logs and stdlib log output bleed into the TUI.
+	options.Monitoring = buildTUIMonitoring()
+	log.SetOutput(io.Discard)
+
 	ws, err := newNexusWorkspace(options)
 	if err != nil {
 		return err
@@ -338,6 +349,31 @@ func runInteractive(ctx context.Context, options runtimeOptions) error {
 	defer ws.Close()
 
 	return tuimodel.Run(ws, ctx)
+}
+
+// buildTUIMonitoring creates a monitoring system that writes to a log file
+// instead of stdout, so logs don't interfere with the TUI alt-screen.
+func buildTUIMonitoring() *sdk.MonitoringSystem {
+	logDir := filepath.Join(nexusLogDir(), "logs")
+	_ = os.MkdirAll(logDir, 0o755)
+	logPath := filepath.Join(logDir, "nexus.log")
+
+	logger := monitoring.NewLoggerWithConfig(&monitoring.LoggerConfig{
+		Level:    monitoring.LogLevelInfo,
+		Output:   "file",
+		FilePath: logPath,
+		Format:   "text",
+	})
+	return monitoring.NewSystem(logger)
+}
+
+// nexusLogDir returns ~/.nexus or a temp fallback.
+func nexusLogDir() string {
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return os.TempDir()
+	}
+	return filepath.Join(home, ".nexus")
 }
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────

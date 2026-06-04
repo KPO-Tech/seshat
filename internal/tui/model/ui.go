@@ -7,11 +7,13 @@ import (
 	"context"
 	"fmt"
 	"strings"
+	"time"
 
 	"charm.land/bubbles/v2/spinner"
 	"charm.land/bubbles/v2/textarea"
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
+	clipboard "github.com/atotto/clipboard"
 	"github.com/EngineerProjects/nexus-engine/internal/tui"
 )
 
@@ -23,6 +25,7 @@ const (
 	stateSessions
 	statePermission
 	stateModelSelect
+	stateCommands
 )
 
 // uiFocus mirrors crush's focus model: editor has the cursor / main lets
@@ -59,6 +62,7 @@ type Model struct {
 	sessions    *sessionList
 	permission  *permissionDialog
 	modelSelect *modelDialog
+	commands    *commandPalette
 	completions *fileCompletions
 	attachments *attachments
 	input       textarea.Model
@@ -69,6 +73,9 @@ type Model struct {
 	activeSession string
 	lastErr       error
 	permInput     string
+	copyNotice    string  // transient "Copied!" message shown in footer
+	selectMode    bool    // when true: mouse capture disabled so terminal handles selection
+	returnState   uiState // state to restore when pressing ← from a sub-dialog
 }
 
 func New(ws tui.Workspace, ctx context.Context) Model {
@@ -101,6 +108,7 @@ func New(ws tui.Workspace, ctx context.Context) Model {
 		sessions:    newSessionList(styles),
 		permission:  newPermissionDialog(styles),
 		modelSelect: newModelDialog(styles),
+		commands:    newCommandPalette(styles),
 		completions: newFileCompletions(styles, ws.WorkingDir()),
 		attachments: newAttachments(styles),
 		input:       ta,
@@ -145,7 +153,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if label == "" {
 			label = msg.Status
 		}
-		m.chat.AddToolProgress(msg.ToolName, msg.Status, label)
+		m.chat.AddToolProgress(msg.ToolUseID, msg.ToolName, msg.Status, label)
 
 	case tui.TurnStartMsg:
 		m.busy = true
@@ -204,6 +212,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case tui.ErrMsg:
 		m.lastErr = msg.Err
 
+	case clearCopyNoticeMsg:
+		m.copyNotice = ""
+
 	// v2 uses KeyPressMsg instead of KeyMsg
 	case tea.KeyPressMsg:
 		consumed, cmd := m.handleKey(msg)
@@ -217,6 +228,18 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.input = newInput
 			cmds = append(cmds, inputCmd)
 			m = m.resizeInput()
+		}
+		return m, tea.Batch(cmds...)
+
+	case tea.MouseWheelMsg:
+		// Mouse wheel scrolls chat regardless of focus state (no Tab required).
+		if m.state == stateChat || m.state == stateWelcome {
+			switch msg.Button {
+			case tea.MouseWheelUp:
+				m.chat.ScrollUp(3)
+			case tea.MouseWheelDown:
+				m.chat.ScrollDown(3)
+			}
 		}
 		return m, tea.Batch(cmds...)
 	}
@@ -247,6 +270,8 @@ func (m Model) View() tea.View {
 		content = m.viewSessions()
 	case stateModelSelect:
 		content = m.viewModelSelect()
+	case stateCommands:
+		content = m.viewCommands()
 	case stateChat, statePermission:
 		content = m.viewChat()
 	default:
@@ -255,8 +280,13 @@ func (m Model) View() tea.View {
 
 	v := tea.NewView(content)
 	v.AltScreen = true
-	// Only track cell motion for mouse scroll — not full motion (avoids spam).
-	v.MouseMode = tea.MouseModeCellMotion
+	if m.selectMode {
+		// In select mode, release mouse capture so the terminal handles
+		// native text selection. Mouse scroll is temporarily unavailable.
+		v.MouseMode = tea.MouseModeNone
+	} else {
+		v.MouseMode = tea.MouseModeCellMotion
+	}
 	return v
 }
 
@@ -291,6 +321,15 @@ func (m *Model) handleKey(msg tea.KeyPressMsg) (bool, tea.Cmd) {
 		switch k {
 		case "esc", "ctrl+m":
 			m.state = m.prevChatState()
+		case "left":
+			// Navigate back to the commands palette if that's where we came from,
+			// otherwise close to the chat/welcome state.
+			if m.returnState == stateCommands {
+				m.state = stateCommands
+				m.commands.Open("")
+			} else {
+				m.state = m.prevChatState()
+			}
 		case "up", "k":
 			m.modelSelect.Up()
 		case "down", "j":
@@ -305,6 +344,31 @@ func (m *Model) handleKey(msg tea.KeyPressMsg) (bool, tea.Cmd) {
 		default:
 			if len(k) == 1 {
 				m.modelSelect.TypeFilter(k)
+			}
+		}
+		return true, nil
+	}
+
+	// ── Commands palette (all keys consumed) ────────────────────────────
+	if m.state == stateCommands {
+		switch k {
+		case "esc", "ctrl+p":
+			m.state = m.prevChatState()
+		case "up", "k":
+			m.commands.Up()
+		case "down", "j":
+			m.commands.Down()
+		case "enter":
+			cmd := m.commands.Execute(m)
+			if m.state == stateCommands {
+				m.state = m.prevChatState()
+			}
+			return true, cmd
+		case "backspace":
+			m.commands.DeleteFilter()
+		default:
+			if len(k) == 1 {
+				m.commands.TypeFilter(k)
 			}
 		}
 		return true, nil
@@ -340,6 +404,12 @@ func (m *Model) handleKey(msg tea.KeyPressMsg) (bool, tea.Cmd) {
 		return true, nil
 	}
 
+	// ── Select mode toggle (ctrl+e) — works from any state ──────────────
+	if k == "ctrl+e" {
+		m.selectMode = !m.selectMode
+		return true, nil
+	}
+
 	// ── Global shortcuts (always consumed) ──────────────────────────────
 	switch k {
 	case "ctrl+c":
@@ -352,6 +422,12 @@ func (m *Model) handleKey(msg tea.KeyPressMsg) (bool, tea.Cmd) {
 	case "ctrl+q":
 		m.cancel()
 		return true, tea.Quit
+	case "ctrl+p":
+		if m.state != stateCommands {
+			m.commands.Open("")
+			m.state = stateCommands
+		}
+		return true, nil
 	case "ctrl+s":
 		if m.state == stateChat || m.state == stateWelcome {
 			m.state = stateSessions
@@ -361,6 +437,7 @@ func (m *Model) handleKey(msg tea.KeyPressMsg) (bool, tea.Cmd) {
 		return true, m.createSession()
 	case "ctrl+m":
 		if m.state != stateModelSelect {
+			m.returnState = m.prevChatState()
 			m.state = stateModelSelect
 			m.modelSelect.ClearFilter()
 			return true, m.listModels()
@@ -444,6 +521,16 @@ func (m *Model) handleKey(msg tea.KeyPressMsg) (bool, tea.Cmd) {
 		}
 
 		switch k {
+		case "/":
+			// Open the commands palette pre-filtered to slash commands when
+			// the input is empty. If there's already text, let / go to textarea.
+			if strings.TrimSpace(m.input.Value()) == "" {
+				m.commands.Open("/")
+				m.state = stateCommands
+				return true, nil
+			}
+			return false, nil
+
 		case "@":
 			// Open completions AND let textarea receive @ to show it in the input.
 			m.completions.Open(m.workspace.WorkingDir())
@@ -473,6 +560,19 @@ func (m *Model) handleKey(msg tea.KeyPressMsg) (bool, tea.Cmd) {
 			m.input.InsertRune('\n')
 			return true, nil
 
+		case "ctrl+t":
+			// Toggle thinking block collapse on the most recent assistant message.
+			m.chat.ToggleThinking()
+			return true, nil
+
+		case "ctrl+u":
+			// Copy last user message to clipboard.
+			text := m.chat.GetLastUserText()
+			if text != "" {
+				return true, m.copyToClipboard(text, "Message copied")
+			}
+			return true, nil
+
 		case "ctrl+a":
 			return true, nil
 
@@ -497,6 +597,9 @@ func (m *Model) handleKey(msg tea.KeyPressMsg) (bool, tea.Cmd) {
 
 // pendingSubmitMsg is used to queue a prompt while session creation is pending.
 type pendingSubmitMsg struct{ prompt string }
+
+// clearCopyNoticeMsg clears the transient "Copied!" footer message.
+type clearCopyNoticeMsg struct{}
 
 // ─── Views ────────────────────────────────────────────────────────────────────
 
@@ -563,6 +666,18 @@ func (m Model) viewModelSelect() string {
 	return overlayOn(backdrop, overlay, m.width, m.height)
 }
 
+func (m Model) viewCommands() string {
+	m.commands.SetSize(m.width, m.height)
+	overlay := m.commands.centred()
+	var backdrop string
+	if m.activeSession != "" {
+		backdrop = m.viewChat()
+	} else {
+		backdrop = m.viewWelcome()
+	}
+	return overlayOn(backdrop, overlay, m.width, m.height)
+}
+
 func (m Model) header() string {
 	logo := m.styles.Logo.Render("◉ NEXUS")
 	sep := m.styles.HeaderSep.Render("  │  ")
@@ -588,19 +703,38 @@ func (m Model) header() string {
 }
 
 func (m Model) footer() string {
+	// Select mode banner takes priority.
+	if m.selectMode {
+		return lipgloss.NewStyle().
+			Foreground(colorPrimary).Bold(true).
+			Render("SELECT MODE") +
+			"  " +
+			m.styles.Desc.Render("select text with mouse · copy with ctrl+c ·") +
+			"  " +
+			m.styles.Key.Render("ctrl+e") +
+			" " +
+			m.styles.Desc.Render("exit")
+	}
+
+	// Transient copy notice takes over the footer briefly.
+	if m.copyNotice != "" {
+		return m.styles.ToolDone.Render("✓ " + m.copyNotice)
+	}
+
 	var items []string
 	if m.focus == uiFocusMain && m.state == stateChat {
 		items = []string{
 			m.styles.Key.Render("↑↓") + " " + m.styles.Desc.Render("scroll"),
+			m.styles.Key.Render("ctrl+e") + " " + m.styles.Desc.Render("select"),
 			m.styles.Key.Render("tab") + " " + m.styles.Desc.Render("back to input"),
 			m.styles.Key.Render("ctrl+c") + " " + m.styles.Desc.Render("quit"),
 		}
 	} else {
 		items = []string{
+			m.styles.Key.Render("ctrl+p") + " " + m.styles.Desc.Render("commands"),
 			m.styles.Key.Render("ctrl+n") + " " + m.styles.Desc.Render("new"),
 			m.styles.Key.Render("ctrl+s") + " " + m.styles.Desc.Render("sessions"),
-			m.styles.Key.Render("ctrl+m") + " " + m.styles.Desc.Render("model"),
-			m.styles.Key.Render("@") + " " + m.styles.Desc.Render("file"),
+			m.styles.Key.Render("ctrl+e") + " " + m.styles.Desc.Render("select"),
 			m.styles.Key.Render("tab") + " " + m.styles.Desc.Render("scroll"),
 			m.styles.Key.Render("ctrl+c") + " " + m.styles.Desc.Render("cancel/quit"),
 		}
@@ -637,6 +771,7 @@ func (m Model) relayout() Model {
 	m.sessions.SetSize(m.width, m.height)
 	m.permission.SetSize(m.width, m.height)
 	m.modelSelect.SetSize(m.width, m.height)
+	m.commands.SetSize(m.width, m.height)
 	m.chat.SetSize(m.width, max(1, m.height-headerHeight-footerHeight-inputMinH-inputPadding))
 	return m
 }
@@ -653,6 +788,25 @@ func (m Model) prevChatState() uiState {
 		return stateChat
 	}
 	return stateWelcome
+}
+
+// ─── Clipboard ───────────────────────────────────────────────────────────────
+
+// copyToClipboard copies text using OSC 52 (tea.SetClipboard) and the native
+// clipboard (atotto/clipboard), then shows a transient notice in the footer.
+// This mirrors crush's CopyToClipboard approach for maximum terminal compat.
+func (m *Model) copyToClipboard(text, notice string) tea.Cmd {
+	m.copyNotice = notice
+	return tea.Sequence(
+		tea.SetClipboard(text),
+		func() tea.Msg {
+			_ = clipboard.WriteAll(text)
+			return nil
+		},
+		tea.Tick(2*time.Second, func(time.Time) tea.Msg {
+			return clearCopyNoticeMsg{}
+		}),
+	)
 }
 
 // ─── Workspace commands ───────────────────────────────────────────────────────
@@ -693,12 +847,19 @@ func overlayOn(base, overlay string, width, height int) string {
 	for len(baseLines) < height {
 		baseLines = append(baseLines, strings.Repeat(" ", width))
 	}
+	// Centre the overlay vertically over the base.
 	topOffset := max(0, (height-overlayH)/2)
 	dim := lipgloss.NewStyle().Faint(true)
 	for i, line := range baseLines {
 		overlayRow := i - topOffset
 		if overlayRow >= 0 && overlayRow < overlayH {
-			baseLines[i] = overlayLines[overlayRow]
+			ol := overlayLines[overlayRow]
+			if ol == "" {
+				// Transparent row: show dimmed base behind it.
+				baseLines[i] = dim.Render(line)
+			} else {
+				baseLines[i] = ol
+			}
 		} else {
 			baseLines[i] = dim.Render(line)
 		}

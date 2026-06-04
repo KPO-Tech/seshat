@@ -64,7 +64,8 @@ func NewEngineWithRegistry(
 		}
 	}
 
-	// Create monitoring system
+	// Create monitoring system — nil passed to NewEngine means discard logger,
+	// so only create a real system when explicitly requested.
 	var monitoringSys *monitoring.System
 	if config.EnableMonitoring {
 		monitoringSys = monitoring.NewSystem(nil)

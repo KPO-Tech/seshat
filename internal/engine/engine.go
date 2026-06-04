@@ -1,6 +1,8 @@
 package engine
 
 import (
+	"os"
+
 	"github.com/EngineerProjects/nexus-engine/internal/execution"
 	"github.com/EngineerProjects/nexus-engine/internal/hooks"
 	"github.com/EngineerProjects/nexus-engine/internal/memory"
@@ -58,7 +60,11 @@ func NewEngine(
 	config.WorkingDirectory = resolveWorkingDirectory(config.WorkingDirectory)
 
 	if monitoringSys == nil {
-		monitoringSys = monitoring.NewSystem(nil)
+		// No monitoring system provided; use a discard logger so the engine
+		// never writes unexpectedly to stdout/stderr (e.g. during TUI mode).
+		monitoringSys = monitoring.NewSystem(monitoring.NewLoggerWithConfig(
+			&monitoring.LoggerConfig{Output: "file", FilePath: os.DevNull},
+		))
 	}
 
 	promptBuilder := prompt.NewBuilder(promptAssembler, prompt.DefaultBuilderConfig())

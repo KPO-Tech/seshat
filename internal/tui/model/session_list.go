@@ -129,10 +129,10 @@ func (s *sessionList) View() string {
 	if s.editing {
 		filterContent += "█" // cursor
 	}
-	filterLine := s.styles.BrowserFilter.Width(w - 2).Render("/ " + filterContent)
+	filterLine := s.styles.BrowserFilter.Width(w - 4).Render("/ " + filterContent)
 
-	// Separator
-	sep := strings.Repeat("─", w-2)
+	// Separator — use w-4 to guarantee no overflow regardless of lipgloss v2 Width semantics.
+	sep := strings.Repeat("─", w-4)
 
 	// Items
 	start := max(0, s.cursor-maxItems+1)
@@ -176,21 +176,15 @@ func (s *sessionList) View() string {
 	return s.styles.BrowserBorder.Width(w).Render(content)
 }
 
-// centred wraps the session list view inside the terminal area.
+// centred returns the box horizontally centred.
+// Vertical centering is handled by overlayOn().
 func (s *sessionList) centred() string {
 	box := s.View()
 	boxLines := strings.Split(box, "\n")
-	boxH := len(boxLines)
-	boxW := lipgloss.Width(box)
-
-	topPad := max(0, (s.height-boxH)/2)
+	boxW := lipgloss.Width(boxLines[0])
 	leftPad := max(0, (s.width-boxW)/2)
 	pad := strings.Repeat(" ", leftPad)
-
 	var sb strings.Builder
-	for i := 0; i < topPad; i++ {
-		sb.WriteString("\n")
-	}
 	for i, line := range boxLines {
 		if i > 0 {
 			sb.WriteString("\n")
