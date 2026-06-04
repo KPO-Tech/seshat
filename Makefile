@@ -1,4 +1,3 @@
-BINARY   := nexus-engine
 CMD_CLI  := ./cmd/cli
 CMD_GRPC := ./cmd/grpc
 
@@ -9,10 +8,10 @@ all: build
 build: build-cli build-grpc
 
 build-cli:
-	go build -o bin/$(BINARY)-cli $(CMD_CLI)
+	go build -o bin/nexus $(CMD_CLI)
 
 build-grpc:
-	go build -o bin/$(BINARY)-grpc $(CMD_GRPC)
+	go build -o bin/nexus-grpc $(CMD_GRPC)
 
 test:
 	go test ./... -timeout 300s
