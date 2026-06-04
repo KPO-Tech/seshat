@@ -87,7 +87,7 @@ jobs:
     name: Branch Policy
     runs-on: ubuntu-latest
     steps:
-      - name: Enforce dev -> main PR flow
+      - name: Enforce PR branch flow
         run: |
           if [[ "${{ github.event_name }}" == "pull_request" && \
                 "${{ github.base_ref }}" == "main" && \
@@ -96,6 +96,21 @@ jobs:
             echo "Current head branch: ${{ github.head_ref }}"
             exit 1
           fi
+
+          if [[ "${{ github.event_name }}" == "pull_request" && \
+                "${{ github.base_ref }}" == "dev" ]]; then
+            case "${{ github.head_ref }}" in
+              feat/*|fix/*|docs/*|refactor/*|test/*|chore/*|perf/*|ci/*)
+                ;;
+              *)
+                echo "Pull requests targeting dev must come from a typed topic branch."
+                echo "Allowed prefixes: feat/, fix/, docs/, refactor/, test/, chore/, perf/, ci/"
+                echo "Current head branch: ${{ github.head_ref }}"
+                exit 1
+                ;;
+            esac
+          fi
+
           echo "Branch policy check passed."
 
   # gate is the single required status check for branch protection.
