@@ -1,4 +1,4 @@
-package ansiext
+package common
 
 import (
 	"strings"

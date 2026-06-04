@@ -48,8 +48,9 @@ This is already close to Crush's architecture. Keep going in that direction.
 - Preserve the current separation:
   - `workspace` does engine work
   - `model` decides how that work is displayed
-  - `notification`, `pubsub`, `anim`, `fsext`, `ansiext`, `csync` stay as
-    supporting packages
+  - `common` holds shared rendering helpers and styles
+  - `notification`, `pubsub`, `anim`, `fsext`, `csync` stay as supporting
+    packages
 
 ---
 
