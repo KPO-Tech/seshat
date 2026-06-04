@@ -2,12 +2,12 @@ name: CI
 
 on:
   push:
-    branches: ["main", "master", "develop"]
+    branches: ["main", "dev"]
     paths-ignore:
       - "**.md"
       - "docs/**"
   pull_request:
-    branches: ["main", "master", "develop"]
+    branches: ["main", "dev"]
     paths-ignore:
       - "**.md"
       - "docs/**"
@@ -49,7 +49,7 @@ jobs:
           go-version-file: go.mod
           cache: true
 
-      - name: Run tests
+      - name: Run tests with race detector
         run: go test -race ./... -timeout 300s
 
   lint:
@@ -73,9 +73,34 @@ jobs:
             exit 1
           fi
 
+      - name: go vet
+        run: go vet ./...
+
       - name: golangci-lint
         uses: golangci/golangci-lint-action@v6
         with:
           version: v1.64.8
           install-mode: goinstall
           args: --timeout=5m
+
+  # gate is the single required status check for branch protection.
+  # Adding new jobs above automatically blocks the merge without
+  # touching the branch protection rules again.
+  gate:
+    name: Gate
+    runs-on: ubuntu-latest
+    needs: [build, test, lint]
+    if: always()
+    steps:
+      - name: All checks passed
+        run: |
+          if [[ "${{ needs.build.result }}" != "success" || \
+                "${{ needs.test.result }}"  != "success" || \
+                "${{ needs.lint.result }}"  != "success" ]]; then
+            echo "One or more required checks failed."
+            echo "  build: ${{ needs.build.result }}"
+            echo "  test:  ${{ needs.test.result }}"
+            echo "  lint:  ${{ needs.lint.result }}"
+            exit 1
+          fi
+          echo "All checks passed."
