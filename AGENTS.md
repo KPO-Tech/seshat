@@ -31,17 +31,17 @@ If `go test` fails, investigate and fix the root cause. Do not disable tests or 
 ```
 main        production-ready, tagged releases only
   └── dev   stable integration — all work lands here first via PR
-        └── feat/<slug>   one branch per issue
+        └── <type>/<slug>   one branch per issue
 ```
 
 - Always branch off `dev`.
 - Never commit or push directly to `main`.
 - Never commit or push directly to `dev`.
-- All work must land through a PR: `feat/*` or `fix/*` → `dev`, then `dev` → `main`.
+- All work must land through a PR: `<type>/*` → `dev`, then `dev` → `main`.
 - PRs target `dev`. The only allowed PR into `main` is `dev` → `main` for final validation by maintainers.
-- Direct PRs from feature or fix branches into `main` must be closed without merge.
+- Direct PRs from topic branches into `main` must be closed without merge.
 - The **Gate CI check** (Build + Test + Lint) must be green before any PR can merge.
-- Name branches `feat/<short-slug>` (e.g. `feat/team-executor`, `fix/stream-timeout`).
+- Name branches `<type>/<short-slug>` where `<type>` is one of `feat`, `fix`, `docs`, `refactor`, `test`, `chore`, `perf`, or `ci`.
 
 If an exceptional direct push ever lands on `main`, stop feature work and
 realign `dev` from `main` immediately before opening new feature branches.

@@ -9,16 +9,16 @@ Thank you for your interest in contributing. This guide covers everything you ne
 ```
 main          production-ready, tagged releases only
   └── dev     stable integration branch — all feature work lands here first
-        └── feat/<slug>   your working branch, one per issue
+        └── <type>/<slug>   your working branch, one per issue
 ```
 
 - Branch off `dev`, not `main`.
 - Never commit or push directly to `main`.
 - Never commit or push directly to `dev`.
-- All work must flow through PRs: `feat/*` or `fix/*` → `dev`, then `dev` → `main`.
-- Name your branch `feat/<short-slug>` (e.g. `feat/oauth-codex`, `fix/stream-timeout`).
+- All work must flow through PRs: `<type>/*` → `dev`, then `dev` → `main`.
+- Name your branch `<type>/<short-slug>` where `<type>` is one of `feat`, `fix`, `docs`, `refactor`, `test`, `chore`, `perf`, or `ci`.
 - Open PRs **targeting `dev`**. The only allowed PR into `main` is `dev` → `main`, opened by maintainers for final validation at milestone boundaries.
-- Direct PRs from feature or fix branches into `main` will be closed without merge.
+- Direct PRs from topic branches into `main` will be closed without merge.
 - The **Gate CI check** must be green before any PR can be merged (Build + Test + Lint all pass).
 
 If someone makes an exceptional direct push to `main`, recreate or realign

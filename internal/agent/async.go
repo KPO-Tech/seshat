@@ -693,11 +693,27 @@ func (a *AsyncAgent) CollabStatus() string {
 	}
 }
 
-// AddListener adds an event listener for this specific agent
+// AddListener adds an event listener for this specific agent.
+// If the agent has already started, replay a snapshot so late subscribers do
+// not depend on event timing to observe the current state.
 func (a *AsyncAgent) AddListener(listener AgentEventListener) {
 	a.listenersMu.Lock()
-	defer a.listenersMu.Unlock()
 	a.listeners = append(a.listeners, listener)
+	a.listenersMu.Unlock()
+
+	event, ok := a.snapshotEvent()
+	if !ok {
+		return
+	}
+
+	go func() {
+		defer func() {
+			if r := recover(); r != nil {
+				slog.Error("async-agent listener replay panic", "panic", r, "agent_id", event.AgentID)
+			}
+		}()
+		listener(event)
+	}()
 }
 
 // RemoveListener removes an event listener by pointer identity.
@@ -712,6 +728,70 @@ func (a *AsyncAgent) RemoveListener(listener AgentEventListener) {
 			break
 		}
 	}
+}
+
+func (a *AsyncAgent) snapshotEvent() (AgentEvent, bool) {
+	a.stateMu.RLock()
+	status := a.Status
+	startTime := a.StartTime
+	endTime := a.EndTime
+	result := a.Result
+	err := a.Error
+	a.stateMu.RUnlock()
+
+	eventType := AgentEventType("")
+	switch status {
+	case AgentStatusRunning:
+		eventType = AgentEventStarted
+	case AgentStatusCompleted:
+		eventType = AgentEventCompleted
+	case AgentStatusFailed:
+		eventType = AgentEventFailed
+	case AgentStatusCancelled:
+		eventType = AgentEventCancelled
+	default:
+		return AgentEvent{}, false
+	}
+
+	a.progressMu.RLock()
+	progress := &AgentProgress{
+		CurrentTurn:     a.CurrentTurn,
+		MaxTurns:        a.Config.MaxTurns,
+		ToolUses:        a.ToolUses,
+		Output:          a.CurrentOutput,
+		PercentComplete: 0,
+	}
+	a.progressMu.RUnlock()
+
+	if progress.MaxTurns == 0 {
+		progress.MaxTurns = DefaultMaxTurns
+	}
+	if progress.MaxTurns > 0 {
+		progress.PercentComplete = float64(progress.CurrentTurn) / float64(progress.MaxTurns) * 100
+	}
+
+	event := AgentEvent{
+		AgentID:   a.ID,
+		AgentType: a.Config.AgentType,
+		EventType: eventType,
+		Timestamp: time.Now(),
+		Task:      a.Config.Task,
+		Progress:  progress,
+		Result:    result,
+		Metadata: map[string]any{
+			"status":     string(status),
+			"start_time": startTime,
+		},
+	}
+	if err != nil {
+		event.Error = err.Error()
+	}
+	if !endTime.IsZero() {
+		event.Metadata["end_time"] = endTime
+		event.Metadata["duration_ms"] = endTime.Sub(startTime).Milliseconds()
+	}
+
+	return event, true
 }
 
 // Wait waits for the agent to complete (or be cancelled)
