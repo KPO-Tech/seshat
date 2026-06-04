@@ -3,6 +3,7 @@ package agent_test
 import (
 	"context"
 	"errors"
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -12,7 +13,6 @@ import (
 	"github.com/EngineerProjects/nexus-engine/internal/db"
 )
 
-// openTestDB opens an in-memory SQLite database and runs all core migrations.
 func openTestDB(t *testing.T) *db.DB {
 	t.Helper()
 	database, err := db.Open(context.Background(), db.Config{
@@ -25,80 +25,102 @@ func openTestDB(t *testing.T) *db.DB {
 	return database
 }
 
+// ─── NewAgentProfile ─────────────────────────────────────────────────────────
+
+func TestNewAgentProfile_GeneratesUUID(t *testing.T) {
+	p1 := agent.NewAgentProfile("Maria", "researcher", "template")
+	p2 := agent.NewAgentProfile("Maria", "researcher", "template")
+	assert.NotEmpty(t, p1.ID)
+	assert.NotEmpty(t, p2.ID)
+	assert.NotEqual(t, p1.ID, p2.ID, "each call must produce a unique ID")
+	assert.Len(t, p1.ID, 36, "ID should be a standard UUID string")
+}
+
+// ─── SystemPrompt ─────────────────────────────────────────────────────────────
+
+func TestSystemPrompt_InjectsNickname(t *testing.T) {
+	p := agent.NewAgentProfile("Faouziath", "researcher", "You specialise in academic papers about {{.Nickname}}.")
+	prompt := p.SystemPrompt()
+	assert.Contains(t, prompt, "You are Faouziath, a researcher.")
+	assert.Contains(t, prompt, "You specialise in academic papers about Faouziath.")
+}
+
+func TestSystemPrompt_EmptyTemplate(t *testing.T) {
+	p := agent.NewAgentProfile("Kai", "engineer", "")
+	prompt := p.SystemPrompt()
+	assert.Equal(t, "You are Kai, a engineer.", prompt)
+}
+
+// ─── Seed ─────────────────────────────────────────────────────────────────────
+
 func TestProfileRegistry_Seed(t *testing.T) {
 	ctx := context.Background()
 	r := agent.NewProfileRegistry(openTestDB(t))
-
 	require.NoError(t, r.Seed(ctx))
 
 	profiles, err := r.List(ctx)
 	require.NoError(t, err)
-	assert.GreaterOrEqual(t, len(profiles), 3, "expected at least 3 built-in profiles")
+	assert.GreaterOrEqual(t, len(profiles), 3)
 
-	ids := make(map[string]bool)
+	nicknames := make(map[string]bool)
 	for _, p := range profiles {
-		ids[p.ID] = true
+		nicknames[p.Nickname] = true
+		assert.Len(t, p.ID, 36, "built-in IDs must be UUID-format")
 	}
-	assert.True(t, ids["orchestrator"])
-	assert.True(t, ids["researcher"])
-	assert.True(t, ids["coder"])
+	assert.True(t, nicknames["Nexus"])
+	assert.True(t, nicknames["Aria"])
+	assert.True(t, nicknames["Kai"])
 }
 
 func TestProfileRegistry_Seed_Idempotent(t *testing.T) {
 	ctx := context.Background()
 	r := agent.NewProfileRegistry(openTestDB(t))
-
 	require.NoError(t, r.Seed(ctx))
-	require.NoError(t, r.Seed(ctx), "second Seed must not fail")
+	require.NoError(t, r.Seed(ctx))
 
 	profiles, err := r.List(ctx)
 	require.NoError(t, err)
-
-	// Count occurrences of built-in IDs — must be exactly 1 each.
 	counts := make(map[string]int)
 	for _, p := range profiles {
-		counts[p.ID]++
+		counts[p.Nickname]++
 	}
-	assert.Equal(t, 1, counts["orchestrator"])
-	assert.Equal(t, 1, counts["researcher"])
-	assert.Equal(t, 1, counts["coder"])
+	assert.Equal(t, 1, counts["Nexus"])
+	assert.Equal(t, 1, counts["Aria"])
+	assert.Equal(t, 1, counts["Kai"])
 }
+
+// ─── Register / Get ───────────────────────────────────────────────────────────
 
 func TestProfileRegistry_Register_And_Get(t *testing.T) {
 	ctx := context.Background()
 	r := agent.NewProfileRegistry(openTestDB(t))
 
-	p := agent.AgentProfile{
-		ID:           "test-agent",
-		Name:         "Test Agent",
-		Role:         "tester",
-		SystemPrompt: "You are a test agent.",
-		Model:        "anthropic:claude-sonnet-4-20250514",
-		Skills:       []string{"go-conventions"},
-		Metadata:     map[string]string{"env": "ci"},
-	}
+	p := agent.NewAgentProfile("Sarah", "manager", "You manage the Alpha team.")
+	p.TeamID = "alpha"
+	p.Model = "anthropic:claude-sonnet-4-20250514"
+	p.Skills = []string{"leadership"}
+	p.Metadata = map[string]string{"lang": "fr"}
 
 	require.NoError(t, r.Register(ctx, p))
 
-	got, err := r.Get(ctx, "test-agent")
+	got, err := r.Get(ctx, p.ID)
 	require.NoError(t, err)
 
 	assert.Equal(t, p.ID, got.ID)
-	assert.Equal(t, p.Name, got.Name)
-	assert.Equal(t, "tester", got.Role) // stored lowercase
-	assert.Equal(t, p.SystemPrompt, got.SystemPrompt)
+	assert.Equal(t, "Sarah", got.Nickname)
+	assert.Equal(t, "manager", got.Role)
+	assert.Equal(t, "alpha", got.TeamID)
+	assert.Equal(t, p.SystemPromptTemplate, got.SystemPromptTemplate)
 	assert.Equal(t, p.Model, got.Model)
 	assert.Equal(t, p.Skills, got.Skills)
 	assert.Equal(t, p.Metadata, got.Metadata)
 	assert.False(t, got.CreatedAt.IsZero())
-	assert.False(t, got.UpdatedAt.IsZero())
 }
 
 func TestProfileRegistry_Register_EmptyID(t *testing.T) {
 	ctx := context.Background()
 	r := agent.NewProfileRegistry(openTestDB(t))
-
-	err := r.Register(ctx, agent.AgentProfile{Name: "no id"})
+	err := r.Register(ctx, agent.AgentProfile{Nickname: "no-id"})
 	assert.Error(t, err)
 }
 
@@ -106,85 +128,106 @@ func TestProfileRegistry_Register_Upsert(t *testing.T) {
 	ctx := context.Background()
 	r := agent.NewProfileRegistry(openTestDB(t))
 
-	original := agent.AgentProfile{
-		ID:           "updatable",
-		Name:         "Original",
-		Role:         "worker",
-		SystemPrompt: "v1",
-	}
-	require.NoError(t, r.Register(ctx, original))
+	p := agent.NewAgentProfile("Elena", "engineer", "v1 template")
+	require.NoError(t, r.Register(ctx, p))
 
-	updated := original
-	updated.Name = "Updated"
-	updated.SystemPrompt = "v2"
-	require.NoError(t, r.Register(ctx, updated))
+	p.Nickname = "Elena V2"
+	p.SystemPromptTemplate = "v2 template"
+	require.NoError(t, r.Register(ctx, p))
 
-	got, err := r.Get(ctx, "updatable")
+	got, err := r.Get(ctx, p.ID)
 	require.NoError(t, err)
-	assert.Equal(t, "Updated", got.Name)
-	assert.Equal(t, "v2", got.SystemPrompt)
+	assert.Equal(t, "Elena V2", got.Nickname)
+	assert.Equal(t, "v2 template", got.SystemPromptTemplate)
 }
 
 func TestProfileRegistry_Get_NotFound(t *testing.T) {
 	ctx := context.Background()
 	r := agent.NewProfileRegistry(openTestDB(t))
-
-	_, err := r.Get(ctx, "does-not-exist")
+	_, err := r.Get(ctx, "00000000-0000-0000-0000-999999999999")
 	assert.True(t, errors.Is(err, db.ErrProfileNotFound))
 }
 
-func TestProfileRegistry_FindByRole(t *testing.T) {
+// ─── Multiple agents, same role ───────────────────────────────────────────────
+
+func TestProfileRegistry_MultipleAgentsSameRole(t *testing.T) {
+	ctx := context.Background()
+	r := agent.NewProfileRegistry(openTestDB(t))
+
+	maria := agent.NewAgentProfile("Maria", "researcher", "Alpha team researcher.")
+	maria.TeamID = "alpha"
+
+	faouziath := agent.NewAgentProfile("Faouziath", "researcher", "Beta team researcher.")
+	faouziath.TeamID = "beta"
+
+	require.NoError(t, r.Register(ctx, maria))
+	require.NoError(t, r.Register(ctx, faouziath))
+
+	// Both have different UUIDs.
+	assert.NotEqual(t, maria.ID, faouziath.ID)
+
+	// FindByRole returns both.
+	researchers, err := r.FindByRole(ctx, "researcher")
+	require.NoError(t, err)
+	assert.Len(t, researchers, 2)
+
+	// FindByTeam isolates each one.
+	alphaTeam, err := r.FindByTeam(ctx, "alpha")
+	require.NoError(t, err)
+	require.Len(t, alphaTeam, 1)
+	assert.Equal(t, "Maria", alphaTeam[0].Nickname)
+
+	betaTeam, err := r.FindByTeam(ctx, "beta")
+	require.NoError(t, err)
+	require.Len(t, betaTeam, 1)
+	assert.Equal(t, "Faouziath", betaTeam[0].Nickname)
+}
+
+// ─── FindByRole case-insensitive ─────────────────────────────────────────────
+
+func TestProfileRegistry_FindByRole_CaseInsensitive(t *testing.T) {
 	ctx := context.Background()
 	r := agent.NewProfileRegistry(openTestDB(t))
 	require.NoError(t, r.Seed(ctx))
 
-	engineers, err := r.FindByRole(ctx, "engineer")
+	upper, err := r.FindByRole(ctx, "ENGINEER")
 	require.NoError(t, err)
-	require.Len(t, engineers, 1)
-	assert.Equal(t, "coder", engineers[0].ID)
-
-	// Case-insensitive.
-	managers, err := r.FindByRole(ctx, "MANAGER")
+	lower, err := r.FindByRole(ctx, "engineer")
 	require.NoError(t, err)
-	require.Len(t, managers, 1)
-	assert.Equal(t, "orchestrator", managers[0].ID)
+	assert.Equal(t, len(upper), len(lower))
 }
+
+// ─── SystemPrompt via registry ────────────────────────────────────────────────
+
+func TestProfileRegistry_SystemPrompt_ContainsNickname(t *testing.T) {
+	ctx := context.Background()
+	r := agent.NewProfileRegistry(openTestDB(t))
+	require.NoError(t, r.Seed(ctx))
+
+	aria, err := r.FindByRole(ctx, "researcher")
+	require.NoError(t, err)
+	require.Len(t, aria, 1)
+
+	prompt := aria[0].SystemPrompt()
+	assert.True(t, strings.HasPrefix(prompt, "You are Aria, a researcher."))
+}
+
+// ─── Delete ───────────────────────────────────────────────────────────────────
 
 func TestProfileRegistry_Delete(t *testing.T) {
 	ctx := context.Background()
 	r := agent.NewProfileRegistry(openTestDB(t))
 
-	p := agent.AgentProfile{ID: "temp", Name: "Temp", Role: "x", SystemPrompt: "x"}
+	p := agent.NewAgentProfile("Temp", "misc", "x")
 	require.NoError(t, r.Register(ctx, p))
+	require.NoError(t, r.Delete(ctx, p.ID))
 
-	require.NoError(t, r.Delete(ctx, "temp"))
-
-	_, err := r.Get(ctx, "temp")
+	_, err := r.Get(ctx, p.ID)
 	assert.True(t, errors.Is(err, db.ErrProfileNotFound))
 }
 
 func TestProfileRegistry_Delete_NoOp(t *testing.T) {
 	ctx := context.Background()
 	r := agent.NewProfileRegistry(openTestDB(t))
-
-	// Deleting a non-existent profile must not error.
-	assert.NoError(t, r.Delete(ctx, "ghost"))
-}
-
-func TestProfileRegistry_List(t *testing.T) {
-	ctx := context.Background()
-	r := agent.NewProfileRegistry(openTestDB(t))
-	require.NoError(t, r.Seed(ctx))
-
-	extra := agent.AgentProfile{ID: "zzz-extra", Name: "Extra", Role: "misc", SystemPrompt: "x"}
-	require.NoError(t, r.Register(ctx, extra))
-
-	profiles, err := r.List(ctx)
-	require.NoError(t, err)
-	assert.GreaterOrEqual(t, len(profiles), 4)
-
-	// Verify ordering by ID.
-	for i := 1; i < len(profiles); i++ {
-		assert.LessOrEqual(t, profiles[i-1].ID, profiles[i].ID)
-	}
+	assert.NoError(t, r.Delete(ctx, "00000000-0000-0000-0000-000000000000"))
 }

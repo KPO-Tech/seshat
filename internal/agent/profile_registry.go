@@ -13,8 +13,7 @@ import (
 )
 
 // ProfileRegistry stores and retrieves AgentProfile records backed by SQLite.
-// It seeds built-in profiles on first use and never overwrites user-customised
-// versions of those profiles.
+// Built-in profiles are seeded on first use and never overwrite user edits.
 type ProfileRegistry struct {
 	db     *db.DB
 	mu     sync.Mutex
@@ -34,8 +33,7 @@ func (r *ProfileRegistry) Seed(ctx context.Context) error {
 		return nil
 	}
 	for _, p := range BuiltInProfiles() {
-		row := toGProfile(p)
-		if err := r.db.UpsertProfileIfAbsent(ctx, row); err != nil {
+		if err := r.db.UpsertProfileIfAbsent(ctx, toGProfile(p)); err != nil {
 			return fmt.Errorf("seed profile %q: %w", p.ID, err)
 		}
 	}
@@ -44,9 +42,10 @@ func (r *ProfileRegistry) Seed(ctx context.Context) error {
 }
 
 // Register inserts or fully replaces the profile.
+// Use NewAgentProfile to create a profile with a fresh UUID.
 func (r *ProfileRegistry) Register(ctx context.Context, p AgentProfile) error {
 	if p.ID == "" {
-		return errors.New("profile ID must not be empty")
+		return errors.New("profile ID must not be empty — use NewAgentProfile to generate one")
 	}
 	p.UpdatedAt = time.Now().UTC()
 	if p.CreatedAt.IsZero() {
@@ -55,8 +54,8 @@ func (r *ProfileRegistry) Register(ctx context.Context, p AgentProfile) error {
 	return r.db.UpsertProfile(ctx, toGProfile(p))
 }
 
-// Get returns the profile with the given ID.
-// Returns ErrProfileNotFound when no record matches.
+// Get returns the profile with the given UUID.
+// Returns db.ErrProfileNotFound when absent.
 func (r *ProfileRegistry) Get(ctx context.Context, id string) (AgentProfile, error) {
 	row, err := r.db.GetProfile(ctx, id)
 	if err != nil {
@@ -65,21 +64,13 @@ func (r *ProfileRegistry) Get(ctx context.Context, id string) (AgentProfile, err
 	return fromGProfile(row)
 }
 
-// List returns all profiles ordered by ID.
+// List returns all profiles ordered by nickname.
 func (r *ProfileRegistry) List(ctx context.Context) ([]AgentProfile, error) {
 	rows, err := r.db.ListProfiles(ctx)
 	if err != nil {
 		return nil, err
 	}
-	profiles := make([]AgentProfile, 0, len(rows))
-	for _, row := range rows {
-		p, err := fromGProfile(row)
-		if err != nil {
-			return nil, err
-		}
-		profiles = append(profiles, p)
-	}
-	return profiles, nil
+	return rowsToProfiles(rows)
 }
 
 // FindByRole returns all profiles whose Role matches the given tag
@@ -89,15 +80,16 @@ func (r *ProfileRegistry) FindByRole(ctx context.Context, role string) ([]AgentP
 	if err != nil {
 		return nil, err
 	}
-	profiles := make([]AgentProfile, 0, len(rows))
-	for _, row := range rows {
-		p, err := fromGProfile(row)
-		if err != nil {
-			return nil, err
-		}
-		profiles = append(profiles, p)
+	return rowsToProfiles(rows)
+}
+
+// FindByTeam returns all profiles belonging to the given team.
+func (r *ProfileRegistry) FindByTeam(ctx context.Context, teamID string) ([]AgentProfile, error) {
+	rows, err := r.db.FindProfilesByTeam(ctx, teamID)
+	if err != nil {
+		return nil, err
 	}
-	return profiles, nil
+	return rowsToProfiles(rows)
 }
 
 // Delete removes the profile with the given ID. No-op if absent.
@@ -121,15 +113,16 @@ func toGProfile(p AgentProfile) db.GAgentProfile {
 		}
 	}
 	return db.GAgentProfile{
-		ID:            p.ID,
-		Name:          p.Name,
-		Role:          strings.ToLower(p.Role),
-		SystemPrompt:  p.SystemPrompt,
-		Model:         p.Model,
-		SkillsJSON:    skillsJSON,
-		MetadataJSON:  metaJSON,
-		CreatedAtUnix: p.CreatedAt.Unix(),
-		UpdatedAtUnix: p.UpdatedAt.Unix(),
+		ID:                   p.ID,
+		Nickname:             p.Nickname,
+		Role:                 strings.ToLower(p.Role),
+		TeamID:               p.TeamID,
+		SystemPromptTemplate: p.SystemPromptTemplate,
+		Model:                p.Model,
+		SkillsJSON:           skillsJSON,
+		MetadataJSON:         metaJSON,
+		CreatedAtUnix:        p.CreatedAt.Unix(),
+		UpdatedAtUnix:        p.UpdatedAt.Unix(),
 	}
 }
 
@@ -147,14 +140,27 @@ func fromGProfile(row db.GAgentProfile) (AgentProfile, error) {
 		}
 	}
 	return AgentProfile{
-		ID:           row.ID,
-		Name:         row.Name,
-		Role:         row.Role,
-		SystemPrompt: row.SystemPrompt,
-		Model:        row.Model,
-		Skills:       skills,
-		Metadata:     meta,
-		CreatedAt:    time.Unix(row.CreatedAtUnix, 0).UTC(),
-		UpdatedAt:    time.Unix(row.UpdatedAtUnix, 0).UTC(),
+		ID:                   row.ID,
+		Nickname:             row.Nickname,
+		Role:                 row.Role,
+		TeamID:               row.TeamID,
+		SystemPromptTemplate: row.SystemPromptTemplate,
+		Model:                row.Model,
+		Skills:               skills,
+		Metadata:             meta,
+		CreatedAt:            time.Unix(row.CreatedAtUnix, 0).UTC(),
+		UpdatedAt:            time.Unix(row.UpdatedAtUnix, 0).UTC(),
 	}, nil
+}
+
+func rowsToProfiles(rows []db.GAgentProfile) ([]AgentProfile, error) {
+	profiles := make([]AgentProfile, 0, len(rows))
+	for _, row := range rows {
+		p, err := fromGProfile(row)
+		if err != nil {
+			return nil, err
+		}
+		profiles = append(profiles, p)
+	}
+	return profiles, nil
 }

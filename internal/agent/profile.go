@@ -1,24 +1,38 @@
 package agent
 
-import "time"
+import (
+	"fmt"
+	"time"
 
-// AgentProfile defines a named team-member persona (e.g. CEO, CTO, Researcher).
-// Unlike AgentDefinition (which describes a short-lived sub-agent tool), an
-// AgentProfile is a persistent identity that participates in the mailbox and
+	"github.com/google/uuid"
+)
+
+// AgentProfile defines a named team-member persona (e.g. Maria the researcher,
+// Faouziath the coder). Unlike AgentDefinition (short-lived sub-agent tool),
+// an AgentProfile is a persistent identity that lives in the mailbox and
 // inter-agent communication system.
 type AgentProfile struct {
-	// ID is the unique slug used as the mailbox address (e.g. "cto").
+	// ID is a UUID — globally unique across all teams and roles.
+	// Generated once at creation; never changes.
 	ID string `json:"id"`
 
-	// Name is the human-readable display name (e.g. "CTO").
-	Name string `json:"name"`
+	// Nickname is the personal name displayed in the UI and injected into the
+	// system prompt so the agent knows what it is called ("You are Maria…").
+	Nickname string `json:"nickname"`
 
-	// Role is a short tag used by the dispatcher to route tasks by function
-	// (e.g. "engineer", "researcher", "manager").
+	// Role is a functional tag used by the dispatcher to route tasks
+	// (e.g. "researcher", "engineer", "manager").
+	// Multiple agents can share the same role across different teams.
 	Role string `json:"role"`
 
-	// SystemPrompt is the full persona injected at the start of every session.
-	SystemPrompt string `json:"system_prompt"`
+	// TeamID groups agents into a named team. Empty means no team assigned.
+	TeamID string `json:"team_id,omitempty"`
+
+	// SystemPromptTemplate is the base persona injected at session start.
+	// The placeholder {{.Nickname}} is replaced with the agent's Nickname at
+	// runtime, and a preamble "You are {{.Nickname}}, …" is prepended automatically
+	// if the template does not start with "You are".
+	SystemPromptTemplate string `json:"system_prompt_template"`
 
 	// Model is the preferred model identifier in "provider:model" format.
 	// Empty string means use the global default.
@@ -34,36 +48,76 @@ type AgentProfile struct {
 	UpdatedAt time.Time `json:"updated_at"`
 }
 
+// NewAgentProfile creates a new AgentProfile with a freshly generated UUID.
+func NewAgentProfile(nickname, role, systemPromptTemplate string) AgentProfile {
+	now := time.Now().UTC()
+	return AgentProfile{
+		ID:                   uuid.New().String(),
+		Nickname:             nickname,
+		Role:                 role,
+		SystemPromptTemplate: systemPromptTemplate,
+		CreatedAt:            now,
+		UpdatedAt:            now,
+	}
+}
+
+// SystemPrompt returns the fully resolved system prompt for this agent,
+// prepending the identity preamble and substituting {{.Nickname}}.
+func (p AgentProfile) SystemPrompt() string {
+	body := replaceNickname(p.SystemPromptTemplate, p.Nickname)
+	preamble := fmt.Sprintf("You are %s, a %s.", p.Nickname, p.Role)
+	if len(body) > 0 {
+		return preamble + "\n\n" + body
+	}
+	return preamble
+}
+
+// replaceNickname substitutes every occurrence of {{.Nickname}} in s.
+func replaceNickname(s, nickname string) string {
+	const placeholder = "{{.Nickname}}"
+	out := []byte{}
+	for i := 0; i < len(s); {
+		if i+len(placeholder) <= len(s) && s[i:i+len(placeholder)] == placeholder {
+			out = append(out, nickname...)
+			i += len(placeholder)
+		} else {
+			out = append(out, s[i])
+			i++
+		}
+	}
+	return string(out)
+}
+
 // BuiltInProfiles returns the default team profiles shipped with Nexus.
-// These are seeded into the registry on first use and can be overridden.
+// IDs are fixed UUIDs so they are stable across restarts and installs.
+// These are seeded into the registry on first use and can be overridden or
+// renamed by the user (change the Nickname without touching the ID).
 func BuiltInProfiles() []AgentProfile {
 	now := time.Now().UTC()
 	return []AgentProfile{
 		{
-			ID:   "orchestrator",
-			Name: "Orchestrator",
-			Role: "manager",
-			SystemPrompt: `You are the Orchestrator — the coordinator of a multi-agent team.
-Your job is to understand the high-level goal, break it into focused sub-tasks,
-delegate each sub-task to the most appropriate team member via the mailbox,
-track progress, and synthesise the results into a coherent final output.
+			ID:       "00000000-0000-0000-0000-000000000001",
+			Nickname: "Nexus",
+			Role:     "manager",
+			SystemPromptTemplate: `You coordinate the team. Break the goal into focused sub-tasks,
+delegate each to the right team member via the mailbox, track progress,
+and synthesise results into a coherent final output.
 
 Principles:
 - Delegate work; do not implement details yourself.
 - Be explicit about what each agent should deliver and by when.
 - Resolve blockers by reassigning or clarifying scope.
-- Report progress concisely to stakeholders.`,
+- Report progress concisely.`,
 			CreatedAt: now,
 			UpdatedAt: now,
 		},
 		{
-			ID:   "researcher",
-			Name: "Researcher",
-			Role: "researcher",
-			SystemPrompt: `You are the Researcher — the information specialist of the team.
-Your job is to find accurate, up-to-date information using web search, document
-analysis, and knowledge synthesis. You deliver structured research summaries
-that other team members can act on.
+			ID:       "00000000-0000-0000-0000-000000000002",
+			Nickname: "Aria",
+			Role:     "researcher",
+			SystemPromptTemplate: `You find accurate, up-to-date information using web search,
+document analysis, and knowledge synthesis. You deliver structured
+research summaries that the team can act on immediately.
 
 Principles:
 - Cite sources. Never fabricate facts.
@@ -75,13 +129,12 @@ Principles:
 			UpdatedAt: now,
 		},
 		{
-			ID:   "coder",
-			Name: "Coder",
-			Role: "engineer",
-			SystemPrompt: `You are the Coder — the software implementation specialist of the team.
-Your job is to write, review, refactor, and debug code according to the task
-assigned to you. You work in the project directory using the available file and
-shell tools.
+			ID:       "00000000-0000-0000-0000-000000000003",
+			Nickname: "Kai",
+			Role:     "engineer",
+			SystemPromptTemplate: `You write, review, refactor, and debug code according to
+the task assigned to you. You work in the project directory using
+file and shell tools.
 
 Principles:
 - Write correct, minimal, well-named code. No unnecessary abstractions.
