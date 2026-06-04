@@ -4,6 +4,21 @@ Thank you for your interest in contributing. This guide covers everything you ne
 
 ---
 
+## Branching strategy
+
+```
+main          production-ready, tagged releases only
+  └── dev     stable integration branch — all feature work lands here first
+        └── feat/<slug>   your working branch, one per issue
+```
+
+- Branch off `dev`, not `main`.
+- Name your branch `feat/<short-slug>` (e.g. `feat/oauth-codex`, `fix/stream-timeout`).
+- Open PRs **targeting `dev`**. The `dev` → `main` merge is done by maintainers at milestone boundaries.
+- The **Gate CI check** must be green before any PR can be merged (Build + Test + Lint all pass).
+
+---
+
 ## Before you open a PR
 
 - **Bug fix** — open an issue first to confirm the bug and discuss the fix approach.
@@ -66,7 +81,17 @@ export OPENAI_API_KEY=sk-...
 - `internal/backend` does not exist in this repository — it lives in `nexus-product`. Do not recreate it here.
 - New tools go in `internal/tools/<category>/`. New providers go in `internal/providers/`.
 
-See [`docs/architecture.md`](./docs/architecture.md) for the full package map.
+**Multi-agent packages** — respect the dependency direction (no cycles):
+
+```
+internal/agent    →  AgentProfile, ProfileRegistry (who agents are)
+internal/mailbox  →  Message, Mailbox              (how they communicate)
+internal/team     →  Dispatcher, TeamBus           (how the team is coordinated)
+```
+
+`internal/team` imports `agent` and `mailbox`. Neither `agent` nor `mailbox` imports `team`.
+
+See [`docs/architecture.md`](./docs/architecture.md) and [`docs/team.md`](./docs/team.md) for the full package map.
 
 ### Adding a new tool
 
@@ -120,13 +145,32 @@ Breaking changes: append `!` and add a `BREAKING CHANGE:` footer.
 
 ## Pull request checklist
 
-- [ ] `go build ./...` passes
-- [ ] `go test -race ./...` passes
-- [ ] `golangci-lint run ./...` passes (or failures are pre-existing and noted)
+The **Gate CI check** runs automatically on every PR and must be green before merge. It covers:
+
+| Check | Command |
+|---|---|
+| Build | `go build ./...` |
+| Test (race detector) | `go test -race ./... -timeout 300s` |
+| Format | `gofmt -l .` |
+| Vet | `go vet ./...` |
+| Lint | `golangci-lint run ./...` |
+
+Before pushing, run locally:
+
+```bash
+make build
+make test-race
+gofmt -w .
+go vet ./...
+```
+
+Additional review checklist:
+
 - [ ] New code is covered by tests
 - [ ] Public API changes are reflected in `docs/`
 - [ ] Commit messages follow Conventional Commits
 - [ ] Breaking changes are called out in the PR description
+- [ ] PR targets `dev`, not `main`
 
 ---
 
