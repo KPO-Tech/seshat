@@ -25,6 +25,15 @@ const (
 	stateModelSelect
 )
 
+// uiFocus mirrors crush's focus model: editor has the cursor / main lets
+// the user scroll chat with arrow keys.
+type uiFocus uint8
+
+const (
+	uiFocusEditor uiFocus = iota // textarea is active (default)
+	uiFocusMain                  // chat list is scrollable with arrow keys
+)
+
 const (
 	headerHeight = 1
 	footerHeight = 1
@@ -55,6 +64,7 @@ type Model struct {
 	input       textarea.Model
 	spinner     spinner.Model
 
+	focus         uiFocus
 	busy          bool
 	activeSession string
 	lastErr       error
@@ -69,11 +79,11 @@ func New(ws tui.Workspace, ctx context.Context) Model {
 
 	ta := textarea.New()
 	ta.Placeholder = "Type a message… (enter to send, shift+enter for newline)"
-	ta.Focus()
 	ta.ShowLineNumbers = false
 	ta.CharLimit = 0
 	ta.SetWidth(80)
 	ta.SetHeight(inputMinH)
+	// Don't call Focus() here — do it in Init() so the Cmd runs properly.
 
 	sp := spinner.New()
 	sp.Spinner = spinner.Dot
@@ -84,6 +94,7 @@ func New(ws tui.Workspace, ctx context.Context) Model {
 		ctx:         ctx,
 		cancel:      cancel,
 		state:       stateWelcome,
+		focus:       uiFocusEditor,
 		keys:        keys,
 		styles:      styles,
 		chat:        newChat(styles, 80, 20),
@@ -100,8 +111,9 @@ func New(ws tui.Workspace, ctx context.Context) Model {
 // ─── BubbleTea v2 interface ───────────────────────────────────────────────────
 
 func (m Model) Init() tea.Cmd {
+	// Focus() in bubbles/v2 returns a Cmd that sets up the cursor — must run.
 	return tea.Batch(
-		textarea.Blink,
+		m.input.Focus(),
 		m.spinner.Tick,
 		m.loadSessions(),
 	)
@@ -163,9 +175,10 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		} else {
 			m.activeSession = msg.ID
 			m.state = stateChat
+			m.focus = uiFocusEditor
 			m.chat.Clear()
 			m.chat.AddSystem("New session · " + shortID(msg.ID))
-			m.input.Focus()
+			cmds = append(cmds, m.input.Focus()) // v2: Focus() returns a Cmd
 		}
 
 	case tui.SessionLoadedMsg:
@@ -174,9 +187,10 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		} else {
 			m.activeSession = msg.ID
 			m.state = stateChat
+			m.focus = uiFocusEditor
 			m.chat.Clear()
 			m.chat.AddSystem("Resumed session · " + shortID(msg.ID))
-			m.input.Focus()
+			cmds = append(cmds, m.input.Focus()) // v2: Focus() returns a Cmd
 		}
 
 	case tui.ModelListMsg:
@@ -192,14 +206,24 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	// v2 uses KeyPressMsg instead of KeyMsg
 	case tea.KeyPressMsg:
-		cmd := m.handleKey(msg)
+		consumed, cmd := m.handleKey(msg)
 		if cmd != nil {
 			cmds = append(cmds, cmd)
+		}
+		// Non-consumed keys flow to the textarea so regular characters,
+		// backspace, and cursor movement work normally.
+		if !consumed && (m.state == stateChat || m.state == stateWelcome) {
+			newInput, inputCmd := m.input.Update(msg)
+			m.input = newInput
+			cmds = append(cmds, inputCmd)
+			m = m.resizeInput()
 		}
 		return m, tea.Batch(cmds...)
 	}
 
-	if m.state == stateChat {
+	// Non-key messages (spinner, window resize, etc.) are also forwarded
+	// to the textarea so blinking and focus work correctly.
+	if m.state == stateChat || m.state == stateWelcome {
 		newInput, cmd := m.input.Update(msg)
 		m.input = newInput
 		cmds = append(cmds, cmd)
@@ -231,15 +255,20 @@ func (m Model) View() tea.View {
 
 	v := tea.NewView(content)
 	v.AltScreen = true
+	// Only track cell motion for mouse scroll — not full motion (avoids spam).
 	v.MouseMode = tea.MouseModeCellMotion
 	return v
 }
 
 // ─── Key handling ─────────────────────────────────────────────────────────────
 
-func (m *Model) handleKey(msg tea.KeyPressMsg) tea.Cmd {
+// handleKey processes a keypress. Returns (consumed, cmd):
+//   - consumed=true  → key was handled; do NOT forward to textarea
+//   - consumed=false → key was not handled; forward to textarea for normal input
+func (m *Model) handleKey(msg tea.KeyPressMsg) (bool, tea.Cmd) {
 	k := msg.String()
 
+	// ── Permission dialog (all keys consumed) ────────────────────────────
 	if m.state == statePermission && m.permission.HasPending() {
 		switch {
 		case k == "y" || k == "Y":
@@ -254,10 +283,10 @@ func (m *Model) handleKey(msg tea.KeyPressMsg) tea.Cmd {
 		default:
 			m.permInput += k
 		}
-		return nil
+		return true, nil
 	}
 
-	// ── Model selection dialog ───────────────────────────────────────────
+	// ── Model selection (all keys consumed) ─────────────────────────────
 	if m.state == stateModelSelect {
 		switch k {
 		case "esc", "ctrl+m":
@@ -278,9 +307,10 @@ func (m *Model) handleKey(msg tea.KeyPressMsg) tea.Cmd {
 				m.modelSelect.TypeFilter(k)
 			}
 		}
-		return nil
+		return true, nil
 	}
 
+	// ── Session browser (all keys consumed) ─────────────────────────────
 	if m.state == stateSessions {
 		switch k {
 		case "esc", "ctrl+s":
@@ -293,12 +323,12 @@ func (m *Model) handleKey(msg tea.KeyPressMsg) tea.Cmd {
 			id := m.sessions.Selected()
 			if id != "" {
 				m.state = stateChat
-				return m.loadSession(id)
+				return true, m.loadSession(id)
 			}
 		case "d", "delete":
 			id := m.sessions.DeleteSelected()
 			if id != "" {
-				return m.deleteSession(id)
+				return true, m.deleteSession(id)
 			}
 		case "backspace":
 			m.sessions.DeleteFilter()
@@ -307,51 +337,91 @@ func (m *Model) handleKey(msg tea.KeyPressMsg) tea.Cmd {
 				m.sessions.TypeFilter(k)
 			}
 		}
-		return nil
+		return true, nil
 	}
 
+	// ── Global shortcuts (always consumed) ──────────────────────────────
 	switch k {
 	case "ctrl+c":
 		if m.busy {
 			m.workspace.Cancel()
-			return nil
+			return true, nil
 		}
 		m.cancel()
-		return tea.Quit
+		return true, tea.Quit
 	case "ctrl+q":
 		m.cancel()
-		return tea.Quit
+		return true, tea.Quit
 	case "ctrl+s":
 		if m.state == stateChat || m.state == stateWelcome {
 			m.state = stateSessions
-			return m.loadSessions()
+			return true, m.loadSessions()
 		}
 	case "ctrl+n":
-		return m.createSession()
+		return true, m.createSession()
 	case "ctrl+m":
 		if m.state != stateModelSelect {
 			m.state = stateModelSelect
 			m.modelSelect.ClearFilter()
-			return m.listModels()
+			return true, m.listModels()
+		}
+	case "tab":
+		// Tab toggles between editor focus (typing) and main focus (scrolling).
+		if m.state == stateChat {
+			if m.focus == uiFocusEditor {
+				m.focus = uiFocusMain
+				m.input.Blur()
+			} else {
+				m.focus = uiFocusEditor
+				return true, m.input.Focus()
+			}
+			return true, nil
 		}
 	}
 
+	// ── Chat / welcome: dispatch by focus state (crush pattern) ──────────
 	if m.state == stateChat || m.state == stateWelcome {
-		// ── File completions (@) ────────────────────────────────────────────
+
+		// When focus is on the chat list, arrow keys scroll rather than move cursor.
+		if m.focus == uiFocusMain {
+			switch k {
+			case "up", "k":
+				m.chat.ScrollUp(3)
+				return true, nil
+			case "down", "j":
+				m.chat.ScrollDown(3)
+				return true, nil
+			case "pgup":
+				m.chat.PageUp()
+				return true, nil
+			case "pgdown":
+				m.chat.PageDown()
+				return true, nil
+			case "home":
+				m.chat.GotoTop()
+				return true, nil
+			case "end":
+				m.chat.GotoBottom()
+				return true, nil
+			}
+			// Any other key switches back to editor.
+			m.focus = uiFocusEditor
+			return true, m.input.Focus()
+		}
+
+		// ── Editor focus (default) ────────────────────────────────────────
+
+		// File completions popup intercepts keys while open.
 		if m.completions.IsOpen() {
 			switch k {
 			case "esc":
 				m.completions.Close()
-				return nil
 			case "up":
 				m.completions.Up()
-				return nil
 			case "down":
 				m.completions.Down()
-				return nil
 			case "enter", "tab":
 				if sel := m.completions.Selected(); sel != "" {
-					// Replace "@query" in input with the selected path.
 					query := m.completions.Query()
 					val := m.input.Value()
 					atIdx := strings.LastIndex(val, "@"+query)
@@ -360,76 +430,69 @@ func (m *Model) handleKey(msg tea.KeyPressMsg) tea.Cmd {
 					}
 					m.completions.Close()
 				}
-				return nil
 			case "backspace":
 				m.completions.Backspace()
-				return nil
 			default:
 				if len(k) == 1 && k != "@" {
 					m.completions.TypeChar(k)
-					return nil
+				} else {
+					m.completions.Close()
+					return false, nil
 				}
 			}
+			return true, nil
 		}
 
 		switch k {
 		case "@":
-			// Open file completions popup.
+			// Open completions AND let textarea receive @ to show it in the input.
 			m.completions.Open(m.workspace.WorkingDir())
-			var cmd tea.Cmd
-			m.input, cmd = m.input.Update(msg)
-			return cmd
+			// Fall through to textarea (consumed=false) so @ appears in input.
+			return false, nil
 
 		case "enter":
 			text := strings.TrimSpace(m.input.Value())
 			if text == "" || m.busy {
-				return nil
+				return true, nil
 			}
 			if m.activeSession == "" {
-				return tea.Batch(m.createSession(), func() tea.Msg {
+				return true, tea.Batch(m.createSession(), func() tea.Msg {
 					return pendingSubmitMsg{prompt: text}
 				})
 			}
-			// Pass attachments with the message.
 			atts := m.attachments.List()
-			_ = atts // TODO: pass to workspace.Submit when SDK supports attachments
+			_ = atts
 			m.attachments.Reset()
 			m.input.Reset()
 			m.chat.AddUserMessage(text)
 			m.workspace.Submit(m.ctx, text)
-			return nil
+			return true, nil
 
 		case "shift+enter", "alt+enter":
-			var cmd tea.Cmd
-			m.input, cmd = m.input.Update(msg)
-			return cmd
+			// crush uses InsertRune('\n') directly — more reliable than Update(msg).
+			m.input.InsertRune('\n')
+			return true, nil
 
 		case "ctrl+a":
-			// Ctrl+A = add attachment (open file dialog stub for now)
-			return nil
+			return true, nil
 
-		case "up":
-			if m.input.Value() == "" {
-				m.chat.ScrollUp(3)
-				return nil
-			}
-		case "down":
-			if m.input.Value() == "" {
-				m.chat.ScrollDown(3)
-				return nil
-			}
 		case "pgup":
 			m.chat.PageUp()
+			return true, nil
 		case "pgdown":
 			m.chat.PageDown()
+			return true, nil
 		case "home":
 			m.chat.GotoTop()
+			return true, nil
 		case "end":
 			m.chat.GotoBottom()
+			return true, nil
 		}
 	}
 
-	return nil
+	// Key was not handled — forward to the textarea.
+	return false, nil
 }
 
 // pendingSubmitMsg is used to queue a prompt while session creation is pending.
@@ -508,6 +571,8 @@ func (m Model) header() string {
 	var status string
 	if m.busy {
 		status = m.spinner.View() + " " + m.styles.HeaderBusy.Render("working")
+	} else if m.focus == uiFocusMain && m.state == stateChat {
+		status = m.styles.HeaderBusy.Render("↕ scroll") + "  " + m.styles.HeaderID.Render("tab: back to input")
 	} else if m.activeSession != "" {
 		status = m.styles.HeaderReady.Render("●") + " " + m.styles.HeaderID.Render(shortID(m.activeSession))
 	} else {
@@ -523,12 +588,22 @@ func (m Model) header() string {
 }
 
 func (m Model) footer() string {
-	items := []string{
-		m.styles.Key.Render("ctrl+n") + " " + m.styles.Desc.Render("new"),
-		m.styles.Key.Render("ctrl+s") + " " + m.styles.Desc.Render("sessions"),
-		m.styles.Key.Render("ctrl+m") + " " + m.styles.Desc.Render("model"),
-		m.styles.Key.Render("@") + " " + m.styles.Desc.Render("file"),
-		m.styles.Key.Render("ctrl+c") + " " + m.styles.Desc.Render("cancel/quit"),
+	var items []string
+	if m.focus == uiFocusMain && m.state == stateChat {
+		items = []string{
+			m.styles.Key.Render("↑↓") + " " + m.styles.Desc.Render("scroll"),
+			m.styles.Key.Render("tab") + " " + m.styles.Desc.Render("back to input"),
+			m.styles.Key.Render("ctrl+c") + " " + m.styles.Desc.Render("quit"),
+		}
+	} else {
+		items = []string{
+			m.styles.Key.Render("ctrl+n") + " " + m.styles.Desc.Render("new"),
+			m.styles.Key.Render("ctrl+s") + " " + m.styles.Desc.Render("sessions"),
+			m.styles.Key.Render("ctrl+m") + " " + m.styles.Desc.Render("model"),
+			m.styles.Key.Render("@") + " " + m.styles.Desc.Render("file"),
+			m.styles.Key.Render("tab") + " " + m.styles.Desc.Render("scroll"),
+			m.styles.Key.Render("ctrl+c") + " " + m.styles.Desc.Render("cancel/quit"),
+		}
 	}
 	return m.styles.Footer.Render(strings.Join(items, "  "))
 }
