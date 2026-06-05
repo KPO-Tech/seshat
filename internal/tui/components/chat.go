@@ -153,18 +153,31 @@ func (tb *thinkingBlock) render(styles common.Styles, width int) string {
 }
 
 type assistantItem struct {
-	thinking   *thinkingBlock
-	content    string
-	streaming  bool
-	finishedAt time.Time
-	showLabel  bool
+	thinking     *thinkingBlock
+	content      string
+	streaming    bool
+	startedAt    time.Time
+	finishedAt   time.Time
+	showLabel    bool
+	showMeta     bool
+	inputTokens  int
+	outputTokens int
+	stopReason   string
 
 	contentCacheWidth  int
 	contentCacheRender string
 }
 
-func newAssistantItem() *assistantItem    { return &assistantItem{streaming: true, showLabel: true} }
-func newContinuationItem() *assistantItem { return &assistantItem{streaming: true, showLabel: false} }
+func newAssistantItem() *assistantItem {
+	return &assistantItem{streaming: true, showLabel: true, startedAt: time.Now()}
+}
+
+func newContinuationItem(startedAt time.Time) *assistantItem {
+	if startedAt.IsZero() {
+		startedAt = time.Now()
+	}
+	return &assistantItem{streaming: true, showLabel: false, startedAt: startedAt}
+}
 
 func (a *assistantItem) appendThinking(text string) {
 	if text == "" {
@@ -185,9 +198,13 @@ func (a *assistantItem) appendContent(text string) {
 	a.contentCacheWidth = 0
 }
 
-func (a *assistantItem) finish() {
+func (a *assistantItem) finish(inputTokens, outputTokens int, stopReason string, showMeta bool) {
 	a.streaming = false
 	a.finishedAt = time.Now()
+	a.showMeta = showMeta
+	a.inputTokens = inputTokens
+	a.outputTokens = outputTokens
+	a.stopReason = stopReason
 	if a.thinking != nil && a.thinking.streaming {
 		a.thinking.finish()
 	}
@@ -200,7 +217,7 @@ func (a *assistantItem) invalidate()      { a.contentCacheWidth = 0 }
 func (a *assistantItem) render(c *Chat, width int) string {
 	var sb strings.Builder
 	if a.showLabel {
-		sb.WriteString(c.styles.AssistantLabel.Render("Nexus"))
+		sb.WriteString(c.styles.AssistantMarker.Render("●"))
 		sb.WriteString("\n")
 	}
 	if a.thinking != nil && strings.TrimSpace(a.thinking.content) != "" {
@@ -213,7 +230,10 @@ func (a *assistantItem) render(c *Chat, width int) string {
 			rendered = a.contentCacheRender
 		} else {
 			var err error
+			mu := common.LockMarkdownRenderer(c.renderer)
+			mu.Lock()
 			rendered, err = c.renderer.Render(a.content)
+			mu.Unlock()
 			if err != nil {
 				rendered = a.content
 			}
@@ -227,7 +247,34 @@ func (a *assistantItem) render(c *Chat, width int) string {
 	} else if a.streaming {
 		sb.WriteString(c.styles.MsgTimestamp.Render("…"))
 	}
+	if meta := a.metaLine(c.styles, width); meta != "" {
+		if sb.Len() > 0 {
+			sb.WriteString("\n\n")
+		}
+		sb.WriteString(meta)
+	}
 	return sb.String()
+}
+
+func (a *assistantItem) metaLine(styles common.Styles, width int) string {
+	if a.streaming || a.finishedAt.IsZero() || !a.showMeta {
+		return ""
+	}
+	left := styles.ToolDone.Render("done")
+	if !a.startedAt.IsZero() {
+		left += styles.TurnMeta.Render(" · " + formatDuration(a.finishedAt.Sub(a.startedAt)))
+	}
+	turnTokens := a.inputTokens + a.outputTokens
+	if turnTokens <= 0 {
+		return left
+	}
+	right := styles.TurnMeta.Render(compactTokenCount(turnTokens) + " tok")
+	sepLen := width - lipgloss.Width(left) - lipgloss.Width(right) - 2
+	if sepLen < 3 {
+		sepLen = 3
+	}
+	sep := styles.TurnMeta.Render(strings.Repeat("·", sepLen))
+	return left + " " + sep + " " + right
 }
 
 type userItem struct {
@@ -244,10 +291,9 @@ func (u *userItem) render(c *Chat, width int) string {
 	if u.cacheW == width && u.cacheR != "" {
 		return u.cacheR
 	}
-	header := c.styles.UserLabel.Render("You") + "  " +
-		c.styles.MsgTimestamp.Render(u.timestamp.Format("15:04"))
-	body := c.styles.UserMsg.Render(wrap.String(u.content, width-2))
-	r := header + "\n" + body
+	_ = u.timestamp
+	body := c.styles.UserMsg.Render(wrap.String(u.content, max(12, width-2)))
+	r := c.styles.UserMarker.Render("● >") + "\n" + body
 	u.cacheW = width
 	u.cacheR = r
 	return r
@@ -343,7 +389,7 @@ func (t *toolItem) renderSelected(c *Chat, width int, selected bool) string {
 func (t *toolItem) renderIcon(styles common.Styles) string {
 	switch {
 	case t.status == "completed" || t.status == "done":
-		return styles.ToolDone.Render("✓")
+		return styles.MsgTimestamp.Render("✓")
 	case t.status == "failed" || t.status == "error":
 		return styles.ToolError.Render("✗")
 	default:
@@ -354,7 +400,7 @@ func (t *toolItem) renderIcon(styles common.Styles) string {
 func (t *toolItem) renderNameStyle(styles common.Styles) lipgloss.Style {
 	switch {
 	case t.status == "completed" || t.status == "done":
-		return styles.ToolDone
+		return styles.UserMsg
 	case t.status == "failed" || t.status == "error":
 		return styles.ToolError
 	default:
@@ -649,10 +695,7 @@ type Chat struct {
 func NewChat(styles common.Styles, width, height int) *Chat {
 	vp := viewport.New(viewport.WithWidth(width), viewport.WithHeight(height))
 	vp.SetContent("")
-	r, _ := glamour.NewTermRenderer(
-		glamour.WithEnvironmentConfig(),
-		glamour.WithWordWrap(common.ClampInt(width-4, 20, width)),
-	)
+	r := common.MarkdownRenderer(width)
 	return &Chat{
 		styles:       styles,
 		viewport:     &vp,
@@ -669,10 +712,7 @@ func (c *Chat) SetSize(width, height int) {
 	c.height = height
 	c.viewport.SetWidth(width)
 	c.viewport.SetHeight(height)
-	if r, err := glamour.NewTermRenderer(
-		glamour.WithEnvironmentConfig(),
-		glamour.WithWordWrap(common.ClampInt(width-4, 20, width)),
-	); err == nil {
+	if r := common.MarkdownRenderer(width); r != nil {
 		c.renderer = r
 	}
 	for _, m := range c.messages {
@@ -707,27 +747,29 @@ func (c *Chat) AppendChunk(text string, isThinking bool) {
 		}
 	}
 	isContinuation := false
+	continuationStart := time.Time{}
 	for i := len(c.messages) - 1; i >= 0; i-- {
 		if _, ok := c.messages[i].(*userItem); ok {
 			break
 		}
-		if _, ok := c.messages[i].(*assistantItem); ok {
+		if a, ok := c.messages[i].(*assistantItem); ok {
 			isContinuation = true
+			continuationStart = a.startedAt
 			break
 		}
 	}
 	if isContinuation {
-		c.messages = append(c.messages, newContinuationItem())
+		c.messages = append(c.messages, newContinuationItem(continuationStart))
 	} else {
 		c.messages = append(c.messages, newAssistantItem())
 	}
 	c.AppendChunk(text, isThinking)
 }
 
-func (c *Chat) FinishAssistantMessage() {
+func (c *Chat) FinishAssistantMessage(inputTokens, outputTokens int, stopReason string) {
 	for i := len(c.messages) - 1; i >= 0; i-- {
 		if a, ok := c.messages[i].(*assistantItem); ok && a.streaming {
-			a.finish()
+			a.finish(inputTokens, outputTokens, stopReason, true)
 			c.refresh()
 			return
 		}
@@ -785,7 +827,7 @@ func (c *Chat) sealActiveAssistant() {
 		if a.content == "" && !hasThinking {
 			c.messages = append(c.messages[:i], c.messages[i+1:]...)
 		} else {
-			a.finish()
+			a.finish(0, 0, "", false)
 		}
 		return
 	}
@@ -1015,6 +1057,17 @@ func (c *Chat) refresh() {
 
 func headerLine(style lipgloss.Style, width int) string {
 	return style.Render(strings.Repeat("─", max(0, width)))
+}
+
+func compactTokenCount(n int) string {
+	switch {
+	case n >= 1_000_000:
+		return strings.TrimSuffix(strings.TrimSuffix(fmt.Sprintf("%.1f", float64(n)/1_000_000), ".0"), ".") + "M"
+	case n >= 1_000:
+		return strings.TrimSuffix(strings.TrimSuffix(fmt.Sprintf("%.1f", float64(n)/1_000), ".0"), ".") + "k"
+	default:
+		return fmt.Sprintf("%d", n)
+	}
 }
 
 func truncate(s string, maxLen int) string {

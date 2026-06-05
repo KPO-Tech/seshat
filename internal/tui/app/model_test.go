@@ -45,8 +45,8 @@ func TestModelRelayoutPropagatesChildSizes(t *testing.T) {
 	m = m.relayout()
 
 	cw, ch := m.chat.Size()
-	if cw != 80 {
-		t.Fatalf("expected chat width 80, got %d", cw)
+	if cw != 76 {
+		t.Fatalf("expected chat width 76, got %d", cw)
 	}
 	if ch != 19 {
 		t.Fatalf("expected chat height 19, got %d", ch)
@@ -128,31 +128,39 @@ func TestModelStatusLineShowsBusyAndUsage(t *testing.T) {
 	}
 
 	m.busy = false
-	m.lastInputTokens = 1200
-	m.lastOutputTokens = 345
-	m.lastStopReason = "end_turn"
-	done := m.statusLine()
-	if !strings.Contains(done, "done") {
-		t.Fatalf("expected done status line to mention done, got %q", done)
-	}
-	if !strings.Contains(done, "end_turn") {
-		t.Fatalf("expected done status line to mention stop reason, got %q", done)
-	}
-	if !strings.Contains(done, "1.5k") {
-		t.Fatalf("expected done status line to include token summary, got %q", done)
+	m.busy = false
+	m.lastTurnErr = "boom"
+	errLine := m.statusLine()
+	if !strings.Contains(errLine, "failed") {
+		t.Fatalf("expected error status line to mention failed, got %q", errLine)
 	}
 }
 
 func TestModelFooterSimplifiesPrimaryActions(t *testing.T) {
 	m := New(mockWorkspace{}, context.Background())
 	m.width = 100
-	m.lastInputTokens = 10
-	m.lastOutputTokens = 5
+	m.sessionInputTokens = 10
+	m.sessionOutputTokens = 5
 	footer := m.footer()
 	if strings.Contains(footer, "ctrl+e") || strings.Contains(footer, "chat/tools") {
 		t.Fatalf("expected footer to remove old select/tools hints, got %q", footer)
 	}
-	if !strings.Contains(footer, "ctrl+p") || !strings.Contains(footer, "15 tokens") {
-		t.Fatalf("expected footer to include commands and token usage, got %q", footer)
+	if !strings.Contains(footer, "ctrl+p") || !strings.Contains(footer, "15 total") {
+		t.Fatalf("expected footer to include commands and total token usage, got %q", footer)
+	}
+}
+
+func TestModelViewChatIncludesStatusLine(t *testing.T) {
+	m := New(mockWorkspace{}, context.Background())
+	m.width = 120
+	m.height = 30
+	m.activeSession = "session-123"
+	m.state = stateChat
+	m.busy = true
+	m = m.relayout()
+	m.chat.AddUserMessage("hello")
+	view := m.viewChat()
+	if !strings.Contains(view, "working") {
+		t.Fatalf("expected chat view to include busy status line, got %q", view)
 	}
 }

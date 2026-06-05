@@ -74,18 +74,20 @@ type Model struct {
 	input       textarea.Model
 	spinner     spinner.Model
 
-	focus            uiFocus
-	busy             bool
-	activeSession    string
-	lastErr          error
-	permInput        string
-	copyNotice       string  // transient "Copied!" message shown in footer
-	selectMode       bool    // when true: mouse capture disabled so terminal handles selection
-	returnState      uiState // state to restore when pressing ← from a sub-dialog
-	lastInputTokens  int
-	lastOutputTokens int
-	lastStopReason   string
-	lastTurnErr      string
+	focus               uiFocus
+	busy                bool
+	activeSession       string
+	lastErr             error
+	permInput           string
+	copyNotice          string  // transient "Copied!" message shown in footer
+	selectMode          bool    // when true: mouse capture disabled so terminal handles selection
+	returnState         uiState // state to restore when pressing ← from a sub-dialog
+	lastInputTokens     int
+	lastOutputTokens    int
+	lastStopReason      string
+	sessionInputTokens  int
+	sessionOutputTokens int
+	lastTurnErr         string
 }
 
 func New(ws tui.Workspace, ctx context.Context) Model {
@@ -183,8 +185,10 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.lastInputTokens = msg.InputTokens
 		m.lastOutputTokens = msg.OutputTokens
 		m.lastStopReason = msg.StopReason
+		m.sessionInputTokens += msg.InputTokens
+		m.sessionOutputTokens += msg.OutputTokens
 		m.lastTurnErr = ""
-		m.chat.FinishAssistantMessage()
+		m.chat.FinishAssistantMessage(msg.InputTokens, msg.OutputTokens, msg.StopReason)
 		if msg.Err != nil {
 			m.lastTurnErr = msg.Err.Error()
 			m.chat.AddError(msg.Err)
@@ -207,7 +211,11 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.activeSession = msg.ID
 			m.state = stateChat
 			m.focus = uiFocusEditor
+			m.sessionInputTokens = 0
+			m.sessionOutputTokens = 0
 			m.chat.Clear()
+			m.sessionInputTokens = 0
+			m.sessionOutputTokens = 0
 			m.chat.AddSystem("New session · " + common.ShortID(msg.ID))
 			cmds = append(cmds, m.input.Focus()) // v2: Focus() returns a Cmd
 		}
@@ -780,26 +788,28 @@ func (m Model) viewWelcome() string {
 		m.styles.Key.Render("ctrl+q") + " " + m.styles.Desc.Render("quit"),
 	}, "  ")
 
+	contentW := m.contentWidth()
 	body := lipgloss.NewStyle().
-		Width(m.width).
+		Width(contentW).
 		Height(m.height-2).
 		Align(lipgloss.Center, lipgloss.Center).
 		Render(logoArt + "\n" + wordmark + "\n\n" + tagline + "\n\n" + hint)
 
-	return m.header() + "\n" + body
+	return m.header() + "\n" + common.CenterHorizontally(body, m.width)
 }
 
 func (m Model) viewChat() string {
 	inputView := m.inputView()
 	statusView := m.statusLine()
+	contentW := m.contentWidth()
 	chatH := m.height - headerHeight - footerHeight - lipgloss.Height(statusView) - lipgloss.Height(inputView)
-	chatW := m.width
+	chatW := contentW
 	var detailView string
-	if m.chat.DetailsOpen() && m.width >= 110 {
-		paneW := max(36, m.width/3)
-		chatW = max(40, m.width-paneW-1)
+	if m.chat.DetailsOpen() && contentW >= 110 {
+		paneW := max(36, contentW/3)
+		chatW = max(40, contentW-paneW-1)
 		m.chat.SetSize(chatW, max(1, chatH))
-		detailView = m.chat.DetailView(m.width-chatW-1, max(1, chatH))
+		detailView = m.chat.DetailView(contentW-chatW-1, max(1, chatH))
 	} else {
 		m.chat.SetSize(chatW, max(1, chatH))
 	}
@@ -808,10 +818,12 @@ func (m Model) viewChat() string {
 	if detailView != "" {
 		body = lipgloss.JoinHorizontal(lipgloss.Top, chatView, " ", detailView)
 	}
+	body = common.CenterHorizontally(lipgloss.NewStyle().Width(contentW).Render(body), m.width)
 
 	base := strings.Join([]string{
 		m.header(),
 		body,
+		statusView,
 		inputView,
 		m.footer(),
 	}, "\n")
@@ -871,6 +883,7 @@ func (m Model) viewProviderConfig() string {
 }
 
 func (m Model) header() string {
+	contentW := m.contentWidth()
 	logo := m.styles.Logo.Render("NEXUS")
 	model := m.styles.HeaderPill.Render(m.workspace.ModelString())
 	left := lipgloss.JoinHorizontal(lipgloss.Center, logo, " ", model)
@@ -894,52 +907,39 @@ func (m Model) header() string {
 		right = m.styles.HeaderPillReady.Render("ready")
 	}
 
-	gap := m.width - lipgloss.Width(left) - lipgloss.Width(right) - m.styles.HeaderBar.GetHorizontalFrameSize()
+	gap := contentW - lipgloss.Width(left) - lipgloss.Width(right) - m.styles.HeaderBar.GetHorizontalFrameSize()
 	if gap < 1 {
 		gap = 1
 	}
-	content := left + strings.Repeat(" ", gap) + right
-	return m.styles.HeaderBar.Width(m.width).Render(content)
+	content := m.styles.HeaderBar.Width(contentW).Render(left + strings.Repeat(" ", gap) + right)
+	return common.CenterHorizontally(content, m.width)
 }
 
 func (m Model) statusLine() string {
-	var left string
+	contentW := m.contentWidth()
+	var line string
 	switch {
 	case m.busy:
-		left = m.styles.HeaderPillBusy.Render(m.spinner.View() + " working")
+		line = m.styles.Footer.Width(contentW).Render(m.styles.HeaderPillBusy.Render(m.spinner.View() + " working"))
 	case m.lastTurnErr != "":
-		left = m.styles.ToolError.Render("failed") + "  " + m.styles.Desc.Render(truncateStatus(m.lastTurnErr, max(12, m.width/3)))
-	case m.lastInputTokens > 0 || m.lastOutputTokens > 0 || m.lastStopReason != "":
-		left = m.styles.ToolDone.Render("done")
-		if m.lastStopReason != "" {
-			left += "  " + m.styles.Desc.Render("stop: "+m.lastStopReason)
-		}
+		line = m.styles.Footer.Width(contentW).Render(m.styles.ToolError.Render("failed") + "  " + m.styles.Desc.Render(truncateStatus(m.lastTurnErr, max(12, contentW/2))))
 	default:
-		left = m.styles.Desc.Render("ready")
+		line = m.styles.Footer.Width(contentW).Render(m.styles.Desc.Render("ready"))
 	}
-
-	right := m.tokenSummary()
-	if right == "" {
-		return m.styles.Footer.Render(left)
-	}
-	gap := m.width - lipgloss.Width(left) - lipgloss.Width(right)
-	if gap < 2 {
-		gap = 2
-	}
-	return m.styles.Footer.Render(left + strings.Repeat(" ", gap) + right)
+	return common.CenterHorizontally(line, m.width)
 }
 
 func (m Model) tokenSummary() string {
-	total := m.lastInputTokens + m.lastOutputTokens
+	total := m.sessionInputTokens + m.sessionOutputTokens
 	if total <= 0 {
 		return ""
 	}
-	parts := []string{formatTokenCount(total) + " tokens"}
-	if m.lastInputTokens > 0 {
-		parts = append(parts, "in "+formatTokenCount(m.lastInputTokens))
+	parts := []string{formatTokenCount(total) + " total"}
+	if m.sessionInputTokens > 0 {
+		parts = append(parts, "in "+formatTokenCount(m.sessionInputTokens))
 	}
-	if m.lastOutputTokens > 0 {
-		parts = append(parts, "out "+formatTokenCount(m.lastOutputTokens))
+	if m.sessionOutputTokens > 0 {
+		parts = append(parts, "out "+formatTokenCount(m.sessionOutputTokens))
 	}
 	return m.styles.Desc.Render(strings.Join(parts, " · "))
 }
@@ -966,9 +966,17 @@ func formatTokenCount(n int) string {
 	}
 }
 
+func (m Model) contentWidth() int {
+	if m.width <= 4 {
+		return m.width
+	}
+	return m.width - 4
+}
+
 func (m Model) footer() string {
+	contentW := m.contentWidth()
 	if m.copyNotice != "" {
-		return m.styles.ToolDone.Render("✓ " + m.copyNotice)
+		return common.CenterHorizontally(m.styles.ToolDone.Width(contentW).Render("✓ "+m.copyNotice), m.width)
 	}
 
 	var leftItems []string
@@ -990,37 +998,41 @@ func (m Model) footer() string {
 	}
 	left := strings.Join(leftItems, "  ")
 	right := m.tokenSummary()
+	var line string
 	if right == "" {
-		return m.styles.Footer.Render(left)
+		line = m.styles.Footer.Width(contentW).Render(left)
+	} else {
+		gap := contentW - lipgloss.Width(left) - lipgloss.Width(right)
+		if gap < 2 {
+			gap = 2
+		}
+		line = m.styles.Footer.Width(contentW).Render(left + strings.Repeat(" ", gap) + right)
 	}
-	gap := m.width - lipgloss.Width(left) - lipgloss.Width(right)
-	if gap < 2 {
-		gap = 2
-	}
-	return m.styles.Footer.Render(left + strings.Repeat(" ", gap) + right)
+	return common.CenterHorizontally(line, m.width)
 }
 
 // Select mode banner takes priority.
 func (m Model) inputView() string {
+	contentW := m.contentWidth()
 	inner := m.input.View()
 
-	if attView := m.attachments.View(max(20, m.width-4)); attView != "" {
+	if attView := m.attachments.View(max(20, contentW-4)); attView != "" {
 		inner = attView + "\n" + inner
 	}
 
-	box := m.styles.InputBorder.Width(max(12, m.width-2)).Render(inner)
-
+	box := m.styles.InputBorder.Width(max(12, contentW-2)).Render(inner)
 	if m.completions.IsOpen() {
-		popup := m.completions.View(max(20, m.width-4))
-		return popup + "\n" + box
+		popup := m.completions.View(max(20, contentW-4))
+		return common.CenterHorizontally(popup+"\n"+box, m.width)
 	}
-	return box
+	return common.CenterHorizontally(box, m.width)
 }
 
 // ─── Layout ───────────────────────────────────────────────────────────────────
 
 func (m Model) relayout() Model {
-	inputW := m.width - 4
+	contentW := m.contentWidth()
+	inputW := contentW - 4
 	if inputW < 10 {
 		inputW = 10
 	}
@@ -1030,7 +1042,7 @@ func (m Model) relayout() Model {
 	m.modelSelect.SetSize(m.width, m.height)
 	m.commands.SetSize(m.width, m.height)
 	m.configPanel.SetSize(m.width, m.height)
-	m.chat.SetSize(m.width, max(1, m.height-headerHeight-footerHeight-statusHeight-inputMinH-inputPadding))
+	m.chat.SetSize(contentW, max(1, m.height-headerHeight-footerHeight-statusHeight-inputMinH-inputPadding))
 	return m
 }
 

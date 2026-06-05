@@ -14,7 +14,7 @@ func TestChatAddToolProgressSealsAssistantAndCreatesContinuation(t *testing.T) {
 	c.AppendChunk("first answer", false)
 	c.AddToolProgress("tool-1", "bash", "running", "running", nil)
 	c.AppendChunk("second answer", false)
-	c.FinishAssistantMessage()
+	c.FinishAssistantMessage(0, 0, "")
 
 	if got := len(c.messages); got != 4 {
 		t.Fatalf("expected 4 chat items, got %d", got)

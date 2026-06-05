@@ -1,77 +1,102 @@
 # TUI Roadmap
 
-This note tracks the next UX and interaction improvements for the Nexus CLI TUI.
+This note tracks the current UX progress of the Nexus CLI TUI and the next interaction work.
 
-## Immediate Fixes
+## Completed
 
 ### 1. Welcome wordmark cleanup
-- Remove the extra leading dot/bullet from the welcome wordmark because the visual logo is already rendered above it.
+- Removed the extra leading bullet from the welcome screen wordmark.
 - Status: done
 
 ### 2. Footer simplification
-- Remove `ctrl+e` select mode from the default footer flow.
-- The terminal should feel copy/select-friendly by default instead of exposing a special selection mode.
-- Reduce footer noise and keep only the actions that matter most during normal chat use.
-- Status: planned
+- Removed `ctrl+e` select mode from the visible happy path.
+- Simplified the default footer actions.
+- Tool navigation is no longer advertised as `tab chat/tools` in the primary footer flow.
+- Status: done
 
-### 3. Spinner relocation
-- Move the active `working` indicator from the top-right header into a status lane directly above the chat input.
-- Goal: the user should see immediately whether the agent is still working while they are focused on the composer.
-- Status: planned
+### 3. Working status lane above composer
+- Moved the active `working` indicator out of the header.
+- Added a status lane directly above the composer for runtime visibility.
+- The lane now focuses on runtime state only: `working`, `failed`, or `ready`.
+- Status: done
 
-## Interaction Changes
+### 4. Primary chat layout polish
+- The app now uses near-full-width layout with small left/right margins instead of a narrow centered column.
+- User messages use an inline blue `● >` marker.
+- Assistant messages use an orange `●` marker.
+- Intermediate assistant segments created around tool calls no longer show false `done` states.
+- Final assistant metadata is attached only to the true end of the turn.
+- Status: done
 
-### 4. Mouse-first selection and copy
-- Replace the current explicit `select mode` approach with proper always-available mouse selection behavior.
-- Crush already handles this with cell-motion mouse mode, selection drag, release-to-copy, and clickable rows.
-- Nexus should move in the same direction.
+### 5. Tool rendering baseline
+- Added richer tool summaries and previews for core tools.
+- Kept completed tools visually more neutral so green is reserved for actual turn completion.
+- Added a right-side details pane for selected tools.
+- Status: done
+
+### 6. Shared markdown renderer
+- Switched from raw environment-configured glamour usage to a shared markdown helper in `internal/tui/common/markdown.go`.
+- Added cached renderers by width and per-renderer locking, following the same structural idea as Crush.
+- Kept a Nexus-specific style decision: markdown headings no longer show visible `##` / `###` prefixes in the main chat renderer.
+- Status: done
+
+## Partially Done
+
+### 7. Footer token/context usage
+- The footer now shows cumulative token usage for the current observed session in the TUI.
+- Per-turn token usage is rendered on the final assistant meta line instead of duplicating it in multiple places.
+- Remaining work:
+  - expose reliable model context-window capacity
+  - add a context percentage once that data is available
+- Status: in progress
+
+### 8. Commands / settings reorganization
+- The footer has already been simplified and older noise removed.
+- Remaining work:
+  - introduce a cleaner commands/settings surface for skills, tools, MCP, model/provider settings, and session actions
+  - reserve slash commands for skills only, with target UX like `/skill_name`
+- Status: in progress
+
+## Next Priorities
+
+### 9. Mouse-first selection and copy
+- Replace the old explicit selection-mode mentality with proper always-available mouse selection behavior.
+- Crush is the reference here: cell-motion mouse mode, drag selection, release-to-copy, and clickable rows.
 - Expected work:
-  - enable proper mouse event routing in the main model
-  - add chat selection state and drag handling
-  - keep clickable tool rows compatible with selection
+  - enable full mouse event routing in the main model
+  - add drag/copy state in chat
+  - keep tool rows clickable without breaking selection
 - Status: planned
 
-### 5. Commands / settings reorganization
-- `tab` should probably stop advertising `chat/tools` as a primary action in the footer.
-- Tool navigation can stay available, but it should feel secondary rather than front-and-center.
-- Introduce a better commands/settings layer for:
+### 10. Clickable tool rows and richer interactions
+- Add mouse interaction for expand/collapse and opening tool details.
+- Keep keyboard navigation first-class while making the interface feel more IDE-like.
+- Status: planned
+
+### 11. Commands / settings panel expansion
+- Add practical navigation for:
   - skills
   - tools
   - MCP
   - model/provider settings
   - session actions
-- Reserve slash commands for skills only, with the target UX being `/skill_name`.
 - Status: planned
 
-## Runtime Visibility
-
-### 6. Footer token/context usage
-- Show token usage in the footer after each turn.
-- Data already reaches the TUI via `TurnDoneMsg.InputTokens` and `TurnDoneMsg.OutputTokens`.
-- A context-window percentage is possible only after the active model context limit is exposed reliably in TUI state for the current session/model.
-- Suggested display:
-  - `12.4k tokens`
-  - `31% context` once model context capacity is wired in
-- Status: partially unblocked
-
-### 7. Working status lane above composer
-- Add a narrow status strip above the input for:
-  - spinner / working state
-  - last stop reason
-  - last token usage summary
-- This would remove pressure from both the header and footer.
+### 12. Context percentage and model capacity visibility
+- Once model context capacity is reliably available in TUI state, show clear session usage such as:
+  - `12.4k total`
+  - `31% context`
 - Status: planned
 
 ## Recommended Implementation Order
 
-1. Footer cleanup and removal of `ctrl+e` from the visible happy path
-2. Working status lane above the composer
-3. Token usage display in footer/status lane
-4. Commands/settings reorganization
-5. Proper mouse selection and clickable interactions
+1. Mouse-first selection and copy behavior
+2. Clickable tool rows and detail interactions
+3. Commands/settings reorganization
+4. Context-window percentage and model-capacity display
 
 ## Notes
 
-- Crush is the right reference for mouse selection and copy behavior.
-- The current Nexus TUI already has the right structural direction for tool rendering, but interaction still needs a second pass.
+- Crush remains the right reference for markdown renderer structure, mouse selection, and interaction polish.
+- Nexus intentionally diverges from Crush on some visual choices, especially markdown heading presentation and chat chrome.
 - `AGENTS.md` should stay focused on engineering rules; roadmap items belong in docs like this file.
