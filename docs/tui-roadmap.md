@@ -52,7 +52,7 @@ This note tracks the current UX progress of the Nexus CLI TUI and the next inter
 
 ### 8. Commands / settings reorganization
 - The footer has already been simplified and older noise removed.
-- The command palette is now organized as a true commands/settings surface with sections for sessions, workspace, settings, and app actions.
+- The `ctrl+p` surface is now moving toward a true settings hub with nested sections and dedicated entry points for commands, providers, models, tools, MCP, and skills.
 - Generic slash commands are no longer advertised there; slash input is now reserved for skills in the chat composer.
 - Remaining work:
   - introduce practical navigation for tools and MCP alongside existing model/provider actions

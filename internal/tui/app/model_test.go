@@ -145,8 +145,8 @@ func TestModelFooterSimplifiesPrimaryActions(t *testing.T) {
 	if strings.Contains(footer, "ctrl+e") || strings.Contains(footer, "chat/tools") {
 		t.Fatalf("expected footer to remove old select/tools hints, got %q", footer)
 	}
-	if !strings.Contains(footer, "ctrl+p") || !strings.Contains(footer, "15 total") {
-		t.Fatalf("expected footer to include commands and total token usage, got %q", footer)
+	if !strings.Contains(footer, "ctrl+p") || !strings.Contains(footer, "settings") || !strings.Contains(footer, "15 total") {
+		t.Fatalf("expected footer to include settings and total token usage, got %q", footer)
 	}
 }
 
@@ -235,5 +235,53 @@ func TestClipboardNoticeReflectsCapabilities(t *testing.T) {
 	}
 	if got := clipboardNotice("Selection copied", false, false); got != "Clipboard unavailable: install wl-clipboard or xclip" {
 		t.Fatalf("expected unavailable notice, got %q", got)
+	}
+}
+
+func TestModelCtrlPOpensSettingsRoot(t *testing.T) {
+	m := New(mockWorkspace{}, context.Background())
+	m.state = stateChat
+	consumed, cmd := m.handleKey(tea.KeyPressMsg(tea.Key{Code: 'p', Mod: tea.ModCtrl}))
+	if !consumed {
+		t.Fatalf("expected ctrl+p to be handled")
+	}
+	if cmd != nil {
+		t.Fatalf("expected ctrl+p not to emit an async command")
+	}
+	if got := m.state; got != stateCommands {
+		t.Fatalf("expected settings hub state, got %v", got)
+	}
+	if sel := m.commands.Selected(); sel == nil || sel.Name != "Commands" {
+		t.Fatalf("expected settings root to start on Commands, got %+v", sel)
+	}
+}
+
+func TestModelSettingsEnterCommandsStaysInHub(t *testing.T) {
+	m := New(mockWorkspace{}, context.Background())
+	m.state = stateCommands
+	m.commands.Open("")
+	cmd := m.activateSettingsSelection()
+	if cmd != nil {
+		t.Fatalf("expected opening commands section not to emit a command")
+	}
+	if sel := m.commands.Selected(); sel == nil || sel.Name != "New Session" {
+		t.Fatalf("expected commands section to open on first command, got %+v", sel)
+	}
+}
+
+func TestModelSettingsProvidersRouteToConfig(t *testing.T) {
+	m := New(mockWorkspace{}, context.Background())
+	m.state = stateCommands
+	m.commands.Open("")
+	m.commands.Down()
+	cmd := m.activateSettingsSelection()
+	if cmd == nil {
+		t.Fatalf("expected providers route to emit a load command")
+	}
+	if got := m.state; got != stateProviderConfig {
+		t.Fatalf("expected provider config state, got %v", got)
+	}
+	if got := m.returnState; got != stateCommands {
+		t.Fatalf("expected return state to point back to settings, got %v", got)
 	}
 }

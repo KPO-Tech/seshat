@@ -483,9 +483,14 @@ func (m *Model) handleKey(msg tea.KeyPressMsg) (bool, tea.Cmd) {
 	if m.state == stateModelSelect {
 		switch k {
 		case "esc", "ctrl+m":
-			m.state = m.prevChatState()
+			if m.returnState == stateCommands {
+				m.state = stateCommands
+				m.commands.Open("")
+			} else {
+				m.state = m.prevChatState()
+			}
 		case "left":
-			// Navigate back to the commands palette if that's where we came from,
+			// Navigate back to the settings hub if that's where we came from,
 			// otherwise close to the chat/welcome state.
 			if m.returnState == stateCommands {
 				m.state = stateCommands
@@ -512,24 +517,23 @@ func (m *Model) handleKey(msg tea.KeyPressMsg) (bool, tea.Cmd) {
 		return true, nil
 	}
 
-	// ── Commands palette (all keys consumed) ────────────────────────────
+	// ── Settings hub (all keys consumed) ────────────────────────────────
 	if m.state == stateCommands {
 		switch k {
 		case "esc", "ctrl+p":
-			m.state = m.prevChatState()
+			if !m.commands.Back() {
+				m.state = m.prevChatState()
+			}
+		case "left":
+			if !m.commands.Back() {
+				m.state = m.prevChatState()
+			}
 		case "up", "k":
 			m.commands.Up()
 		case "down", "j":
 			m.commands.Down()
 		case "enter":
-			var cmd tea.Cmd
-			if sel := m.commands.Selected(); sel != nil {
-				cmd = m.executeCommand(sel.ID)
-			}
-			if m.state == stateCommands {
-				m.state = m.prevChatState()
-			}
-			return true, cmd
+			return true, m.activateSettingsSelection()
 		case "backspace":
 			m.commands.DeleteFilter()
 		default:
@@ -582,7 +586,12 @@ func (m *Model) handleKey(msg tea.KeyPressMsg) (bool, tea.Cmd) {
 		} else {
 			switch k {
 			case "esc", "ctrl+,":
-				m.state = m.prevChatState()
+				if m.returnState == stateCommands {
+					m.state = stateCommands
+					m.commands.Open("")
+				} else {
+					m.state = m.prevChatState()
+				}
 			case "up", "k":
 				cp.Up()
 			case "down", "j":
@@ -823,6 +832,39 @@ func (m *Model) handleKey(msg tea.KeyPressMsg) (bool, tea.Cmd) {
 
 	// Key was not handled — forward to the textarea.
 	return false, nil
+}
+
+func (m *Model) activateSettingsSelection() tea.Cmd {
+	sel := m.commands.Selected()
+	if sel == nil {
+		return nil
+	}
+	switch sel.Kind {
+	case components.PaletteSectionKind:
+		m.commands.OpenSection(sel.ID)
+		return nil
+	case components.PaletteRouteKind:
+		switch sel.ID {
+		case "providers":
+			m.returnState = stateCommands
+			m.state = stateProviderConfig
+			return m.loadProviderConfig()
+		case "models":
+			m.returnState = stateCommands
+			m.state = stateModelSelect
+			m.modelSelect.ClearFilter()
+			return m.listModels()
+		}
+	case components.PaletteActionKind:
+		cmd := m.executeCommand(sel.ID)
+		if m.state == stateCommands {
+			m.state = m.prevChatState()
+		}
+		return cmd
+	case components.PaletteInfoKind:
+		return nil
+	}
+	return nil
 }
 
 func (m *Model) executeCommand(id string) tea.Cmd {
@@ -1100,11 +1142,11 @@ func (m Model) footer() string {
 			m.styles.Key.Render("n/p") + " " + m.styles.Desc.Render("tools"),
 			m.styles.Key.Render("space") + " " + m.styles.Desc.Render("preview"),
 			m.styles.Key.Render("o") + " " + m.styles.Desc.Render("details"),
-			m.styles.Key.Render("ctrl+p") + " " + m.styles.Desc.Render("commands"),
+			m.styles.Key.Render("ctrl+p") + " " + m.styles.Desc.Render("settings"),
 		}
 	} else {
 		leftItems = []string{
-			m.styles.Key.Render("ctrl+p") + " " + m.styles.Desc.Render("commands"),
+			m.styles.Key.Render("ctrl+p") + " " + m.styles.Desc.Render("settings"),
 			m.styles.Key.Render("ctrl+n") + " " + m.styles.Desc.Render("new"),
 			m.styles.Key.Render("ctrl+s") + " " + m.styles.Desc.Render("sessions"),
 			m.styles.Key.Render("ctrl+c") + " " + m.styles.Desc.Render("cancel/quit"),

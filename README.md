@@ -30,8 +30,8 @@
       <br><sub><b>Welcome</b> — up and running in 10 seconds</sub>
     </td>
     <td align="center" width="50%">
-      <img src="docs/captures/commands_pannel.png" alt="Commands palette" width="100%">
-      <br><sub><b>Commands palette</b> — every shortcut, one keystroke away (<code>ctrl+p</code>)</sub>
+      <img src="docs/captures/commands_pannel.png" alt="Settings panel" width="100%">
+      <br><sub><b>Settings panel</b> — every shortcut, one keystroke away (<code>ctrl+p</code>)</sub>
     </td>
   </tr>
   <tr>
@@ -56,7 +56,7 @@
   </tr>
 </table>
 
-> **Keyboard shortcuts:** `ctrl+p` commands · `ctrl+m` model · `ctrl+s` sessions · `ctrl+,` provider config · `ctrl+shift+c` copy selection · `ctrl+c` cancel/quit
+> **Keyboard shortcuts:** `ctrl+p` settings · `ctrl+m` model · `ctrl+s` sessions · `ctrl+,` provider config · `ctrl+shift+c` copy selection · `ctrl+c` cancel/quit
 
 > **Clipboard note (Linux):** selection copy works best when `wl-clipboard` (Wayland) or `xclip`/`xsel` (X11) is installed. Without a system clipboard backend, Nexus can request terminal clipboard access but cannot guarantee a real system copy.
 
