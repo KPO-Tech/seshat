@@ -167,3 +167,21 @@ func TestChatMouseSelectionExtractsPlainText(t *testing.T) {
 		t.Fatalf("expected selected text to be copied")
 	}
 }
+
+func TestChatMouseSelectionHighlightsDuringDrag(t *testing.T) {
+	c := NewChat(common.DefaultStyles(), 80, 20)
+	c.AddUserMessage("hello world")
+	if !c.HandleMouseDown(0, 0) {
+		t.Fatalf("expected mouse down to start selection")
+	}
+	if !c.HandleMouseDrag(5, 0) {
+		t.Fatalf("expected mouse drag to update selection")
+	}
+	view := c.View()
+	if strings.TrimSpace(view) == "" {
+		t.Fatalf("expected non-empty view during selection")
+	}
+	if view == c.plainContent {
+		t.Fatalf("expected highlighted selection to add styling")
+	}
+}

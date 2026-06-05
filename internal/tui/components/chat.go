@@ -1007,6 +1007,7 @@ func (c *Chat) HandleMouseDown(x, y int) bool {
 	c.mouseStartCo = max(0, x)
 	c.mouseEndLn = line
 	c.mouseEndCo = max(0, x)
+	c.refresh()
 	return true
 }
 
@@ -1025,6 +1026,7 @@ func (c *Chat) HandleMouseDrag(x, y int) bool {
 	if line != c.mouseStartLn || col != c.mouseStartCo {
 		c.mouseMoved = true
 	}
+	c.refresh()
 	return true
 }
 
@@ -1054,6 +1056,10 @@ func (c *Chat) HasMouseCapture() bool {
 func (c *Chat) clearMouse() {
 	c.mouseDown = false
 	c.mouseMoved = false
+	c.mouseStartLn = 0
+	c.mouseStartCo = 0
+	c.mouseEndLn = 0
+	c.mouseEndCo = 0
 }
 
 func (c *Chat) handleToolLineClick(msgIndex int) {
@@ -1233,10 +1239,52 @@ func (c *Chat) refresh() {
 		c.plainLines = strings.Split(plain, "\n")
 	}
 	c.toolRegions = regions
-	c.viewport.SetContent(content)
+	if c.mouseDown && c.mouseMoved {
+		c.viewport.SetContent(c.highlightedSelectionContent())
+	} else {
+		c.viewport.SetContent(content)
+	}
 	if c.follow {
 		c.viewport.GotoBottom()
 	}
+}
+
+func (c *Chat) highlightedSelectionContent() string {
+	if len(c.plainLines) == 0 {
+		return c.plainContent
+	}
+	startLn, startCo, endLn, endCo := c.selectionRange()
+	if startLn < 0 || endLn < 0 {
+		return c.plainContent
+	}
+	lines := make([]string, len(c.plainLines))
+	copy(lines, c.plainLines)
+	for line := startLn; line <= endLn; line++ {
+		runes := []rune(lines[line])
+		lineStart := 0
+		lineEnd := len(runes)
+		if line == startLn {
+			lineStart = clampInt(startCo, 0, len(runes))
+		}
+		if line == endLn {
+			lineEnd = clampInt(endCo, 0, len(runes))
+		}
+		if line == startLn && line == endLn && lineEnd < lineStart {
+			lineStart, lineEnd = lineEnd, lineStart
+		}
+		if lineEnd < lineStart {
+			lineEnd = lineStart
+		}
+		before := string(runes[:lineStart])
+		middle := string(runes[lineStart:lineEnd])
+		after := string(runes[lineEnd:])
+		if middle == "" && lineStart < len(runes) {
+			middle = string(runes[lineStart : lineStart+1])
+			after = string(runes[lineStart+1:])
+		}
+		lines[line] = before + c.styles.Selection.Render(middle) + after
+	}
+	return strings.Join(lines, "\n")
 }
 
 func headerLine(style lipgloss.Style, width int) string {

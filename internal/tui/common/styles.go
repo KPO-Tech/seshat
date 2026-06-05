@@ -50,6 +50,7 @@ type Styles struct {
 	ToolDone        lipgloss.Style
 	ToolError       lipgloss.Style
 	ErrorMsg        lipgloss.Style
+	Selection       lipgloss.Style
 
 	// Input
 	InputBorder      lipgloss.Style
@@ -151,6 +152,9 @@ func DefaultStyles() Styles {
 	s.ErrorMsg = lipgloss.NewStyle().
 		Foreground(ColorRed).
 		Bold(true)
+	s.Selection = lipgloss.NewStyle().
+		Foreground(ColorText).
+		Background(lipgloss.Color("#1D4ED8"))
 
 	// Input
 	s.InputBorder = lipgloss.NewStyle().
