@@ -42,8 +42,8 @@ const (
 const (
 	headerHeight = 1
 	footerHeight = 1
-	inputMinH    = 3
-	inputMaxH    = 15
+	inputMinH    = 1
+	inputMaxH    = 10
 	inputPadding = 1
 )
 
@@ -89,7 +89,7 @@ func New(ws tui.Workspace, ctx context.Context) Model {
 
 	ta := textarea.New()
 	ta.SetStyles(styles.Textarea)
-	ta.Placeholder = "Ask Nexus to read, edit, search, or run..."
+	ta.Placeholder = "Ask Nexus..."
 	ta.ShowLineNumbers = false
 	ta.CharLimit = -1
 	ta.SetVirtualCursor(false)
@@ -753,14 +753,11 @@ func editorPrompt(styles common.Styles) func(textarea.PromptInfo) string {
 	return func(info textarea.PromptInfo) string {
 		if info.LineNumber == 0 {
 			if info.Focused {
-				return styles.InputPrompt.Render("  > ")
+				return styles.InputPrompt.Render("> ")
 			}
-			return styles.InputHint.Render("  > ")
+			return styles.InputHint.Render("> ")
 		}
-		if info.Focused {
-			return styles.InputPrompt.Render("::: ")
-		}
-		return styles.InputHint.Render("::: ")
+		return "  "
 	}
 }
 
@@ -934,20 +931,13 @@ func (m Model) footer() string {
 
 // Select mode banner takes priority.
 func (m Model) inputView() string {
-	header := lipgloss.JoinHorizontal(
-		lipgloss.Left,
-		m.styles.InputBadge.Render("chat"),
-		"  ",
-		m.styles.InputHint.Render("enter send · shift+enter newline · @ files · / commands"),
-	)
-
-	inner := header + "\n" + m.input.View()
+	inner := m.input.View()
 
 	if attView := m.attachments.View(max(20, m.width-4)); attView != "" {
 		inner = attView + "\n" + inner
 	}
 
-	box := m.styles.InputBorder.Width(m.width).Render(inner)
+	box := m.styles.InputBorder.Width(max(12, m.width-2)).Render(inner)
 
 	if m.completions.IsOpen() {
 		popup := m.completions.View(max(20, m.width-4))

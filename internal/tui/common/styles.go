@@ -114,10 +114,9 @@ func DefaultStyles() Styles {
 
 	// Input
 	s.InputBorder = lipgloss.NewStyle().
-		BorderTop(true).
+		Border(lipgloss.RoundedBorder()).
 		BorderForeground(ColorBorder).
-		Padding(0, 1).
-		Background(lipgloss.Color("#0F1115"))
+		Padding(0, 1)
 	s.InputPrompt = lipgloss.NewStyle().
 		Foreground(ColorPrimary).
 		Bold(true)
@@ -131,7 +130,7 @@ func DefaultStyles() Styles {
 		Bold(true)
 	s.Textarea = textarea.Styles{
 		Focused: textarea.StyleState{
-			Base:             lipgloss.NewStyle().Foreground(ColorText).Background(lipgloss.Color("#0F1115")),
+			Base:             lipgloss.NewStyle().Foreground(ColorText),
 			Text:             lipgloss.NewStyle().Foreground(ColorText),
 			LineNumber:       lipgloss.NewStyle().Foreground(ColorMuted),
 			CursorLine:       lipgloss.NewStyle().Foreground(ColorText),
@@ -140,7 +139,7 @@ func DefaultStyles() Styles {
 			Prompt:           lipgloss.NewStyle().Foreground(ColorPrimary).Bold(true),
 		},
 		Blurred: textarea.StyleState{
-			Base:             lipgloss.NewStyle().Foreground(ColorMuted).Background(lipgloss.Color("#0F1115")),
+			Base:             lipgloss.NewStyle().Foreground(ColorMuted),
 			Text:             lipgloss.NewStyle().Foreground(ColorMuted),
 			LineNumber:       lipgloss.NewStyle().Foreground(ColorMuted),
 			CursorLine:       lipgloss.NewStyle().Foreground(ColorMuted),

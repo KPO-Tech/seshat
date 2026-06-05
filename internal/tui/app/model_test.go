@@ -47,8 +47,8 @@ func TestModelRelayoutPropagatesChildSizes(t *testing.T) {
 	if cw != 80 {
 		t.Fatalf("expected chat width 80, got %d", cw)
 	}
-	if ch != 18 {
-		t.Fatalf("expected chat height 18, got %d", ch)
+	if ch != 20 {
+		t.Fatalf("expected chat height 20, got %d", ch)
 	}
 	sw, sh := m.sessions.Size()
 	if sw != 80 {
@@ -77,15 +77,12 @@ func TestModelInputViewUsesPromptStyleAndHint(t *testing.T) {
 	m.width = 100
 	m.height = 30
 	m = m.relayout()
-	m.input.SetValue("hello")
-	m = m.resizeInput()
-
 	view := m.inputView()
-	if !strings.Contains(view, "chat") {
-		t.Fatalf("expected input view to include composer badge, got %q", view)
+	if strings.Contains(view, "enter send") || strings.Contains(view, "chat") {
+		t.Fatalf("expected input view to avoid inline helper chrome, got %q", view)
 	}
-	if !strings.Contains(view, "enter send") {
-		t.Fatalf("expected input view to include composer hint, got %q", view)
+	if !strings.Contains(view, "╭") || !strings.Contains(view, "╯") {
+		t.Fatalf("expected input view to render a compact bordered composer, got %q", view)
 	}
 	if !strings.Contains(view, ">") {
 		t.Fatalf("expected input view to include prompt marker, got %q", view)
