@@ -227,3 +227,57 @@ func TestThinkingBlockRenderShowsMouseHint(t *testing.T) {
 		t.Fatalf("expected ctrl+t hint to be removed from visible footer, got %q", rendered)
 	}
 }
+
+func TestChatToolDetailsZoneTogglesDetails(t *testing.T) {
+	c := NewChat(common.DefaultStyles(), 80, 20)
+	c.AddToolProgress("tool-1", "read_file", "completed", "done", map[string]any{
+		"tool_input": map[string]any{"file_path": "/tmp/a.txt"},
+		"content":    "alpha\nbeta",
+	})
+	if len(c.toolRegions) == 0 {
+		t.Fatalf("expected tool regions to be populated")
+	}
+	region := c.toolRegions[0]
+	if !c.HandleMouseDown(region.detailStart, region.startLine) {
+		t.Fatalf("expected mouse down on tool detail zone to be handled")
+	}
+	if got := c.HandleMouseUp(region.detailStart, region.startLine); got != "" {
+		t.Fatalf("expected click on tool detail zone not to copy text, got %q", got)
+	}
+	if !c.DetailsOpen() {
+		t.Fatalf("expected details pane to open from detail click zone")
+	}
+}
+
+func TestChatToolBodyClickSelectsWithoutToggling(t *testing.T) {
+	c := NewChat(common.DefaultStyles(), 80, 20)
+	c.AddToolProgress("tool-1", "read_file", "completed", "done", map[string]any{
+		"tool_input": map[string]any{"file_path": "/tmp/a.txt"},
+		"content":    "alpha\nbeta",
+	})
+	tool := c.selectedToolItem()
+	if tool == nil {
+		t.Fatalf("expected selected tool")
+	}
+	tool.expanded = false
+	tool.invalidate()
+	c.selectedTool = -1
+	c.detailOpen = false
+	c.refresh()
+	region := c.toolRegions[0]
+	if !c.HandleMouseDown(6, region.startLine) {
+		t.Fatalf("expected mouse down on tool body to be handled")
+	}
+	if got := c.HandleMouseUp(6, region.startLine); got != "" {
+		t.Fatalf("expected click on tool body not to copy text, got %q", got)
+	}
+	if c.selectedToolIndex() < 0 {
+		t.Fatalf("expected tool body click to select the tool")
+	}
+	if c.DetailsOpen() {
+		t.Fatalf("expected tool body click not to toggle details")
+	}
+	if tool.expanded {
+		t.Fatalf("expected tool body click not to expand preview")
+	}
+}

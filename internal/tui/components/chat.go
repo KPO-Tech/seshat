@@ -334,6 +334,23 @@ func (t *toolItem) render(c *Chat, width int) string {
 	return t.renderSelected(c, width, false)
 }
 
+func (t *toolItem) expanderSymbol() string {
+	if !t.supportsPreview() {
+		return " "
+	}
+	if t.expanded {
+		return "▾"
+	}
+	return "▸"
+}
+
+func (t *toolItem) detailsSymbol(selected, detailsOpen bool) string {
+	if selected && detailsOpen {
+		return "⊟"
+	}
+	return "⊞"
+}
+
 func (t *toolItem) renderSelected(c *Chat, width int, selected bool) string {
 	if t.isDone() && !selected && !t.expanded && t.cacheW == width && t.cacheR != "" {
 		return t.cacheR
@@ -341,18 +358,12 @@ func (t *toolItem) renderSelected(c *Chat, width int, selected bool) string {
 
 	icon := t.renderIcon(c.styles)
 	nameStyle := t.renderNameStyle(c.styles)
-	summary := truncate(t.summaryText(), max(12, width-30))
-	expander := c.styles.MsgTimestamp.Render("  ")
-	if t.supportsPreview() {
-		if t.expanded {
-			expander = c.styles.MsgTimestamp.Render("▾")
-		} else {
-			expander = c.styles.MsgTimestamp.Render("▸")
-		}
-	}
+	summary := truncate(t.summaryText(), max(12, width-34))
+	expander := c.styles.MsgTimestamp.Render(t.expanderSymbol())
+	details := c.styles.MsgTimestamp.Render(t.detailsSymbol(selected, c.detailOpen && selected))
 	status := c.styles.MsgTimestamp.Render(t.statusLabel())
 
-	parts := []string{expander, icon, nameStyle.Render(toolDisplayName(t.name)), status}
+	parts := []string{expander, details, icon, nameStyle.Render(toolDisplayName(t.name)), status}
 	if summary != "" {
 		parts = append(parts, c.styles.MsgTimestamp.Render(summary))
 	}
@@ -679,9 +690,13 @@ func (e *errorItem) render(c *Chat, _ int) string {
 }
 
 type toolRegion struct {
-	startLine int
-	endLine   int
-	msgIndex  int
+	startLine     int
+	endLine       int
+	msgIndex      int
+	expanderStart int
+	expanderEnd   int
+	detailStart   int
+	detailEnd     int
 }
 
 type thinkingRegion struct {
@@ -1049,7 +1064,7 @@ func (c *Chat) HandleMouseUp(x, y int) string {
 		if idx := c.thinkingIndexAtLine(line); idx >= 0 {
 			c.handleThinkingLineClick(idx)
 		} else if idx := c.toolIndexAtLine(line); idx >= 0 {
-			c.handleToolLineClick(idx)
+			c.handleToolLineClick(idx, max(0, x), line)
 		}
 	}
 	c.clearMouse()
@@ -1069,7 +1084,7 @@ func (c *Chat) clearMouse() {
 	c.mouseEndCo = 0
 }
 
-func (c *Chat) handleToolLineClick(msgIndex int) {
+func (c *Chat) handleToolLineClick(msgIndex, x, line int) {
 	if msgIndex < 0 || msgIndex >= len(c.messages) {
 		return
 	}
@@ -1077,14 +1092,26 @@ func (c *Chat) handleToolLineClick(msgIndex int) {
 	if !ok {
 		return
 	}
-	if c.selectedTool == msgIndex {
-		if tool.supportsPreview() {
+	for _, region := range c.toolRegions {
+		if region.msgIndex != msgIndex {
+			continue
+		}
+		if line == region.startLine && x >= region.expanderStart && x < region.expanderEnd && tool.supportsPreview() {
 			tool.expanded = !tool.expanded
 			tool.invalidate()
+			c.selectedTool = msgIndex
+			c.refresh()
+			return
 		}
-	} else {
-		c.selectedTool = msgIndex
+		if line == region.startLine && x >= region.detailStart && x < region.detailEnd {
+			c.selectedTool = msgIndex
+			c.detailOpen = !(c.selectedTool == msgIndex && c.detailOpen)
+			c.refresh()
+			return
+		}
+		break
 	}
+	c.selectedTool = msgIndex
 	c.refresh()
 }
 
@@ -1254,7 +1281,7 @@ func (c *Chat) refresh() {
 		plainSB.WriteString(plainRendered)
 		height := max(1, lipgloss.Height(plainRendered))
 		if _, ok := item.(*toolItem); ok {
-			toolRegions = append(toolRegions, toolRegion{startLine: startLine, endLine: startLine + height - 1, msgIndex: i})
+			toolRegions = append(toolRegions, toolRegion{startLine: startLine, endLine: startLine + height - 1, msgIndex: i, expanderStart: 0, expanderEnd: 1, detailStart: 2, detailEnd: 3})
 		}
 		if assistant, ok := item.(*assistantItem); ok && assistant.thinking != nil && strings.TrimSpace(assistant.thinking.content) != "" {
 			thinkingStart := startLine
