@@ -5,6 +5,8 @@ package app
 
 import (
 	"context"
+	"fmt"
+	"strconv"
 	"strings"
 	"time"
 
@@ -42,6 +44,7 @@ const (
 const (
 	headerHeight = 1
 	footerHeight = 1
+	statusHeight = 1
 	inputMinH    = 1
 	inputMaxH    = 10
 	inputPadding = 1
@@ -71,14 +74,18 @@ type Model struct {
 	input       textarea.Model
 	spinner     spinner.Model
 
-	focus         uiFocus
-	busy          bool
-	activeSession string
-	lastErr       error
-	permInput     string
-	copyNotice    string  // transient "Copied!" message shown in footer
-	selectMode    bool    // when true: mouse capture disabled so terminal handles selection
-	returnState   uiState // state to restore when pressing ← from a sub-dialog
+	focus            uiFocus
+	busy             bool
+	activeSession    string
+	lastErr          error
+	permInput        string
+	copyNotice       string  // transient "Copied!" message shown in footer
+	selectMode       bool    // when true: mouse capture disabled so terminal handles selection
+	returnState      uiState // state to restore when pressing ← from a sub-dialog
+	lastInputTokens  int
+	lastOutputTokens int
+	lastStopReason   string
+	lastTurnErr      string
 }
 
 func New(ws tui.Workspace, ctx context.Context) Model {
@@ -167,13 +174,19 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case tui.TurnStartMsg:
 		m.busy = true
+		m.lastTurnErr = ""
 		m.chat.StartAssistantMessage()
 		cmds = append(cmds, m.spinner.Tick)
 
 	case tui.TurnDoneMsg:
 		m.busy = false
+		m.lastInputTokens = msg.InputTokens
+		m.lastOutputTokens = msg.OutputTokens
+		m.lastStopReason = msg.StopReason
+		m.lastTurnErr = ""
 		m.chat.FinishAssistantMessage()
 		if msg.Err != nil {
+			m.lastTurnErr = msg.Err.Error()
 			m.chat.AddError(msg.Err)
 		}
 
@@ -489,12 +502,6 @@ func (m *Model) handleKey(msg tea.KeyPressMsg) (bool, tea.Cmd) {
 		return true, nil
 	}
 
-	// ── Select mode toggle (ctrl+e) — works from any state ──────────────
-	if k == "ctrl+e" {
-		m.selectMode = !m.selectMode
-		return true, nil
-	}
-
 	// ── Global shortcuts (always consumed) ──────────────────────────────
 	switch k {
 	case "ctrl+c":
@@ -711,9 +718,6 @@ func (m *Model) executeCommand(id string) tea.Cmd {
 	case "thinking":
 		m.chat.ToggleThinking()
 		return nil
-	case "select":
-		m.selectMode = !m.selectMode
-		return nil
 	case "copy-msg":
 		text := m.chat.GetLastUserText()
 		if text != "" {
@@ -787,7 +791,8 @@ func (m Model) viewWelcome() string {
 
 func (m Model) viewChat() string {
 	inputView := m.inputView()
-	chatH := m.height - headerHeight - footerHeight - lipgloss.Height(inputView)
+	statusView := m.statusLine()
+	chatH := m.height - headerHeight - footerHeight - lipgloss.Height(statusView) - lipgloss.Height(inputView)
 	chatW := m.width
 	var detailView string
 	if m.chat.DetailsOpen() && m.width >= 110 {
@@ -871,9 +876,7 @@ func (m Model) header() string {
 	left := lipgloss.JoinHorizontal(lipgloss.Center, logo, " ", model)
 
 	var right string
-	if m.busy {
-		right = m.styles.HeaderPillBusy.Render(m.spinner.View() + " working")
-	} else if m.focus == uiFocusMain && m.state == stateChat {
+	if m.focus == uiFocusMain && m.state == stateChat {
 		right = lipgloss.JoinHorizontal(
 			lipgloss.Center,
 			m.styles.HeaderPillActive.Render("tools"),
@@ -899,44 +902,102 @@ func (m Model) header() string {
 	return m.styles.HeaderBar.Width(m.width).Render(content)
 }
 
-func (m Model) footer() string {
-	// Select mode banner takes priority.
-	if m.selectMode {
-		return lipgloss.NewStyle().
-			Foreground(common.ColorPrimary).Bold(true).
-			Render("SELECT MODE") +
-			"  " +
-			m.styles.Desc.Render("select text with mouse · copy with ctrl+c ·") +
-			"  " +
-			m.styles.Key.Render("ctrl+e") +
-			" " +
-			m.styles.Desc.Render("exit")
+func (m Model) statusLine() string {
+	var left string
+	switch {
+	case m.busy:
+		left = m.styles.HeaderPillBusy.Render(m.spinner.View() + " working")
+	case m.lastTurnErr != "":
+		left = m.styles.ToolError.Render("failed") + "  " + m.styles.Desc.Render(truncateStatus(m.lastTurnErr, max(12, m.width/3)))
+	case m.lastInputTokens > 0 || m.lastOutputTokens > 0 || m.lastStopReason != "":
+		left = m.styles.ToolDone.Render("done")
+		if m.lastStopReason != "" {
+			left += "  " + m.styles.Desc.Render("stop: "+m.lastStopReason)
+		}
+	default:
+		left = m.styles.Desc.Render("ready")
 	}
 
+	right := m.tokenSummary()
+	if right == "" {
+		return m.styles.Footer.Render(left)
+	}
+	gap := m.width - lipgloss.Width(left) - lipgloss.Width(right)
+	if gap < 2 {
+		gap = 2
+	}
+	return m.styles.Footer.Render(left + strings.Repeat(" ", gap) + right)
+}
+
+func (m Model) tokenSummary() string {
+	total := m.lastInputTokens + m.lastOutputTokens
+	if total <= 0 {
+		return ""
+	}
+	parts := []string{formatTokenCount(total) + " tokens"}
+	if m.lastInputTokens > 0 {
+		parts = append(parts, "in "+formatTokenCount(m.lastInputTokens))
+	}
+	if m.lastOutputTokens > 0 {
+		parts = append(parts, "out "+formatTokenCount(m.lastOutputTokens))
+	}
+	return m.styles.Desc.Render(strings.Join(parts, " · "))
+}
+
+func truncateStatus(s string, maxLen int) string {
+	r := []rune(strings.TrimSpace(s))
+	if len(r) <= maxLen {
+		return string(r)
+	}
+	if maxLen <= 1 {
+		return string(r[:1])
+	}
+	return string(r[:maxLen-1]) + "…"
+}
+
+func formatTokenCount(n int) string {
+	switch {
+	case n >= 1_000_000:
+		return strings.TrimSuffix(strings.TrimSuffix(fmt.Sprintf("%.1f", float64(n)/1_000_000), ".0"), ".") + "M"
+	case n >= 1_000:
+		return strings.TrimSuffix(strings.TrimSuffix(fmt.Sprintf("%.1f", float64(n)/1_000), ".0"), ".") + "k"
+	default:
+		return strconv.Itoa(n)
+	}
+}
+
+func (m Model) footer() string {
 	if m.copyNotice != "" {
 		return m.styles.ToolDone.Render("✓ " + m.copyNotice)
 	}
 
-	var items []string
+	var leftItems []string
 	if m.focus == uiFocusMain && m.state == stateChat {
-		items = []string{
+		leftItems = []string{
 			m.styles.Key.Render("↑↓") + " " + m.styles.Desc.Render("scroll"),
-			m.styles.Key.Render("n/p") + " " + m.styles.Desc.Render("select tool"),
-			m.styles.Key.Render("space") + " " + m.styles.Desc.Render("expand"),
+			m.styles.Key.Render("n/p") + " " + m.styles.Desc.Render("tools"),
+			m.styles.Key.Render("space") + " " + m.styles.Desc.Render("preview"),
 			m.styles.Key.Render("o") + " " + m.styles.Desc.Render("details"),
-			m.styles.Key.Render("tab") + " " + m.styles.Desc.Render("back to input"),
+			m.styles.Key.Render("ctrl+p") + " " + m.styles.Desc.Render("commands"),
 		}
 	} else {
-		items = []string{
+		leftItems = []string{
 			m.styles.Key.Render("ctrl+p") + " " + m.styles.Desc.Render("commands"),
 			m.styles.Key.Render("ctrl+n") + " " + m.styles.Desc.Render("new"),
 			m.styles.Key.Render("ctrl+s") + " " + m.styles.Desc.Render("sessions"),
-			m.styles.Key.Render("ctrl+e") + " " + m.styles.Desc.Render("select"),
-			m.styles.Key.Render("tab") + " " + m.styles.Desc.Render("chat/tools"),
 			m.styles.Key.Render("ctrl+c") + " " + m.styles.Desc.Render("cancel/quit"),
 		}
 	}
-	return m.styles.Footer.Render(strings.Join(items, "  "))
+	left := strings.Join(leftItems, "  ")
+	right := m.tokenSummary()
+	if right == "" {
+		return m.styles.Footer.Render(left)
+	}
+	gap := m.width - lipgloss.Width(left) - lipgloss.Width(right)
+	if gap < 2 {
+		gap = 2
+	}
+	return m.styles.Footer.Render(left + strings.Repeat(" ", gap) + right)
 }
 
 // Select mode banner takes priority.
@@ -969,7 +1030,7 @@ func (m Model) relayout() Model {
 	m.modelSelect.SetSize(m.width, m.height)
 	m.commands.SetSize(m.width, m.height)
 	m.configPanel.SetSize(m.width, m.height)
-	m.chat.SetSize(m.width, max(1, m.height-headerHeight-footerHeight-inputMinH-inputPadding))
+	m.chat.SetSize(m.width, max(1, m.height-headerHeight-footerHeight-statusHeight-inputMinH-inputPadding))
 	return m
 }
 

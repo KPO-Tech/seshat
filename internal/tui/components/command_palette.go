@@ -43,7 +43,6 @@ func defaultPaletteItems() []PaletteItem {
 		{ID: "sessions", Name: "Sessions", Shortcut: "ctrl+s", Desc: "Browse and resume past sessions"},
 		{ID: "model", Name: "Switch Model", Shortcut: "ctrl+m", Desc: "Change the active AI model"},
 		{ID: "thinking", Name: "Toggle Thinking", Shortcut: "ctrl+t", Desc: "Expand or collapse the thinking block"},
-		{ID: "select", Name: "Select Mode", Shortcut: "ctrl+e", Desc: "Enable native mouse text selection"},
 		{ID: "copy-msg", Name: "Copy Last Message", Shortcut: "ctrl+u", Desc: "Copy your last message to clipboard"},
 		{ID: "provider-config", Name: "Provider Config", Shortcut: "ctrl+,", Desc: "Configure API keys and providers"},
 		{ID: "clear", Name: "/clear", Shortcut: "", Desc: "Clear the chat display"},

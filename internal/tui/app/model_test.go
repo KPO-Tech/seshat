@@ -48,8 +48,8 @@ func TestModelRelayoutPropagatesChildSizes(t *testing.T) {
 	if cw != 80 {
 		t.Fatalf("expected chat width 80, got %d", cw)
 	}
-	if ch != 20 {
-		t.Fatalf("expected chat height 20, got %d", ch)
+	if ch != 19 {
+		t.Fatalf("expected chat height 19, got %d", ch)
 	}
 	sw, sh := m.sessions.Size()
 	if sw != 80 {
@@ -115,5 +115,44 @@ func TestModelHeaderRendersModelAndStatusPills(t *testing.T) {
 	}
 	if !strings.Contains(header, common.ShortID(m.activeSession)) {
 		t.Fatalf("expected header to include short session id, got %q", header)
+	}
+}
+
+func TestModelStatusLineShowsBusyAndUsage(t *testing.T) {
+	m := New(mockWorkspace{}, context.Background())
+	m.width = 100
+	m.busy = true
+	busy := m.statusLine()
+	if !strings.Contains(busy, "working") {
+		t.Fatalf("expected busy status line to mention working, got %q", busy)
+	}
+
+	m.busy = false
+	m.lastInputTokens = 1200
+	m.lastOutputTokens = 345
+	m.lastStopReason = "end_turn"
+	done := m.statusLine()
+	if !strings.Contains(done, "done") {
+		t.Fatalf("expected done status line to mention done, got %q", done)
+	}
+	if !strings.Contains(done, "end_turn") {
+		t.Fatalf("expected done status line to mention stop reason, got %q", done)
+	}
+	if !strings.Contains(done, "1.5k") {
+		t.Fatalf("expected done status line to include token summary, got %q", done)
+	}
+}
+
+func TestModelFooterSimplifiesPrimaryActions(t *testing.T) {
+	m := New(mockWorkspace{}, context.Background())
+	m.width = 100
+	m.lastInputTokens = 10
+	m.lastOutputTokens = 5
+	footer := m.footer()
+	if strings.Contains(footer, "ctrl+e") || strings.Contains(footer, "chat/tools") {
+		t.Fatalf("expected footer to remove old select/tools hints, got %q", footer)
+	}
+	if !strings.Contains(footer, "ctrl+p") || !strings.Contains(footer, "15 tokens") {
+		t.Fatalf("expected footer to include commands and token usage, got %q", footer)
 	}
 }
