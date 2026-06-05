@@ -291,3 +291,21 @@ func TestUserItemRenderKeepsMessageInlineWithMarker(t *testing.T) {
 		t.Fatalf("expected first rendered line to include user content, got %q", rendered)
 	}
 }
+
+func TestChatMouseSelectionPersistsAfterRelease(t *testing.T) {
+	c := NewChat(common.DefaultStyles(), 80, 20)
+	c.AddUserMessage("hello world")
+	if !c.HandleMouseDown(0, 0) {
+		t.Fatalf("expected mouse down to start selection")
+	}
+	if !c.HandleMouseDrag(5, 0) {
+		t.Fatalf("expected mouse drag to update selection")
+	}
+	got := c.HandleMouseUp(5, 0)
+	if strings.TrimSpace(got) == "" {
+		t.Fatalf("expected selected text to be copied")
+	}
+	if view := c.View(); view == c.renderedContent {
+		t.Fatalf("expected highlighted selection to remain after mouse release")
+	}
+}

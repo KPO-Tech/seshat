@@ -726,17 +726,13 @@ type Chat struct {
 	selectedTool int
 	detailOpen   bool
 
+	renderedContent string
+	renderedLines   []string
 	plainContent    string
 	plainLines      []string
 	toolRegions     []toolRegion
 	thinkingRegions []thinkingRegion
-
-	mouseDown    bool
-	mouseMoved   bool
-	mouseStartLn int
-	mouseStartCo int
-	mouseEndLn   int
-	mouseEndCo   int
+	selection       mouseSelection
 }
 
 func NewChat(styles common.Styles, width, height int) *Chat {
@@ -1030,18 +1026,13 @@ func (c *Chat) HandleMouseDown(x, y int) bool {
 	if line < 0 || line >= len(c.plainLines) {
 		return false
 	}
-	c.mouseDown = true
-	c.mouseMoved = false
-	c.mouseStartLn = line
-	c.mouseStartCo = max(0, x)
-	c.mouseEndLn = line
-	c.mouseEndCo = max(0, x)
+	c.selection.begin(line, max(0, x))
 	c.refresh()
 	return true
 }
 
 func (c *Chat) HandleMouseDrag(x, y int) bool {
-	if !c.mouseDown {
+	if !c.selection.dragging {
 		return false
 	}
 	if len(c.plainLines) == 0 {
@@ -1049,48 +1040,37 @@ func (c *Chat) HandleMouseDrag(x, y int) bool {
 	}
 	line := c.viewport.YOffset() + clampInt(y, 0, max(0, c.height-1))
 	line = clampInt(line, 0, len(c.plainLines)-1)
-	col := max(0, x)
-	c.mouseEndLn = line
-	c.mouseEndCo = col
-	if line != c.mouseStartLn || col != c.mouseStartCo {
-		c.mouseMoved = true
-	}
+	c.selection.update(line, max(0, x))
 	c.refresh()
 	return true
 }
 
 func (c *Chat) HandleMouseUp(x, y int) string {
-	if !c.mouseDown {
+	if !c.selection.dragging {
 		return ""
 	}
 	_ = c.HandleMouseDrag(x, y)
-	wasMoved := c.mouseMoved
+	wasMoved := c.selection.finish()
 	text := ""
 	if wasMoved {
 		text = c.selectedText()
+		c.refresh()
 	} else {
-		line := c.mouseStartLn
+		line := c.selection.startLine
+		c.selection.clear()
 		if idx := c.thinkingIndexAtLine(line); idx >= 0 {
 			c.handleThinkingLineClick(idx)
 		} else if idx := c.toolIndexAtLine(line); idx >= 0 {
 			c.handleToolLineClick(idx, max(0, x), line)
+		} else {
+			c.refresh()
 		}
 	}
-	c.clearMouse()
 	return text
 }
 
 func (c *Chat) HasMouseCapture() bool {
-	return c.mouseDown
-}
-
-func (c *Chat) clearMouse() {
-	c.mouseDown = false
-	c.mouseMoved = false
-	c.mouseStartLn = 0
-	c.mouseStartCo = 0
-	c.mouseEndLn = 0
-	c.mouseEndCo = 0
+	return c.selection.dragging
 }
 
 func (c *Chat) handleToolLineClick(msgIndex, x, line int) {
@@ -1187,16 +1167,7 @@ func (c *Chat) selectedText() string {
 }
 
 func (c *Chat) selectionRange() (int, int, int, int) {
-	if !c.mouseMoved {
-		return -1, -1, -1, -1
-	}
-	startLn, startCo := c.mouseStartLn, c.mouseStartCo
-	endLn, endCo := c.mouseEndLn, c.mouseEndCo
-	if endLn < startLn || (endLn == startLn && endCo < startCo) {
-		startLn, endLn = endLn, startLn
-		startCo, endCo = endCo, startCo
-	}
-	return startLn, startCo, endLn, endCo
+	return c.selection.rangeOrInvalid()
 }
 
 func clampInt(v, lo, hi int) int {
@@ -1307,6 +1278,12 @@ func (c *Chat) refresh() {
 	}
 	content := sb.String()
 	plain := plainSB.String()
+	c.renderedContent = content
+	if content == "" {
+		c.renderedLines = nil
+	} else {
+		c.renderedLines = strings.Split(content, "\n")
+	}
 	c.plainContent = plain
 	if plain == "" {
 		c.plainLines = nil
@@ -1315,7 +1292,7 @@ func (c *Chat) refresh() {
 	}
 	c.toolRegions = toolRegions
 	c.thinkingRegions = thinkingRegions
-	if c.mouseDown && c.mouseMoved {
+	if c.selection.hasSelection() {
 		c.viewport.SetContent(c.highlightedSelectionContent())
 	} else {
 		c.viewport.SetContent(content)
@@ -1325,24 +1302,25 @@ func (c *Chat) refresh() {
 	}
 }
 func (c *Chat) highlightedSelectionContent() string {
-	if len(c.plainLines) == 0 {
-		return c.plainContent
+	if len(c.renderedLines) == 0 {
+		return c.renderedContent
 	}
 	startLn, startCo, endLn, endCo := c.selectionRange()
 	if startLn < 0 || endLn < 0 {
-		return c.plainContent
+		return c.renderedContent
 	}
-	lines := make([]string, len(c.plainLines))
-	copy(lines, c.plainLines)
+	lines := make([]string, len(c.renderedLines))
+	copy(lines, c.renderedLines)
 	for line := startLn; line <= endLn; line++ {
-		runes := []rune(lines[line])
+		renderedLine := lines[line]
+		lineWidth := ansi.StringWidth(renderedLine)
 		lineStart := 0
-		lineEnd := len(runes)
+		lineEnd := lineWidth
 		if line == startLn {
-			lineStart = clampInt(startCo, 0, len(runes))
+			lineStart = clampInt(startCo, 0, lineWidth)
 		}
 		if line == endLn {
-			lineEnd = clampInt(endCo, 0, len(runes))
+			lineEnd = clampInt(endCo, 0, lineWidth)
 		}
 		if line == startLn && line == endLn && lineEnd < lineStart {
 			lineStart, lineEnd = lineEnd, lineStart
@@ -1350,12 +1328,12 @@ func (c *Chat) highlightedSelectionContent() string {
 		if lineEnd < lineStart {
 			lineEnd = lineStart
 		}
-		before := string(runes[:lineStart])
-		middle := string(runes[lineStart:lineEnd])
-		after := string(runes[lineEnd:])
-		if middle == "" && lineStart < len(runes) {
-			middle = string(runes[lineStart : lineStart+1])
-			after = string(runes[lineStart+1:])
+		before := ansi.Cut(renderedLine, 0, lineStart)
+		middle := ansi.Cut(renderedLine, lineStart, lineEnd)
+		after := ansi.Cut(renderedLine, lineEnd, lineWidth)
+		if middle == "" && lineStart < lineWidth {
+			middle = ansi.Cut(renderedLine, lineStart, lineStart+1)
+			after = ansi.Cut(renderedLine, lineStart+1, lineWidth)
 		}
 		lines[line] = before + c.styles.Selection.Render(middle) + after
 	}
