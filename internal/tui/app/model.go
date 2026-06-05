@@ -97,7 +97,7 @@ func New(ws tui.Workspace, ctx context.Context) Model {
 
 	ta := textarea.New()
 	ta.SetStyles(styles.Textarea)
-	ta.Placeholder = "Ask Nexus..."
+	ta.Placeholder = "Ask Nexus...  /skill"
 	ta.ShowLineNumbers = false
 	ta.CharLimit = -1
 	ta.SetVirtualCursor(false)
@@ -739,13 +739,7 @@ func (m *Model) handleKey(msg tea.KeyPressMsg) (bool, tea.Cmd) {
 
 		switch k {
 		case "/":
-			// Open the commands palette pre-filtered to slash commands when
-			// the input is empty. If there's already text, let / go to textarea.
-			if strings.TrimSpace(m.input.Value()) == "" {
-				m.commands.Open("/")
-				m.state = stateCommands
-				return true, nil
-			}
+			// Slash is reserved for skills. Let the textarea receive it directly.
 			return false, nil
 
 		case "@":

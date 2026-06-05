@@ -52,23 +52,26 @@ This note tracks the current UX progress of the Nexus CLI TUI and the next inter
 
 ### 8. Commands / settings reorganization
 - The footer has already been simplified and older noise removed.
+- The command palette is now organized as a true commands/settings surface with sections for sessions, workspace, settings, and app actions.
+- Generic slash commands are no longer advertised there; slash input is now reserved for skills in the chat composer.
 - Remaining work:
-  - introduce a cleaner commands/settings surface for skills, tools, MCP, model/provider settings, and session actions
-  - reserve slash commands for skills only, with target UX like `/skill_name`
+  - introduce practical navigation for tools and MCP alongside existing model/provider actions
+  - surface skills more explicitly once TUI-side skill discovery is wired
 - Status: in progress
 
 ## Next Priorities
 
 ### 9. Mouse-first selection and copy
-- First pass implemented:
+- Implemented:
   - mouse event routing in the main model
   - drag-to-copy text selection in chat
   - copy on mouse release
-  - old select-mode path removed
-- Remaining work:
-  - visible selection highlight during drag
+  - persistent colored selection after mouse release
   - double-click word selection
   - triple-click line selection
+  - auto-scroll while dragging at viewport edges
+- Remaining work:
+  - refine copy semantics for visual chat markers versus plain content where needed
 - Status: in progress
 
 ### 10. Clickable tool rows and richer interactions

@@ -7,15 +7,16 @@ import (
 	"github.com/EngineerProjects/nexus-engine/internal/tui/common"
 )
 
-// PaletteItem is one entry in the command palette.
+// PaletteItem is one entry in the command and settings palette.
 type PaletteItem struct {
+	Section  string
 	ID       string
 	Name     string
 	Shortcut string
 	Desc     string
 }
 
-// CommandPalette is the ctrl+p overlay listing all actions and slash commands.
+// CommandPalette is the ctrl+p overlay listing actions and settings.
 type CommandPalette struct {
 	items  []PaletteItem
 	list   common.ListState[PaletteItem]
@@ -29,7 +30,8 @@ func NewCommandPalette(styles common.Styles) *CommandPalette {
 		styles: styles,
 		list: common.NewListState(func(item PaletteItem, needle string) bool {
 			return strings.Contains(strings.ToLower(item.Name), needle) ||
-				strings.Contains(strings.ToLower(item.Desc), needle)
+				strings.Contains(strings.ToLower(item.Desc), needle) ||
+				strings.Contains(strings.ToLower(item.Section), needle)
 		}),
 	}
 	p.items = defaultPaletteItems()
@@ -39,14 +41,13 @@ func NewCommandPalette(styles common.Styles) *CommandPalette {
 
 func defaultPaletteItems() []PaletteItem {
 	return []PaletteItem{
-		{ID: "new-session", Name: "New Session", Shortcut: "ctrl+n", Desc: "Start a fresh conversation"},
-		{ID: "sessions", Name: "Sessions", Shortcut: "ctrl+s", Desc: "Browse and resume past sessions"},
-		{ID: "model", Name: "Switch Model", Shortcut: "ctrl+m", Desc: "Change the active AI model"},
-		{ID: "thinking", Name: "Toggle Thinking", Shortcut: "ctrl+t", Desc: "Expand or collapse the thinking block"},
-		{ID: "copy-msg", Name: "Copy Last Message", Shortcut: "ctrl+u", Desc: "Copy your last message to clipboard"},
-		{ID: "provider-config", Name: "Provider Config", Shortcut: "ctrl+,", Desc: "Configure API keys and providers"},
-		{ID: "clear", Name: "/clear", Shortcut: "", Desc: "Clear the chat display"},
-		{ID: "quit", Name: "Quit", Shortcut: "ctrl+c", Desc: "Exit Nexus"},
+		{Section: "Sessions", ID: "new-session", Name: "New Session", Shortcut: "ctrl+n", Desc: "Start a fresh conversation"},
+		{Section: "Sessions", ID: "sessions", Name: "Sessions", Shortcut: "ctrl+s", Desc: "Browse and resume past sessions"},
+		{Section: "Workspace", ID: "copy-msg", Name: "Copy Last Message", Shortcut: "ctrl+u", Desc: "Copy your last message to clipboard"},
+		{Section: "Workspace", ID: "clear", Name: "Clear Chat", Shortcut: "", Desc: "Clear the current chat display"},
+		{Section: "Settings", ID: "model", Name: "Switch Model", Shortcut: "ctrl+m", Desc: "Change the active AI model"},
+		{Section: "Settings", ID: "provider-config", Name: "Provider Config", Shortcut: "ctrl+,", Desc: "Configure API keys and providers"},
+		{Section: "App", ID: "quit", Name: "Quit", Shortcut: "ctrl+c", Desc: "Exit Nexus"},
 	}
 }
 
@@ -68,31 +69,52 @@ func (p *CommandPalette) Selected() *PaletteItem {
 func (p *CommandPalette) View() string {
 	w := common.Clamp(p.width*4/5, 54, 90)
 	innerW := w - 4
-	title := p.styles.BrowserTitle.Render("  Commands")
-	filterContent := "  / " + p.list.Filter() + "█"
+	title := p.styles.BrowserTitle.Render("  Commands & Settings")
+	filterContent := "  search " + p.list.Filter() + "█"
 	filterLine := p.styles.BrowserFilter.Width(innerW).Render(filterContent)
 	sep := p.styles.MsgTimestamp.Render(strings.Repeat("─", innerW))
 
 	filtered := p.list.FilteredItems()
 	cursor := p.list.Cursor()
-	var rows []string
+	sectionOrder := []string{"Sessions", "Workspace", "Settings", "App"}
+	grouped := make(map[string][]paletteViewItem)
 	for i, item := range filtered {
-		row := p.renderItem(item, i == cursor, innerW)
-		rows = append(rows, row)
-		if i < len(filtered)-1 {
+		grouped[item.Section] = append(grouped[item.Section], paletteViewItem{item: item, selected: i == cursor})
+	}
+
+	var rows []string
+	for _, section := range sectionOrder {
+		items := grouped[section]
+		if len(items) == 0 {
+			continue
+		}
+		if len(rows) > 0 {
 			rows = append(rows, "")
+		}
+		rows = append(rows, p.renderSection(section, innerW))
+		for _, entry := range items {
+			rows = append(rows, p.renderItem(entry.item, entry.selected, innerW))
 		}
 	}
 	if len(rows) == 0 {
 		rows = append(rows, p.styles.BrowserItem.Render("  no matches"))
 	}
 
-	hint := p.styles.Footer.Render("  ↑↓ navigate  enter confirm  esc close")
-	parts := []string{title, filterLine, sep, ""}
+	hint := p.styles.Footer.Render("  ↑↓ navigate  enter confirm  esc close  /skill in chat runs a skill")
+	parts := []string{title, filterLine, sep, "", p.styles.MsgTimestamp.Render("  slash commands are reserved for skills"), ""}
 	parts = append(parts, rows...)
 	parts = append(parts, "", sep, hint)
 	content := strings.Join(parts, "\n")
 	return p.styles.BrowserBorder.Width(w).Render(content)
+}
+
+type paletteViewItem struct {
+	item     PaletteItem
+	selected bool
+}
+
+func (p *CommandPalette) renderSection(section string, innerW int) string {
+	return p.styles.MsgTimestamp.Width(innerW).Render("  " + strings.ToUpper(section))
 }
 
 func (p *CommandPalette) renderItem(item PaletteItem, selected bool, innerW int) string {

@@ -164,3 +164,18 @@ func TestModelViewChatIncludesStatusLine(t *testing.T) {
 		t.Fatalf("expected chat view to include busy status line, got %q", view)
 	}
 }
+
+func TestModelSlashKeyFallsThroughToInput(t *testing.T) {
+	m := New(mockWorkspace{}, context.Background())
+	m.state = stateChat
+	consumed, cmd := m.handleKey(tea.KeyPressMsg{Text: "/"})
+	if consumed {
+		t.Fatalf("expected slash to fall through to the textarea for skill input")
+	}
+	if cmd != nil {
+		t.Fatalf("expected slash key handling not to emit a command")
+	}
+	if got := m.state; got != stateChat {
+		t.Fatalf("expected slash to keep chat state, got %v", got)
+	}
+}
