@@ -1268,13 +1268,16 @@ func (m Model) inputView() string {
 	}
 
 	box := m.styles.InputBorder.Width(max(12, contentW-2)).Render(inner)
+	stackW := lipgloss.Width(box)
 	if m.skillCompletions.IsOpen() {
 		popup := m.skillCompletions.View(max(24, contentW-4))
-		return common.CenterHorizontally(popup+"\n"+box, m.width)
+		stack := lipgloss.NewStyle().Width(stackW).Render(popup) + "\n" + box
+		return common.CenterHorizontally(stack, m.width)
 	}
 	if m.completions.IsOpen() {
 		popup := m.completions.View(max(20, contentW-4))
-		return common.CenterHorizontally(popup+"\n"+box, m.width)
+		stack := lipgloss.NewStyle().Width(stackW).Render(popup) + "\n" + box
+		return common.CenterHorizontally(stack, m.width)
 	}
 	return common.CenterHorizontally(box, m.width)
 }
