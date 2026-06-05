@@ -6,6 +6,9 @@ package app
 import (
 	"context"
 	"fmt"
+	"os"
+	"os/exec"
+	"runtime"
 	"strconv"
 	"strings"
 	"time"
@@ -1175,9 +1178,10 @@ func (m Model) prevChatState() uiState {
 
 // copyToClipboard copies text using OSC 52 (tea.SetClipboard) and the native
 // clipboard (atotto/clipboard), then shows a transient notice in the footer.
-// This mirrors crush's CopyToClipboard approach for maximum terminal compat.
+// This mirrors crush's CopyToClipboard approach, but avoids claiming success
+// when the local session has no actual clipboard backend.
 func (m *Model) copyToClipboard(text, notice string) tea.Cmd {
-	m.copyNotice = notice
+	m.copyNotice = copyNoticeForCapability(notice)
 	return tea.Sequence(
 		tea.SetClipboard(text),
 		func() tea.Msg {
@@ -1188,6 +1192,39 @@ func (m *Model) copyToClipboard(text, notice string) tea.Cmd {
 			return clearCopyNoticeMsg{}
 		}),
 	)
+}
+
+func copyNoticeForCapability(success string) string {
+	return clipboardNotice(success, nativeClipboardLikelyAvailable(), terminalClipboardLikelyAvailable())
+}
+
+func clipboardNotice(success string, nativeAvailable, terminalAvailable bool) string {
+	switch {
+	case nativeAvailable:
+		return success
+	case terminalAvailable:
+		return success + " (terminal clipboard requested)"
+	default:
+		return "Clipboard unavailable: install wl-clipboard or xclip"
+	}
+}
+
+func nativeClipboardLikelyAvailable() bool {
+	switch runtime.GOOS {
+	case "windows", "darwin":
+		return true
+	}
+	for _, name := range []string{"wl-copy", "xclip", "xsel", "pbcopy", "clip.exe", "powershell.exe"} {
+		if _, err := exec.LookPath(name); err == nil {
+			return true
+		}
+	}
+	return false
+}
+
+func terminalClipboardLikelyAvailable() bool {
+	term := strings.TrimSpace(os.Getenv("TERM"))
+	return term != "" && term != "dumb"
 }
 
 // ─── Workspace commands ───────────────────────────────────────────────────────

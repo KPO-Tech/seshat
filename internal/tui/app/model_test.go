@@ -199,8 +199,8 @@ func TestModelCtrlShiftCCopiesActiveSelection(t *testing.T) {
 	if cmd == nil {
 		t.Fatalf("expected ctrl+shift+c to return a clipboard command")
 	}
-	if m.copyNotice != "Selection copied" {
-		t.Fatalf("expected selection copy notice, got %q", m.copyNotice)
+	if m.copyNotice == "" {
+		t.Fatalf("expected a copy notice")
 	}
 }
 
@@ -221,7 +221,19 @@ func TestModelRightClickCopiesActiveSelection(t *testing.T) {
 	if cmd == nil {
 		t.Fatalf("expected right click to return a clipboard command")
 	}
-	if m.copyNotice != "Selection copied" {
-		t.Fatalf("expected selection copy notice, got %q", m.copyNotice)
+	if m.copyNotice == "" {
+		t.Fatalf("expected a copy notice")
+	}
+}
+
+func TestClipboardNoticeReflectsCapabilities(t *testing.T) {
+	if got := clipboardNotice("Selection copied", true, false); got != "Selection copied" {
+		t.Fatalf("expected native clipboard success notice, got %q", got)
+	}
+	if got := clipboardNotice("Selection copied", false, true); got != "Selection copied (terminal clipboard requested)" {
+		t.Fatalf("expected terminal clipboard fallback notice, got %q", got)
+	}
+	if got := clipboardNotice("Selection copied", false, false); got != "Clipboard unavailable: install wl-clipboard or xclip" {
+		t.Fatalf("expected unavailable notice, got %q", got)
 	}
 }
