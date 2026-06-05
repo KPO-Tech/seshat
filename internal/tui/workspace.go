@@ -25,6 +25,7 @@ type ToolProgressMsg struct {
 	ToolName  string
 	Status    string // "pending" | "running" | "completed" | "failed"
 	Label     string // human-readable status label
+	Metadata  map[string]any
 	SessionID string
 }
 

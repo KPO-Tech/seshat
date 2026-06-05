@@ -1,6 +1,7 @@
-package model
+package components
 
 import (
+	"github.com/EngineerProjects/nexus-engine/internal/tui/common"
 	"os"
 	"path/filepath"
 	"strings"
@@ -10,8 +11,8 @@ import (
 
 // fileCompletions is the @-triggered file picker popup shown above the input.
 // When the user types @ the popup opens; typing more chars filters the list.
-type fileCompletions struct {
-	styles   Styles
+type FileCompletions struct {
+	styles   common.Styles
 	workDir  string
 	items    []string // full relative paths from workDir
 	filtered []string
@@ -21,14 +22,14 @@ type fileCompletions struct {
 	width    int
 }
 
-func newFileCompletions(styles Styles, workDir string) *fileCompletions {
-	return &fileCompletions{
+func NewFileCompletions(styles common.Styles, workDir string) *FileCompletions {
+	return &FileCompletions{
 		styles:  styles,
 		workDir: workDir,
 	}
 }
 
-func (c *fileCompletions) Open(workDir string) {
+func (c *FileCompletions) Open(workDir string) {
 	c.workDir = workDir
 	c.query = ""
 	c.cursor = 0
@@ -36,21 +37,21 @@ func (c *fileCompletions) Open(workDir string) {
 	c.load()
 }
 
-func (c *fileCompletions) Close() {
+func (c *FileCompletions) Close() {
 	c.open = false
 	c.query = ""
 	c.cursor = 0
 }
 
-func (c *fileCompletions) IsOpen() bool { return c.open }
+func (c *FileCompletions) IsOpen() bool { return c.open }
 
-func (c *fileCompletions) TypeChar(ch string) {
+func (c *FileCompletions) TypeChar(ch string) {
 	c.query += ch
 	c.cursor = 0
 	c.filter()
 }
 
-func (c *fileCompletions) Backspace() {
+func (c *FileCompletions) Backspace() {
 	if len(c.query) > 0 {
 		c.query = c.query[:len(c.query)-1]
 		c.cursor = 0
@@ -61,19 +62,19 @@ func (c *fileCompletions) Backspace() {
 	}
 }
 
-func (c *fileCompletions) Up() {
+func (c *FileCompletions) Up() {
 	if c.cursor > 0 {
 		c.cursor--
 	}
 }
-func (c *fileCompletions) Down() {
+func (c *FileCompletions) Down() {
 	if c.cursor < len(c.filtered)-1 {
 		c.cursor++
 	}
 }
 
 // Selected returns the currently highlighted item, or "".
-func (c *fileCompletions) Selected() string {
+func (c *FileCompletions) Selected() string {
 	if c.cursor >= 0 && c.cursor < len(c.filtered) {
 		return c.filtered[c.cursor]
 	}
@@ -81,17 +82,17 @@ func (c *fileCompletions) Selected() string {
 }
 
 // Query returns the current filter text (what was typed after @).
-func (c *fileCompletions) Query() string { return c.query }
+func (c *FileCompletions) Query() string { return c.query }
 
-func (c *fileCompletions) SetSize(width int) { c.width = width }
+func (c *FileCompletions) SetSize(width int) { c.width = width }
 
-func (c *fileCompletions) load() {
+func (c *FileCompletions) load() {
 	c.items = c.items[:0]
 	c.walkDir(c.workDir, "", 0)
 	c.filter()
 }
 
-func (c *fileCompletions) walkDir(base, rel string, depth int) {
+func (c *FileCompletions) walkDir(base, rel string, depth int) {
 	if depth > 3 {
 		return
 	}
@@ -118,7 +119,7 @@ func (c *fileCompletions) walkDir(base, rel string, depth int) {
 	}
 }
 
-func (c *fileCompletions) filter() {
+func (c *FileCompletions) filter() {
 	c.filtered = c.filtered[:0]
 	if c.query == "" {
 		// Show recent/common files first
@@ -156,7 +157,7 @@ func (c *fileCompletions) filter() {
 }
 
 // View renders the completions popup (rendered as a string, placed above the input).
-func (c *fileCompletions) View(inputWidth int) string {
+func (c *FileCompletions) View(inputWidth int) string {
 	if !c.open {
 		return ""
 	}
@@ -202,7 +203,7 @@ func (c *fileCompletions) View(inputWidth int) string {
 	content := title + "\n" + sep + "\n" + strings.Join(rows, "\n")
 	return lipgloss.NewStyle().
 		Border(lipgloss.RoundedBorder()).
-		BorderForeground(colorPrimary).
+		BorderForeground(common.ColorPrimary).
 		PaddingLeft(1).PaddingRight(1).
 		Width(w).
 		Render(content)

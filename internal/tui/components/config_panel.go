@@ -1,24 +1,23 @@
-package model
+package components
 
 import (
 	"strings"
 
 	"charm.land/lipgloss/v2"
 	"github.com/EngineerProjects/nexus-engine/internal/tui"
+	"github.com/EngineerProjects/nexus-engine/internal/tui/common"
 )
 
 // configPanel is the provider configuration overlay (ctrl+, or via commands palette).
 // It has two modes:
 //   - list mode: shows all providers with their API key status
 //   - edit mode: shows fields for a selected provider with text inputs
-type configPanel struct {
-	styles Styles
+type ConfigPanel struct {
+	styles common.Styles
 
 	// ── list mode ──────────────────────────────────────────────────────────
 	providers []tui.ProviderStatus
-	filtered  []tui.ProviderStatus
-	cursor    int
-	filter    string
+	list      common.ListState[tui.ProviderStatus]
 
 	// ── edit mode ──────────────────────────────────────────────────────────
 	editing      bool
@@ -37,76 +36,54 @@ type cfgFieldInput struct {
 	draft string // what the user is currently typing
 }
 
-func newConfigPanel(styles Styles) *configPanel {
-	return &configPanel{styles: styles}
+func NewConfigPanel(styles common.Styles) *ConfigPanel {
+	return &ConfigPanel{
+		styles: styles,
+		list: common.NewListState(func(pv tui.ProviderStatus, needle string) bool {
+			return strings.Contains(strings.ToLower(pv.DisplayName), needle) ||
+				strings.Contains(strings.ToLower(pv.Description), needle)
+		}),
+	}
 }
 
-func (p *configPanel) SetSize(w, h int) { p.width = w; p.height = h }
+func (p *ConfigPanel) SetSize(w, h int) { p.width = w; p.height = h }
 
 // SetProviders refreshes the provider list.
-func (p *configPanel) SetProviders(providers []tui.ProviderStatus) {
+func (p *ConfigPanel) SetProviders(providers []tui.ProviderStatus) {
 	p.providers = providers
-	p.cursor = 0
-	p.applyFilter()
+	p.list.SetItems(providers)
 }
 
-func (p *configPanel) applyFilter() {
-	if p.filter == "" {
-		p.filtered = make([]tui.ProviderStatus, len(p.providers))
-		copy(p.filtered, p.providers)
-		return
-	}
-	needle := strings.ToLower(p.filter)
-	p.filtered = p.filtered[:0]
-	for _, pv := range p.providers {
-		if strings.Contains(strings.ToLower(pv.DisplayName), needle) ||
-			strings.Contains(strings.ToLower(pv.Description), needle) {
-			p.filtered = append(p.filtered, pv)
-		}
-	}
-	if p.cursor >= len(p.filtered) {
-		p.cursor = max(0, len(p.filtered)-1)
-	}
-}
+func (p *ConfigPanel) TypeFilter(ch string) { p.list.TypeFilter(ch) }
+func (p *ConfigPanel) DeleteFilter()        { p.list.DeleteFilter() }
 
-func (p *configPanel) TypeFilter(ch string) { p.filter += ch; p.applyFilter() }
-func (p *configPanel) DeleteFilter() {
-	if len(p.filter) > 0 {
-		p.filter = p.filter[:len(p.filter)-1]
-		p.applyFilter()
-	}
-}
-
-func (p *configPanel) Up() {
+func (p *ConfigPanel) Up() {
 	if p.editing {
 		if p.fieldCursor > 0 {
 			p.fieldCursor--
 		}
-	} else {
-		if p.cursor > 0 {
-			p.cursor--
-		}
+		return
 	}
+	p.list.Up()
 }
 
-func (p *configPanel) Down() {
+func (p *ConfigPanel) Down() {
 	if p.editing {
 		if p.fieldCursor < len(p.inputs)-1 {
 			p.fieldCursor++
 		}
-	} else {
-		if p.cursor < len(p.filtered)-1 {
-			p.cursor++
-		}
+		return
 	}
+	p.list.Down()
 }
 
 // EnterEdit switches to edit mode for the currently selected provider.
-func (p *configPanel) EnterEdit() {
-	if p.cursor < 0 || p.cursor >= len(p.filtered) {
+func (p *ConfigPanel) EnterEdit() {
+	selected, ok := p.list.Selected()
+	if !ok {
 		return
 	}
-	p.editProvider = p.filtered[p.cursor]
+	p.editProvider = selected
 	p.inputs = make([]cfgFieldInput, len(p.editProvider.Fields))
 	for i, f := range p.editProvider.Fields {
 		p.inputs[i] = cfgFieldInput{field: f, draft: ""}
@@ -118,14 +95,14 @@ func (p *configPanel) EnterEdit() {
 }
 
 // ExitEdit returns to list mode.
-func (p *configPanel) ExitEdit() {
+func (p *ConfigPanel) ExitEdit() {
 	p.editing = false
 	p.statusMsg = ""
 	// Reload the providers so the list reflects saved state.
 }
 
 // TypeChar appends a character to the active field draft.
-func (p *configPanel) TypeChar(ch string) {
+func (p *ConfigPanel) TypeChar(ch string) {
 	if !p.editing || p.fieldCursor >= len(p.inputs) {
 		return
 	}
@@ -134,7 +111,7 @@ func (p *configPanel) TypeChar(ch string) {
 }
 
 // DeleteChar removes the last character from the active field draft.
-func (p *configPanel) DeleteChar() {
+func (p *ConfigPanel) DeleteChar() {
 	if !p.editing || p.fieldCursor >= len(p.inputs) {
 		return
 	}
@@ -146,10 +123,10 @@ func (p *configPanel) DeleteChar() {
 }
 
 // ToggleReveal shows/hides the secret value in the active field.
-func (p *configPanel) ToggleReveal() { p.showSecret = !p.showSecret }
+func (p *ConfigPanel) ToggleReveal() { p.showSecret = !p.showSecret }
 
 // CurrentFieldDraft returns the current draft text and whether it's a secret field.
-func (p *configPanel) CurrentFieldDraft() (draft string, isSecret bool, fieldKey string) {
+func (p *ConfigPanel) CurrentFieldDraft() (draft string, isSecret bool, fieldKey string) {
 	if !p.editing || p.fieldCursor >= len(p.inputs) {
 		return "", false, ""
 	}
@@ -158,7 +135,7 @@ func (p *configPanel) CurrentFieldDraft() (draft string, isSecret bool, fieldKey
 }
 
 // SetSaved marks the current field as successfully saved and updates isSet.
-func (p *configPanel) SetSaved() {
+func (p *ConfigPanel) SetSaved() {
 	if p.fieldCursor < len(p.inputs) {
 		p.inputs[p.fieldCursor].field.IsSet = true
 		p.inputs[p.fieldCursor].draft = ""
@@ -172,16 +149,16 @@ func (p *configPanel) SetSaved() {
 		}
 	}
 	p.statusMsg = "✓ Saved"
-	p.applyFilter()
+	p.list.ResetItems(p.providers, true)
 }
 
-func (p *configPanel) SetError(msg string) { p.statusMsg = "✗ " + msg }
-func (p *configPanel) ClearStatus()        { p.statusMsg = "" }
+func (p *ConfigPanel) SetError(msg string) { p.statusMsg = "✗ " + msg }
+func (p *ConfigPanel) ClearStatus()        { p.statusMsg = "" }
 
 // ─── View ────────────────────────────────────────────────────────────────────
 
-func (p *configPanel) View() string {
-	w := clamp(p.width*4/5, 54, 90)
+func (p *ConfigPanel) View() string {
+	w := common.Clamp(p.width*4/5, 54, 90)
 	innerW := w - 4
 
 	if p.editing {
@@ -190,15 +167,17 @@ func (p *configPanel) View() string {
 	return p.viewList(w, innerW)
 }
 
-func (p *configPanel) viewList(w, innerW int) string {
+func (p *ConfigPanel) viewList(w, innerW int) string {
 	title := p.styles.BrowserTitle.Render("  Provider Configuration")
-	filterLine := p.styles.BrowserFilter.Width(innerW).Render("  / " + p.filter + "█")
+	filterLine := p.styles.BrowserFilter.Width(innerW).Render("  / " + p.list.Filter() + "█")
 	sep := p.styles.MsgTimestamp.Render(strings.Repeat("─", innerW))
 
+	filtered := p.list.FilteredItems()
+	cursor := p.list.Cursor()
 	var rows []string
-	for i, pv := range p.filtered {
+	for i, pv := range filtered {
 		statusStr := p.providerStatusTag(pv)
-		nameStr := lipgloss.NewStyle().Foreground(colorText).Render(pv.DisplayName)
+		nameStr := lipgloss.NewStyle().Foreground(common.ColorText).Render(pv.DisplayName)
 		descStr := ""
 		if pv.Description != "" {
 			maxDesc := innerW - lipgloss.Width(pv.DisplayName) - lipgloss.Width(statusStr) - 10
@@ -210,9 +189,9 @@ func (p *configPanel) viewList(w, innerW int) string {
 		}
 
 		var row string
-		if i == p.cursor {
-			indicator := lipgloss.NewStyle().Bold(true).Foreground(colorPrimary).Render("▶ ")
-			left := "  " + indicator + lipgloss.NewStyle().Bold(true).Foreground(colorPrimary).Render(pv.DisplayName)
+		if i == cursor {
+			indicator := lipgloss.NewStyle().Bold(true).Foreground(common.ColorPrimary).Render("▶ ")
+			left := "  " + indicator + lipgloss.NewStyle().Bold(true).Foreground(common.ColorPrimary).Render(pv.DisplayName)
 			if descStr != "" {
 				left += "  " + descStr
 			}
@@ -251,8 +230,8 @@ func (p *configPanel) viewList(w, innerW int) string {
 	return p.styles.BrowserBorder.Width(w).Render(strings.Join(parts, "\n"))
 }
 
-func (p *configPanel) viewEdit(w, innerW int) string {
-	providerTitle := lipgloss.NewStyle().Bold(true).Foreground(colorPrimary).Render(p.editProvider.DisplayName)
+func (p *ConfigPanel) viewEdit(w, innerW int) string {
+	providerTitle := lipgloss.NewStyle().Bold(true).Foreground(common.ColorPrimary).Render(p.editProvider.DisplayName)
 	title := p.styles.BrowserTitle.Render("  " + providerTitle)
 	sep := p.styles.MsgTimestamp.Render(strings.Repeat("─", innerW))
 
@@ -270,16 +249,16 @@ func (p *configPanel) viewEdit(w, innerW int) string {
 		// Label line
 		var labelStyle lipgloss.Style
 		if selected {
-			labelStyle = lipgloss.NewStyle().Bold(true).Foreground(colorPrimary)
+			labelStyle = lipgloss.NewStyle().Bold(true).Foreground(common.ColorPrimary)
 		} else {
-			labelStyle = lipgloss.NewStyle().Foreground(colorText)
+			labelStyle = lipgloss.NewStyle().Foreground(common.ColorText)
 		}
 		labelLine := "  " + labelStyle.Render(inp.field.Label)
 		if inp.field.EnvVar != "" {
 			labelLine += "  " + p.styles.MsgTimestamp.Render("("+inp.field.EnvVar+")")
 		}
 		if inp.field.IsSet && inp.draft == "" {
-			labelLine += "  " + lipgloss.NewStyle().Foreground(colorGreen).Render("✓ set")
+			labelLine += "  " + lipgloss.NewStyle().Foreground(common.ColorGreen).Render("✓ set")
 		}
 		rows = append(rows, labelLine)
 
@@ -294,8 +273,8 @@ func (p *configPanel) viewEdit(w, innerW int) string {
 			if display == "" && inp.field.IsSet {
 				display = p.styles.MsgTimestamp.Render("(keep existing — type to replace)")
 			}
-			cursor := lipgloss.NewStyle().Foreground(colorPrimary).Render("█")
-			valLine = "  ▶ " + lipgloss.NewStyle().Foreground(colorText).Render(display) + cursor
+			cursor := lipgloss.NewStyle().Foreground(common.ColorPrimary).Render("█")
+			valLine = "  ▶ " + lipgloss.NewStyle().Foreground(common.ColorText).Render(display) + cursor
 			if inp.field.Secret {
 				revealHint := "ctrl+v: reveal"
 				if p.showSecret {
@@ -311,7 +290,7 @@ func (p *configPanel) viewEdit(w, innerW int) string {
 				if inp.field.Secret {
 					display = strings.Repeat("•", len(inp.draft))
 				}
-				valLine = "    " + lipgloss.NewStyle().Foreground(colorMuted).Render(display)
+				valLine = "    " + lipgloss.NewStyle().Foreground(common.ColorMuted).Render(display)
 			} else {
 				valLine = "    " + p.styles.MsgTimestamp.Render("(not set)")
 			}
@@ -328,9 +307,9 @@ func (p *configPanel) viewEdit(w, innerW int) string {
 	if p.statusMsg != "" {
 		var st lipgloss.Style
 		if strings.HasPrefix(p.statusMsg, "✓") {
-			st = lipgloss.NewStyle().Foreground(colorGreen).Bold(true)
+			st = lipgloss.NewStyle().Foreground(common.ColorGreen).Bold(true)
 		} else {
-			st = lipgloss.NewStyle().Foreground(colorRed).Bold(true)
+			st = lipgloss.NewStyle().Foreground(common.ColorRed).Bold(true)
 		}
 		statusLine = "  " + st.Render(p.statusMsg)
 	}
@@ -347,7 +326,7 @@ func (p *configPanel) viewEdit(w, innerW int) string {
 	return p.styles.BrowserBorder.Width(w).Render(strings.Join(parts, "\n"))
 }
 
-func (p *configPanel) providerStatusTag(pv tui.ProviderStatus) string {
+func (p *ConfigPanel) providerStatusTag(pv tui.ProviderStatus) string {
 	if !pv.NeedsKey {
 		return p.styles.MsgTimestamp.Render("─ local")
 	}
@@ -363,24 +342,15 @@ func (p *configPanel) providerStatusTag(pv tui.ProviderStatus) string {
 	}
 	_ = anySet
 	if allSet {
-		return lipgloss.NewStyle().Foreground(colorGreen).Render("✓ configured")
+		return lipgloss.NewStyle().Foreground(common.ColorGreen).Render("✓ configured")
 	}
-	return lipgloss.NewStyle().Foreground(colorRed).Render("✗ not configured")
+	return lipgloss.NewStyle().Foreground(common.ColorRed).Render("✗ not configured")
 }
 
 // centred returns the panel horizontally centred (vertical centring via overlayOn).
-func (p *configPanel) centred() string {
-	box := p.View()
-	lines := strings.Split(box, "\n")
-	boxW := lipgloss.Width(lines[0])
-	left := max(0, (p.width-boxW)/2)
-	pad := strings.Repeat(" ", left)
-	var sb strings.Builder
-	for i, l := range lines {
-		if i > 0 {
-			sb.WriteString("\n")
-		}
-		sb.WriteString(pad + l)
-	}
-	return sb.String()
+func (p *ConfigPanel) Centered() string {
+	return common.CenterHorizontally(p.View(), p.width)
 }
+
+func (p *ConfigPanel) IsEditing() bool          { return p.editing }
+func (p *ConfigPanel) EditedProviderID() string { return p.editProvider.ID }

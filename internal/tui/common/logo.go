@@ -1,8 +1,8 @@
-package model
+package common
 
-// nexusLogo is a braille-art rendering of the Nexus logo (atom + circular arrows).
+// NexusLogo is a braille-art rendering of the Nexus logo (atom + circular arrows).
 // Generated from docs/images/nexus.png at 48×20 braille chars (2×4 dots per char).
-const nexusLogo = `` +
+const NexusLogo = `` +
 	`⠀⠀⠀⠀⠀⠀⠀⢀⢠⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⢠⢸⣸⡜⡜⡜⣜⢸⠠⠀⠀⠀⠀⠀` + "\n" +
 	`⠀⠀⠀⢀⣸⡞⡇⡇⡇⡇⡇⡗⡜⢼⢸⢠⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⣐⢼⢨⢠⣸⡞⠇⠁⠀⠀⠀⠀⠀⠂⣟⠨⠀⠀⠀⠀` + "\n" +
 	`⠀⠀⢀⣿⠁⠀⠀⠀⠀⢰⣸⡜⡜⢼⢺⣣⣷⣼⢸⡼⡜⡟⡇⡇⡇⡇⡟⡜⣜⣿⠫⡇⠁⠀⠀⠀⠀⠀⠀⠀⠀⠀⡒⣿⠀⠀⠀⠀` + "\n" +
