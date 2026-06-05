@@ -4,6 +4,7 @@ import (
 	"strings"
 
 	"charm.land/lipgloss/v2"
+	"github.com/charmbracelet/x/ansi"
 )
 
 // CenterHorizontally pads a rendered box so it is centered within the viewport.
@@ -28,8 +29,9 @@ func CenterHorizontally(box string, width int) string {
 	return sb.String()
 }
 
-// OverlayOn dims the backdrop and places the overlay vertically centered on it.
-// Empty overlay lines are treated as transparent rows.
+// OverlayOn places the overlay vertically centered on top of the backdrop.
+// Only the popup's visible width replaces the backdrop; text outside the popup
+// remains visible so overlays feel like true floating panels rather than modals.
 func OverlayOn(base, overlay string, width, height int) string {
 	if overlay == "" {
 		return base
@@ -44,21 +46,33 @@ func OverlayOn(base, overlay string, width, height int) string {
 	}
 
 	topOffset := max(0, (height-overlayH)/2)
-	dim := lipgloss.NewStyle().Faint(true)
 
-	for i, line := range baseLines {
+	for i := range baseLines {
+		baseLines[i] = padVisualWidth(baseLines[i], width)
 		overlayRow := i - topOffset
-		if overlayRow >= 0 && overlayRow < overlayH {
-			overlayLine := overlayLines[overlayRow]
-			if overlayLine == "" {
-				baseLines[i] = dim.Render(line)
-				continue
-			}
-			baseLines[i] = overlayLine
+		if overlayRow < 0 || overlayRow >= overlayH {
 			continue
 		}
-		baseLines[i] = dim.Render(line)
+		overlayLine := overlayLines[overlayRow]
+		trimmed := strings.TrimLeft(overlayLine, " ")
+		if ansi.StringWidth(trimmed) == 0 {
+			continue
+		}
+		leftPad := len(overlayLine) - len(trimmed)
+		leftWidth := leftPad
+		overlayWidth := ansi.StringWidth(trimmed)
+		before := ansi.Cut(baseLines[i], 0, leftWidth)
+		after := ansi.Cut(baseLines[i], leftWidth+overlayWidth, width)
+		baseLines[i] = before + trimmed + after
 	}
 
 	return strings.Join(baseLines, "\n")
+}
+
+func padVisualWidth(s string, width int) string {
+	w := ansi.StringWidth(s)
+	if w >= width {
+		return s
+	}
+	return s + strings.Repeat(" ", width-w)
 }
