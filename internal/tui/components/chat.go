@@ -1224,9 +1224,28 @@ func (c *Chat) selectedText() string {
 		if lineEnd < lineStart {
 			lineEnd = lineStart
 		}
-		parts = append(parts, string(runes[lineStart:lineEnd]))
+		parts = append(parts, normalizeCopiedLine(string(runes[lineStart:lineEnd])))
 	}
-	return strings.TrimRight(strings.Join(parts, "\n"), "\n")
+	joined := strings.Join(parts, "\n")
+	joined = strings.Trim(joined, "\n")
+	return joined
+}
+
+func normalizeCopiedLine(line string) string {
+	switch {
+	case strings.HasPrefix(line, "● > "):
+		return strings.TrimPrefix(line, "● > ")
+	case strings.HasPrefix(line, "● "):
+		return strings.TrimPrefix(line, "● ")
+	case line == "●":
+		return ""
+	case strings.HasPrefix(line, "─ "):
+		return strings.TrimPrefix(line, "─ ")
+	case strings.HasPrefix(line, "✗ "):
+		return strings.TrimPrefix(line, "✗ ")
+	default:
+		return line
+	}
 }
 
 func (c *Chat) selectionRange() (int, int, int, int) {

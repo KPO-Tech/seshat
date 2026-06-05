@@ -70,6 +70,12 @@ This note tracks the current UX progress of the Nexus CLI TUI and the next inter
   - double-click word selection
   - triple-click line selection
   - auto-scroll while dragging at viewport edges
+  - `ctrl+shift+c` copy shortcut
+  - right-click copy attempt when the terminal forwards the event
+  - accurate clipboard-availability notice when Linux clipboard backends are missing
+  - `ctrl+shift+c` copy shortcut
+  - right-click copy attempt when the terminal forwards the event
+  - accurate clipboard-availability notice when Linux clipboard backends are missing
 - Remaining work:
   - refine copy semantics for visual chat markers versus plain content where needed
 - Status: in progress

@@ -346,7 +346,7 @@ func TestChatMouseTripleClickSelectsLine(t *testing.T) {
 	if !c.HandleMouseDown(10, 0) {
 		t.Fatalf("expected third mouse down")
 	}
-	if got := c.selectedText(); got != "● > hello brave world" {
+	if got := c.selectedText(); got != "hello brave world" {
 		t.Fatalf("expected triple-click to select visual line, got %q", got)
 	}
 }
@@ -366,5 +366,18 @@ func TestChatMouseDragAutoScrollsAtBottom(t *testing.T) {
 	}
 	if c.viewport.YOffset() <= startOffset {
 		t.Fatalf("expected drag at bottom edge to autoscroll down")
+	}
+}
+
+func TestChatSelectedTextStripsAssistantMarkerLine(t *testing.T) {
+	c := NewChat(common.DefaultStyles(), 80, 20)
+	c.StartAssistantMessage()
+	c.AppendChunk("hello from assistant", false)
+	c.FinishAssistantMessage(0, 0, "")
+	c.HandleMouseDown(0, 0)
+	c.HandleMouseDrag(25, 1)
+	_ = c.HandleMouseUp(25, 1)
+	if got := c.selectedText(); strings.Contains(got, "●") {
+		t.Fatalf("expected copied assistant text to drop visual marker, got %q", got)
 	}
 }
