@@ -60,6 +60,8 @@
 
 > **Clipboard note (Linux):** selection copy works best when `wl-clipboard` (Wayland) or `xclip`/`xsel` (X11) is installed. Without a system clipboard backend, Nexus can request terminal clipboard access but cannot guarantee a real system copy.
 
+> **Compaction note:** transcript compaction is automatic today. A dedicated manual compact action is planned for the TUI once the runtime exposes a real manual-compaction hook.
+
 ---
 
 ## Three ways to use it

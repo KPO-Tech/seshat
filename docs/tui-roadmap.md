@@ -99,6 +99,15 @@ This note tracks the current UX progress of the Nexus CLI TUI and the next inter
   - session actions
 - Status: planned
 
+### 11b. Manual compaction trigger
+- A true manual compact action is still missing.
+- The runtime currently auto-compacts, but the TUI/SDK surface does not yet expose a dedicated manual compaction API.
+- Do not fake this with a normal prompt command; it should be a real engine operation once exposed.
+- Candidate UX later:
+  - Settings / Commands entry: `Compact Context`
+  - optional shortcut such as `ctrl+l` once the runtime hook exists
+- Status: planned
+
 ### 12. Context percentage and model capacity visibility
 - Once model context capacity is reliably available in TUI state, show clear session usage such as:
   - `12.4k total`

@@ -891,12 +891,6 @@ func (m *Model) executeCommand(id string) tea.Cmd {
 	case "provider-config":
 		m.state = stateProviderConfig
 		return m.loadProviderConfig()
-	case "clear":
-		m.chat.Clear()
-		if m.activeSession != "" {
-			m.chat.AddSystem("Chat cleared")
-		}
-		return nil
 	case "quit":
 		m.cancel()
 		return tea.Quit

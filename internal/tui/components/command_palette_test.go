@@ -28,7 +28,7 @@ func TestCommandPaletteOpenCommandsSection(t *testing.T) {
 		t.Fatalf("expected commands section to open")
 	}
 	view := p.View()
-	for _, want := range []string{"Settings / Commands", "run commands and workspace actions", "New Session", "Clear Chat", "Quit"} {
+	for _, want := range []string{"Settings / Commands", "run commands and workspace actions", "New Session", "Quit"} {
 		if !strings.Contains(view, want) {
 			t.Fatalf("expected commands section to contain %q, got %q", want, view)
 		}
