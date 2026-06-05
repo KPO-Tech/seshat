@@ -767,7 +767,7 @@ func (m Model) viewWelcome() string {
 	// Braille logo rendered in orange primary colour.
 	logoArt := lipgloss.NewStyle().Foreground(common.ColorPrimary).Render(common.NexusLogo)
 
-	wordmark := m.styles.Logo.Render("◉ NEXUS")
+	wordmark := m.styles.Logo.Render("NEXUS")
 	tagline := m.styles.HeaderModel.Render("One runtime. Any LLM. Any language.")
 
 	hint := strings.Join([]string{
