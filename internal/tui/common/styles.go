@@ -154,7 +154,7 @@ func DefaultStyles() Styles {
 		Bold(true)
 	s.Selection = lipgloss.NewStyle().
 		Foreground(ColorText).
-		Background(lipgloss.Color("#1D4ED8"))
+		Background(lipgloss.Color("#5A3418"))
 
 	// Input
 	s.InputBorder = lipgloss.NewStyle().
