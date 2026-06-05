@@ -6,6 +6,7 @@ import (
 	"path/filepath"
 	"strings"
 	"time"
+	"unicode"
 
 	"github.com/EngineerProjects/nexus-engine/internal/tui/common"
 	"github.com/muesli/reflow/wrap"
@@ -1026,7 +1027,13 @@ func (c *Chat) HandleMouseDown(x, y int) bool {
 	if line < 0 || line >= len(c.plainLines) {
 		return false
 	}
-	c.selection.begin(line, max(0, x))
+	clicks := c.selection.begin(line, max(0, x), time.Now())
+	switch clicks {
+	case 2:
+		c.selectWordAt(line, max(0, x))
+	case 3:
+		c.selectLineAt(line)
+	}
 	c.refresh()
 	return true
 }
@@ -1037,6 +1044,13 @@ func (c *Chat) HandleMouseDrag(x, y int) bool {
 	}
 	if len(c.plainLines) == 0 {
 		return false
+	}
+	if y < 0 {
+		c.ScrollUp(1)
+		y = 0
+	} else if y >= c.height {
+		c.ScrollDown(1)
+		y = max(0, c.height-1)
 	}
 	line := c.viewport.YOffset() + clampInt(y, 0, max(0, c.height-1))
 	line = clampInt(line, 0, len(c.plainLines)-1)
@@ -1133,6 +1147,47 @@ func (c *Chat) toolIndexAtLine(line int) int {
 		}
 	}
 	return -1
+}
+
+func (c *Chat) selectWordAt(line, col int) {
+	if line < 0 || line >= len(c.plainLines) {
+		return
+	}
+	runes := []rune(c.plainLines[line])
+	if len(runes) == 0 {
+		c.selection.setRange(line, 0, line, 0)
+		return
+	}
+	col = clampInt(col, 0, len(runes)-1)
+	isWord := func(r rune) bool {
+		return unicode.IsLetter(r) || unicode.IsDigit(r) || r == '_'
+	}
+	if !isWord(runes[col]) {
+		for col < len(runes) && !isWord(runes[col]) {
+			col++
+		}
+		if col >= len(runes) {
+			c.selection.setRange(line, 0, line, len(runes))
+			return
+		}
+	}
+	start := col
+	for start > 0 && isWord(runes[start-1]) {
+		start--
+	}
+	end := col
+	for end < len(runes) && isWord(runes[end]) {
+		end++
+	}
+	c.selection.setRange(line, start, line, end)
+}
+
+func (c *Chat) selectLineAt(line int) {
+	if line < 0 || line >= len(c.plainLines) {
+		return
+	}
+	runes := []rune(c.plainLines[line])
+	c.selection.setRange(line, 0, line, len(runes))
 }
 
 func (c *Chat) selectedText() string {

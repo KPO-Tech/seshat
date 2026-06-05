@@ -318,3 +318,53 @@ func TestApplySelectionStyleReappliesBackgroundAfterReset(t *testing.T) {
 		t.Fatalf("expected selection background to be reapplied after reset, got %q", got)
 	}
 }
+
+func TestChatMouseDoubleClickSelectsWord(t *testing.T) {
+	c := NewChat(common.DefaultStyles(), 80, 20)
+	c.AddUserMessage("hello brave world")
+	if !c.HandleMouseDown(10, 0) {
+		t.Fatalf("expected first mouse down")
+	}
+	_ = c.HandleMouseUp(10, 0)
+	if !c.HandleMouseDown(10, 0) {
+		t.Fatalf("expected second mouse down")
+	}
+	if got := c.selectedText(); got != "brave" {
+		t.Fatalf("expected double-click to select word, got %q", got)
+	}
+}
+
+func TestChatMouseTripleClickSelectsLine(t *testing.T) {
+	c := NewChat(common.DefaultStyles(), 80, 20)
+	c.AddUserMessage("hello brave world")
+	for i := 0; i < 2; i++ {
+		if !c.HandleMouseDown(10, 0) {
+			t.Fatalf("expected mouse down %d", i+1)
+		}
+		_ = c.HandleMouseUp(10, 0)
+	}
+	if !c.HandleMouseDown(10, 0) {
+		t.Fatalf("expected third mouse down")
+	}
+	if got := c.selectedText(); got != "● > hello brave world" {
+		t.Fatalf("expected triple-click to select visual line, got %q", got)
+	}
+}
+
+func TestChatMouseDragAutoScrollsAtBottom(t *testing.T) {
+	c := NewChat(common.DefaultStyles(), 40, 4)
+	for i := 0; i < 10; i++ {
+		c.AddUserMessage("line")
+	}
+	c.GotoTop()
+	startOffset := c.viewport.YOffset()
+	if !c.HandleMouseDown(0, c.height-1) {
+		t.Fatalf("expected mouse down at bottom visible line")
+	}
+	if !c.HandleMouseDrag(0, c.height+2) {
+		t.Fatalf("expected drag to continue")
+	}
+	if c.viewport.YOffset() <= startOffset {
+		t.Fatalf("expected drag at bottom edge to autoscroll down")
+	}
+}

@@ -417,8 +417,8 @@ func (m *Model) handleMouseMotion(msg tea.MouseMotionMsg) bool {
 		return false
 	}
 	layout := m.currentChatLayout()
-	relX := clampMouse(msg.X-layout.chatX, 0, max(0, layout.chatW-1))
-	relY := clampMouse(msg.Y-layout.chatY, 0, max(0, layout.chatH-1))
+	relX := msg.X - layout.chatX
+	relY := msg.Y - layout.chatY
 	return m.chat.HandleMouseDrag(relX, relY)
 }
 
@@ -427,8 +427,8 @@ func (m *Model) handleMouseRelease(msg tea.MouseReleaseMsg) tea.Cmd {
 		return nil
 	}
 	layout := m.currentChatLayout()
-	relX := clampMouse(msg.X-layout.chatX, 0, max(0, layout.chatW-1))
-	relY := clampMouse(msg.Y-layout.chatY, 0, max(0, layout.chatH-1))
+	relX := msg.X - layout.chatX
+	relY := msg.Y - layout.chatY
 	if text := m.chat.HandleMouseUp(relX, relY); text != "" {
 		return m.copyToClipboard(text, "Selection copied")
 	}
