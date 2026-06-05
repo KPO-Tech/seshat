@@ -12,7 +12,7 @@ func TestChatAddToolProgressSealsAssistantAndCreatesContinuation(t *testing.T) {
 	c.AddUserMessage("user prompt")
 	c.StartAssistantMessage()
 	c.AppendChunk("first answer", false)
-	c.AddToolProgress("tool-1", "bash", "running", "running")
+	c.AddToolProgress("tool-1", "bash", "running", "running", nil)
 	c.AppendChunk("second answer", false)
 	c.FinishAssistantMessage()
 
@@ -53,7 +53,7 @@ func TestChatAddToolProgressDropsEmptyAssistantPlaceholder(t *testing.T) {
 	c := NewChat(common.DefaultStyles(), 80, 20)
 
 	c.StartAssistantMessage()
-	c.AddToolProgress("tool-1", "bash", "running", "running")
+	c.AddToolProgress("tool-1", "bash", "running", "running", nil)
 
 	if got := len(c.messages); got != 1 {
 		t.Fatalf("expected 1 chat item after sealing empty assistant, got %d", got)
@@ -87,5 +87,36 @@ func TestThinkingBlockToggleChangesCollapsedState(t *testing.T) {
 	expanded := tb.render(common.DefaultStyles(), 50)
 	if strings.Contains(expanded, "lines hidden") {
 		t.Fatalf("expected expanded render to show all lines, got %q", expanded)
+	}
+}
+
+func TestChatToolSelectionAndDetails(t *testing.T) {
+	c := NewChat(common.DefaultStyles(), 80, 20)
+	c.AddToolProgress("tool-1", "read_file", "completed", "done", map[string]any{
+		"tool_input": map[string]any{"file_path": "/tmp/a.txt"},
+		"content":    "alpha\nbeta\ngamma",
+	})
+	c.AddToolProgress("tool-2", "bash", "completed", "done", map[string]any{
+		"tool_input": map[string]any{"command": "ls -la"},
+		"stdout":     "file-a\nfile-b",
+	})
+
+	if !c.HasSelectedTool() {
+		t.Fatalf("expected latest tool to be selected")
+	}
+	if !c.SelectPrevTool() {
+		t.Fatalf("expected previous tool selection to succeed")
+	}
+	if !c.ToggleSelectedToolExpanded() {
+		t.Fatalf("expected selected tool expansion to succeed")
+	}
+	if !c.ToggleDetails() {
+		t.Fatalf("expected selected tool details to toggle")
+	}
+	if !c.DetailsOpen() {
+		t.Fatalf("expected details pane to be open")
+	}
+	if got := c.DetailView(40, 20); !strings.Contains(got, "a.txt") {
+		t.Fatalf("expected detail view to mention selected file, got %q", got)
 	}
 }

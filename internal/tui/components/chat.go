@@ -1,34 +1,39 @@
 package components
 
 import (
+	"encoding/json"
 	"fmt"
-	"github.com/EngineerProjects/nexus-engine/internal/tui/common"
+	"path/filepath"
 	"strings"
 	"time"
+
+	"github.com/EngineerProjects/nexus-engine/internal/tui/common"
+	"github.com/muesli/reflow/wrap"
 
 	"charm.land/bubbles/v2/viewport"
 	"charm.land/glamour/v2"
 	"charm.land/lipgloss/v2"
-	"github.com/muesli/reflow/wrap"
 )
 
-// ─── Tool icons ───────────────────────────────────────────────────────────────
-
 var toolIcons = map[string]string{
-	"bash":             "❯",
-	"write_file":       "✏",
-	"edit_file":        "✏",
-	"apply_patch":      "✏",
-	"read_file":        "◻",
-	"list_directory":   "◫",
-	"glob":             "◈",
-	"grep":             "◈",
-	"web_fetch":        "◉",
-	"web_search":       "◉",
-	"job_output":       "◆",
-	"job_kill":         "⊗",
-	"write_stdin":      "❯",
-	"create_directory": "◫",
+	"bash":               "❯",
+	"write_file":         "✏",
+	"edit_file":          "✎",
+	"apply_patch":        "⟠",
+	"read_file":          "◻",
+	"list_directory":     "◫",
+	"glob":               "◈",
+	"grep":               "◈",
+	"web_fetch":          "◉",
+	"web_search":         "◉",
+	"job_output":         "◆",
+	"job_kill":           "⊗",
+	"write_stdin":        "❯",
+	"create_directory":   "◫",
+	"spawn_agent":        "◎",
+	"wait_agent":         "◎",
+	"send_agent_message": "◎",
+	"close_agent":        "◎",
 }
 
 func toolIconFor(name string) string {
@@ -38,20 +43,13 @@ func toolIconFor(name string) string {
 	return "◆"
 }
 
-// ─── Message item interface ───────────────────────────────────────────────────
-
-// msgItem is the renderable unit in the chat viewport.
 type msgItem interface {
 	render(c *Chat, width int) string
 	isFinished() bool
 	invalidate()
 }
 
-// ─── Thinking block ───────────────────────────────────────────────────────────
-
-const (
-	thinkTailLines = 10 // lines shown when collapsed
-)
+const thinkTailLines = 10
 
 type thinkingBlock struct {
 	content    string
@@ -129,7 +127,6 @@ func (tb *thinkingBlock) render(styles common.Styles, width int) string {
 
 	box := boxStyle.Render(inner.String())
 
-	// Footer: duration + toggle hint
 	var footParts []string
 	if tb.streaming {
 		footParts = append(footParts, styles.MsgTimestamp.Render("thinking…"))
@@ -155,37 +152,23 @@ func (tb *thinkingBlock) render(styles common.Styles, width int) string {
 	return result
 }
 
-// ─── assistantItem ────────────────────────────────────────────────────────────
-
 type assistantItem struct {
 	thinking   *thinkingBlock
 	content    string
 	streaming  bool
 	finishedAt time.Time
-
-	// showLabel is true only for the first assistantItem in a turn.
-	// Subsequent items (post-tool text) omit the "Nexus" header so the
-	// whole turn reads as one continuous agent response.
-	showLabel bool
+	showLabel  bool
 
 	contentCacheWidth  int
 	contentCacheRender string
 }
 
-func newAssistantItem() *assistantItem {
-	return &assistantItem{streaming: true, showLabel: true}
-}
-
-// newContinuationItem creates a follow-up assistant item within the same
-// turn (text that arrives after a tool call). No "Nexus" label — it
-// visually continues from the previous segment.
-func newContinuationItem() *assistantItem {
-	return &assistantItem{streaming: true, showLabel: false}
-}
+func newAssistantItem() *assistantItem    { return &assistantItem{streaming: true, showLabel: true} }
+func newContinuationItem() *assistantItem { return &assistantItem{streaming: true, showLabel: false} }
 
 func (a *assistantItem) appendThinking(text string) {
 	if text == "" {
-		return // never create a thinkingBlock for empty deltas
+		return
 	}
 	if a.thinking == nil {
 		a.thinking = newThinkingBlock()
@@ -195,7 +178,6 @@ func (a *assistantItem) appendThinking(text string) {
 }
 
 func (a *assistantItem) appendContent(text string) {
-	// Seal thinking block when content begins
 	if a.thinking != nil && a.thinking.streaming {
 		a.thinking.finish()
 	}
@@ -217,19 +199,14 @@ func (a *assistantItem) invalidate()      { a.contentCacheWidth = 0 }
 
 func (a *assistantItem) render(c *Chat, width int) string {
 	var sb strings.Builder
-
-	// Only the first item per turn shows the "Nexus" label.
 	if a.showLabel {
 		sb.WriteString(c.styles.AssistantLabel.Render("Nexus"))
 		sb.WriteString("\n")
 	}
-
-	// Only render thinking if it has actual content.
 	if a.thinking != nil && strings.TrimSpace(a.thinking.content) != "" {
 		sb.WriteString(a.thinking.render(c.styles, width))
 		sb.WriteString("\n")
 	}
-
 	if a.content != "" {
 		var rendered string
 		if !a.streaming && a.contentCacheWidth == width && a.contentCacheRender != "" {
@@ -250,11 +227,8 @@ func (a *assistantItem) render(c *Chat, width int) string {
 	} else if a.streaming {
 		sb.WriteString(c.styles.MsgTimestamp.Render("…"))
 	}
-
 	return sb.String()
 }
-
-// ─── userItem ────────────────────────────────────────────────────────────────
 
 type userItem struct {
 	content   string
@@ -279,13 +253,13 @@ func (u *userItem) render(c *Chat, width int) string {
 	return r
 }
 
-// ─── toolItem ────────────────────────────────────────────────────────────────
-
 type toolItem struct {
-	id         string // ToolUseID — unique per call
+	id         string
 	name       string
-	status     string // "pending" | "running" | "completed" | "failed" | "done" | "error"
+	status     string
 	label      string
+	metadata   map[string]any
+	expanded   bool
 	startedAt  time.Time
 	finishedAt time.Time
 
@@ -293,23 +267,69 @@ type toolItem struct {
 	cacheR string
 }
 
-func newToolItem(id, name, status, label string) *toolItem {
+func newToolItem(id, name, status, label string, metadata map[string]any) *toolItem {
 	return &toolItem{
 		id:        id,
 		name:      name,
 		status:    status,
 		label:     label,
+		metadata:  cloneMap(metadata),
 		startedAt: time.Now(),
 	}
 }
 
 func (t *toolItem) isDone() bool {
-	return t.status == "completed" || t.status == "failed" ||
-		t.status == "done" || t.status == "error"
+	return t.status == "completed" || t.status == "failed" || t.status == "done" || t.status == "error"
 }
 
 func (t *toolItem) isFinished() bool { return t.isDone() }
-func (t *toolItem) invalidate()      { t.cacheW = 0 }
+func (t *toolItem) invalidate()      { t.cacheW = 0; t.cacheR = "" }
+
+func (t *toolItem) render(c *Chat, width int) string {
+	return t.renderSelected(c, width, false)
+}
+
+func (t *toolItem) renderSelected(c *Chat, width int, selected bool) string {
+	if t.isDone() && !selected && !t.expanded && t.cacheW == width && t.cacheR != "" {
+		return t.cacheR
+	}
+
+	icon := t.renderIcon(c.styles)
+	nameStyle := t.renderNameStyle(c.styles)
+	summary := truncate(t.summaryText(), max(16, width-18))
+
+	parts := []string{"  " + icon, nameStyle.Render(toolDisplayName(t.name))}
+	if summary != "" {
+		parts = append(parts, c.styles.MsgTimestamp.Render(summary))
+	}
+	if dur := t.durationText(); dur != "" {
+		parts = append(parts, c.styles.MsgTimestamp.Render("("+dur+")"))
+	}
+
+	line := strings.Join(parts, " ")
+	if selected {
+		line = lipgloss.NewStyle().Foreground(common.ColorText).Background(lipgloss.Color("#1F2937")).Render(line)
+	}
+
+	if !t.expanded {
+		if t.isDone() && !selected {
+			t.cacheW = width
+			t.cacheR = line
+		}
+		return line
+	}
+
+	preview := t.inlinePreview(c, width)
+	if preview == "" {
+		preview = c.styles.MsgTimestamp.Render("No preview available.")
+	}
+	result := line + "\n" + indentBlock(preview, "    ")
+	if t.isDone() && !selected {
+		t.cacheW = width
+		t.cacheR = result
+	}
+	return result
+}
 
 func (t *toolItem) renderIcon(styles common.Styles) string {
 	switch {
@@ -322,86 +342,265 @@ func (t *toolItem) renderIcon(styles common.Styles) string {
 	}
 }
 
-func (t *toolItem) render(c *Chat, width int) string {
-	if t.isDone() && t.cacheW == width && t.cacheR != "" {
-		return t.cacheR
-	}
-
-	icon := t.renderIcon(c.styles)
-
-	var nameStyle lipgloss.Style
+func (t *toolItem) renderNameStyle(styles common.Styles) lipgloss.Style {
 	switch {
 	case t.status == "completed" || t.status == "done":
-		nameStyle = c.styles.ToolDone
+		return styles.ToolDone
 	case t.status == "failed" || t.status == "error":
-		nameStyle = c.styles.ToolError
+		return styles.ToolError
 	default:
-		nameStyle = c.styles.ToolProgress
+		return styles.ToolProgress
 	}
+}
 
-	var sb strings.Builder
-	sb.WriteString("  ")
-	sb.WriteString(icon)
-	sb.WriteString(" ")
-	sb.WriteString(nameStyle.Render(t.name))
+func (t *toolItem) durationText() string {
+	if !t.isDone() || t.finishedAt.IsZero() {
+		if ms, ok := intFromMap(t.metadata, "execution_duration_ms"); ok && ms > 0 {
+			return formatDuration(time.Duration(ms) * time.Millisecond)
+		}
+		return ""
+	}
+	return formatDuration(t.finishedAt.Sub(t.startedAt))
+}
 
-	// Label (truncated to fit)
+func (t *toolItem) toolInput() map[string]any {
+	return normalizeMap(t.metadata["tool_input"])
+}
+
+func (t *toolItem) summaryText() string {
+	input := t.toolInput()
+	switch t.name {
+	case "read_file":
+		path := prettyPath(stringFromMap(input, "file_path"))
+		if path == "" {
+			path = t.label
+		}
+		return path
+	case "write_file", "edit_file":
+		path := prettyPath(stringFromMap(input, "file_path"))
+		kind := stringFromMap(t.metadata, "type")
+		if kind != "" {
+			return path + " · " + kind
+		}
+		return path
+	case "apply_patch":
+		if content := stringFromMap(t.metadata, "content"); content != "" {
+			return firstLine(content)
+		}
+		if patch := stringFromMap(input, "patch"); patch != "" {
+			return firstLine(strings.TrimSpace(patch))
+		}
+	case "bash":
+		cmd := strings.TrimSpace(stringFromMap(input, "command"))
+		if cmd == "" {
+			cmd = strings.TrimSpace(stringFromMap(t.metadata, "description"))
+		}
+		return cmd
+	case "spawn_agent":
+		prompt := strings.TrimSpace(stringFromMap(input, "prompt"))
+		nickname := strings.TrimSpace(stringFromMap(input, "nickname"))
+		if nickname != "" {
+			return nickname + " · " + prompt
+		}
+		return prompt
+	case "wait_agent", "close_agent", "send_agent_message":
+		agentID := strings.TrimSpace(stringFromMap(input, "agent_id"))
+		if agentID != "" {
+			return agentID
+		}
+	}
 	if t.label != "" && t.label != t.status {
-		maxLabelW := width - 30
-		if maxLabelW < 10 {
-			maxLabelW = 10
-		}
-		short := truncate(t.label, maxLabelW)
-		sb.WriteString(c.styles.MsgTimestamp.Render("  " + short))
+		return strings.TrimSpace(t.label)
 	}
-
-	// Duration for finished tools
-	if t.isDone() && !t.finishedAt.IsZero() {
-		d := t.finishedAt.Sub(t.startedAt)
-		var durStr string
-		if d < time.Second {
-			durStr = fmt.Sprintf("%dms", d.Milliseconds())
-		} else {
-			durStr = fmt.Sprintf("%.1fs", d.Seconds())
-		}
-		sb.WriteString(c.styles.MsgTimestamp.Render("  (" + durStr + ")"))
+	if msg := strings.TrimSpace(stringFromMap(t.metadata, "content")); msg != "" {
+		return firstLine(msg)
 	}
-
-	r := sb.String()
-	if t.isDone() {
-		t.cacheW = width
-		t.cacheR = r
-	}
-	return r
+	return ""
 }
 
-// ─── systemItem ──────────────────────────────────────────────────────────────
-
-type systemItem struct {
-	content string
+func (t *toolItem) inlinePreview(c *Chat, width int) string {
+	bodyWidth := max(20, width-8)
+	switch t.name {
+	case "read_file":
+		input := t.toolInput()
+		path := prettyPath(stringFromMap(input, "file_path"))
+		content := t.resultContent()
+		return renderContentPanel(c.styles, path, content, bodyWidth, 14)
+	case "write_file", "edit_file":
+		path := prettyPath(stringFromMap(t.toolInput(), "file_path"))
+		if diff := t.diffPreview(); diff != "" {
+			return renderContentPanel(c.styles, path, diff, bodyWidth, 14)
+		}
+		return renderContentPanel(c.styles, path, t.resultContent(), bodyWidth, 14)
+	case "apply_patch":
+		if diff := stringFromMap(t.toolInput(), "patch"); diff != "" {
+			return renderContentPanel(c.styles, "patch", diff, bodyWidth, 14)
+		}
+		return renderContentPanel(c.styles, "patch", t.resultContent(), bodyWidth, 14)
+	case "bash":
+		return renderContentPanel(c.styles, "output", t.commandOutput(), bodyWidth, 12)
+	case "spawn_agent", "wait_agent", "close_agent", "send_agent_message":
+		return renderContentPanel(c.styles, "agent", t.agentDetails(), bodyWidth, 10)
+	default:
+		return renderContentPanel(c.styles, toolDisplayName(t.name), t.resultContent(), bodyWidth, 10)
+	}
 }
+
+func (t *toolItem) detailView(c *Chat, width, height int) string {
+	innerW := max(24, width-4)
+	sections := []string{
+		c.styles.AssistantLabel.Render(toolDisplayName(t.name)),
+		c.styles.MsgTimestamp.Render(strings.ToUpper(t.status)),
+	}
+	if summary := t.summaryText(); summary != "" {
+		sections = append(sections, wrap.String(summary, innerW))
+	}
+	if meta := t.metaSummary(); meta != "" {
+		sections = append(sections, meta)
+	}
+	if body := t.detailBody(c, innerW); body != "" {
+		sections = append(sections, body)
+	}
+	content := strings.Join(sections, "\n\n")
+	box := lipgloss.NewStyle().
+		Border(lipgloss.RoundedBorder()).
+		BorderForeground(common.ColorBorder).
+		Padding(0, 1).
+		Width(width).
+		MaxHeight(height).
+		Render(content)
+	return box
+}
+
+func (t *toolItem) metaSummary() string {
+	var lines []string
+	if dur := t.durationText(); dur != "" {
+		lines = append(lines, "duration: "+dur)
+	}
+	if code, ok := intFromMap(t.metadata, "exit_code"); ok {
+		lines = append(lines, fmt.Sprintf("exit code: %d", code))
+	}
+	if cwd := stringFromMap(t.metadata, "cwd"); cwd != "" {
+		lines = append(lines, "cwd: "+cwd)
+	}
+	if taskID := stringFromMap(t.metadata, "task_id"); taskID != "" {
+		lines = append(lines, "task: "+taskID)
+	}
+	if count, ok := intFromMap(t.metadata, "lines_added"); ok {
+		removed, _ := intFromMap(t.metadata, "lines_removed")
+		lines = append(lines, fmt.Sprintf("changes: +%d -%d", count, removed))
+	}
+	return strings.Join(lines, "\n")
+}
+
+func (t *toolItem) detailBody(c *Chat, width int) string {
+	switch t.name {
+	case "read_file":
+		return renderContentPanel(c.styles, prettyPath(stringFromMap(t.toolInput(), "file_path")), t.resultContent(), width, 200)
+	case "write_file", "edit_file":
+		if diff := t.diffPreview(); diff != "" {
+			return renderContentPanel(c.styles, prettyPath(stringFromMap(t.toolInput(), "file_path")), diff, width, 200)
+		}
+		return renderContentPanel(c.styles, prettyPath(stringFromMap(t.toolInput(), "file_path")), t.resultContent(), width, 200)
+	case "apply_patch":
+		body := t.resultContent()
+		if patch := stringFromMap(t.toolInput(), "patch"); patch != "" {
+			body = body + "\n\n" + patch
+		}
+		return renderContentPanel(c.styles, "patch", body, width, 220)
+	case "bash":
+		cmd := stringFromMap(t.toolInput(), "command")
+		body := t.commandOutput()
+		if cmd != "" {
+			body = "$ " + cmd + "\n\n" + body
+		}
+		return renderContentPanel(c.styles, "bash", body, width, 180)
+	case "spawn_agent", "wait_agent", "close_agent", "send_agent_message":
+		return renderContentPanel(c.styles, "agent", t.agentDetails(), width, 160)
+	default:
+		return renderContentPanel(c.styles, toolDisplayName(t.name), t.resultContent(), width, 140)
+	}
+}
+
+func (t *toolItem) resultContent() string {
+	if content := stringFromMap(t.metadata, "content"); content != "" {
+		return content
+	}
+	return ""
+}
+
+func (t *toolItem) diffPreview() string {
+	if patch := nestedString(t.metadata["git_diff"], "patch", "Patch"); patch != "" {
+		return patch
+	}
+	if structured := prettyJSON(t.metadata["structured_patch"]); structured != "" {
+		return structured
+	}
+	if original := stringFromMap(t.metadata, "original_file"); original != "" {
+		if content := stringFromMap(t.metadata, "content"); content != "" {
+			return "--- before\n" + original + "\n\n+++ after\n" + content
+		}
+	}
+	return ""
+}
+
+func (t *toolItem) commandOutput() string {
+	stdout := stringFromMap(t.metadata, "stdout")
+	stderr := stringFromMap(t.metadata, "stderr")
+	if stdout == "" && stderr == "" {
+		if content := t.resultContent(); content != "" {
+			return content
+		}
+		return t.label
+	}
+	if stdout != "" && stderr != "" {
+		return stdout + "\n\n[stderr]\n" + stderr
+	}
+	if stdout != "" {
+		return stdout
+	}
+	return stderr
+}
+
+func (t *toolItem) agentDetails() string {
+	input := t.toolInput()
+	var parts []string
+	if nickname := stringFromMap(input, "nickname"); nickname != "" {
+		parts = append(parts, "nickname: "+nickname)
+	}
+	if role := stringFromMap(input, "role"); role != "" {
+		parts = append(parts, "role: "+role)
+	}
+	if agentID := stringFromMap(input, "agent_id"); agentID != "" {
+		parts = append(parts, "agent: "+agentID)
+	}
+	if prompt := stringFromMap(input, "prompt"); prompt != "" {
+		parts = append(parts, "prompt:\n"+prompt)
+	}
+	if msg := stringFromMap(input, "message"); msg != "" {
+		parts = append(parts, "message:\n"+msg)
+	}
+	if content := t.resultContent(); content != "" {
+		parts = append(parts, content)
+	}
+	return strings.Join(parts, "\n\n")
+}
+
+type systemItem struct{ content string }
 
 func (s *systemItem) isFinished() bool { return true }
 func (s *systemItem) invalidate()      {}
-
 func (s *systemItem) render(c *Chat, _ int) string {
 	return c.styles.MsgTimestamp.Render("─ " + s.content)
 }
 
-// ─── errorItem ───────────────────────────────────────────────────────────────
-
-type errorItem struct {
-	content string
-}
+type errorItem struct{ content string }
 
 func (e *errorItem) isFinished() bool { return true }
 func (e *errorItem) invalidate()      {}
-
 func (e *errorItem) render(c *Chat, _ int) string {
 	return c.styles.ToolError.Render("✗ " + e.content)
 }
-
-// ─── chat ────────────────────────────────────────────────────────────────────
 
 type Chat struct {
 	styles   common.Styles
@@ -411,6 +610,9 @@ type Chat struct {
 	width    int
 	height   int
 	follow   bool
+
+	selectedTool int
+	detailOpen   bool
 }
 
 func NewChat(styles common.Styles, width, height int) *Chat {
@@ -421,12 +623,13 @@ func NewChat(styles common.Styles, width, height int) *Chat {
 		glamour.WithWordWrap(common.ClampInt(width-4, 20, width)),
 	)
 	return &Chat{
-		styles:   styles,
-		viewport: &vp,
-		renderer: r,
-		follow:   true,
-		width:    width,
-		height:   height,
+		styles:       styles,
+		viewport:     &vp,
+		renderer:     r,
+		follow:       true,
+		width:        width,
+		height:       height,
+		selectedTool: -1,
 	}
 }
 
@@ -447,13 +650,8 @@ func (c *Chat) SetSize(width, height int) {
 	c.refresh()
 }
 
-// ─── Public mutation API ──────────────────────────────────────────────────────
-
 func (c *Chat) AddUserMessage(text string) {
-	c.messages = append(c.messages, &userItem{
-		content:   text,
-		timestamp: time.Now(),
-	})
+	c.messages = append(c.messages, &userItem{content: text, timestamp: time.Now()})
 	c.refresh()
 }
 
@@ -464,7 +662,7 @@ func (c *Chat) StartAssistantMessage() {
 
 func (c *Chat) AppendChunk(text string, isThinking bool) {
 	if text == "" {
-		return // nothing to render; avoid creating empty items
+		return
 	}
 	for i := len(c.messages) - 1; i >= 0; i-- {
 		if a, ok := c.messages[i].(*assistantItem); ok && a.streaming {
@@ -477,9 +675,6 @@ func (c *Chat) AppendChunk(text string, isThinking bool) {
 			return
 		}
 	}
-	// No active streaming item — post-tool text within the same turn.
-	// Search backwards; if we see an assistantItem before hitting a userItem
-	// (or the start), this is a continuation — omit the "Nexus" label.
 	isContinuation := false
 	for i := len(c.messages) - 1; i >= 0; i-- {
 		if _, ok := c.messages[i].(*userItem); ok {
@@ -508,16 +703,15 @@ func (c *Chat) FinishAssistantMessage() {
 	}
 }
 
-// AddToolProgress adds or updates a tool call entry.
-// toolUseID is the unique per-call identifier; if empty, falls back to
-// name-based matching on the most recent undone tool with that name.
-func (c *Chat) AddToolProgress(toolUseID, toolName, status, label string) {
-	// Update existing tool item if found.
+func (c *Chat) AddToolProgress(toolUseID, toolName, status, label string, metadata map[string]any) {
 	if toolUseID != "" {
 		for i := len(c.messages) - 1; i >= 0; i-- {
 			if t, ok := c.messages[i].(*toolItem); ok && t.id == toolUseID {
 				t.status = status
 				t.label = label
+				if len(metadata) > 0 {
+					t.metadata = cloneMap(metadata)
+				}
 				if t.isDone() {
 					t.finishedAt = time.Now()
 				}
@@ -531,6 +725,9 @@ func (c *Chat) AddToolProgress(toolUseID, toolName, status, label string) {
 			if t, ok := c.messages[i].(*toolItem); ok && t.name == toolName && !t.isDone() {
 				t.status = status
 				t.label = label
+				if len(metadata) > 0 {
+					t.metadata = cloneMap(metadata)
+				}
 				if t.isDone() {
 					t.finishedAt = time.Now()
 				}
@@ -541,24 +738,18 @@ func (c *Chat) AddToolProgress(toolUseID, toolName, status, label string) {
 		}
 	}
 
-	// New tool: seal the current streaming assistant item so post-tool text
-	// appears in a fresh item after this tool entry (crush interleave pattern).
 	c.sealActiveAssistant()
-
-	c.messages = append(c.messages, newToolItem(toolUseID, toolName, status, label))
+	c.messages = append(c.messages, newToolItem(toolUseID, toolName, status, label, metadata))
+	c.selectedTool = len(c.messages) - 1
 	c.refresh()
 }
 
-// sealActiveAssistant closes the last streaming assistantItem so subsequent
-// ChunkMsgs create a new one. An empty item (no content, no thinking) is
-// removed rather than kept as a blank entry.
 func (c *Chat) sealActiveAssistant() {
 	for i := len(c.messages) - 1; i >= 0; i-- {
 		a, ok := c.messages[i].(*assistantItem)
 		if !ok || !a.streaming {
 			continue
 		}
-		// Drop placeholder if it has no visible content at all.
 		hasThinking := a.thinking != nil && strings.TrimSpace(a.thinking.content) != ""
 		if a.content == "" && !hasThinking {
 			c.messages = append(c.messages[:i], c.messages[i+1:]...)
@@ -581,11 +772,11 @@ func (c *Chat) AddSystem(text string) {
 
 func (c *Chat) Clear() {
 	c.messages = c.messages[:0]
+	c.selectedTool = -1
+	c.detailOpen = false
 	c.refresh()
 }
 
-// GetLastAssistantText returns the plain-text content of the most recent
-// completed assistant turn (all segments concatenated, no markdown symbols).
 func (c *Chat) GetLastAssistantText() string {
 	var parts []string
 	inCurrentTurn := false
@@ -593,7 +784,6 @@ func (c *Chat) GetLastAssistantText() string {
 		switch m := c.messages[i].(type) {
 		case *userItem:
 			if inCurrentTurn {
-				// Reached the user message that started this turn — stop.
 				goto done
 			}
 		case *assistantItem:
@@ -607,7 +797,6 @@ done:
 	return strings.Join(parts, "\n\n")
 }
 
-// GetLastUserText returns the text of the most recent user message.
 func (c *Chat) GetLastUserText() string {
 	for i := len(c.messages) - 1; i >= 0; i-- {
 		if u, ok := c.messages[i].(*userItem); ok {
@@ -617,7 +806,6 @@ func (c *Chat) GetLastUserText() string {
 	return ""
 }
 
-// ToggleThinking toggles the collapse state of the most recent thinking block.
 func (c *Chat) ToggleThinking() {
 	for i := len(c.messages) - 1; i >= 0; i-- {
 		if a, ok := c.messages[i].(*assistantItem); ok {
@@ -630,7 +818,6 @@ func (c *Chat) ToggleThinking() {
 	}
 }
 
-// HasThinking reports whether the most recent assistant item has a thinking block.
 func (c *Chat) HasThinking() bool {
 	for i := len(c.messages) - 1; i >= 0; i-- {
 		if a, ok := c.messages[i].(*assistantItem); ok {
@@ -640,7 +827,91 @@ func (c *Chat) HasThinking() bool {
 	return false
 }
 
-// ─── Scroll ──────────────────────────────────────────────────────────────────
+func (c *Chat) HasTools() bool {
+	for _, item := range c.messages {
+		if _, ok := item.(*toolItem); ok {
+			return true
+		}
+	}
+	return false
+}
+
+func (c *Chat) HasSelectedTool() bool {
+	return c.selectedToolIndex() >= 0
+}
+
+func (c *Chat) DetailsOpen() bool {
+	return c.detailOpen && c.HasSelectedTool()
+}
+
+func (c *Chat) ToggleSelectedToolExpanded() bool {
+	if tool := c.selectedToolItem(); tool != nil {
+		tool.expanded = !tool.expanded
+		tool.invalidate()
+		c.refresh()
+		return true
+	}
+	return false
+}
+
+func (c *Chat) ToggleDetails() bool {
+	if !c.HasSelectedTool() {
+		return false
+	}
+	c.detailOpen = !c.detailOpen
+	c.refresh()
+	return true
+}
+
+func (c *Chat) CloseDetails() {
+	if c.detailOpen {
+		c.detailOpen = false
+		c.refresh()
+	}
+}
+
+func (c *Chat) SelectNextTool() bool {
+	for i, start := range c.toolIndices() {
+		if start > c.selectedToolIndex() {
+			c.selectedTool = start
+			c.refresh()
+			_ = i
+			return true
+		}
+	}
+	indices := c.toolIndices()
+	if len(indices) > 0 && c.selectedToolIndex() < 0 {
+		c.selectedTool = indices[0]
+		c.refresh()
+		return true
+	}
+	return false
+}
+
+func (c *Chat) SelectPrevTool() bool {
+	indices := c.toolIndices()
+	for i := len(indices) - 1; i >= 0; i-- {
+		if indices[i] < c.selectedToolIndex() {
+			c.selectedTool = indices[i]
+			c.refresh()
+			return true
+		}
+	}
+	if len(indices) > 0 && c.selectedToolIndex() < 0 {
+		c.selectedTool = indices[len(indices)-1]
+		c.refresh()
+		return true
+	}
+	return false
+}
+
+func (c *Chat) DetailView(width, height int) string {
+	tool := c.selectedToolItem()
+	if tool == nil {
+		return ""
+	}
+	return tool.detailView(c, width, height)
+}
 
 func (c *Chat) ScrollUp(n int)   { c.follow = false; c.viewport.ScrollUp(n) }
 func (c *Chat) ScrollDown(n int) { c.viewport.ScrollDown(n); c.follow = c.viewport.AtBottom() }
@@ -648,26 +919,57 @@ func (c *Chat) PageUp()          { c.follow = false; c.viewport.HalfPageUp() }
 func (c *Chat) PageDown()        { c.viewport.HalfPageDown(); c.follow = c.viewport.AtBottom() }
 func (c *Chat) GotoTop()         { c.follow = false; c.viewport.GotoTop() }
 func (c *Chat) GotoBottom()      { c.follow = true; c.viewport.GotoBottom() }
+func (c *Chat) View() string     { return c.viewport.View() }
 
-func (c *Chat) View() string { return c.viewport.View() }
+func (c *Chat) selectedToolIndex() int {
+	if c.selectedTool < 0 || c.selectedTool >= len(c.messages) {
+		return -1
+	}
+	if _, ok := c.messages[c.selectedTool].(*toolItem); !ok {
+		return -1
+	}
+	return c.selectedTool
+}
 
-// ─── Internal ────────────────────────────────────────────────────────────────
+func (c *Chat) selectedToolItem() *toolItem {
+	if idx := c.selectedToolIndex(); idx >= 0 {
+		if tool, ok := c.messages[idx].(*toolItem); ok {
+			return tool
+		}
+	}
+	return nil
+}
+
+func (c *Chat) toolIndices() []int {
+	indices := make([]int, 0)
+	for i, item := range c.messages {
+		if _, ok := item.(*toolItem); ok {
+			indices = append(indices, i)
+		}
+	}
+	return indices
+}
 
 func (c *Chat) refresh() {
 	var sb strings.Builder
 	lastWasTool := false
 	wroteAny := false
-	for _, item := range c.messages {
-		rendered := item.render(c, c.width)
+	for i, item := range c.messages {
+		var rendered string
+		if tool, ok := item.(*toolItem); ok {
+			rendered = tool.renderSelected(c, c.width, i == c.selectedToolIndex())
+		} else {
+			rendered = item.render(c, c.width)
+		}
 		if rendered == "" {
-			continue // skip invisible items; no separator either
+			continue
 		}
 		if wroteAny {
 			_, currIsTool := item.(*toolItem)
 			if lastWasTool && currIsTool {
-				sb.WriteString("\n") // consecutive tools: no blank line
+				sb.WriteString("\n")
 			} else {
-				sb.WriteString("\n\n") // all other boundaries: blank line
+				sb.WriteString("\n\n")
 			}
 		}
 		sb.WriteString(rendered)
@@ -680,17 +982,192 @@ func (c *Chat) refresh() {
 	}
 }
 
-// ─── Helpers ─────────────────────────────────────────────────────────────────
-
 func headerLine(style lipgloss.Style, width int) string {
 	return style.Render(strings.Repeat("─", max(0, width)))
 }
 
 func truncate(s string, maxLen int) string {
-	if maxLen <= 0 || len(s) <= maxLen {
+	if maxLen <= 0 || len([]rune(s)) <= maxLen {
 		return s
 	}
-	return s[:maxLen-1] + "…"
+	r := []rune(s)
+	return string(r[:maxLen-1]) + "…"
 }
 
 func (c *Chat) Size() (int, int) { return c.width, c.height }
+
+func renderContentPanel(styles common.Styles, title, body string, width, maxLines int) string {
+	if strings.TrimSpace(body) == "" {
+		return styles.MsgTimestamp.Render("No output")
+	}
+	clean := common.Escape(strings.ReplaceAll(body, "\r\n", "\n"))
+	lines := strings.Split(clean, "\n")
+	hidden := 0
+	if maxLines > 0 && len(lines) > maxLines {
+		hidden = len(lines) - maxLines
+		lines = lines[:maxLines]
+	}
+	wrapped := make([]string, 0, len(lines)+1)
+	innerW := max(16, width-4)
+	for _, line := range lines {
+		wrapped = append(wrapped, wrap.String(line, innerW))
+	}
+	if hidden > 0 {
+		wrapped = append(wrapped, styles.MsgTimestamp.Render(fmt.Sprintf("… %d more lines", hidden)))
+	}
+	panelBody := strings.Join(wrapped, "\n")
+	if title != "" {
+		panelBody = styles.Key.Render(title) + "\n" + panelBody
+	}
+	return lipgloss.NewStyle().
+		Border(lipgloss.RoundedBorder()).
+		BorderForeground(common.ColorBorder).
+		Padding(0, 1).
+		Width(width).
+		Render(panelBody)
+}
+
+func cloneMap(in map[string]any) map[string]any {
+	if len(in) == 0 {
+		return nil
+	}
+	out := make(map[string]any, len(in))
+	for k, v := range in {
+		out[k] = v
+	}
+	return out
+}
+
+func normalizeMap(v any) map[string]any {
+	switch m := v.(type) {
+	case map[string]any:
+		return m
+	case nil:
+		return nil
+	default:
+		b, err := json.Marshal(v)
+		if err != nil {
+			return nil
+		}
+		var out map[string]any
+		if err := json.Unmarshal(b, &out); err != nil {
+			return nil
+		}
+		return out
+	}
+}
+
+func nestedString(v any, keys ...string) string {
+	m := normalizeMap(v)
+	for _, key := range keys {
+		if s, ok := stringAny(m[key]); ok {
+			return s
+		}
+	}
+	return ""
+}
+
+func stringFromMap(m map[string]any, key string) string {
+	if m == nil {
+		return ""
+	}
+	s, _ := stringAny(m[key])
+	return s
+}
+
+func intFromMap(m map[string]any, key string) (int, bool) {
+	if m == nil {
+		return 0, false
+	}
+	switch v := m[key].(type) {
+	case int:
+		return v, true
+	case int32:
+		return int(v), true
+	case int64:
+		return int(v), true
+	case float64:
+		return int(v), true
+	case float32:
+		return int(v), true
+	case json.Number:
+		i, err := v.Int64()
+		return int(i), err == nil
+	default:
+		return 0, false
+	}
+}
+
+func stringAny(v any) (string, bool) {
+	switch x := v.(type) {
+	case string:
+		return x, true
+	case fmt.Stringer:
+		return x.String(), true
+	case json.Number:
+		return x.String(), true
+	case nil:
+		return "", false
+	default:
+		return fmt.Sprintf("%v", x), true
+	}
+}
+
+func prettyPath(path string) string {
+	if path == "" {
+		return ""
+	}
+	clean := filepath.Clean(path)
+	return strings.ReplaceAll(clean, "\\", "/")
+}
+
+func prettyJSON(v any) string {
+	if v == nil {
+		return ""
+	}
+	b, err := json.MarshalIndent(v, "", "  ")
+	if err != nil {
+		return ""
+	}
+	return string(b)
+}
+
+func indentBlock(s, indent string) string {
+	lines := strings.Split(s, "\n")
+	for i, line := range lines {
+		lines[i] = indent + line
+	}
+	return strings.Join(lines, "\n")
+}
+
+func formatDuration(d time.Duration) string {
+	if d < time.Second {
+		return fmt.Sprintf("%dms", d.Milliseconds())
+	}
+	return fmt.Sprintf("%.1fs", d.Seconds())
+}
+
+func toolDisplayName(name string) string {
+	name = strings.ReplaceAll(name, "_", " ")
+	name = strings.ReplaceAll(name, "-", " ")
+	parts := strings.Fields(name)
+	for i, part := range parts {
+		if part == "api" || part == "mcp" {
+			parts[i] = strings.ToUpper(part)
+			continue
+		}
+		parts[i] = strings.ToUpper(part[:1]) + part[1:]
+	}
+	return strings.Join(parts, " ")
+}
+
+func firstLine(s string) string {
+	s = strings.TrimSpace(s)
+	if s == "" {
+		return ""
+	}
+	if idx := strings.IndexByte(s, '\n'); idx >= 0 {
+		return s[:idx]
+	}
+	return s
+}

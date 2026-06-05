@@ -19,7 +19,7 @@ func TestChatGoldenTurnWithTool(t *testing.T) {
 	c.messages = []msgItem{
 		&userItem{content: "Run the tool", timestamp: fixed},
 		&assistantItem{content: "I will inspect the workspace.", showLabel: true},
-		&toolItem{id: "tool-1", name: "bash", status: "completed", label: "ls -la", startedAt: fixed, finishedAt: fixed.Add(500 * time.Millisecond)},
+		&toolItem{id: "tool-1", name: "bash", status: "completed", label: "ls -la", metadata: map[string]any{"tool_input": map[string]any{"command": "ls -la"}}, startedAt: fixed, finishedAt: fixed.Add(500 * time.Millisecond)},
 		&assistantItem{content: "The workspace contains 3 files.", showLabel: false},
 	}
 	c.refresh()

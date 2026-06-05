@@ -384,6 +384,7 @@ func (w *nexusWorkspace) onProgress(progress sdk.ToolProgress) {
 		ToolName:  progress.ToolName,
 		Status:    string(progress.Stage),
 		Label:     label,
+		Metadata:  progress.Metadata,
 	})
 }
 

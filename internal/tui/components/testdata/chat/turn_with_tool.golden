@@ -5,7 +5,7 @@ Nexus
                                                             
   I will inspect the workspace.                             
                                                             
-  ✓ bash  ls -la  (500ms)                                   
+  ✓ Bash ls -la (500ms)                                     
                                                             
                                                             
   The workspace contains 3 files.

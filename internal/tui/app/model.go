@@ -157,7 +157,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if label == "" {
 			label = msg.Status
 		}
-		m.chat.AddToolProgress(msg.ToolUseID, msg.ToolName, msg.Status, label)
+		m.chat.AddToolProgress(msg.ToolUseID, msg.ToolName, msg.Status, label, msg.Metadata)
 
 	case tui.TurnStartMsg:
 		m.busy = true
@@ -565,12 +565,21 @@ func (m *Model) handleKey(msg tea.KeyPressMsg) (bool, tea.Cmd) {
 			case "end":
 				m.chat.GotoBottom()
 				return true, nil
+			case "n":
+				return true, boolCmd(m.chat.SelectNextTool())
+			case "p":
+				return true, boolCmd(m.chat.SelectPrevTool())
+			case "space":
+				return true, boolCmd(m.chat.ToggleSelectedToolExpanded())
+			case "o", "enter", "right":
+				return true, boolCmd(m.chat.ToggleDetails())
+			case "left", "esc":
+				m.chat.CloseDetails()
+				return true, nil
 			}
-			// Any other key switches back to editor.
 			m.focus = uiFocusEditor
 			return true, m.input.Focus()
 		}
-
 		// ── Editor focus (default) ────────────────────────────────────────
 
 		// File completions popup intercepts keys while open.
@@ -760,12 +769,25 @@ func (m Model) viewWelcome() string {
 func (m Model) viewChat() string {
 	inputView := m.inputView()
 	chatH := m.height - headerHeight - footerHeight - lipgloss.Height(inputView)
-	m.chat.SetSize(m.width, max(1, chatH))
+	chatW := m.width
+	var detailView string
+	if m.chat.DetailsOpen() && m.width >= 110 {
+		paneW := max(36, m.width/3)
+		chatW = max(40, m.width-paneW-1)
+		m.chat.SetSize(chatW, max(1, chatH))
+		detailView = m.chat.DetailView(m.width-chatW-1, max(1, chatH))
+	} else {
+		m.chat.SetSize(chatW, max(1, chatH))
+	}
 	chatView := m.chat.View()
+	body := chatView
+	if detailView != "" {
+		body = lipgloss.JoinHorizontal(lipgloss.Top, chatView, " ", detailView)
+	}
 
 	base := strings.Join([]string{
 		m.header(),
-		chatView,
+		body,
 		inputView,
 		m.footer(),
 	}, "\n")
@@ -776,7 +798,6 @@ func (m Model) viewChat() string {
 	}
 	return base
 }
-
 func (m Model) viewSessions() string {
 	m.sessions.SetSize(m.width, m.height)
 	overlay := m.sessions.Centered()
@@ -834,7 +855,7 @@ func (m Model) header() string {
 	if m.busy {
 		status = m.spinner.View() + " " + m.styles.HeaderBusy.Render("working")
 	} else if m.focus == uiFocusMain && m.state == stateChat {
-		status = m.styles.HeaderBusy.Render("↕ scroll") + "  " + m.styles.HeaderID.Render("tab: back to input")
+		status = m.styles.HeaderBusy.Render("↕ chat") + "  " + m.styles.HeaderID.Render("n/p: tools · o: details")
 	} else if m.activeSession != "" {
 		status = m.styles.HeaderReady.Render("●") + " " + m.styles.HeaderID.Render(common.ShortID(m.activeSession))
 	} else {
@@ -863,7 +884,6 @@ func (m Model) footer() string {
 			m.styles.Desc.Render("exit")
 	}
 
-	// Transient copy notice takes over the footer briefly.
 	if m.copyNotice != "" {
 		return m.styles.ToolDone.Render("✓ " + m.copyNotice)
 	}
@@ -872,9 +892,10 @@ func (m Model) footer() string {
 	if m.focus == uiFocusMain && m.state == stateChat {
 		items = []string{
 			m.styles.Key.Render("↑↓") + " " + m.styles.Desc.Render("scroll"),
-			m.styles.Key.Render("ctrl+e") + " " + m.styles.Desc.Render("select"),
+			m.styles.Key.Render("n/p") + " " + m.styles.Desc.Render("select tool"),
+			m.styles.Key.Render("space") + " " + m.styles.Desc.Render("expand"),
+			m.styles.Key.Render("o") + " " + m.styles.Desc.Render("details"),
 			m.styles.Key.Render("tab") + " " + m.styles.Desc.Render("back to input"),
-			m.styles.Key.Render("ctrl+c") + " " + m.styles.Desc.Render("quit"),
 		}
 	} else {
 		items = []string{
@@ -882,13 +903,14 @@ func (m Model) footer() string {
 			m.styles.Key.Render("ctrl+n") + " " + m.styles.Desc.Render("new"),
 			m.styles.Key.Render("ctrl+s") + " " + m.styles.Desc.Render("sessions"),
 			m.styles.Key.Render("ctrl+e") + " " + m.styles.Desc.Render("select"),
-			m.styles.Key.Render("tab") + " " + m.styles.Desc.Render("scroll"),
+			m.styles.Key.Render("tab") + " " + m.styles.Desc.Render("chat/tools"),
 			m.styles.Key.Render("ctrl+c") + " " + m.styles.Desc.Render("cancel/quit"),
 		}
 	}
 	return m.styles.Footer.Render(strings.Join(items, "  "))
 }
 
+// Select mode banner takes priority.
 func (m Model) inputView() string {
 	inner := m.input.View()
 
@@ -958,6 +980,13 @@ func (m *Model) copyToClipboard(text, notice string) tea.Cmd {
 }
 
 // ─── Workspace commands ───────────────────────────────────────────────────────
+
+func boolCmd(ok bool) tea.Cmd {
+	if ok {
+		return func() tea.Msg { return nil }
+	}
+	return nil
+}
 
 func (m Model) loadSessions() tea.Cmd {
 	return func() tea.Msg { m.workspace.ListSessions(m.ctx); return nil }

@@ -324,7 +324,9 @@ func (e *Tool) Call(
 		output["git_diff"] = gitDiff
 	}
 
-	return tool.NewJSONResult(output), nil
+	res := tool.NewJSONResult(output)
+	res.Metadata = &tool.ResultMetadata{Additional: output}
+	return res, nil
 }
 
 func normalizedBaseName(filePath string) string {
