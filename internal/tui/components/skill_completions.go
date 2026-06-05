@@ -9,7 +9,9 @@ import (
 	"github.com/EngineerProjects/nexus-engine/internal/tui/common"
 )
 
-// SkillCompletions is the /-triggered skill picker shown above the composer.
+const skillPopupVisible = 3
+
+// SkillCompletions is the /-triggered skill picker shown just above the composer.
 type SkillCompletions struct {
 	styles   common.Styles
 	items    []tui.SkillInfo
@@ -56,6 +58,16 @@ func (c *SkillCompletions) Down() {
 	}
 }
 
+func (c *SkillCompletions) Scroll(delta int) {
+	if delta < 0 {
+		c.Up()
+		return
+	}
+	if delta > 0 {
+		c.Down()
+	}
+}
+
 func (c *SkillCompletions) Selected() string {
 	if c.cursor >= 0 && c.cursor < len(c.filtered) {
 		return "/" + c.filtered[c.cursor].Name
@@ -63,20 +75,47 @@ func (c *SkillCompletions) Selected() string {
 	return ""
 }
 
+func (c *SkillCompletions) Width(inputWidth int) int {
+	return min(max(36, inputWidth-10), 84)
+}
+
+func (c *SkillCompletions) Height(inputWidth int) int {
+	if !c.open {
+		return 0
+	}
+	visible := min(len(c.filtered), skillPopupVisible)
+	if visible == 0 {
+		visible = 1
+	}
+	return visible + 2
+}
+
+func (c *SkillCompletions) ClickRow(row int) string {
+	start, end := c.visibleRange()
+	idx := start + row
+	if idx < start || idx >= end || idx >= len(c.filtered) {
+		return ""
+	}
+	c.cursor = idx
+	return "/" + c.filtered[idx].Name
+}
+
 func (c *SkillCompletions) View(inputWidth int) string {
 	if !c.open {
 		return ""
 	}
-	w := min(inputWidth, 72)
-	const maxVisible = 6
-	start := max(0, c.cursor-maxVisible+1)
-	end := min(len(c.filtered), start+maxVisible)
+	w := c.Width(inputWidth)
+	start, end := c.visibleRange()
 	if len(c.filtered) == 0 {
-		return c.styles.BrowserBorder.Width(w).Render(
-			c.styles.MsgTimestamp.Render("  no skills matching /" + c.query),
-		)
+		return lipgloss.NewStyle().
+			Border(lipgloss.RoundedBorder()).
+			BorderForeground(common.ColorPrimary).
+			PaddingLeft(1).PaddingRight(1).
+			Width(w).
+			Render(c.styles.MsgTimestamp.Render("no skills matching /" + c.query))
 	}
-	var rows []string
+
+	rows := make([]string, 0, end-start)
 	for i := start; i < end; i++ {
 		item := c.filtered[i]
 		name := "/" + item.Name
@@ -84,25 +123,46 @@ func (c *SkillCompletions) View(inputWidth int) string {
 		if desc == "" {
 			desc = strings.TrimSpace(item.WhenToUse)
 		}
-		line := name
+		desc = truncateText(desc, max(12, w-lipgloss.Width(name)-10))
+		left := name
 		if desc != "" {
-			line += c.styles.MsgTimestamp.Render("  " + desc)
+			left += c.styles.MsgTimestamp.Render("  " + desc)
 		}
 		if i == c.cursor {
-			rows = append(rows, c.styles.BrowserSelected.Width(w-4).Render("▶ "+line))
+			rows = append(rows, c.styles.BrowserSelected.Width(w-4).Render("> "+left))
 		} else {
-			rows = append(rows, c.styles.BrowserItem.Width(w-4).Render("  "+line))
+			rows = append(rows, c.styles.BrowserItem.Width(w-4).Render("  "+left))
 		}
 	}
-	title := c.styles.MsgTimestamp.Render("/" + c.query + "█")
-	sep := c.styles.MsgTimestamp.Render(strings.Repeat("─", w-4))
-	content := title + "\n" + sep + "\n" + strings.Join(rows, "\n")
+	content := strings.Join(rows, "\n")
 	return lipgloss.NewStyle().
 		Border(lipgloss.RoundedBorder()).
 		BorderForeground(common.ColorPrimary).
 		PaddingLeft(1).PaddingRight(1).
 		Width(w).
 		Render(content)
+}
+
+func (c *SkillCompletions) visibleRange() (int, int) {
+	visible := skillPopupVisible
+	if len(c.filtered) < visible {
+		visible = len(c.filtered)
+	}
+	if visible <= 0 {
+		return 0, 0
+	}
+	start := c.cursor - (visible - 1)
+	if start < 0 {
+		start = 0
+	}
+	maxStart := len(c.filtered) - visible
+	if start > maxStart {
+		start = maxStart
+	}
+	if start < 0 {
+		start = 0
+	}
+	return start, start + visible
 }
 
 func (c *SkillCompletions) filter() {
@@ -137,4 +197,15 @@ func skillQuery(input string) (string, bool) {
 		return "", false
 	}
 	return strings.TrimPrefix(input, "/"), true
+}
+
+func truncateText(s string, limit int) string {
+	if limit <= 0 || lipgloss.Width(s) <= limit {
+		return s
+	}
+	runes := []rune(s)
+	if limit <= 1 || len(runes) <= limit {
+		return string(runes)
+	}
+	return string(runes[:limit-1]) + "…"
 }

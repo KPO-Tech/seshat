@@ -296,6 +296,18 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, tea.Batch(cmds...)
 		}
 	case tea.MouseWheelMsg:
+		if (m.state == stateChat || m.state == stateWelcome) && m.skillCompletions.IsOpen() {
+			layout := m.currentChatLayout()
+			if pointInRect(msg.X, msg.Y, layout.popupX, layout.popupY, layout.popupW, layout.popupH) {
+				switch msg.Button {
+				case tea.MouseWheelUp:
+					m.skillCompletions.Scroll(-1)
+				case tea.MouseWheelDown:
+					m.skillCompletions.Scroll(1)
+				}
+				return m, tea.Batch(cmds...)
+			}
+		}
 		// Mouse wheel scrolls chat regardless of focus state (no Tab required).
 		if m.state == stateChat || m.state == stateWelcome {
 			switch msg.Button {
@@ -358,8 +370,14 @@ type chatLayout struct {
 	chatY    int
 	chatW    int
 	chatH    int
+	inputX   int
 	inputY   int
+	inputW   int
 	inputH   int
+	popupX   int
+	popupY   int
+	popupW   int
+	popupH   int
 }
 
 func (m Model) currentChatLayout() chatLayout {
@@ -368,6 +386,11 @@ func (m Model) currentChatLayout() chatLayout {
 	contentW := m.contentWidth()
 	chatH := m.height - headerHeight - footerHeight - lipgloss.Height(statusView) - lipgloss.Height(inputView)
 	chatW := contentW
+	inputW := max(12, contentW-2)
+	inputX := max(0, (m.width-inputW)/2)
+	popupW := 0
+	popupH := 0
+	popupX := inputX
 	if m.chat.DetailsOpen() && contentW >= 110 {
 		paneW := max(36, contentW/3)
 		chatW = max(40, contentW-paneW-1)
@@ -375,6 +398,10 @@ func (m Model) currentChatLayout() chatLayout {
 	contentX := max(0, (m.width-contentW)/2)
 	chatY := headerHeight
 	inputY := chatY + max(1, chatH) + lipgloss.Height(statusView)
+	if m.skillCompletions.IsOpen() {
+		popupW = m.skillCompletions.Width(max(24, contentW-4))
+		popupH = m.skillCompletions.Height(max(24, contentW-4))
+	}
 	return chatLayout{
 		contentW: contentW,
 		contentX: contentX,
@@ -382,8 +409,14 @@ func (m Model) currentChatLayout() chatLayout {
 		chatY:    chatY,
 		chatW:    chatW,
 		chatH:    max(1, chatH),
+		inputX:   inputX,
 		inputY:   inputY,
+		inputW:   inputW,
 		inputH:   lipgloss.Height(inputView),
+		popupX:   popupX,
+		popupY:   inputY,
+		popupW:   popupW,
+		popupH:   popupH,
 	}
 }
 
@@ -406,7 +439,21 @@ func (m *Model) handleMouseClick(msg tea.MouseClickMsg) tea.Cmd {
 		return nil
 	}
 	layout := m.currentChatLayout()
-	if pointInRect(msg.X, msg.Y, layout.contentX, layout.inputY, layout.contentW, layout.inputH) {
+	if m.skillCompletions.IsOpen() && pointInRect(msg.X, msg.Y, layout.popupX, layout.popupY, layout.popupW, layout.popupH) {
+		if msg.Button == tea.MouseLeft {
+			row := msg.Y - layout.popupY - 1
+			if sel := m.skillCompletions.ClickRow(row); sel != "" {
+				m.input.SetValue(sel + " ")
+				m.input.CursorEnd()
+				m.skillCompletions.Close()
+				m.focus = uiFocusEditor
+				*m = m.resizeInput()
+				return m.input.Focus()
+			}
+		}
+		return nil
+	}
+	if pointInRect(msg.X, msg.Y, layout.inputX, layout.inputY+layout.popupH, layout.inputW, layout.inputH-layout.popupH) {
 		m.focus = uiFocusEditor
 		return m.input.Focus()
 	}
@@ -506,9 +553,9 @@ func (m *Model) handleKey(msg tea.KeyPressMsg) (bool, tea.Cmd) {
 			} else {
 				m.state = m.prevChatState()
 			}
-		case "up", "k":
+		case "up":
 			m.modelSelect.Up()
-		case "down", "j":
+		case "down":
 			m.modelSelect.Down()
 		case "enter":
 			if sel := m.modelSelect.Selected(); sel != nil {
@@ -536,9 +583,9 @@ func (m *Model) handleKey(msg tea.KeyPressMsg) (bool, tea.Cmd) {
 			if !m.commands.Back() {
 				m.state = m.prevChatState()
 			}
-		case "up", "k":
+		case "up":
 			m.commands.Up()
-		case "down", "j":
+		case "down":
 			m.commands.Down()
 		case "enter":
 			return true, m.activateSettingsSelection()
@@ -563,9 +610,9 @@ func (m *Model) handleKey(msg tea.KeyPressMsg) (bool, tea.Cmd) {
 				cp.ExitEdit()
 				// Reload provider status after editing.
 				return true, m.loadProviderConfig()
-			case "up", "k":
+			case "up":
 				cp.Up()
-			case "down", "j":
+			case "down":
 				cp.Down()
 			case "tab":
 				cp.Down()
@@ -601,9 +648,9 @@ func (m *Model) handleKey(msg tea.KeyPressMsg) (bool, tea.Cmd) {
 				} else {
 					m.state = m.prevChatState()
 				}
-			case "up", "k":
+			case "up":
 				cp.Up()
-			case "down", "j":
+			case "down":
 				cp.Down()
 			case "enter":
 				cp.EnterEdit()
@@ -623,9 +670,9 @@ func (m *Model) handleKey(msg tea.KeyPressMsg) (bool, tea.Cmd) {
 		switch k {
 		case "esc", "ctrl+s":
 			m.state = m.prevChatState()
-		case "up", "k":
+		case "up":
 			m.sessions.Up()
-		case "down", "j":
+		case "down":
 			m.sessions.Down()
 		case "enter":
 			id := m.sessions.Selected()
@@ -707,10 +754,10 @@ func (m *Model) handleKey(msg tea.KeyPressMsg) (bool, tea.Cmd) {
 		// When focus is on the chat list, arrow keys scroll rather than move cursor.
 		if m.focus == uiFocusMain {
 			switch k {
-			case "up", "k":
+			case "up":
 				m.chat.ScrollUp(3)
 				return true, nil
-			case "down", "j":
+			case "down":
 				m.chat.ScrollDown(3)
 				return true, nil
 			case "pgup":
@@ -747,23 +794,26 @@ func (m *Model) handleKey(msg tea.KeyPressMsg) (bool, tea.Cmd) {
 			switch k {
 			case "esc":
 				m.skillCompletions.Close()
-			case "up", "k":
+				return true, nil
+			case "up":
 				m.skillCompletions.Up()
-			case "down", "j":
+				return true, nil
+			case "down":
 				m.skillCompletions.Down()
+				return true, nil
 			case "enter", "tab":
 				if sel := m.skillCompletions.Selected(); sel != "" {
 					m.input.SetValue(sel + " ")
 					m.input.CursorEnd()
 					m.skillCompletions.Close()
 					*m = m.resizeInput()
-					m.syncComposerAssist()
 					return true, nil
 				}
 				m.skillCompletions.Close()
 				return false, nil
+			default:
+				return false, nil
 			}
-			return true, nil
 		}
 
 		// File completions popup intercepts keys while open.
