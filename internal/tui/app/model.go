@@ -100,7 +100,7 @@ func New(ws tui.Workspace, ctx context.Context) Model {
 	ta.Placeholder = "Ask Nexus...  /skill"
 	ta.ShowLineNumbers = false
 	ta.CharLimit = -1
-	ta.SetVirtualCursor(false)
+	ta.SetVirtualCursor(true)
 	ta.DynamicHeight = true
 	ta.MinHeight = inputMinH
 	ta.MaxHeight = inputMaxH
