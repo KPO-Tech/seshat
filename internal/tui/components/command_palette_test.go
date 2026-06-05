@@ -48,3 +48,20 @@ func TestCommandPaletteBackReturnsToRoot(t *testing.T) {
 		t.Fatalf("expected root view after back, got %q", view)
 	}
 }
+
+func TestCommandPaletteSetSectionItemsReplacesLiveSection(t *testing.T) {
+	p := NewCommandPalette(common.DefaultStyles())
+	p.SetSectionItems("tools", []PaletteItem{{
+		Kind: PaletteInfoKind,
+		ID:   "tool-bash",
+		Name: "bash",
+		Desc: "system · Run shell commands",
+	}})
+	if !p.OpenSection("tools") {
+		t.Fatalf("expected tools section to open")
+	}
+	view := p.View()
+	if !strings.Contains(view, "bash") || !strings.Contains(view, "Run shell commands") {
+		t.Fatalf("expected live tools section to contain replacement item, got %q", view)
+	}
+}

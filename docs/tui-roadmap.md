@@ -52,12 +52,10 @@ This note tracks the current UX progress of the Nexus CLI TUI and the next inter
 
 ### 8. Commands / settings reorganization
 - The footer has already been simplified and older noise removed.
-- The `ctrl+p` surface is now moving toward a true settings hub with nested sections and dedicated entry points for commands, providers, models, tools, MCP, and skills.
+- `ctrl+p` is now a true settings hub with nested sections for commands, providers, models, tools, MCP, and skills.
 - Generic slash commands are no longer advertised there; slash input is now reserved for skills in the chat composer.
-- Remaining work:
-  - introduce practical navigation for tools and MCP alongside existing model/provider actions
-  - surface skills more explicitly once TUI-side skill discovery is wired
-- Status: in progress
+- The `Tools`, `MCP`, and `Skills` sections now load live data from the current workspace/runtime instead of showing only static placeholder copy.
+- Status: done
 
 ## Next Priorities
 
@@ -81,23 +79,25 @@ This note tracks the current UX progress of the Nexus CLI TUI and the next inter
 - Status: in progress
 
 ### 10. Clickable tool rows and richer interactions
-- First pass implemented:
+- Implemented:
   - tool rows can now be clicked
   - clicking a tool row selects it
-  - clicking the selected row toggles its inline preview
+  - explicit click targets exist for expand and details
+  - thinking blocks can be expanded or collapsed directly with the mouse
 - Remaining work:
-  - richer targetable click zones for think/expand/details
   - smoother IDE-like interactions around the side pane
 - Status: in progress
 
 ### 11. Commands / settings panel expansion
-- Add practical navigation for:
+- Completed:
   - skills
   - tools
   - MCP
   - model/provider settings
   - session actions
-- Status: planned
+- Remaining work:
+  - deepen each section into richer management views instead of simple searchable lists
+- Status: in progress
 
 ### 11b. Manual compaction trigger
 - A true manual compact action is still missing.

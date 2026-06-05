@@ -484,6 +484,7 @@ func (m *Model) handleKey(msg tea.KeyPressMsg) (bool, tea.Cmd) {
 		switch k {
 		case "esc", "ctrl+m":
 			if m.returnState == stateCommands {
+				m.refreshSettingsHubData()
 				m.state = stateCommands
 				m.commands.Open("")
 			} else {
@@ -493,6 +494,7 @@ func (m *Model) handleKey(msg tea.KeyPressMsg) (bool, tea.Cmd) {
 			// Navigate back to the settings hub if that's where we came from,
 			// otherwise close to the chat/welcome state.
 			if m.returnState == stateCommands {
+				m.refreshSettingsHubData()
 				m.state = stateCommands
 				m.commands.Open("")
 			} else {
@@ -587,6 +589,7 @@ func (m *Model) handleKey(msg tea.KeyPressMsg) (bool, tea.Cmd) {
 			switch k {
 			case "esc", "ctrl+,":
 				if m.returnState == stateCommands {
+					m.refreshSettingsHubData()
 					m.state = stateCommands
 					m.commands.Open("")
 				} else {
@@ -653,6 +656,7 @@ func (m *Model) handleKey(msg tea.KeyPressMsg) (bool, tea.Cmd) {
 		return true, tea.Quit
 	case "ctrl+p":
 		if m.state != stateCommands {
+			m.refreshSettingsHubData()
 			m.commands.Open("")
 			m.state = stateCommands
 		}
@@ -1293,6 +1297,98 @@ func (m Model) loadProviderConfig() tea.Cmd {
 		providers := m.workspace.LoadProviderConfig(m.ctx)
 		return providerConfigLoadedMsg{providers: providers}
 	}
+}
+
+func (m *Model) refreshSettingsHubData() {
+	m.commands.SetSectionItems("tools", buildToolSettingsItems(m.workspace.LoadToolCatalog(m.ctx)))
+	m.commands.SetSectionItems("mcp", buildMCPSettingsItems(m.workspace.LoadMCPServers(m.ctx)))
+	m.commands.SetSectionItems("skills", buildSkillSettingsItems(m.workspace.LoadSkills(m.ctx)))
+}
+
+func buildToolSettingsItems(items []tui.ToolInfo) []components.PaletteItem {
+	if len(items) == 0 {
+		return []components.PaletteItem{{
+			Kind: components.PaletteInfoKind,
+			ID:   "tools-empty",
+			Name: "No tools found",
+			Desc: "The current runtime did not expose any tools",
+		}}
+	}
+	result := make([]components.PaletteItem, 0, len(items))
+	for _, item := range items {
+		desc := strings.TrimSpace(item.Description)
+		if category := strings.TrimSpace(item.Category); category != "" {
+			if desc != "" {
+				desc = category + " · " + desc
+			} else {
+				desc = category
+			}
+		}
+		result = append(result, components.PaletteItem{
+			Kind: components.PaletteInfoKind,
+			ID:   "tool-" + item.Name,
+			Name: item.Name,
+			Desc: desc,
+		})
+	}
+	return result
+}
+
+func buildMCPSettingsItems(items []tui.MCPServerInfo) []components.PaletteItem {
+	if len(items) == 0 {
+		return []components.PaletteItem{{
+			Kind: components.PaletteInfoKind,
+			ID:   "mcp-empty",
+			Name: "No MCP servers configured",
+			Desc: "Add MCP servers in config to expose them here",
+		}}
+	}
+	result := make([]components.PaletteItem, 0, len(items))
+	for _, item := range items {
+		desc := item.Status + " · " + strconv.Itoa(item.ToolsRegistered) + " tools"
+		if item.Error != "" {
+			desc += " · " + item.Error
+		}
+		result = append(result, components.PaletteItem{
+			Kind: components.PaletteInfoKind,
+			ID:   "mcp-" + item.Name,
+			Name: item.Name,
+			Desc: desc,
+		})
+	}
+	return result
+}
+
+func buildSkillSettingsItems(items []tui.SkillInfo) []components.PaletteItem {
+	if len(items) == 0 {
+		return []components.PaletteItem{{
+			Kind: components.PaletteInfoKind,
+			ID:   "skills-empty",
+			Name: "No skills found",
+			Desc: "Add bundled, repo, or user skills to invoke them with /skill",
+		}}
+	}
+	result := make([]components.PaletteItem, 0, len(items))
+	for _, item := range items {
+		desc := strings.TrimSpace(item.Description)
+		if desc == "" {
+			desc = strings.TrimSpace(item.WhenToUse)
+		}
+		if source := strings.TrimSpace(item.Source); source != "" {
+			if desc != "" {
+				desc = source + " · " + desc
+			} else {
+				desc = source
+			}
+		}
+		result = append(result, components.PaletteItem{
+			Kind: components.PaletteInfoKind,
+			ID:   "skill-" + item.Name,
+			Name: "/" + item.Name,
+			Desc: desc,
+		})
+	}
+	return result
 }
 
 func (m Model) deleteSession(id string) tea.Cmd {

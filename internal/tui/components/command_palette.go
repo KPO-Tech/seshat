@@ -115,6 +115,15 @@ func (p *CommandPalette) OpenSection(sectionID string) bool {
 	return true
 }
 
+func (p *CommandPalette) SetSectionItems(sectionID string, items []PaletteItem) {
+	copied := append([]PaletteItem(nil), items...)
+	p.sectionItems[sectionID] = copied
+	if p.view == paletteViewSection && p.activeSection == sectionID {
+		p.list.ResetItems(copied, false)
+		p.list.ClearFilter()
+	}
+}
+
 func (p *CommandPalette) Back() bool {
 	if p.view == paletteViewSection {
 		p.Open("")

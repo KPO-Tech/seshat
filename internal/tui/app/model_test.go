@@ -30,6 +30,15 @@ func (mockWorkspace) Close()                                      {}
 func (mockWorkspace) LoadProviderConfig(context.Context) []tui.ProviderStatus {
 	return nil
 }
+func (mockWorkspace) LoadToolCatalog(context.Context) []tui.ToolInfo {
+	return []tui.ToolInfo{{Name: "bash", Description: "Run shell commands", Category: "system"}}
+}
+func (mockWorkspace) LoadMCPServers(context.Context) []tui.MCPServerInfo {
+	return []tui.MCPServerInfo{{Name: "github", ToolsRegistered: 3, Status: "ready"}}
+}
+func (mockWorkspace) LoadSkills(context.Context) []tui.SkillInfo {
+	return []tui.SkillInfo{{Name: "summarise-pr", Description: "Summarise a pull request", Source: "bundled"}}
+}
 func (mockWorkspace) SaveProviderField(context.Context, string, string, string) error {
 	return nil
 }
@@ -283,5 +292,42 @@ func TestModelSettingsProvidersRouteToConfig(t *testing.T) {
 	}
 	if got := m.returnState; got != stateCommands {
 		t.Fatalf("expected return state to point back to settings, got %v", got)
+	}
+}
+
+func TestModelCtrlPLoadsLiveSettingsSections(t *testing.T) {
+	m := New(mockWorkspace{}, context.Background())
+	m.state = stateChat
+	consumed, cmd := m.handleKey(tea.KeyPressMsg(tea.Key{Code: 'p', Mod: tea.ModCtrl}))
+	if !consumed {
+		t.Fatalf("expected ctrl+p to be handled")
+	}
+	if cmd != nil {
+		t.Fatalf("expected ctrl+p not to emit an async command")
+	}
+	if !m.commands.OpenSection("tools") {
+		t.Fatalf("expected tools section to open")
+	}
+	if sel := m.commands.Selected(); sel == nil || sel.Name != "bash" {
+		t.Fatalf("expected live tools section to include bash, got %+v", sel)
+	}
+	if !m.commands.Back() {
+		t.Fatalf("expected to return to settings root from tools")
+	}
+	m.commands.Down()
+	m.commands.Down()
+	m.commands.Down()
+	m.commands.OpenSection("mcp")
+	if sel := m.commands.Selected(); sel == nil || sel.Name != "github" {
+		t.Fatalf("expected live mcp section to include github, got %+v", sel)
+	}
+	if !m.commands.Back() {
+		t.Fatalf("expected to return to settings root from mcp")
+	}
+	m.commands.Down()
+	m.commands.Down()
+	m.commands.OpenSection("skills")
+	if sel := m.commands.Selected(); sel == nil || sel.Name != "/summarise-pr" {
+		t.Fatalf("expected live skills section to include /summarise-pr, got %+v", sel)
 	}
 }

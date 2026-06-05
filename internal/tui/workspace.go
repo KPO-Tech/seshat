@@ -144,6 +144,29 @@ type SessionInfo struct {
 	Tokens    int
 }
 
+// ToolInfo is the TUI's lightweight view of one registered tool.
+type ToolInfo struct {
+	Name        string
+	Description string
+	Category    string
+}
+
+// MCPServerInfo is the TUI's summary view of one MCP server integration.
+type MCPServerInfo struct {
+	Name            string
+	ToolsRegistered int
+	Status          string
+	Error           string
+}
+
+// SkillInfo is the TUI's summary view of one available slash skill.
+type SkillInfo struct {
+	Name        string
+	Description string
+	WhenToUse   string
+	Source      string
+}
+
 // ─── Workspace interface ──────────────────────────────────────────────────────
 
 // Workspace is the contract between the TUI model and the nexus engine.
@@ -189,6 +212,15 @@ type Workspace interface {
 	// LoadProviderConfig returns all available providers with their current
 	// credential status read from the credentials DB.
 	LoadProviderConfig(ctx context.Context) []ProviderStatus
+
+	// LoadToolCatalog returns the current registered tool surface.
+	LoadToolCatalog(ctx context.Context) []ToolInfo
+
+	// LoadMCPServers returns the current MCP integration status.
+	LoadMCPServers(ctx context.Context) []MCPServerInfo
+
+	// LoadSkills returns user-invocable skills available in the current repo.
+	LoadSkills(ctx context.Context) []SkillInfo
 
 	// SaveProviderField persists a credential field for a provider.
 	// fieldKey is the DB key (e.g. "api_key", "provider_base_url").
