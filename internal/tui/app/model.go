@@ -401,14 +401,21 @@ func (m *Model) handleMouseClick(msg tea.MouseClickMsg) tea.Cmd {
 		m.focus = uiFocusEditor
 		return m.input.Focus()
 	}
+	if !pointInRect(msg.X, msg.Y, layout.chatX, layout.chatY, layout.chatW, layout.chatH) {
+		return nil
+	}
+	if msg.Button == tea.MouseRight {
+		if text := m.chat.SelectedText(); text != "" {
+			return m.copyToClipboard(text, "Selection copied")
+		}
+		return nil
+	}
 	if msg.Button != tea.MouseLeft {
 		return nil
 	}
-	if pointInRect(msg.X, msg.Y, layout.chatX, layout.chatY, layout.chatW, layout.chatH) {
-		m.focus = uiFocusMain
-		m.input.Blur()
-		m.chat.HandleMouseDown(msg.X-layout.chatX, msg.Y-layout.chatY)
-	}
+	m.focus = uiFocusMain
+	m.input.Blur()
+	m.chat.HandleMouseDown(msg.X-layout.chatX, msg.Y-layout.chatY)
 	return nil
 }
 
@@ -442,6 +449,14 @@ func (m *Model) handleMouseRelease(msg tea.MouseReleaseMsg) tea.Cmd {
 //   - consumed=false → key was not handled; forward to textarea for normal input
 func (m *Model) handleKey(msg tea.KeyPressMsg) (bool, tea.Cmd) {
 	k := msg.String()
+	stroke := msg.Keystroke()
+
+	if stroke == "ctrl+shift+c" {
+		if text := m.chat.SelectedText(); text != "" {
+			return true, m.copyToClipboard(text, "Selection copied")
+		}
+		return true, nil
+	}
 
 	// ── Permission dialog (all keys consumed) ────────────────────────────
 	if m.state == statePermission && m.permission.HasPending() {

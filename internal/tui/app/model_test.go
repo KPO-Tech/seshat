@@ -179,3 +179,49 @@ func TestModelSlashKeyFallsThroughToInput(t *testing.T) {
 		t.Fatalf("expected slash to keep chat state, got %v", got)
 	}
 }
+
+func TestModelCtrlShiftCCopiesActiveSelection(t *testing.T) {
+	m := New(mockWorkspace{}, context.Background())
+	m.width = 120
+	m.height = 30
+	m.state = stateChat
+	m.activeSession = "session-123"
+	m = m.relayout()
+	m.chat.AddUserMessage("hello world")
+	m.chat.HandleMouseDown(0, 0)
+	m.chat.HandleMouseDrag(8, 0)
+	m.chat.HandleMouseUp(8, 0)
+
+	consumed, cmd := m.handleKey(tea.KeyPressMsg(tea.Key{Text: "c", Code: 'c', ShiftedCode: 'C', Mod: tea.ModCtrl | tea.ModShift}))
+	if !consumed {
+		t.Fatalf("expected ctrl+shift+c to be handled")
+	}
+	if cmd == nil {
+		t.Fatalf("expected ctrl+shift+c to return a clipboard command")
+	}
+	if m.copyNotice != "Selection copied" {
+		t.Fatalf("expected selection copy notice, got %q", m.copyNotice)
+	}
+}
+
+func TestModelRightClickCopiesActiveSelection(t *testing.T) {
+	m := New(mockWorkspace{}, context.Background())
+	m.width = 120
+	m.height = 30
+	m.state = stateChat
+	m.activeSession = "session-123"
+	m = m.relayout()
+	m.chat.AddUserMessage("hello world")
+	m.chat.HandleMouseDown(0, 0)
+	m.chat.HandleMouseDrag(8, 0)
+	m.chat.HandleMouseUp(8, 0)
+
+	layout := m.currentChatLayout()
+	cmd := m.handleMouseClick(tea.MouseClickMsg(tea.Mouse{X: layout.chatX + 2, Y: layout.chatY, Button: tea.MouseRight}))
+	if cmd == nil {
+		t.Fatalf("expected right click to return a clipboard command")
+	}
+	if m.copyNotice != "Selection copied" {
+		t.Fatalf("expected selection copy notice, got %q", m.copyNotice)
+	}
+}

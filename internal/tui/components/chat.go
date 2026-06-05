@@ -1190,6 +1190,14 @@ func (c *Chat) selectLineAt(line int) {
 	c.selection.setRange(line, 0, line, len(runes))
 }
 
+func (c *Chat) HasSelection() bool {
+	return c.selection.hasSelection()
+}
+
+func (c *Chat) SelectedText() string {
+	return c.selectedText()
+}
+
 func (c *Chat) selectedText() string {
 	if len(c.plainLines) == 0 {
 		return ""
