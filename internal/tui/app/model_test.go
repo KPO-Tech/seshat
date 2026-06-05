@@ -2,6 +2,7 @@ package app
 
 import (
 	"context"
+	"strings"
 	"testing"
 
 	tea "charm.land/bubbletea/v2"
@@ -46,8 +47,8 @@ func TestModelRelayoutPropagatesChildSizes(t *testing.T) {
 	if cw != 80 {
 		t.Fatalf("expected chat width 80, got %d", cw)
 	}
-	if ch != 17 {
-		t.Fatalf("expected chat height 17, got %d", ch)
+	if ch != 18 {
+		t.Fatalf("expected chat height 18, got %d", ch)
 	}
 	sw, sh := m.sessions.Size()
 	if sw != 80 {
@@ -68,5 +69,34 @@ func TestModelPrevChatStateDependsOnActiveSession(t *testing.T) {
 	m.activeSession = "sess-1"
 	if got := m.prevChatState(); got != stateChat {
 		t.Fatalf("expected chat state with active session, got %v", got)
+	}
+}
+
+func TestModelInputViewUsesPromptStyleAndHint(t *testing.T) {
+	m := New(mockWorkspace{}, context.Background())
+	m.width = 100
+	m.height = 30
+	m = m.relayout()
+	m.input.SetValue("hello")
+	m = m.resizeInput()
+
+	view := m.inputView()
+	if !strings.Contains(view, "chat") {
+		t.Fatalf("expected input view to include composer badge, got %q", view)
+	}
+	if !strings.Contains(view, "enter send") {
+		t.Fatalf("expected input view to include composer hint, got %q", view)
+	}
+	if !strings.Contains(view, ">") {
+		t.Fatalf("expected input view to include prompt marker, got %q", view)
+	}
+}
+
+func TestModelResizeInputUsesTextareaLineCount(t *testing.T) {
+	m := New(mockWorkspace{}, context.Background())
+	m.input.SetValue(strings.Repeat("line\n", 20))
+	m = m.resizeInput()
+	if got := m.input.Height(); got != inputMaxH {
+		t.Fatalf("expected input height %d, got %d", inputMaxH, got)
 	}
 }

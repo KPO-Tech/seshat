@@ -120,3 +120,13 @@ func TestChatToolSelectionAndDetails(t *testing.T) {
 		t.Fatalf("expected detail view to mention selected file, got %q", got)
 	}
 }
+
+func TestToolSummaryUsesCompactFileName(t *testing.T) {
+	tool := newToolItem("tool-1", "write_file", "completed", "done", map[string]any{
+		"tool_input": map[string]any{"file_path": "/tmp/example/nested/file.txt"},
+		"type":       "create",
+	})
+	if got := tool.summaryText(); got != "file.txt · create" {
+		t.Fatalf("unexpected compact summary: %q", got)
+	}
+}

@@ -43,8 +43,8 @@ const (
 	headerHeight = 1
 	footerHeight = 1
 	inputMinH    = 3
-	inputMaxH    = 7
-	inputPadding = 2
+	inputMaxH    = 15
+	inputPadding = 1
 )
 
 // Model is the top-level BubbleTea model for nexus-engine's TUI.
@@ -88,9 +88,15 @@ func New(ws tui.Workspace, ctx context.Context) Model {
 	keys := common.DefaultKeys()
 
 	ta := textarea.New()
-	ta.Placeholder = "Type a message… (enter to send, shift+enter for newline)"
+	ta.SetStyles(styles.Textarea)
+	ta.Placeholder = "Ask Nexus to read, edit, search, or run..."
 	ta.ShowLineNumbers = false
-	ta.CharLimit = 0
+	ta.CharLimit = -1
+	ta.SetVirtualCursor(false)
+	ta.DynamicHeight = true
+	ta.MinHeight = inputMinH
+	ta.MaxHeight = inputMaxH
+	ta.SetPromptFunc(4, editorPrompt(styles))
 	ta.SetWidth(80)
 	ta.SetHeight(inputMinH)
 	// Don't call Focus() here — do it in Init() so the Cmd runs properly.
@@ -645,6 +651,7 @@ func (m *Model) handleKey(msg tea.KeyPressMsg) (bool, tea.Cmd) {
 			_ = atts
 			m.attachments.Reset()
 			m.input.Reset()
+			*m = m.resizeInput()
 			m.chat.AddUserMessage(text)
 			m.workspace.Submit(m.ctx, text)
 			return true, nil
@@ -741,6 +748,21 @@ type cfgSaveResultMsg struct{ err error }
 
 // providerConfigLoadedMsg carries a refreshed provider list.
 type providerConfigLoadedMsg struct{ providers []tui.ProviderStatus }
+
+func editorPrompt(styles common.Styles) func(textarea.PromptInfo) string {
+	return func(info textarea.PromptInfo) string {
+		if info.LineNumber == 0 {
+			if info.Focused {
+				return styles.InputPrompt.Render("  > ")
+			}
+			return styles.InputHint.Render("  > ")
+		}
+		if info.Focused {
+			return styles.InputPrompt.Render("::: ")
+		}
+		return styles.InputHint.Render("::: ")
+	}
+}
 
 // ─── Views ────────────────────────────────────────────────────────────────────
 
@@ -912,18 +934,23 @@ func (m Model) footer() string {
 
 // Select mode banner takes priority.
 func (m Model) inputView() string {
-	inner := m.input.View()
+	header := lipgloss.JoinHorizontal(
+		lipgloss.Left,
+		m.styles.InputBadge.Render("chat"),
+		"  ",
+		m.styles.InputHint.Render("enter send · shift+enter newline · @ files · / commands"),
+	)
 
-	// Attachments strip above the textarea.
-	if attView := m.attachments.View(m.width - 4); attView != "" {
+	inner := header + "\n" + m.input.View()
+
+	if attView := m.attachments.View(max(20, m.width-4)); attView != "" {
 		inner = attView + "\n" + inner
 	}
 
-	box := m.styles.InputBorder.Width(m.width - 2).Render(inner)
+	box := m.styles.InputBorder.Width(m.width).Render(inner)
 
-	// File completions popup rendered directly above the input box.
 	if m.completions.IsOpen() {
-		popup := m.completions.View(m.width - 4)
+		popup := m.completions.View(max(20, m.width-4))
 		return popup + "\n" + box
 	}
 	return box

@@ -1,6 +1,10 @@
 package common
 
-import "charm.land/lipgloss/v2"
+import (
+	"charm.land/bubbles/v2/textarea"
+	tea "charm.land/bubbletea/v2"
+	"charm.land/lipgloss/v2"
+)
 
 // Palette — orange / grey accent matching the Nexus logo.
 // lipgloss/v2 Color returns an interface, so these must be var not const.
@@ -41,6 +45,9 @@ type Styles struct {
 	InputBorder      lipgloss.Style
 	InputPrompt      lipgloss.Style
 	InputPlaceholder lipgloss.Style
+	InputHint        lipgloss.Style
+	InputBadge       lipgloss.Style
+	Textarea         textarea.Styles
 
 	// Session browser
 	BrowserBorder   lipgloss.Style
@@ -107,12 +114,46 @@ func DefaultStyles() Styles {
 
 	// Input
 	s.InputBorder = lipgloss.NewStyle().
-		Border(lipgloss.RoundedBorder()).
+		BorderTop(true).
 		BorderForeground(ColorBorder).
-		PaddingLeft(1).PaddingRight(1)
+		Padding(0, 1).
+		Background(lipgloss.Color("#0F1115"))
 	s.InputPrompt = lipgloss.NewStyle().
 		Foreground(ColorPrimary).
 		Bold(true)
+	s.InputPlaceholder = lipgloss.NewStyle().
+		Foreground(ColorMuted).
+		Faint(true)
+	s.InputHint = lipgloss.NewStyle().
+		Foreground(ColorMuted)
+	s.InputBadge = lipgloss.NewStyle().
+		Foreground(ColorPrimary).
+		Bold(true)
+	s.Textarea = textarea.Styles{
+		Focused: textarea.StyleState{
+			Base:             lipgloss.NewStyle().Foreground(ColorText).Background(lipgloss.Color("#0F1115")),
+			Text:             lipgloss.NewStyle().Foreground(ColorText),
+			LineNumber:       lipgloss.NewStyle().Foreground(ColorMuted),
+			CursorLine:       lipgloss.NewStyle().Foreground(ColorText),
+			CursorLineNumber: lipgloss.NewStyle().Foreground(ColorMuted),
+			Placeholder:      lipgloss.NewStyle().Foreground(ColorMuted).Faint(true),
+			Prompt:           lipgloss.NewStyle().Foreground(ColorPrimary).Bold(true),
+		},
+		Blurred: textarea.StyleState{
+			Base:             lipgloss.NewStyle().Foreground(ColorMuted).Background(lipgloss.Color("#0F1115")),
+			Text:             lipgloss.NewStyle().Foreground(ColorMuted),
+			LineNumber:       lipgloss.NewStyle().Foreground(ColorMuted),
+			CursorLine:       lipgloss.NewStyle().Foreground(ColorMuted),
+			CursorLineNumber: lipgloss.NewStyle().Foreground(ColorMuted),
+			Placeholder:      lipgloss.NewStyle().Foreground(ColorMuted).Faint(true),
+			Prompt:           lipgloss.NewStyle().Foreground(ColorMuted),
+		},
+		Cursor: textarea.CursorStyle{
+			Color: ColorSecondary,
+			Shape: tea.CursorBlock,
+			Blink: true,
+		},
+	}
 
 	// Session browser
 	s.BrowserBorder = lipgloss.NewStyle().

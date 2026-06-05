@@ -296,9 +296,18 @@ func (t *toolItem) renderSelected(c *Chat, width int, selected bool) string {
 
 	icon := t.renderIcon(c.styles)
 	nameStyle := t.renderNameStyle(c.styles)
-	summary := truncate(t.summaryText(), max(16, width-18))
+	summary := truncate(t.summaryText(), max(12, width-30))
+	expander := c.styles.MsgTimestamp.Render("  ")
+	if t.supportsPreview() {
+		if t.expanded {
+			expander = c.styles.MsgTimestamp.Render("▾")
+		} else {
+			expander = c.styles.MsgTimestamp.Render("▸")
+		}
+	}
+	status := c.styles.MsgTimestamp.Render(t.statusLabel())
 
-	parts := []string{"  " + icon, nameStyle.Render(toolDisplayName(t.name))}
+	parts := []string{expander, icon, nameStyle.Render(toolDisplayName(t.name)), status}
 	if summary != "" {
 		parts = append(parts, c.styles.MsgTimestamp.Render(summary))
 	}
@@ -367,17 +376,39 @@ func (t *toolItem) toolInput() map[string]any {
 	return normalizeMap(t.metadata["tool_input"])
 }
 
+func (t *toolItem) supportsPreview() bool {
+	switch t.name {
+	case "read_file", "write_file", "edit_file", "apply_patch", "bash", "spawn_agent", "wait_agent", "close_agent", "send_agent_message":
+		return true
+	default:
+		return strings.TrimSpace(t.resultContent()) != ""
+	}
+}
+
+func (t *toolItem) statusLabel() string {
+	switch t.status {
+	case "completed", "done":
+		return "done"
+	case "failed", "error":
+		return "failed"
+	case "running", "started":
+		return "running"
+	default:
+		return t.status
+	}
+}
+
 func (t *toolItem) summaryText() string {
 	input := t.toolInput()
 	switch t.name {
 	case "read_file":
-		path := prettyPath(stringFromMap(input, "file_path"))
+		path := compactPath(stringFromMap(input, "file_path"))
 		if path == "" {
 			path = t.label
 		}
 		return path
 	case "write_file", "edit_file":
-		path := prettyPath(stringFromMap(input, "file_path"))
+		path := compactPath(stringFromMap(input, "file_path"))
 		kind := stringFromMap(t.metadata, "type")
 		if kind != "" {
 			return path + " · " + kind
@@ -425,24 +456,24 @@ func (t *toolItem) inlinePreview(c *Chat, width int) string {
 		input := t.toolInput()
 		path := prettyPath(stringFromMap(input, "file_path"))
 		content := t.resultContent()
-		return renderContentPanel(c.styles, path, content, bodyWidth, 14)
+		return renderContentPanel(c.styles, path, content, bodyWidth, 8)
 	case "write_file", "edit_file":
 		path := prettyPath(stringFromMap(t.toolInput(), "file_path"))
 		if diff := t.diffPreview(); diff != "" {
-			return renderContentPanel(c.styles, path, diff, bodyWidth, 14)
+			return renderContentPanel(c.styles, path, diff, bodyWidth, 10)
 		}
-		return renderContentPanel(c.styles, path, t.resultContent(), bodyWidth, 14)
+		return renderContentPanel(c.styles, path, t.resultContent(), bodyWidth, 8)
 	case "apply_patch":
 		if diff := stringFromMap(t.toolInput(), "patch"); diff != "" {
-			return renderContentPanel(c.styles, "patch", diff, bodyWidth, 14)
+			return renderContentPanel(c.styles, "patch", diff, bodyWidth, 10)
 		}
-		return renderContentPanel(c.styles, "patch", t.resultContent(), bodyWidth, 14)
+		return renderContentPanel(c.styles, "patch", t.resultContent(), bodyWidth, 8)
 	case "bash":
-		return renderContentPanel(c.styles, "output", t.commandOutput(), bodyWidth, 12)
+		return renderContentPanel(c.styles, "output", t.commandOutput(), bodyWidth, 8)
 	case "spawn_agent", "wait_agent", "close_agent", "send_agent_message":
-		return renderContentPanel(c.styles, "agent", t.agentDetails(), bodyWidth, 10)
+		return renderContentPanel(c.styles, "agent", t.agentDetails(), bodyWidth, 8)
 	default:
-		return renderContentPanel(c.styles, toolDisplayName(t.name), t.resultContent(), bodyWidth, 10)
+		return renderContentPanel(c.styles, toolDisplayName(t.name), t.resultContent(), bodyWidth, 8)
 	}
 }
 
@@ -1119,6 +1150,18 @@ func prettyPath(path string) string {
 	}
 	clean := filepath.Clean(path)
 	return strings.ReplaceAll(clean, "\\", "/")
+}
+
+func compactPath(path string) string {
+	pretty := prettyPath(path)
+	if pretty == "" {
+		return ""
+	}
+	base := filepath.Base(pretty)
+	if base == "." || base == "/" {
+		return pretty
+	}
+	return base
 }
 
 func prettyJSON(v any) string {
