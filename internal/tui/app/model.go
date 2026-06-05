@@ -66,16 +66,17 @@ type Model struct {
 	width  int
 	height int
 
-	chat        *components.Chat
-	sessions    *components.SessionList
-	permission  *components.PermissionDialog
-	modelSelect *components.ModelPicker
-	commands    *components.CommandPalette
-	configPanel *components.ConfigPanel
-	completions *components.FileCompletions
-	attachments *components.Attachments
-	input       textarea.Model
-	spinner     spinner.Model
+	chat             *components.Chat
+	sessions         *components.SessionList
+	permission       *components.PermissionDialog
+	modelSelect      *components.ModelPicker
+	commands         *components.CommandPalette
+	configPanel      *components.ConfigPanel
+	completions      *components.FileCompletions
+	skillCompletions *components.SkillCompletions
+	attachments      *components.Attachments
+	input            textarea.Model
+	spinner          spinner.Model
 
 	focus               uiFocus
 	busy                bool
@@ -90,6 +91,8 @@ type Model struct {
 	sessionInputTokens  int
 	sessionOutputTokens int
 	lastTurnErr         string
+	skillCatalog        []tui.SkillInfo
+	skillCatalogLoaded  bool
 }
 
 func New(ws tui.Workspace, ctx context.Context) Model {
@@ -117,23 +120,24 @@ func New(ws tui.Workspace, ctx context.Context) Model {
 	sp.Style = lipgloss.NewStyle().Foreground(common.ColorYellow)
 
 	return Model{
-		workspace:   ws,
-		ctx:         ctx,
-		cancel:      cancel,
-		state:       stateWelcome,
-		focus:       uiFocusEditor,
-		keys:        keys,
-		styles:      styles,
-		chat:        components.NewChat(styles, 80, 20),
-		sessions:    components.NewSessionList(styles),
-		permission:  components.NewPermissionDialog(styles),
-		modelSelect: components.NewModelPicker(styles),
-		commands:    components.NewCommandPalette(styles),
-		configPanel: components.NewConfigPanel(styles),
-		completions: components.NewFileCompletions(styles, ws.WorkingDir()),
-		attachments: components.NewAttachments(styles),
-		input:       ta,
-		spinner:     sp,
+		workspace:        ws,
+		ctx:              ctx,
+		cancel:           cancel,
+		state:            stateWelcome,
+		focus:            uiFocusEditor,
+		keys:             keys,
+		styles:           styles,
+		chat:             components.NewChat(styles, 80, 20),
+		sessions:         components.NewSessionList(styles),
+		permission:       components.NewPermissionDialog(styles),
+		modelSelect:      components.NewModelPicker(styles),
+		commands:         components.NewCommandPalette(styles),
+		configPanel:      components.NewConfigPanel(styles),
+		completions:      components.NewFileCompletions(styles, ws.WorkingDir()),
+		skillCompletions: components.NewSkillCompletions(styles),
+		attachments:      components.NewAttachments(styles),
+		input:            ta,
+		spinner:          sp,
 	}
 }
 
@@ -271,6 +275,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.input = newInput
 			cmds = append(cmds, inputCmd)
 			m = m.resizeInput()
+			m.syncComposerAssist()
 		}
 		return m, tea.Batch(cmds...)
 
@@ -310,6 +315,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.input = newInput
 		cmds = append(cmds, cmd)
 		m = m.resizeInput()
+		m.syncComposerAssist()
 	}
 
 	return m, tea.Batch(cmds...)
@@ -736,6 +742,30 @@ func (m *Model) handleKey(msg tea.KeyPressMsg) (bool, tea.Cmd) {
 		}
 		// ── Editor focus (default) ────────────────────────────────────────
 
+		// Slash-skill suggestions intercept keys while open.
+		if m.skillCompletions.IsOpen() {
+			switch k {
+			case "esc":
+				m.skillCompletions.Close()
+			case "up", "k":
+				m.skillCompletions.Up()
+			case "down", "j":
+				m.skillCompletions.Down()
+			case "enter", "tab":
+				if sel := m.skillCompletions.Selected(); sel != "" {
+					m.input.SetValue(sel + " ")
+					m.input.CursorEnd()
+					m.skillCompletions.Close()
+					*m = m.resizeInput()
+					m.syncComposerAssist()
+					return true, nil
+				}
+				m.skillCompletions.Close()
+				return false, nil
+			}
+			return true, nil
+		}
+
 		// File completions popup intercepts keys while open.
 		if m.completions.IsOpen() {
 			switch k {
@@ -796,6 +826,7 @@ func (m *Model) handleKey(msg tea.KeyPressMsg) (bool, tea.Cmd) {
 			*m = m.resizeInput()
 			m.chat.AddUserMessage(text)
 			m.workspace.Submit(m.ctx, text)
+			m.syncComposerAssist()
 			return true, nil
 
 		case "shift+enter", "alt+enter":
@@ -1187,6 +1218,10 @@ func (m Model) inputView() string {
 	}
 
 	box := m.styles.InputBorder.Width(max(12, contentW-2)).Render(inner)
+	if m.skillCompletions.IsOpen() {
+		popup := m.skillCompletions.View(max(24, contentW-4))
+		return common.CenterHorizontally(popup+"\n"+box, m.width)
+	}
 	if m.completions.IsOpen() {
 		popup := m.completions.View(max(20, contentW-4))
 		return common.CenterHorizontally(popup+"\n"+box, m.width)
@@ -1288,6 +1323,23 @@ func boolCmd(ok bool) tea.Cmd {
 	return nil
 }
 
+func (m *Model) syncComposerAssist() {
+	if m.completions.IsOpen() {
+		m.skillCompletions.Close()
+		return
+	}
+	skills := m.loadSkillCatalog()
+	m.skillCompletions.Sync(skills, m.input.Value())
+}
+
+func (m *Model) loadSkillCatalog() []tui.SkillInfo {
+	if !m.skillCatalogLoaded {
+		m.skillCatalog = m.workspace.LoadSkills(m.ctx)
+		m.skillCatalogLoaded = true
+	}
+	return m.skillCatalog
+}
+
 func (m Model) loadSessions() tea.Cmd {
 	return func() tea.Msg { m.workspace.ListSessions(m.ctx); return nil }
 }
@@ -1314,7 +1366,9 @@ func (m Model) loadProviderConfig() tea.Cmd {
 func (m *Model) refreshSettingsHubData() {
 	m.commands.SetSectionItems("tools", buildToolSettingsItems(m.workspace.LoadToolCatalog(m.ctx)))
 	m.commands.SetSectionItems("mcp", buildMCPSettingsItems(m.workspace.LoadMCPServers(m.ctx)))
-	m.commands.SetSectionItems("skills", buildSkillSettingsItems(m.workspace.LoadSkills(m.ctx)))
+	m.skillCatalog = m.workspace.LoadSkills(m.ctx)
+	m.skillCatalogLoaded = true
+	m.commands.SetSectionItems("skills", buildSkillSettingsItems(m.skillCatalog))
 }
 
 func buildToolSettingsItems(items []tui.ToolInfo) []components.PaletteItem {

@@ -354,3 +354,43 @@ func TestModelSettingsSkillSelectionPrimesComposer(t *testing.T) {
 		t.Fatalf("expected editor focus after inserting skill, got %v", got)
 	}
 }
+
+func TestModelSlashSkillPopupOpensWhileTyping(t *testing.T) {
+	m := New(mockWorkspace{}, context.Background())
+	m.state = stateChat
+	m.width = 100
+	m.height = 30
+	m = m.relayout()
+	m.input.SetValue("/sum")
+	m.syncComposerAssist()
+	if !m.skillCompletions.IsOpen() {
+		t.Fatalf("expected slash skill popup to open for /sum")
+	}
+	view := m.inputView()
+	if !strings.Contains(view, "/summarise-pr") {
+		t.Fatalf("expected skill popup to render matching skill, got %q", view)
+	}
+}
+
+func TestModelSlashSkillPopupSelectionPrimesComposer(t *testing.T) {
+	m := New(mockWorkspace{}, context.Background())
+	m.state = stateChat
+	m.width = 100
+	m.height = 30
+	m = m.relayout()
+	m.input.SetValue("/sum")
+	m.syncComposerAssist()
+	consumed, cmd := m.handleKey(tea.KeyPressMsg(tea.Key{Code: tea.KeyEnter, Text: "enter"}))
+	if !consumed {
+		t.Fatalf("expected enter to be handled by slash skill popup")
+	}
+	if cmd != nil {
+		t.Fatalf("expected skill popup selection not to emit a command")
+	}
+	if got := m.input.Value(); got != "/summarise-pr " {
+		t.Fatalf("expected selected skill to replace typed query, got %q", got)
+	}
+	if m.skillCompletions.IsOpen() {
+		t.Fatalf("expected slash skill popup to close after selection")
+	}
+}
