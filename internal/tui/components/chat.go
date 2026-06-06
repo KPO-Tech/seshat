@@ -1273,6 +1273,8 @@ func (c *Chat) Clear() {
 	c.messages = c.messages[:0]
 	c.selectedTool = -1
 	c.detailOpen = false
+	c.planDepth = 0
+	c.pairDepth = 0
 	c.refresh()
 }
 

@@ -857,6 +857,14 @@ func (m *Model) handleKey(msg tea.KeyPressMsg) (bool, tea.Cmd) {
 		case "d", "delete":
 			id := m.sessions.DeleteSelected()
 			if id != "" {
+				if id == m.activeSession {
+					m.activeSession = ""
+					m.lastTurnErr = ""
+					m.lastErr = nil
+					m.busy = false
+					m.chat.Clear()
+					m.state = stateWelcome
+				}
 				return true, m.deleteSession(id)
 			}
 		case "backspace":
