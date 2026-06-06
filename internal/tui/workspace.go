@@ -112,6 +112,25 @@ type ModelChangedMsg struct {
 	Model    string
 }
 
+// ─── Search config types ──────────────────────────────────────────────────────
+
+// SearchKeyStatus describes one web-search provider in the TUI.
+type SearchKeyStatus struct {
+	ID          string // "tavily", "exa", "jina", "langsearch", "searxng", "ddg"
+	DisplayName string
+	Description string
+	EnvVar      string // e.g. "TAVILY_API_KEY"
+	DBKey       string // credential DB key
+	NeedsKey    bool   // false for DDG, SearXNG
+	IsSet       bool   // a value is currently stored in the DB
+}
+
+// SearchConfig is the TUI's view of the web search configuration.
+type SearchConfig struct {
+	Mode      string            // "auto", "tavily", "exa", etc.
+	Providers []SearchKeyStatus
+}
+
 // ─── Provider config types ────────────────────────────────────────────────────
 
 // ProviderFieldStatus describes one credential field for a provider.
@@ -231,4 +250,15 @@ type Workspace interface {
 
 	// DeleteProviderField removes a credential field for a provider.
 	DeleteProviderField(ctx context.Context, providerID, fieldKey string) error
+
+	// ── Search configuration ──────────────────────────────────────────────
+
+	// LoadSearchConfig returns the current web search provider configuration.
+	LoadSearchConfig(ctx context.Context) SearchConfig
+
+	// SaveSearchKey persists an API key for a search provider under dbKey.
+	SaveSearchKey(ctx context.Context, dbKey, value string) error
+
+	// SaveSearchMode sets the active web search provider mode (e.g. "auto", "tavily").
+	SaveSearchMode(ctx context.Context, mode string) error
 }

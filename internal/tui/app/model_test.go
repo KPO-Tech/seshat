@@ -45,6 +45,11 @@ func (mockWorkspace) SaveProviderField(context.Context, string, string, string) 
 func (mockWorkspace) DeleteProviderField(context.Context, string, string) error {
 	return nil
 }
+func (mockWorkspace) LoadSearchConfig(context.Context) tui.SearchConfig {
+	return tui.SearchConfig{Mode: "auto"}
+}
+func (mockWorkspace) SaveSearchKey(context.Context, string, string) error { return nil }
+func (mockWorkspace) SaveSearchMode(context.Context, string) error        { return nil }
 
 func TestModelRelayoutPropagatesChildSizes(t *testing.T) {
 	m := New(mockWorkspace{}, context.Background())

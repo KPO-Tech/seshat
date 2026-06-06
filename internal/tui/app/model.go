@@ -33,6 +33,7 @@ const (
 	stateModelSelect
 	stateCommands
 	stateProviderConfig
+	stateSearchConfig
 )
 
 // uiFocus mirrors crush's focus model: editor has the cursor / main lets
@@ -72,6 +73,7 @@ type Model struct {
 	modelSelect      *components.ModelPicker
 	commands         *components.CommandPalette
 	configPanel      *components.ConfigPanel
+	searchPanel      *components.SearchPanel
 	completions      *components.FileCompletions
 	skillCompletions *components.SkillCompletions
 	attachments      *components.Attachments
@@ -133,6 +135,7 @@ func New(ws tui.Workspace, ctx context.Context) Model {
 		modelSelect:      components.NewModelPicker(styles),
 		commands:         components.NewCommandPalette(styles),
 		configPanel:      components.NewConfigPanel(styles),
+		searchPanel:      components.NewSearchPanel(styles),
 		completions:      components.NewFileCompletions(styles, ws.WorkingDir()),
 		skillCompletions: components.NewSkillCompletions(styles),
 		attachments:      components.NewAttachments(styles),
@@ -156,6 +159,11 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	var cmds []tea.Cmd
 
 	switch msg := msg.(type) {
+	case openSettingsMsg:
+		m.returnState = stateWelcome
+		m.state = stateProviderConfig
+		return m, m.loadProviderConfig()
+
 	case tea.WindowSizeMsg:
 		m.width = msg.Width
 		m.height = msg.Height
@@ -266,6 +274,23 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.configPanel.SetSaved()
 		}
 
+	case searchConfigLoadedMsg:
+		m.searchPanel.SetConfig(msg.config)
+
+	case searchKeySaveResultMsg:
+		if msg.err != nil {
+			m.searchPanel.SetError(msg.err.Error())
+		} else {
+			m.searchPanel.SetKeySaved()
+		}
+
+	case searchModeSaveResultMsg:
+		if msg.err != nil {
+			m.searchPanel.SetError(msg.err.Error())
+		} else {
+			m.searchPanel.SetModeSaved()
+		}
+
 	// v2 uses KeyPressMsg instead of KeyMsg
 	case tea.KeyPressMsg:
 		consumed, cmd := m.handleKey(msg)
@@ -367,6 +392,8 @@ func (m Model) View() tea.View {
 		content = m.viewCommands()
 	case stateProviderConfig:
 		content = m.viewProviderConfig()
+	case stateSearchConfig:
+		content = m.viewSearchConfig()
 	case stateChat, statePermission:
 		content = m.viewChat()
 	default:
@@ -685,6 +712,10 @@ func (m *Model) handleKey(msg tea.KeyPressMsg) (bool, tea.Cmd) {
 			case "backspace":
 				cp.DeleteChar()
 			case "ctrl+v":
+				if text, err := clipboard.ReadAll(); err == nil && text != "" {
+					cp.TypeString(text)
+				}
+			case "ctrl+r":
 				cp.ToggleReveal()
 			default:
 				if len(k) == 1 {
@@ -713,6 +744,79 @@ func (m *Model) handleKey(msg tea.KeyPressMsg) (bool, tea.Cmd) {
 				if len(k) == 1 {
 					cp.TypeFilter(k)
 				}
+			}
+		}
+		return true, nil
+	}
+
+	// ── Search config panel (all keys consumed) ──────────────────────────
+	if m.state == stateSearchConfig {
+		sp := m.searchPanel
+		switch {
+		case sp.IsEditingKey():
+			switch k {
+			case "esc":
+				m.state = m.prevChatState()
+			case "left":
+				sp.ExitKeyEdit()
+			case "enter":
+				draft, dbKey := sp.CurrentDraft()
+				if strings.TrimSpace(draft) == "" {
+					sp.ExitKeyEdit()
+					return true, nil
+				}
+				return true, func() tea.Msg {
+					err := m.workspace.SaveSearchKey(m.ctx, dbKey, strings.TrimSpace(draft))
+					return searchKeySaveResultMsg{err: err}
+				}
+			case "backspace":
+				sp.DeleteChar()
+			case "ctrl+v":
+				if text, err := clipboard.ReadAll(); err == nil && text != "" {
+					sp.TypeString(text)
+				}
+			case "ctrl+r":
+				sp.ToggleReveal()
+			default:
+				if len(k) == 1 {
+					sp.TypeChar(k)
+				}
+			}
+		case sp.IsEditingMode():
+			switch k {
+			case "esc":
+				m.state = m.prevChatState()
+			case "left":
+				sp.ExitModeEdit()
+			case "up":
+				sp.Up()
+			case "down":
+				sp.Down()
+			case "enter":
+				chosen := sp.ConfirmMode()
+				if chosen != "" {
+					return true, func() tea.Msg {
+						err := m.workspace.SaveSearchMode(m.ctx, chosen)
+						return searchModeSaveResultMsg{err: err}
+					}
+				}
+			}
+		default:
+			switch k {
+			case "esc":
+				if m.returnState == stateCommands {
+					m.refreshSettingsHubData()
+					m.state = stateCommands
+					m.commands.Open("")
+				} else {
+					m.state = m.prevChatState()
+				}
+			case "up":
+				sp.Up()
+			case "down":
+				sp.Down()
+			case "enter":
+				sp.EnterList()
 			}
 		}
 		return true, nil
@@ -1043,6 +1147,10 @@ func (m *Model) activateSettingsSelection() tea.Cmd {
 			m.state = stateModelSelect
 			m.modelSelect.ClearFilter()
 			return m.listModels()
+		case "search":
+			m.returnState = stateCommands
+			m.state = stateSearchConfig
+			return m.loadSearchConfig()
 		}
 	case components.PaletteActionKind:
 		cmd := m.executeCommand(sel.ID)
@@ -1105,6 +1213,10 @@ func (m *Model) executeCommand(id string) tea.Cmd {
 }
 
 // pendingSubmitMsg is used to queue a prompt while session creation is pending.
+// openSettingsMsg triggers the provider settings panel — sent on first run when
+// no provider is configured.
+type openSettingsMsg struct{}
+
 type pendingSubmitMsg struct{ prompt string }
 
 // clearCopyNoticeMsg clears the transient "Copied!" footer message.
@@ -1115,6 +1227,15 @@ type cfgSaveResultMsg struct{ err error }
 
 // providerConfigLoadedMsg carries a refreshed provider list.
 type providerConfigLoadedMsg struct{ providers []tui.ProviderStatus }
+
+// searchConfigLoadedMsg carries the refreshed search configuration.
+type searchConfigLoadedMsg struct{ config tui.SearchConfig }
+
+// searchKeySaveResultMsg is sent after attempting to save a search provider key.
+type searchKeySaveResultMsg struct{ err error }
+
+// searchModeSaveResultMsg is sent after attempting to save the search mode.
+type searchModeSaveResultMsg struct{ err error }
 
 func editorPrompt(styles common.Styles) func(textarea.PromptInfo) string {
 	return func(info textarea.PromptInfo) string {
@@ -1143,12 +1264,19 @@ func (m Model) viewWelcome() string {
 		m.styles.Key.Render("ctrl+q") + " " + m.styles.Desc.Render("quit"),
 	}, "  ")
 
+	extra := ""
+	if m.workspace.ModelString() == "" {
+		extra = "\n\n" + m.styles.MsgTimestamp.Render("No provider configured — press ") +
+			m.styles.Key.Render("ctrl+p") +
+			m.styles.MsgTimestamp.Render(" to set one up")
+	}
+
 	contentW := m.contentWidth()
 	body := lipgloss.NewStyle().
 		Width(contentW).
 		Height(m.height-2).
 		Align(lipgloss.Center, lipgloss.Center).
-		Render(logoArt + "\n" + wordmark + "\n\n" + tagline + "\n\n" + hint)
+		Render(logoArt + "\n" + wordmark + "\n\n" + tagline + "\n\n" + hint + extra)
 
 	return m.header() + "\n" + common.CenterHorizontally(body, m.width)
 }
@@ -1562,6 +1690,25 @@ func (m Model) loadProviderConfig() tea.Cmd {
 		providers := m.workspace.LoadProviderConfig(m.ctx)
 		return providerConfigLoadedMsg{providers: providers}
 	}
+}
+
+func (m Model) loadSearchConfig() tea.Cmd {
+	return func() tea.Msg {
+		cfg := m.workspace.LoadSearchConfig(m.ctx)
+		return searchConfigLoadedMsg{config: cfg}
+	}
+}
+
+func (m Model) viewSearchConfig() string {
+	m.searchPanel.SetSize(m.width, m.height)
+	overlay := m.searchPanel.Centered()
+	var backdrop string
+	if m.activeSession != "" {
+		backdrop = m.viewChat()
+	} else {
+		backdrop = m.viewWelcome()
+	}
+	return common.OverlayOn(backdrop, overlay, m.width, m.height)
 }
 
 func (m *Model) refreshSettingsHubData() {

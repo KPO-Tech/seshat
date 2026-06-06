@@ -3,10 +3,11 @@ package memory
 import (
 	"fmt"
 	"os"
-	"path/filepath"
 	"sort"
 	"strings"
 	"time"
+
+	"github.com/EngineerProjects/nexus-engine/pkg/runtimepath"
 )
 
 // ============================================================================
@@ -283,13 +284,9 @@ func getBaseMemoryPath() (string, error) {
 		return path, nil
 	}
 
-	// Default to ~/.nexus/memory
-	homeDir, err := os.UserHomeDir()
-	if err != nil {
-		return "", fmt.Errorf("get home dir: %w", err)
-	}
-
-	return filepath.Join(homeDir, ".nexus", "memory"), nil
+	// Default to <runtime-root>/memory — honours NEXUS_RUNTIME_ROOT so the CLI
+	// (nexus-cli) and the product backend (nexus) stay isolated automatically.
+	return runtimepath.Join("", "memory"), nil
 }
 
 // EnsureDirectory ensures the memory directory exists

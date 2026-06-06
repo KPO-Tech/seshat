@@ -12,6 +12,7 @@ import (
 	"os"
 	"path/filepath"
 
+	"github.com/EngineerProjects/nexus-engine/pkg/runtimepath"
 	"gorm.io/gorm"
 	"gorm.io/gorm/clause"
 )
@@ -89,19 +90,32 @@ func (db *DB) ListCredentialKeys(ctx context.Context) ([]string, error) {
 
 // ─── Encryption helpers ────────────────────────────────────────────────────────
 
-const keyFile = ".nexus_secret"
-
-// loadOrCreateEncryptionKey returns the 32-byte AES key from ~/.nexus_secret,
-// creating and writing it with mode 0600 on first use.
+// loadOrCreateEncryptionKey returns the 32-byte AES key from
+// ~/.config/nexus/secret.key, creating and writing it with mode 0600 on first use.
+// Falls back to migrating the legacy ~/.nexus_secret key on first run.
 func loadOrCreateEncryptionKey() ([]byte, error) {
 	path, err := encryptionKeyPath()
 	if err != nil {
 		return nil, err
 	}
+
 	data, err := os.ReadFile(path)
 	if err == nil && len(data) == 32 {
 		return data, nil
 	}
+
+	// Migrate legacy key from ~/.nexus_secret if it exists.
+	if home, herr := os.UserHomeDir(); herr == nil {
+		legacy := filepath.Join(home, ".nexus_secret")
+		if legacyData, lerr := os.ReadFile(legacy); lerr == nil && len(legacyData) == 32 {
+			if merr := os.MkdirAll(filepath.Dir(path), 0o700); merr == nil {
+				if werr := os.WriteFile(path, legacyData, 0o600); werr == nil {
+					return legacyData, nil
+				}
+			}
+		}
+	}
+
 	// Generate a new key.
 	key := make([]byte, 32)
 	if _, err := io.ReadFull(rand.Reader, key); err != nil {
@@ -117,11 +131,7 @@ func loadOrCreateEncryptionKey() ([]byte, error) {
 }
 
 func encryptionKeyPath() (string, error) {
-	home, err := os.UserHomeDir()
-	if err != nil {
-		return "", fmt.Errorf("resolve home directory: %w", err)
-	}
-	return filepath.Join(home, keyFile), nil
+	return runtimepath.Join("", "secret.key"), nil
 }
 
 // encryptAESGCM encrypts plaintext with AES-256-GCM and returns a base64 string

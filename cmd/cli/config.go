@@ -16,6 +16,7 @@ import (
 
 // credentialKey constants — these are the keys used in the credentials table.
 const (
+	credKeyModel     = "model"
 	credKeyAPIKey    = "api_key"
 	credKeyBaseURL   = "provider_base_url"
 	credKeyRegion    = "provider_region"
@@ -150,6 +151,11 @@ func runConfig(args []string, stdin io.Reader, stdout, stderr io.Writer) error {
 
 	// ── Validate + save ────────────────────────────────────────────────────────
 	if err := engineconfig.ValidateProviderSetup(config, provider); err != nil {
+		return err
+	}
+
+	// Persist model selection to DB so it survives YAML resets.
+	if err := saveCredential(database, credKeyModel, config.Model); err != nil {
 		return err
 	}
 
@@ -418,6 +424,13 @@ func loadCredsIntoConfig(database *db.DB, config *engineconfig.Config) {
 		return loadCred(fieldKey)
 	}
 
+	// Load persisted model selection from DB when YAML has none.
+	if strings.TrimSpace(config.Model) == "" {
+		if v := loadCred(credKeyModel); v != "" {
+			config.Model = v
+		}
+	}
+
 	// Determine the active provider from the config model string.
 	activeProvider := ""
 	if m := resolveModel(*config); m.Provider != "" {
@@ -445,6 +458,7 @@ func loadCredsIntoConfig(database *db.DB, config *engineconfig.Config) {
 }
 
 func stripRuntimeSecrets(config engineconfig.Config) engineconfig.Config {
+	// Strip secrets — stored in the DB, never in YAML.
 	config.APIKey = ""
 	config.ProviderBaseURL = ""
 	config.ProviderRegion = ""
@@ -453,6 +467,10 @@ func stripRuntimeSecrets(config engineconfig.Config) engineconfig.Config {
 	config.TavilyAPIKey = ""
 	config.ExaAPIKey = ""
 	config.JinaAPIKey = ""
+	// RuntimeRoot is always re-computed at startup from NEXUS_RUNTIME_ROOT or
+	// the XDG default (~/.config/nexus-cli). Never persist it so the YAML stays
+	// portable and doesn't hard-code absolute paths.
+	config.RuntimeRoot = ""
 	return config
 }
 

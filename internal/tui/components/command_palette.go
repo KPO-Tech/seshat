@@ -64,6 +64,7 @@ func defaultPaletteRootItems() []PaletteItem {
 		{Kind: PaletteSectionKind, ID: "commands", Name: "Commands", Desc: "Shortcuts, sessions, copy actions, and app controls"},
 		{Kind: PaletteRouteKind, ID: "providers", Name: "Providers", Shortcut: "ctrl+,", Desc: "Configure API keys and provider credentials"},
 		{Kind: PaletteRouteKind, ID: "models", Name: "Models", Shortcut: "ctrl+m", Desc: "Switch the active AI model"},
+		{Kind: PaletteRouteKind, ID: "search", Name: "Web Search", Desc: "Configure web search providers and API keys"},
 		{Kind: PaletteSectionKind, ID: "tools", Name: "Tools", Desc: "Current tool UX and future browser entry point"},
 		{Kind: PaletteSectionKind, ID: "mcp", Name: "MCP", Desc: "Server usage notes and future management surface"},
 		{Kind: PaletteSectionKind, ID: "skills", Name: "Skills", Desc: "Slash-skill workflow and future skill discovery"},

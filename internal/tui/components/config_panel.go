@@ -110,6 +110,15 @@ func (p *ConfigPanel) TypeChar(ch string) {
 	p.statusMsg = ""
 }
 
+// TypeString appends an arbitrary string to the active field draft (used for clipboard paste).
+func (p *ConfigPanel) TypeString(s string) {
+	if !p.editing || p.fieldCursor >= len(p.inputs) {
+		return
+	}
+	p.inputs[p.fieldCursor].draft += s
+	p.statusMsg = ""
+}
+
 // DeleteChar removes the last character from the active field draft.
 func (p *ConfigPanel) DeleteChar() {
 	if !p.editing || p.fieldCursor >= len(p.inputs) {
@@ -276,9 +285,9 @@ func (p *ConfigPanel) viewEdit(w, innerW int) string {
 			cursor := lipgloss.NewStyle().Foreground(common.ColorPrimary).Render("█")
 			valLine = "  ▶ " + lipgloss.NewStyle().Foreground(common.ColorText).Render(display) + cursor
 			if inp.field.Secret {
-				revealHint := "ctrl+v: reveal"
+				revealHint := "ctrl+r: reveal"
 				if p.showSecret {
-					revealHint = "ctrl+v: hide"
+					revealHint = "ctrl+r: hide"
 				}
 				valLine += "  " + p.styles.MsgTimestamp.Render(revealHint)
 			}
@@ -314,7 +323,7 @@ func (p *ConfigPanel) viewEdit(w, innerW int) string {
 		statusLine = "  " + st.Render(p.statusMsg)
 	}
 
-	hint := p.styles.Footer.Render("  enter: save  ↑↓ switch field  ← back  esc: close")
+	hint := p.styles.Footer.Render("  enter: save  ctrl+v: paste  ctrl+r: reveal  ↑↓ switch field  ← back  esc: close")
 
 	parts := []string{title, sep, ""}
 	parts = append(parts, rows...)

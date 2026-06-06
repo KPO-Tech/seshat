@@ -3,10 +3,10 @@ package auth
 import (
 	"context"
 	"os"
-	"path/filepath"
 
 	"github.com/EngineerProjects/nexus-engine/internal/auth/store"
 	"github.com/EngineerProjects/nexus-engine/internal/auth/types"
+	"github.com/EngineerProjects/nexus-engine/pkg/runtimepath"
 )
 
 // ============================================================================
@@ -150,6 +150,5 @@ func DefaultConfigPath() string {
 		return path
 	}
 
-	homeDir, _ := os.UserHomeDir()
-	return filepath.Join(homeDir, ".nexus", "auth.json")
+	return runtimepath.Join("", "auth.json")
 }

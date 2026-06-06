@@ -2,6 +2,8 @@ package main
 
 import (
 	"context"
+	"encoding/json"
+	"fmt"
 	"io"
 	"log"
 	"os"
@@ -91,11 +93,74 @@ type nexusWorkspace struct {
 	debounce *chunkDebounce
 }
 
+// credKeyOllamaModels is the DB key for the cached Ollama model list.
+const credKeyOllamaModels = "ollama:models"
+
+type ollamaCachedModel struct {
+	ID      string `json:"id"`
+	Context int    `json:"ctx,omitempty"`
+}
+
+// probeOllamaInBackground discovers Ollama models, caches them in the DB,
+// and sends a ModelListMsg so the picker refreshes if it happens to be open.
+// Safe to call multiple times; each call spawns a goroutine that runs to completion.
+func (w *nexusWorkspace) probeOllamaInBackground() {
+	go func() {
+		ctx, cancel := context.WithTimeout(context.Background(), 12*time.Second)
+		defer cancel()
+
+		cfg, _ := engineconfig.Load()
+		database, _ := openCredentialsDB(cfg)
+		if database != nil {
+			defer database.Close()
+		}
+
+		baseURL := ollamaBaseURLFromDB(context.Background(), database)
+
+		fetched, err := providers.FetchModels(ctx, "ollama", baseURL, "")
+		if err != nil || len(fetched) == 0 {
+			return
+		}
+
+		// Persist to DB cache.
+		cached := make([]ollamaCachedModel, 0, len(fetched))
+		for _, m := range fetched {
+			cached = append(cached, ollamaCachedModel{ID: m.ModelID, Context: m.ContextWindow})
+		}
+		if data, jerr := json.Marshal(cached); jerr == nil && database != nil {
+			_ = database.UpsertCredential(context.Background(), credKeyOllamaModels, string(data))
+		}
+
+		// Trigger a full model-list refresh so the picker updates if open.
+		w.ListModels(context.Background())
+	}()
+}
+
+// ollamaBaseURLFromDB returns the user-configured Ollama endpoint from the DB,
+// or empty string (which makes FetchModels fall back to localhost:11434).
+func ollamaBaseURLFromDB(ctx context.Context, database interface {
+	GetCredential(ctx context.Context, key string) (string, bool, error)
+}) string {
+	if database == nil {
+		return ""
+	}
+	if v, ok, _ := database.GetCredential(ctx, "provider_base_url:ollama"); ok && v != "" {
+		return v
+	}
+	return ""
+}
+
 // newNexusWorkspace creates a nexusWorkspace. The workspace registers its own
 // callbacks on the ClientConfig so that events are forwarded to the TUI.
 func newNexusWorkspace(options runtimeOptions) (*nexusWorkspace, error) {
+	// Keep w.model as "" when no provider is configured — the TUI uses this
+	// to detect first-run and auto-open the provider settings panel.
+	modelStr := ""
+	if options.Model.Provider != "" {
+		modelStr = options.Model.String()
+	}
 	w := &nexusWorkspace{
-		model:      options.Model.String(),
+		model:      modelStr,
 		workDir:    options.WorkingDir,
 		permMode:   string(options.PermissionMode),
 		sqlitePath: options.SQLitePath,
@@ -103,6 +168,13 @@ func newNexusWorkspace(options runtimeOptions) (*nexusWorkspace, error) {
 	w.debounce = newChunkDebounce(33*time.Millisecond, func(text string) {
 		w.send(tui.ChunkMsg{Text: text})
 	})
+
+	// When no provider is configured, fall back to the SDK default so the
+	// client can be initialized. The user will configure the real provider
+	// through the settings panel before submitting the first message.
+	if options.Model.Provider == "" {
+		options.Model = sdk.DefaultClientConfig().Model
+	}
 
 	client, err := newClient(
 		options,
@@ -114,6 +186,8 @@ func newNexusWorkspace(options runtimeOptions) (*nexusWorkspace, error) {
 		return nil, err
 	}
 	w.client = client
+	// Probe Ollama in background so model cache is warm by the time the picker opens.
+	w.probeOllamaInBackground()
 	return w, nil
 }
 
@@ -248,12 +322,128 @@ func (w *nexusWorkspace) PermissionMode() string { return w.permMode }
 
 func (w *nexusWorkspace) ListModels(ctx context.Context) {
 	go func() {
+		cfg, _ := engineconfig.Load()
+		database, _ := openCredentialsDB(cfg)
+		if database != nil {
+			defer database.Close()
+		}
+
+		// Resolve which provider the global (non-scoped) api_key belongs to,
+		// based on the persisted model selection.
+		globalKeyProvider := sdk.APIProvider("")
+		if database != nil {
+			if modelStr, ok, _ := database.GetCredential(ctx, credKeyModel); ok && modelStr != "" {
+				globalKeyProvider = engineconfig.ParseModelIdentifier(modelStr).Provider
+			}
+		}
+
+		// isConfigured returns true when the provider has usable credentials
+		// (env var, scoped DB key, or global DB key attributed to this provider).
+		isConfigured := func(provider sdk.APIProvider) bool {
+			for _, ev := range engineconfig.ProviderCredentialEnvVars(provider) {
+				if strings.TrimSpace(os.Getenv(ev)) != "" {
+					return true
+				}
+			}
+			if database == nil {
+				return false
+			}
+			pid := strings.ToLower(string(provider))
+			// Scoped key written by the TUI config panel.
+			if v, ok, _ := database.GetCredential(ctx, "api_key:"+pid); ok && v != "" {
+				return true
+			}
+			// Global key written by `nexus config`, attributed to its provider.
+			if provider == globalKeyProvider {
+				if v, ok, _ := database.GetCredential(ctx, credKeyAPIKey); ok && v != "" {
+					return true
+				}
+			}
+			// Cloud providers (Bedrock, Vertex) store region/project instead of a key.
+			if len(engineconfig.ProviderCredentialEnvVars(provider)) == 0 {
+				for _, ck := range []string{"provider_region:" + pid, "provider_project_id:" + pid} {
+					if v, ok, _ := database.GetCredential(ctx, ck); ok && v != "" {
+						return true
+					}
+				}
+			}
+			return false
+		}
+
 		all := providers.AllProvidersInfo()
 		var models []tui.ProviderModel
+
 		for provider, info := range all {
+			providerStr := string(provider)
+
+			if provider == sdk.APIProviderOllama {
+				// Quick live refresh — longer timeout since /api/show is called per model.
+				// Falls back to startup-cached list on timeout or error.
+				ollamaURL := ollamaBaseURLFromDB(ctx, database)
+				liveCtx, liveCancel := context.WithTimeout(ctx, 8*time.Second)
+				fetched, liveErr := providers.FetchModels(liveCtx, providerStr, ollamaURL, "")
+				liveCancel()
+
+				if liveErr == nil && len(fetched) > 0 {
+					// Update the cache in background so future opens are fast.
+					go func(list []providers.FetchedModel) {
+						cached := make([]ollamaCachedModel, 0, len(list))
+						for _, m := range list {
+							cached = append(cached, ollamaCachedModel{ID: m.ModelID, Context: m.ContextWindow})
+						}
+						if data, err := json.Marshal(cached); err == nil {
+							if cfg2, err := engineconfig.Load(); err == nil {
+								if db2, err := openCredentialsDB(cfg2); err == nil {
+									_ = db2.UpsertCredential(context.Background(), credKeyOllamaModels, string(data))
+									_ = db2.Close()
+								}
+							}
+						}
+					}(fetched)
+					for _, m := range fetched {
+						desc := m.DisplayName
+						if m.ContextWindow > 0 {
+							desc = fmt.Sprintf("%s · %dk ctx", m.DisplayName, m.ContextWindow/1000)
+						}
+						models = append(models, tui.ProviderModel{
+							Provider:    providerStr,
+							Identifier:  m.ModelID,
+							DisplayName: m.DisplayName,
+							Description: desc,
+							Context:     m.ContextWindow,
+						})
+					}
+				} else if database != nil {
+					// Live fetch failed or timed out — serve the startup cache.
+					if raw, ok, _ := database.GetCredential(ctx, credKeyOllamaModels); ok && raw != "" {
+						var cached []ollamaCachedModel
+						if json.Unmarshal([]byte(raw), &cached) == nil {
+							for _, m := range cached {
+								desc := m.ID
+								if m.Context > 0 {
+									desc = fmt.Sprintf("%s · %dk ctx", m.ID, m.Context/1000)
+								}
+								models = append(models, tui.ProviderModel{
+									Provider:    providerStr,
+									Identifier:  m.ID,
+									DisplayName: m.ID,
+									Description: desc,
+									Context:     m.Context,
+								})
+							}
+						}
+					}
+				}
+				continue
+			}
+
+			if !isConfigured(provider) {
+				continue
+			}
+
 			for _, m := range info.Models {
 				models = append(models, tui.ProviderModel{
-					Provider:    string(provider),
+					Provider:    providerStr,
 					Identifier:  m.Identifier,
 					DisplayName: info.DisplayName + " / " + m.Identifier,
 					Description: m.Description,
@@ -261,14 +451,23 @@ func (w *nexusWorkspace) ListModels(ctx context.Context) {
 				})
 			}
 		}
+
 		w.send(tui.ModelListMsg{Models: models})
 	}()
 }
 
 func (w *nexusWorkspace) SetModel(providerID, modelID string) {
+	modelStr := providerID + ":" + modelID
 	w.mu.Lock()
-	w.model = providerID + ":" + modelID
+	w.model = modelStr
 	w.mu.Unlock()
+	// Persist to DB so the selection survives restarts.
+	if cfg, err := engineconfig.Load(); err == nil {
+		if db, err := openCredentialsDB(cfg); err == nil {
+			_ = db.UpsertCredential(context.Background(), credKeyModel, modelStr)
+			_ = db.Close()
+		}
+	}
 	w.send(tui.ModelChangedMsg{Provider: providerID, Model: modelID})
 }
 
@@ -340,7 +539,14 @@ func (w *nexusWorkspace) SaveProviderField(ctx context.Context, providerID, fiel
 		return err
 	}
 	defer database.Close()
-	return database.UpsertCredential(ctx, providerCredKey(fieldKey, providerID), value)
+	if err := database.UpsertCredential(ctx, providerCredKey(fieldKey, providerID), value); err != nil {
+		return err
+	}
+	// Re-probe Ollama whenever its endpoint is saved so the model cache stays current.
+	if strings.ToLower(providerID) == "ollama" && fieldKey == "provider_base_url" {
+		w.probeOllamaInBackground()
+	}
+	return nil
 }
 
 func (w *nexusWorkspace) DeleteProviderField(ctx context.Context, providerID, fieldKey string) error {
@@ -350,7 +556,93 @@ func (w *nexusWorkspace) DeleteProviderField(ctx context.Context, providerID, fi
 		return err
 	}
 	defer database.Close()
-	return database.DeleteCredential(ctx, providerCredKey(fieldKey, providerID))
+	if err := database.DeleteCredential(ctx, providerCredKey(fieldKey, providerID)); err != nil {
+		return err
+	}
+	// Re-probe with default URL when the Ollama endpoint is cleared.
+	if strings.ToLower(providerID) == "ollama" && fieldKey == "provider_base_url" {
+		w.probeOllamaInBackground()
+	}
+	return nil
+}
+
+// searchProviderCatalog is the static metadata for each search provider.
+var searchProviderCatalog = []tui.SearchKeyStatus{
+	{ID: "tavily", DisplayName: "Tavily", Description: "AI-optimised search", EnvVar: "TAVILY_API_KEY", DBKey: "TAVILY_API_KEY", NeedsKey: true},
+	{ID: "exa", DisplayName: "Exa", Description: "Neural search engine", EnvVar: "EXA_API_KEY", DBKey: "EXA_API_KEY", NeedsKey: true},
+	{ID: "jina", DisplayName: "Jina AI", Description: "Reader-based web retrieval", EnvVar: "JINA_API_KEY", DBKey: "JINA_API_KEY", NeedsKey: true},
+	{ID: "langsearch", DisplayName: "LangSearch", Description: "Free AI-optimised search", EnvVar: "LANGSEARCH_API_KEY", DBKey: "LANGSEARCH_API_KEY", NeedsKey: true},
+	{ID: "searxng", DisplayName: "SearXNG", Description: "Self-hosted meta-search", NeedsKey: false},
+	{ID: "ddg", DisplayName: "DuckDuckGo", Description: "Privacy-friendly fallback", NeedsKey: false},
+}
+
+func (w *nexusWorkspace) LoadSearchConfig(_ context.Context) tui.SearchConfig {
+	cfg, _ := engineconfig.Load()
+	database, dbErr := openCredentialsDB(cfg)
+	if dbErr == nil {
+		defer database.Close()
+	}
+
+	mode, _, _ := func() (string, bool, error) {
+		if database == nil {
+			return "", false, nil
+		}
+		return database.GetCredential(context.Background(), "WEB_SEARCH_PROVIDER")
+	}()
+	if mode == "" {
+		mode = os.Getenv("WEB_SEARCH_PROVIDER")
+	}
+	if mode == "" {
+		mode = "auto"
+	}
+
+	providers := make([]tui.SearchKeyStatus, len(searchProviderCatalog))
+	copy(providers, searchProviderCatalog)
+	for i, p := range providers {
+		if !p.NeedsKey {
+			continue
+		}
+		if database != nil {
+			if _, ok, _ := database.GetCredential(context.Background(), p.DBKey); ok {
+				providers[i].IsSet = true
+				continue
+			}
+		}
+		// Fallback: check env var (e.g. set by ApplySearchKeys).
+		if os.Getenv(p.EnvVar) != "" {
+			providers[i].IsSet = true
+		}
+	}
+	return tui.SearchConfig{Mode: mode, Providers: providers}
+}
+
+func (w *nexusWorkspace) SaveSearchKey(ctx context.Context, dbKey, value string) error {
+	cfg, _ := engineconfig.Load()
+	database, err := openCredentialsDB(cfg)
+	if err != nil {
+		return err
+	}
+	defer database.Close()
+	if err := database.UpsertCredential(ctx, dbKey, value); err != nil {
+		return err
+	}
+	// Apply immediately so the current process uses the new key.
+	os.Setenv(strings.TrimPrefix(dbKey, "search:"), value)
+	return nil
+}
+
+func (w *nexusWorkspace) SaveSearchMode(ctx context.Context, mode string) error {
+	cfg, _ := engineconfig.Load()
+	database, err := openCredentialsDB(cfg)
+	if err != nil {
+		return err
+	}
+	defer database.Close()
+	if err := database.UpsertCredential(ctx, "WEB_SEARCH_PROVIDER", mode); err != nil {
+		return err
+	}
+	os.Setenv("WEB_SEARCH_PROVIDER", mode)
+	return nil
 }
 
 func (w *nexusWorkspace) LoadToolCatalog(ctx context.Context) []tui.ToolInfo {
