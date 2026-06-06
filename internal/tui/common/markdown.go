@@ -1,6 +1,8 @@
 package common
 
 import (
+	"fmt"
+	"strings"
 	"sync"
 
 	"charm.land/glamour/v2"
@@ -55,6 +57,31 @@ func InvalidateMarkdownRendererCache() {
 	defer rendererLocksMu.Unlock()
 	markdownCache = map[int]*glamour.TermRenderer{}
 	rendererLocks = map[*glamour.TermRenderer]*sync.Mutex{}
+}
+
+// RenderMarkdown safely renders markdown using the shared cached renderer for
+// the requested width. Third-party renderer panics are converted into errors so
+// the TUI can fall back to plain text instead of crashing.
+func RenderMarkdown(width int, body string) (rendered string, err error) {
+	renderer := MarkdownRenderer(width)
+	if renderer == nil {
+		return "", fmt.Errorf("markdown renderer unavailable")
+	}
+	mu := LockMarkdownRenderer(renderer)
+	mu.Lock()
+	defer mu.Unlock()
+	defer func() {
+		if r := recover(); r != nil {
+			InvalidateMarkdownRendererCache()
+			rendered = ""
+			err = fmt.Errorf("markdown render panic: %v", r)
+		}
+	}()
+	rendered, err = renderer.Render(strings.ReplaceAll(body, "\r\n", "\n"))
+	if err != nil {
+		return "", err
+	}
+	return strings.TrimRight(rendered, "\n"), nil
 }
 
 func markdownStyleConfig() glamouransi.StyleConfig {

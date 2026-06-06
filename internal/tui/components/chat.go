@@ -475,7 +475,7 @@ func (t *toolItem) toolInput() map[string]any {
 
 func (t *toolItem) supportsPreview() bool {
 	switch t.name {
-	case "read_file", "write_file", "edit_file", "apply_patch", "bash", "spawn_agent", "wait_agent", "close_agent", "send_agent_message":
+	case "read_file", "write_file", "edit_file", "apply_patch", "bash", "web_search", "web_fetch", "spawn_agent", "wait_agent", "close_agent", "send_agent_message":
 		return true
 	default:
 		return strings.TrimSpace(t.resultContent()) != ""
@@ -506,17 +506,26 @@ func (t *toolItem) summaryText() string {
 		return path
 	case "write_file", "edit_file":
 		path := compactPath(stringFromMap(input, "file_path"))
-		kind := stringFromMap(t.metadata, "type")
-		if kind != "" {
-			return path + " · " + kind
+		parts := make([]string, 0, 3)
+		if path != "" {
+			parts = append(parts, path)
 		}
-		return path
+		if kind := stringFromMap(t.metadata, "type"); kind != "" {
+			parts = append(parts, kind)
+		}
+		if stats := t.changeStatsText(); stats != "" {
+			parts = append(parts, stats)
+		}
+		return strings.Join(parts, " · ")
 	case "apply_patch":
-		if content := stringFromMap(t.metadata, "content"); content != "" {
-			return firstLine(content)
+		if stats := t.changeStatsText(); stats != "" {
+			return "patch · " + stats
 		}
 		if patch := stringFromMap(input, "patch"); patch != "" {
 			return firstLine(strings.TrimSpace(patch))
+		}
+		if content := stringFromMap(t.metadata, "content"); content != "" {
+			return firstLine(content)
 		}
 	case "bash":
 		cmd := strings.TrimSpace(stringFromMap(input, "command"))
@@ -524,6 +533,27 @@ func (t *toolItem) summaryText() string {
 			cmd = strings.TrimSpace(stringFromMap(t.metadata, "description"))
 		}
 		return cmd
+	case "web_search":
+		query := strings.TrimSpace(stringFromMap(input, "query"))
+		if query == "" {
+			query = strings.TrimSpace(stringFromMap(t.metadata, "query"))
+		}
+		if count, ok := intFromMap(t.metadata, "result_count"); ok && count > 0 {
+			return fmt.Sprintf("%s · %d results", query, count)
+		}
+		return query
+	case "web_fetch":
+		summary := strings.TrimSpace(stringFromMap(input, "url"))
+		if summary == "" {
+			summary = strings.TrimSpace(stringFromMap(t.metadata, "url"))
+		}
+		if title := strings.TrimSpace(stringFromMap(t.metadata, "title")); title != "" {
+			summary = title
+		}
+		if code, ok := intFromMap(t.metadata, "code"); ok && code > 0 {
+			return fmt.Sprintf("%s · %d", compactPath(summary), code)
+		}
+		return compactPath(summary)
 	case "spawn_agent":
 		prompt := strings.TrimSpace(stringFromMap(input, "prompt"))
 		nickname := strings.TrimSpace(stringFromMap(input, "nickname"))
@@ -547,57 +577,38 @@ func (t *toolItem) summaryText() string {
 }
 
 func (t *toolItem) inlinePreview(c *Chat, width int) string {
-	bodyWidth := max(20, width-8)
+	bodyWidth := max(20, width-4)
 	switch t.name {
 	case "read_file":
-		input := t.toolInput()
-		path := prettyPath(stringFromMap(input, "file_path"))
-		content := t.resultContent()
-		return renderContentPanel(c.styles, path, content, bodyWidth, 8)
+		path := prettyPath(stringFromMap(t.toolInput(), "file_path"))
+		return renderFilePanel(c.styles, path, t.resultContent(), bodyWidth, inlinePreviewLines)
 	case "write_file", "edit_file":
 		path := prettyPath(stringFromMap(t.toolInput(), "file_path"))
 		if diff := t.diffPreview(); diff != "" {
-			return renderContentPanel(c.styles, path, diff, bodyWidth, 10)
+			return renderDiffPanel(c.styles, diff, bodyWidth, inlinePreviewLines)
 		}
-		return renderContentPanel(c.styles, path, t.resultContent(), bodyWidth, 8)
+		return renderFilePanel(c.styles, path, t.resultContent(), bodyWidth, inlinePreviewLines)
 	case "apply_patch":
-		if diff := stringFromMap(t.toolInput(), "patch"); diff != "" {
-			return renderContentPanel(c.styles, "patch", diff, bodyWidth, 10)
+		diff := stringFromMap(t.toolInput(), "patch")
+		if strings.TrimSpace(diff) == "" {
+			diff = t.resultContent()
 		}
-		return renderContentPanel(c.styles, "patch", t.resultContent(), bodyWidth, 8)
+		return renderDiffPanel(c.styles, diff, bodyWidth, inlinePreviewLines)
 	case "bash":
-		return renderContentPanel(c.styles, "output", t.commandOutput(), bodyWidth, 8)
+		return renderBashInline(c.styles, stringFromMap(t.toolInput(), "command"), t.commandOutput(), bodyWidth, inlinePreviewLines)
+	case "web_search":
+		return renderContentPanel(c.styles, "results", t.resultContent(), bodyWidth, 8, contentFlavorMarkdown)
+	case "web_fetch":
+		return renderContentPanel(c.styles, "page", t.resultContent(), bodyWidth, 8, contentFlavorMarkdown)
 	case "spawn_agent", "wait_agent", "close_agent", "send_agent_message":
-		return renderContentPanel(c.styles, "agent", t.agentDetails(), bodyWidth, 8)
+		return renderContentPanel(c.styles, "agent", t.agentDetails(), bodyWidth, 8, contentFlavorPlain)
 	default:
-		return renderContentPanel(c.styles, toolDisplayName(t.name), t.resultContent(), bodyWidth, 8)
+		return renderContentPanel(c.styles, toolDisplayName(t.name), t.resultContent(), bodyWidth, 8, contentFlavorPlain)
 	}
 }
 
 func (t *toolItem) detailView(c *Chat, width, height int) string {
-	innerW := max(24, width-4)
-	sections := []string{
-		c.styles.AssistantLabel.Render(toolDisplayName(t.name)),
-		c.styles.MsgTimestamp.Render(strings.ToUpper(t.status)),
-	}
-	if summary := t.summaryText(); summary != "" {
-		sections = append(sections, wrap.String(summary, innerW))
-	}
-	if meta := t.metaSummary(); meta != "" {
-		sections = append(sections, meta)
-	}
-	if body := t.detailBody(c, innerW); body != "" {
-		sections = append(sections, body)
-	}
-	content := strings.Join(sections, "\n\n")
-	box := lipgloss.NewStyle().
-		Border(lipgloss.RoundedBorder()).
-		BorderForeground(common.ColorBorder).
-		Padding(0, 1).
-		Width(width).
-		MaxHeight(height).
-		Render(content)
-	return box
+	return c.renderToolDetail(t, width, height)
 }
 
 func (t *toolItem) metaSummary() string {
@@ -614,9 +625,27 @@ func (t *toolItem) metaSummary() string {
 	if taskID := stringFromMap(t.metadata, "task_id"); taskID != "" {
 		lines = append(lines, "task: "+taskID)
 	}
-	if count, ok := intFromMap(t.metadata, "lines_added"); ok {
-		removed, _ := intFromMap(t.metadata, "lines_removed")
-		lines = append(lines, fmt.Sprintf("changes: +%d -%d", count, removed))
+	if stats := t.changeStatsText(); stats != "" {
+		lines = append(lines, "changes: "+stats)
+	}
+	if t.name == "web_search" {
+		if provider := stringFromMap(t.metadata, "provider"); provider != "" {
+			lines = append(lines, "provider: "+provider)
+		}
+		if count, ok := intFromMap(t.metadata, "result_count"); ok {
+			lines = append(lines, fmt.Sprintf("results: %d", count))
+		}
+	}
+	if t.name == "web_fetch" {
+		if code, ok := intFromMap(t.metadata, "code"); ok && code > 0 {
+			lines = append(lines, fmt.Sprintf("status: %d", code))
+		}
+		if mode := stringFromMap(t.metadata, "mode"); mode != "" {
+			lines = append(lines, "mode: "+mode)
+		}
+		if rawURL := stringFromMap(t.metadata, "url"); rawURL != "" {
+			lines = append(lines, "url: "+rawURL)
+		}
 	}
 	return strings.Join(lines, "\n")
 }
@@ -624,30 +653,216 @@ func (t *toolItem) metaSummary() string {
 func (t *toolItem) detailBody(c *Chat, width int) string {
 	switch t.name {
 	case "read_file":
-		return renderContentPanel(c.styles, prettyPath(stringFromMap(t.toolInput(), "file_path")), t.resultContent(), width, 200)
+		path := stringFromMap(t.toolInput(), "file_path")
+		if flavorForPath(path) == contentFlavorCode {
+			return renderCodeBody(c.styles, path, t.resultContent(), width, 0, 0)
+		}
+		return renderContentBody(c.styles, t.resultContent(), width, flavorForPath(path))
 	case "write_file", "edit_file":
+		path := stringFromMap(t.toolInput(), "file_path")
 		if diff := t.diffPreview(); diff != "" {
-			return renderContentPanel(c.styles, prettyPath(stringFromMap(t.toolInput(), "file_path")), diff, width, 200)
+			return renderDiffSections(c.styles, prettyPath(path), diff, width)
 		}
-		return renderContentPanel(c.styles, prettyPath(stringFromMap(t.toolInput(), "file_path")), t.resultContent(), width, 200)
+		if flavorForPath(path) == contentFlavorCode {
+			return renderCodeBody(c.styles, path, t.resultContent(), width, 0, 0)
+		}
+		return renderContentBody(c.styles, t.resultContent(), width, flavorForPath(path))
 	case "apply_patch":
-		body := t.resultContent()
-		if patch := stringFromMap(t.toolInput(), "patch"); patch != "" {
-			body = body + "\n\n" + patch
+		body := stringFromMap(t.toolInput(), "patch")
+		if strings.TrimSpace(body) == "" {
+			body = t.resultContent()
 		}
-		return renderContentPanel(c.styles, "patch", body, width, 220)
+		return renderDiffSections(c.styles, "patch", body, width)
 	case "bash":
-		cmd := stringFromMap(t.toolInput(), "command")
-		body := t.commandOutput()
-		if cmd != "" {
-			body = "$ " + cmd + "\n\n" + body
-		}
-		return renderContentPanel(c.styles, "bash", body, width, 180)
+		return renderBashDetails(c.styles, stringFromMap(t.toolInput(), "command"), t.commandOutput(), width)
+	case "web_search":
+		return renderWebSearchDetails(c.styles, t.summaryText(), t.resultContent(), width)
+	case "web_fetch":
+		return renderWebFetchDetails(c.styles, t.summaryText(), t.resultContent(), width)
 	case "spawn_agent", "wait_agent", "close_agent", "send_agent_message":
-		return renderContentPanel(c.styles, "agent", t.agentDetails(), width, 160)
+		return renderContentBody(c.styles, t.agentDetails(), width, contentFlavorPlain)
 	default:
-		return renderContentPanel(c.styles, toolDisplayName(t.name), t.resultContent(), width, 140)
+		return renderContentBody(c.styles, t.resultContent(), width, contentFlavorPlain)
 	}
+}
+
+type contentFlavor uint8
+
+const (
+	contentFlavorPlain contentFlavor = iota
+	contentFlavorMarkdown
+	contentFlavorCode
+	contentFlavorDiff
+)
+
+func flavorForPath(path string) contentFlavor {
+	switch strings.ToLower(filepath.Ext(path)) {
+	case ".md", ".markdown", ".mdx":
+		return contentFlavorMarkdown
+	case ".go", ".js", ".jsx", ".ts", ".tsx", ".json", ".yaml", ".yml", ".toml", ".sh", ".bash", ".zsh", ".py", ".rb", ".rs", ".java", ".kt", ".swift", ".css", ".scss", ".html", ".sql", ".proto":
+		return contentFlavorCode
+	default:
+		return contentFlavorPlain
+	}
+}
+
+func (t *toolItem) detailCacheKey(width, height int, body string) string {
+	return fmt.Sprintf("%s|%s|%d|%d|%s|%s", t.id, t.status, width, height, t.summaryText(), body)
+}
+
+func (t *toolItem) changeStatsText() string {
+	added, addedOK := intFromMap(t.metadata, "lines_added")
+	removed, removedOK := intFromMap(t.metadata, "lines_removed")
+	if !addedOK && !removedOK {
+		return ""
+	}
+	return fmt.Sprintf("+%d -%d", added, removed)
+}
+
+func renderDiffSections(styles common.Styles, title, body string, width int) string {
+	parts := make([]string, 0, 2)
+	if title = strings.TrimSpace(title); title != "" {
+		parts = append(parts, styles.Key.Render(title))
+	}
+	parts = append(parts, renderDiffBody(styles, body, width, 0))
+	return strings.Join(parts, "\n\n")
+}
+
+func renderBashDetails(styles common.Styles, cmd, output string, width int) string {
+	sections := make([]string, 0, 2)
+	if cmd = strings.TrimSpace(cmd); cmd != "" {
+		sections = append(sections, styles.Key.Render("command")+"\n"+renderPlainBody("$ "+cmd, width))
+	}
+	if output = strings.TrimSpace(output); output != "" {
+		sections = append(sections, styles.Key.Render("output")+"\n"+renderPlainBody(output, width))
+	}
+	return strings.Join(sections, "\n\n")
+}
+
+func renderWebSearchDetails(styles common.Styles, summary, body string, width int) string {
+	query, results := parseWebSearchContent(body)
+	sections := make([]string, 0, 2)
+	if strings.TrimSpace(query) == "" {
+		query = summary
+	}
+	if query = strings.TrimSpace(query); query != "" {
+		sections = append(sections, styles.Key.Render("query")+"\n"+renderContentBody(styles, query, width, contentFlavorPlain))
+	}
+	if len(results) == 0 {
+		sections = append(sections, renderContentBody(styles, body, width, contentFlavorPlain))
+		return strings.Join(sections, "\n\n")
+	}
+	cards := make([]string, 0, len(results))
+	for i, result := range results {
+		cards = append(cards, renderSearchResultCard(styles, i+1, result, width))
+	}
+	sections = append(sections, strings.Join(cards, "\n\n"))
+	return strings.Join(sections, "\n\n")
+}
+
+func renderWebFetchDetails(styles common.Styles, summary, body string, width int) string {
+	meta, extracted := splitWebFetchContent(body)
+	sections := make([]string, 0, 3)
+	if summary = strings.TrimSpace(summary); summary != "" {
+		sections = append(sections, styles.Key.Render("page")+"\n"+renderContentBody(styles, summary, width, contentFlavorPlain))
+	}
+	if meta = strings.TrimSpace(meta); meta != "" {
+		sections = append(sections, styles.Key.Render("fetch")+"\n"+renderContentBody(styles, meta, width, contentFlavorPlain))
+	}
+	if extracted = strings.TrimSpace(extracted); extracted != "" {
+		sections = append(sections, styles.Key.Render("result")+"\n"+renderContentBody(styles, extracted, width, contentFlavorMarkdown))
+	}
+	if len(sections) == 0 {
+		return renderContentBody(styles, body, width, contentFlavorMarkdown)
+	}
+	return strings.Join(sections, "\n\n")
+}
+
+type webSearchResult struct {
+	Title       string
+	URL         string
+	Description string
+	Source      string
+}
+
+func parseWebSearchContent(body string) (string, []webSearchResult) {
+	lines := strings.Split(strings.ReplaceAll(body, "\r\n", "\n"), "\n")
+	var query string
+	results := make([]webSearchResult, 0)
+	var current *webSearchResult
+	for _, raw := range lines {
+		line := strings.TrimSpace(raw)
+		if line == "" {
+			continue
+		}
+		if strings.HasPrefix(line, "Query: ") {
+			query = strings.TrimSpace(strings.TrimPrefix(line, "Query: "))
+			continue
+		}
+		if idx := leadingNumberedItem(line); idx >= 0 {
+			if current != nil {
+				results = append(results, *current)
+			}
+			current = &webSearchResult{Title: strings.TrimSpace(line[idx:])}
+			continue
+		}
+		if current == nil {
+			continue
+		}
+		if current.URL == "" && strings.HasPrefix(line, "http") {
+			current.URL = line
+			continue
+		}
+		if strings.HasPrefix(line, "Source: ") {
+			current.Source = strings.TrimSpace(strings.TrimPrefix(line, "Source: "))
+			continue
+		}
+		if current.Description == "" {
+			current.Description = line
+		} else {
+			current.Description += "\n" + line
+		}
+	}
+	if current != nil {
+		results = append(results, *current)
+	}
+	return query, results
+}
+
+func renderSearchResultCard(styles common.Styles, index int, result webSearchResult, width int) string {
+	parts := []string{styles.AssistantLabel.Render(fmt.Sprintf("%d. %s", index, result.Title))}
+	if result.URL != "" {
+		parts = append(parts, styles.MsgTimestamp.Render(result.URL))
+	}
+	if result.Description != "" {
+		parts = append(parts, renderContentBody(styles, result.Description, width, contentFlavorPlain))
+	}
+	if result.Source != "" {
+		parts = append(parts, styles.MsgTimestamp.Render("source: "+result.Source))
+	}
+	return strings.Join(parts, "\n")
+}
+
+func leadingNumberedItem(line string) int {
+	dot := strings.Index(line, ".")
+	if dot <= 0 {
+		return -1
+	}
+	for _, r := range line[:dot] {
+		if r < '0' || r > '9' {
+			return -1
+		}
+	}
+	return dot + 1
+}
+
+func splitWebFetchContent(body string) (string, string) {
+	normalized := strings.ReplaceAll(body, "\r\n", "\n")
+	parts := strings.SplitN(normalized, "Result:\n", 2)
+	if len(parts) != 2 {
+		return "", normalized
+	}
+	return strings.TrimSpace(parts[0]), strings.TrimSpace(parts[1])
 }
 
 func (t *toolItem) resultContent() string {
@@ -750,6 +965,7 @@ type Chat struct {
 	styles   common.Styles
 	viewport *viewport.Model
 	renderer *glamour.TermRenderer
+	detail   *viewport.Model
 	messages []msgItem
 	width    int
 	height   int
@@ -766,16 +982,20 @@ type Chat struct {
 	thinkingRegions []thinkingRegion
 	selection       mouseSelection
 	verboseInterim  bool
+	detailKey       string
 }
 
 func NewChat(styles common.Styles, width, height int) *Chat {
 	vp := viewport.New(viewport.WithWidth(width), viewport.WithHeight(height))
 	vp.SetContent("")
+	detail := viewport.New(viewport.WithWidth(width), viewport.WithHeight(height))
+	detail.SetContent("")
 	r := common.MarkdownRenderer(width)
 	return &Chat{
 		styles:       styles,
 		viewport:     &vp,
 		renderer:     r,
+		detail:       &detail,
 		follow:       true,
 		width:        width,
 		height:       height,
@@ -788,6 +1008,7 @@ func (c *Chat) SetSize(width, height int) {
 	c.height = height
 	c.viewport.SetWidth(width)
 	c.viewport.SetHeight(height)
+	c.detailKey = ""
 	if r := common.MarkdownRenderer(width); r != nil {
 		c.renderer = r
 	}
@@ -878,6 +1099,9 @@ func (c *Chat) AddToolProgress(toolUseID, toolName, status, label string, metada
 				}
 				if t.isDone() {
 					t.finishedAt = time.Now()
+					if isAutoExpandTool(t.name) && !t.expanded {
+						t.expanded = true
+					}
 				}
 				t.invalidate()
 				c.refresh()
@@ -894,6 +1118,9 @@ func (c *Chat) AddToolProgress(toolUseID, toolName, status, label string, metada
 				}
 				if t.isDone() {
 					t.finishedAt = time.Now()
+					if isAutoExpandTool(t.name) && !t.expanded {
+						t.expanded = true
+					}
 				}
 				t.invalidate()
 				c.refresh()
@@ -1317,13 +1544,92 @@ func (c *Chat) DetailView(width, height int) string {
 	return tool.detailView(c, width, height)
 }
 
+func (c *Chat) renderToolDetail(t *toolItem, width, height int) string {
+	if width < 20 || height < 6 {
+		return ""
+	}
+	innerW := max(24, width-4)
+	sections := []string{
+		c.styles.AssistantLabel.Render(toolDisplayName(t.name)),
+		c.styles.MsgTimestamp.Render(strings.ToUpper(t.status)),
+	}
+	if summary := strings.TrimSpace(t.summaryText()); summary != "" {
+		sections = append(sections, wrap.String(summary, innerW))
+	}
+	if meta := strings.TrimSpace(t.metaSummary()); meta != "" {
+		sections = append(sections, wrap.String(meta, innerW))
+	}
+	header := strings.Join(sections, "\n\n")
+	body := strings.TrimSpace(t.detailBody(c, innerW))
+	if body == "" {
+		body = c.styles.MsgTimestamp.Render("No output")
+	}
+	bodyH := max(3, height-lipgloss.Height(header)-4)
+	key := t.detailCacheKey(innerW, bodyH, body)
+	sizeChanged := c.detail.Width() != innerW || c.detail.Height() != bodyH
+	if c.detail.Width() != innerW {
+		c.detail.SetWidth(innerW)
+	}
+	if c.detail.Height() != bodyH {
+		c.detail.SetHeight(bodyH)
+	}
+	if c.detailKey != key || sizeChanged {
+		yOffset := c.detail.YOffset()
+		c.detail.SetContent(body)
+		if c.detailKey != key {
+			c.detail.GotoTop()
+		} else {
+			c.detail.SetYOffset(yOffset)
+		}
+		c.detailKey = key
+	}
+	content := header + "\n\n" + c.detail.View()
+	return lipgloss.NewStyle().
+		Border(lipgloss.RoundedBorder()).
+		BorderForeground(common.ColorBorder).
+		Padding(0, 1).
+		Width(width).
+		Height(height).
+		Render(content)
+}
+
 func (c *Chat) ScrollUp(n int)   { c.follow = false; c.viewport.ScrollUp(n) }
 func (c *Chat) ScrollDown(n int) { c.viewport.ScrollDown(n); c.follow = c.viewport.AtBottom() }
 func (c *Chat) PageUp()          { c.follow = false; c.viewport.HalfPageUp() }
 func (c *Chat) PageDown()        { c.viewport.HalfPageDown(); c.follow = c.viewport.AtBottom() }
 func (c *Chat) GotoTop()         { c.follow = false; c.viewport.GotoTop() }
 func (c *Chat) GotoBottom()      { c.follow = true; c.viewport.GotoBottom() }
-func (c *Chat) View() string     { return c.viewport.View() }
+func (c *Chat) DetailScrollUp(n int) {
+	if c.detail != nil {
+		c.detail.ScrollUp(n)
+	}
+}
+func (c *Chat) DetailScrollDown(n int) {
+	if c.detail != nil {
+		c.detail.ScrollDown(n)
+	}
+}
+func (c *Chat) DetailPageUp() {
+	if c.detail != nil {
+		c.detail.HalfPageUp()
+	}
+}
+func (c *Chat) DetailPageDown() {
+	if c.detail != nil {
+		c.detail.HalfPageDown()
+	}
+}
+func (c *Chat) DetailGotoTop() {
+	if c.detail != nil {
+		c.detail.GotoTop()
+	}
+}
+func (c *Chat) DetailGotoBottom() {
+	if c.detail != nil {
+		c.detail.GotoBottom()
+	}
+}
+func (c *Chat) View() string { return c.viewport.View() }
 
 func (c *Chat) selectedToolIndex() int {
 	if c.selectedTool < 0 || c.selectedTool >= len(c.messages) {
@@ -1494,35 +1800,209 @@ func truncate(s string, maxLen int) string {
 
 func (c *Chat) Size() (int, int) { return c.width, c.height }
 
-func renderContentPanel(styles common.Styles, title, body string, width, maxLines int) string {
+// inlinePreviewLines is the default number of lines shown in collapsed inline previews.
+const inlinePreviewLines = 10
+
+// previewTruncFmt is the footer shown when a preview is truncated.
+const previewTruncFmt = "… (%d lines hidden) [enter for full view]"
+
+// isAutoExpandTool returns true for tools whose inline preview should open by default.
+func isAutoExpandTool(name string) bool {
+	switch name {
+	case "write_file", "edit_file", "apply_patch", "bash", "spawn_agent":
+		return true
+	}
+	return false
+}
+
+// renderCodeBody renders source code with line numbers and syntax highlighting.
+// maxLines=0 means no truncation (used by the detail sidebar).
+func renderCodeBody(styles common.Styles, path, body string, width, maxLines, offset int) string {
 	if strings.TrimSpace(body) == "" {
-		return styles.MsgTimestamp.Render("No output")
+		return ""
 	}
-	clean := common.Escape(strings.ReplaceAll(body, "\r\n", "\n"))
-	lines := strings.Split(clean, "\n")
+	body = strings.ReplaceAll(body, "\r\n", "\n")
+	allLines := strings.Split(body, "\n")
+
+	display := allLines
 	hidden := 0
-	if maxLines > 0 && len(lines) > maxLines {
-		hidden = len(lines) - maxLines
-		lines = lines[:maxLines]
+	if maxLines > 0 && len(allLines) > maxLines {
+		hidden = len(allLines) - maxLines
+		display = allLines[:maxLines]
 	}
-	wrapped := make([]string, 0, len(lines)+1)
-	innerW := max(16, width-4)
-	for _, line := range lines {
-		wrapped = append(wrapped, wrap.String(line, innerW))
+
+	highlighted := common.SyntaxHighlight(strings.Join(display, "\n"), path)
+	hlLines := strings.Split(highlighted, "\n")
+	if len(hlLines) != len(display) {
+		hlLines = display
+	}
+
+	maxNum := len(display) + offset
+	numWidth := len(fmt.Sprintf("%d", maxNum))
+	if numWidth < 1 {
+		numWidth = 1
+	}
+	numFmt := fmt.Sprintf("%%%dd ", numWidth)
+
+	numColW := numWidth + 1 // digits + trailing space
+	maxLineW := max(1, width-numColW)
+
+	out := make([]string, 0, len(hlLines)+1)
+	for i, ln := range hlLines {
+		lineNum := styles.ToolLineNumber.Render(fmt.Sprintf(numFmt, i+1+offset))
+		ln = ansi.Truncate(ln, maxLineW, "…")
+		out = append(out, lineNum+ln)
 	}
 	if hidden > 0 {
-		wrapped = append(wrapped, styles.MsgTimestamp.Render(fmt.Sprintf("… %d more lines", hidden)))
+		out = append(out, styles.ToolTruncation.Render(fmt.Sprintf(previewTruncFmt, hidden)))
 	}
-	panelBody := strings.Join(wrapped, "\n")
-	if title != "" {
-		panelBody = styles.Key.Render(title) + "\n" + panelBody
+	return strings.Join(out, "\n")
+}
+
+// renderDiffBody renders a unified diff with +/- line coloring.
+// maxLines=0 means no truncation (used by the detail sidebar).
+func renderDiffBody(styles common.Styles, body string, width, maxLines int) string {
+	if strings.TrimSpace(body) == "" {
+		return ""
+	}
+	body = strings.ReplaceAll(body, "\r\n", "\n")
+	allLines := strings.Split(body, "\n")
+
+	display := allLines
+	hidden := 0
+	if maxLines > 0 && len(allLines) > maxLines {
+		hidden = len(allLines) - maxLines
+		display = allLines[:maxLines]
+	}
+
+	out := make([]string, 0, len(display)+1)
+	for _, ln := range display {
+		switch {
+		case strings.HasPrefix(ln, "+") && !strings.HasPrefix(ln, "+++"):
+			out = append(out, styles.ToolDiffAdd.Render(ln))
+		case strings.HasPrefix(ln, "-") && !strings.HasPrefix(ln, "---"):
+			out = append(out, styles.ToolDiffDel.Render(ln))
+		case strings.HasPrefix(ln, "@@"):
+			out = append(out, styles.ToolDiffHunk.Render(ln))
+		default:
+			out = append(out, common.Escape(ln))
+		}
+	}
+	if hidden > 0 {
+		out = append(out, styles.ToolTruncation.Render(fmt.Sprintf(previewTruncFmt, hidden)))
+	}
+	return strings.Join(out, "\n")
+}
+
+// panelBox wraps rendered content in the standard rounded border box used for inline previews.
+func panelBox(styles common.Styles, content string, width int) string {
+	if strings.TrimSpace(content) == "" {
+		content = styles.MsgTimestamp.Render("No output")
 	}
 	return lipgloss.NewStyle().
 		Border(lipgloss.RoundedBorder()).
 		BorderForeground(common.ColorBorder).
 		Padding(0, 1).
 		Width(width).
-		Render(panelBody)
+		Render(content)
+}
+
+// renderCodePanel renders a file's content as a code block for inline preview (no border).
+func renderCodePanel(styles common.Styles, path, body string, width, maxLines, offset int) string {
+	return renderCodeBody(styles, path, body, width, maxLines, offset)
+}
+
+// renderDiffPanel renders a unified diff for inline preview (no border).
+func renderDiffPanel(styles common.Styles, body string, width, maxLines int) string {
+	return renderDiffBody(styles, body, width, maxLines)
+}
+
+// renderBashInline renders a bash inline preview: a dim `$ cmd` prompt line
+// followed by the command output, all truncated to maxLines (no border).
+func renderBashInline(styles common.Styles, cmd, output string, width, maxLines int) string {
+	var lines []string
+	if cmd = strings.TrimSpace(cmd); cmd != "" {
+		cmdOneLine := strings.ReplaceAll(cmd, "\n", "; ")
+		lines = append(lines, styles.MsgTimestamp.Render("$ "+ansi.Truncate(cmdOneLine, max(1, width-2), "…")))
+	}
+	if output = strings.TrimSpace(output); output != "" {
+		for _, ln := range strings.Split(strings.ReplaceAll(output, "\r\n", "\n"), "\n") {
+			lines = append(lines, wrap.String(common.Escape(ln), width))
+		}
+	}
+	hidden := 0
+	if maxLines > 0 && len(lines) > maxLines {
+		hidden = len(lines) - maxLines
+		lines = lines[:maxLines]
+	}
+	if hidden > 0 {
+		lines = append(lines, styles.ToolTruncation.Render(fmt.Sprintf(previewTruncFmt, hidden)))
+	}
+	return strings.Join(lines, "\n")
+}
+
+// renderFilePanel picks the right panel renderer based on the file extension.
+func renderFilePanel(styles common.Styles, path, body string, width, maxLines int) string {
+	switch flavorForPath(path) {
+	case contentFlavorCode:
+		return renderCodePanel(styles, path, body, width, maxLines, 0)
+	default:
+		return renderContentPanel(styles, "", body, width, maxLines, flavorForPath(path))
+	}
+}
+
+func renderContentPanel(styles common.Styles, title, body string, width, maxLines int, flavor contentFlavor) string {
+	panelBody := renderContentBody(styles, body, width, flavor)
+	if maxLines > 0 {
+		lines := strings.Split(panelBody, "\n")
+		if len(lines) > maxLines {
+			hidden := len(lines) - maxLines
+			lines = append(lines[:maxLines], styles.ToolTruncation.Render(fmt.Sprintf(previewTruncFmt, hidden)))
+		}
+		panelBody = strings.Join(lines, "\n")
+	}
+	if title != "" {
+		panelBody = styles.Key.Render(title) + "\n" + panelBody
+	}
+	return panelBody
+}
+
+func renderContentBody(styles common.Styles, body string, width int, flavor contentFlavor) string {
+	if strings.TrimSpace(body) == "" {
+		return ""
+	}
+	switch flavor {
+	case contentFlavorMarkdown:
+		if rendered := renderMarkdownBody(body, width); rendered != "" {
+			return rendered
+		}
+	}
+	return renderPlainBody(body, width)
+}
+
+func renderMarkdownBody(body string, width int) string {
+	renderer := common.MarkdownRenderer(width)
+	if renderer == nil {
+		return ""
+	}
+	mu := common.LockMarkdownRenderer(renderer)
+	mu.Lock()
+	defer mu.Unlock()
+	rendered, err := renderer.Render(strings.ReplaceAll(body, "\r\n", "\n"))
+	if err != nil {
+		return ""
+	}
+	return strings.TrimRight(rendered, "\n")
+}
+
+func renderPlainBody(body string, width int) string {
+	rawLines := strings.Split(strings.ReplaceAll(body, "\r\n", "\n"), "\n")
+	wrapped := make([]string, 0, len(rawLines))
+	innerW := max(16, width)
+	for _, line := range rawLines {
+		wrapped = append(wrapped, wrap.String(common.Escape(line), innerW))
+	}
+	return strings.Join(wrapped, "\n")
 }
 
 func cloneMap(in map[string]any) map[string]any {

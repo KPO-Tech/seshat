@@ -475,6 +475,7 @@ func (w *nexusWorkspace) promptFn(ctx context.Context, req sdk.PromptRequest) (s
 		Type:     string(req.Type),
 		Message:  req.Message,
 		Options:  opts,
+		Metadata: req.Metadata,
 		Response: respCh,
 	})
 

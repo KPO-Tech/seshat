@@ -48,9 +48,10 @@ type TurnDoneMsg struct {
 // PromptRequestMsg carries a blocking prompt from the engine.
 // The Response channel must be sent a PromptResponse to unblock the agent.
 type PromptRequestMsg struct {
-	Type    string // "confirm" | "text" | "choice"
-	Message string
-	Options []PromptOption
+	Type     string // "confirm" | "text" | "choice"
+	Message  string
+	Options  []PromptOption
+	Metadata map[string]any // engine metadata: tool_name, tool_input, working_directory, …
 	// Response is written to exactly once to unblock the engine goroutine.
 	Response chan PromptResponse
 }

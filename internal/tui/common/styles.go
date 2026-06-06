@@ -80,6 +80,13 @@ type Styles struct {
 	Footer lipgloss.Style
 	Key    lipgloss.Style
 	Desc   lipgloss.Style
+
+	// Tool inline rendering
+	ToolLineNumber lipgloss.Style
+	ToolTruncation lipgloss.Style
+	ToolDiffAdd    lipgloss.Style
+	ToolDiffDel    lipgloss.Style
+	ToolDiffHunk   lipgloss.Style
 }
 
 // DefaultStyles returns the theme used by the TUI.
@@ -252,6 +259,13 @@ func DefaultStyles() Styles {
 		Bold(true)
 	s.Desc = lipgloss.NewStyle().
 		Foreground(ColorMuted)
+
+	// Tool inline rendering
+	s.ToolLineNumber = lipgloss.NewStyle().Foreground(ColorMuted).Faint(true)
+	s.ToolTruncation = lipgloss.NewStyle().Foreground(ColorMuted).Faint(true)
+	s.ToolDiffAdd = lipgloss.NewStyle().Foreground(ColorGreen)
+	s.ToolDiffDel = lipgloss.NewStyle().Foreground(ColorRed)
+	s.ToolDiffHunk = lipgloss.NewStyle().Foreground(ColorBlue).Faint(true)
 
 	return s
 }

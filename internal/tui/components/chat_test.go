@@ -1,6 +1,7 @@
 package components
 
 import (
+	"fmt"
 	"github.com/EngineerProjects/nexus-engine/internal/tui/common"
 	"strings"
 	"testing"
@@ -351,6 +352,134 @@ func TestChatMouseTripleClickSelectsLine(t *testing.T) {
 	}
 	if got := c.selectedText(); got != "hello brave world" {
 		t.Fatalf("expected triple-click to select visual line, got %q", got)
+	}
+}
+
+func TestAutoExpandActionToolOnCompletion(t *testing.T) {
+	c := NewChat(common.DefaultStyles(), 80, 20)
+	// Running tool should not be auto-expanded.
+	c.AddToolProgress("t1", "bash", "running", "", map[string]any{
+		"tool_input": map[string]any{"command": "echo hi"},
+	})
+	idx := c.selectedToolIndex()
+	if idx < 0 {
+		t.Fatal("no selected tool")
+	}
+	tool := c.messages[idx].(*toolItem)
+	if tool.expanded {
+		t.Error("expected tool not expanded while running")
+	}
+	// Complete the tool — should auto-expand.
+	c.AddToolProgress("t1", "bash", "completed", "done", map[string]any{
+		"tool_input": map[string]any{"command": "echo hi"},
+		"stdout":     "hi\n",
+	})
+	if !tool.expanded {
+		t.Error("expected tool to be auto-expanded on completion")
+	}
+}
+
+func TestAutoExpandDoesNotExpandWebTools(t *testing.T) {
+	c := NewChat(common.DefaultStyles(), 80, 20)
+	c.AddToolProgress("w1", "web_search", "completed", "done", map[string]any{
+		"tool_input": map[string]any{"query": "golang"},
+	})
+	idx := c.selectedToolIndex()
+	if idx < 0 {
+		t.Fatal("no selected tool")
+	}
+	tool := c.messages[idx].(*toolItem)
+	if tool.expanded {
+		t.Error("web_search should not auto-expand")
+	}
+}
+
+func TestRenderCodeBodyLineNumbers(t *testing.T) {
+	styles := common.DefaultStyles()
+	// No trailing newline: exactly 3 lines.
+	src := "package main\n\nfunc main() {}"
+	out := renderCodeBody(styles, "main.go", src, 80, 0, 0)
+	plain := ansi.Strip(out)
+	if !strings.Contains(plain, "1 ") {
+		t.Error("expected line numbers in code body output")
+	}
+	lines := strings.Split(strings.TrimRight(plain, "\n"), "\n")
+	if len(lines) != 3 {
+		t.Errorf("expected 3 lines, got %d: %q", len(lines), lines)
+	}
+}
+
+func TestRenderCodeBodyTruncation(t *testing.T) {
+	styles := common.DefaultStyles()
+	var sb strings.Builder
+	for i := 0; i < 20; i++ {
+		fmt.Fprintf(&sb, "line%d", i)
+		if i < 19 {
+			sb.WriteByte('\n')
+		}
+	}
+	out := renderCodeBody(styles, "file.go", sb.String(), 80, 10, 0)
+	plain := ansi.Strip(out)
+	if !strings.Contains(plain, "10 lines hidden") || !strings.Contains(plain, "enter for full view") {
+		t.Errorf("expected truncation footer with hint, got:\n%s", plain)
+	}
+}
+
+func TestRenderDiffBodyColors(t *testing.T) {
+	styles := common.DefaultStyles()
+	diff := "+added line\n-removed line\n@@ -1,1 +1,1 @@\n context\n"
+	out := renderDiffBody(styles, diff, 80, 0)
+	lines := strings.Split(strings.TrimRight(out, "\n"), "\n")
+	if len(lines) < 4 {
+		t.Fatalf("expected at least 4 lines, got %d", len(lines))
+	}
+}
+
+func TestBashInlineShowsCommandPrompt(t *testing.T) {
+	styles := common.DefaultStyles()
+	out := renderBashInline(styles, "go test ./...", "ok  foo\nok  bar\n", 80, inlinePreviewLines)
+	plain := ansi.Strip(out)
+	if !strings.Contains(plain, "$ go test ./...") {
+		t.Errorf("expected command prompt in bash inline preview, got:\n%s", plain)
+	}
+	if !strings.Contains(plain, "ok  foo") {
+		t.Error("expected command output in bash inline preview")
+	}
+}
+
+func TestBashInlineTruncatesLongOutput(t *testing.T) {
+	styles := common.DefaultStyles()
+	var sb strings.Builder
+	for i := 0; i < 30; i++ {
+		fmt.Fprintf(&sb, "output line %d\n", i)
+	}
+	out := renderBashInline(styles, "cmd", sb.String(), 80, inlinePreviewLines)
+	plain := ansi.Strip(out)
+	if !strings.Contains(plain, "lines hidden") {
+		t.Errorf("expected truncation footer, got:\n%s", plain)
+	}
+}
+
+func TestChatDetailViewScrollsLongContent(t *testing.T) {
+	c := NewChat(common.DefaultStyles(), 80, 20)
+	var output strings.Builder
+	for i := 0; i < 80; i++ {
+		output.WriteString(fmt.Sprintf("line %02d ", i))
+		output.WriteString(strings.Repeat("x", 20))
+		output.WriteString("\n")
+	}
+	c.AddToolProgress("tool-1", "bash", "completed", "done", map[string]any{
+		"tool_input": map[string]any{"command": "cat big.log"},
+		"stdout":     output.String(),
+	})
+	if !c.ToggleDetails() {
+		t.Fatalf("expected details to open")
+	}
+	before := c.DetailView(44, 12)
+	c.DetailScrollDown(4)
+	after := c.DetailView(44, 12)
+	if before == after {
+		t.Fatalf("expected detail view to change after scrolling, yOffset=%d total=%d height=%d", c.detail.YOffset(), c.detail.TotalLineCount(), c.detail.Height())
 	}
 }
 

@@ -296,8 +296,8 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, tea.Batch(cmds...)
 		}
 	case tea.MouseWheelMsg:
+		layout := m.currentChatLayout()
 		if (m.state == stateChat || m.state == stateWelcome) && m.skillCompletions.IsOpen() {
-			layout := m.currentChatLayout()
 			if pointInRect(msg.X, msg.Y, layout.popupX, layout.popupY, layout.popupW, layout.popupH) {
 				switch msg.Button {
 				case tea.MouseWheelUp:
@@ -308,8 +308,17 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				return m, tea.Batch(cmds...)
 			}
 		}
-		// Mouse wheel scrolls chat regardless of focus state (no Tab required).
+		// Mouse wheel scrolls the active content under the pointer.
 		if m.state == stateChat || m.state == stateWelcome {
+			if m.chat.DetailsOpen() && pointInRect(msg.X, msg.Y, layout.detailX, layout.detailY, layout.detailW, layout.detailH) {
+				switch msg.Button {
+				case tea.MouseWheelUp:
+					m.chat.DetailScrollUp(3)
+				case tea.MouseWheelDown:
+					m.chat.DetailScrollDown(3)
+				}
+				return m, tea.Batch(cmds...)
+			}
 			switch msg.Button {
 			case tea.MouseWheelUp:
 				m.chat.ScrollUp(3)
@@ -370,6 +379,10 @@ type chatLayout struct {
 	chatY    int
 	chatW    int
 	chatH    int
+	detailX  int
+	detailY  int
+	detailW  int
+	detailH  int
 	inputX   int
 	inputY   int
 	inputW   int
@@ -391,12 +404,22 @@ func (m Model) currentChatLayout() chatLayout {
 	popupW := 0
 	popupH := 0
 	popupX := inputX
+	detailX := 0
+	detailY := 0
+	detailW := 0
+	detailH := 0
 	if m.chat.DetailsOpen() && contentW >= 110 {
 		paneW := max(36, contentW/3)
 		chatW = max(40, contentW-paneW-1)
+		detailW = contentW - chatW - 1
+		detailH = max(1, chatH)
 	}
 	contentX := max(0, (m.width-contentW)/2)
 	chatY := headerHeight
+	if detailW > 0 {
+		detailX = contentX + chatW + 1
+		detailY = chatY
+	}
 	inputY := chatY + max(1, chatH) + lipgloss.Height(statusView)
 	if m.skillCompletions.IsOpen() {
 		popupW = m.skillCompletions.Width(max(24, contentW-4))
@@ -409,6 +432,10 @@ func (m Model) currentChatLayout() chatLayout {
 		chatY:    chatY,
 		chatW:    chatW,
 		chatH:    max(1, chatH),
+		detailX:  detailX,
+		detailY:  detailY,
+		detailW:  detailW,
+		detailH:  detailH,
 		inputX:   inputX,
 		inputY:   inputY,
 		inputW:   inputW,
@@ -755,22 +782,46 @@ func (m *Model) handleKey(msg tea.KeyPressMsg) (bool, tea.Cmd) {
 		if m.focus == uiFocusMain {
 			switch k {
 			case "up":
-				m.chat.ScrollUp(3)
+				if m.chat.DetailsOpen() {
+					m.chat.DetailScrollUp(3)
+				} else {
+					m.chat.ScrollUp(3)
+				}
 				return true, nil
 			case "down":
-				m.chat.ScrollDown(3)
+				if m.chat.DetailsOpen() {
+					m.chat.DetailScrollDown(3)
+				} else {
+					m.chat.ScrollDown(3)
+				}
 				return true, nil
 			case "pgup":
-				m.chat.PageUp()
+				if m.chat.DetailsOpen() {
+					m.chat.DetailPageUp()
+				} else {
+					m.chat.PageUp()
+				}
 				return true, nil
 			case "pgdown":
-				m.chat.PageDown()
+				if m.chat.DetailsOpen() {
+					m.chat.DetailPageDown()
+				} else {
+					m.chat.PageDown()
+				}
 				return true, nil
 			case "home":
-				m.chat.GotoTop()
+				if m.chat.DetailsOpen() {
+					m.chat.DetailGotoTop()
+				} else {
+					m.chat.GotoTop()
+				}
 				return true, nil
 			case "end":
-				m.chat.GotoBottom()
+				if m.chat.DetailsOpen() {
+					m.chat.DetailGotoBottom()
+				} else {
+					m.chat.GotoBottom()
+				}
 				return true, nil
 			case "n":
 				return true, boolCmd(m.chat.SelectNextTool())
@@ -1307,8 +1358,25 @@ func (m Model) relayout() Model {
 }
 
 func (m Model) resizeInput() Model {
-	lines := strings.Count(m.input.Value(), "\n") + 1
-	h := common.Clamp(lines, inputMinH, inputMaxH)
+	// Count visual rows, not just explicit newlines.
+	// Text that wraps due to line width doesn't insert \n into the value.
+	inputW := m.contentWidth() - 4 // matches SetWidth in relayout
+	promptW := 4                    // matches SetPromptFunc(4, ...)
+	textW := max(1, inputW-promptW)
+
+	visualLines := 0
+	for _, line := range strings.Split(m.input.Value(), "\n") {
+		runes := []rune(line)
+		if len(runes) == 0 {
+			visualLines++
+		} else {
+			visualLines += (len(runes) + textW - 1) / textW
+		}
+	}
+	if visualLines < 1 {
+		visualLines = 1
+	}
+	h := common.Clamp(visualLines, inputMinH, inputMaxH)
 	m.input.SetHeight(h)
 	return m
 }
