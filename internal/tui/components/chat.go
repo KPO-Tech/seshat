@@ -139,9 +139,9 @@ func (tb *thinkingBlock) render(styles common.Styles, width int) string {
 		footParts = append(footParts,
 			styles.MsgTimestamp.Render(fmt.Sprintf("Thought for %.1fs", dur.Seconds())))
 		if tb.collapsed {
-			footParts = append(footParts, styles.Desc.Render("click to expand"))
+			footParts = append(footParts, styles.Desc.Render("ctrl+t to expand"))
 		} else {
-			footParts = append(footParts, styles.Desc.Render("click to collapse"))
+			footParts = append(footParts, styles.Desc.Render("ctrl+t to collapse"))
 		}
 	}
 	foot := "  " + strings.Join(footParts, "  ")
@@ -402,10 +402,10 @@ func (t *toolItem) renderSelected(c *Chat, width int, selected bool) string {
 	nameStyle := t.renderNameStyle(c.styles)
 	summary := truncate(t.summaryText(), max(12, width-34))
 	expander := c.styles.MsgTimestamp.Render(t.expanderSymbol())
-	details := c.styles.MsgTimestamp.Render(t.detailsSymbol(selected, c.detailOpen && selected))
-	status := c.styles.MsgTimestamp.Render(t.statusLabel())
 
-	parts := []string{expander, details, icon, nameStyle.Render(toolDisplayName(t.name)), status}
+	// Format: ▸ ✓ ToolName  summary  (Xms)
+	// No status label (redundant with icon), no details symbol (open via keyboard/o).
+	parts := []string{expander, icon, nameStyle.Render(toolDisplayName(t.name))}
 	if summary != "" {
 		parts = append(parts, c.styles.MsgTimestamp.Render(summary))
 	}
@@ -1036,6 +1036,8 @@ type Chat struct {
 
 	selectedTool int
 	detailOpen   bool
+	planDepth    int // incremented by enter_plan_mode, decremented by exit_plan_mode
+	pairDepth    int // incremented by enter_pair_programming_mode, decremented by exit_pair_programming_mode
 
 	renderedContent string
 	renderedLines   []string
@@ -1096,6 +1098,20 @@ func (c *Chat) VerboseInterim() bool {
 	return c.verboseInterim
 }
 
+func (c *Chat) PlanMode() bool { return c.planDepth > 0 }
+func (c *Chat) PairMode() bool { return c.pairDepth > 0 }
+
+// ExecutionMode returns "plan", "pair_programming", or "execute" (default).
+func (c *Chat) ExecutionMode() string {
+	if c.planDepth > 0 {
+		return "plan"
+	}
+	if c.pairDepth > 0 {
+		return "pair_programming"
+	}
+	return "execute"
+}
+
 func (c *Chat) AddUserMessage(text string) {
 	c.messages = append(c.messages, &userItem{content: text, timestamp: time.Now()})
 	c.refresh()
@@ -1152,6 +1168,30 @@ func (c *Chat) FinishAssistantMessage(inputTokens, outputTokens int, stopReason 
 }
 
 func (c *Chat) AddToolProgress(toolUseID, toolName, status, label string, metadata map[string]any) {
+	// Mode transitions: track execution mode state but never add a tool row.
+	switch toolName {
+	case "enter_plan_mode", "exit_plan_mode",
+		"enter_pair_programming_mode", "exit_pair_programming_mode":
+		if status == "completed" || status == "done" {
+			switch toolName {
+			case "enter_plan_mode":
+				c.planDepth++
+			case "exit_plan_mode":
+				if c.planDepth > 0 {
+					c.planDepth--
+				}
+			case "enter_pair_programming_mode":
+				c.pairDepth++
+			case "exit_pair_programming_mode":
+				if c.pairDepth > 0 {
+					c.pairDepth--
+				}
+			}
+			c.refresh()
+		}
+		return
+	}
+
 	if toolUseID != "" {
 		for i := len(c.messages) - 1; i >= 0; i-- {
 			if t, ok := c.messages[i].(*toolItem); ok && t.id == toolUseID {
@@ -1725,9 +1765,29 @@ func (c *Chat) selectedToolItem() *toolItem {
 
 func (c *Chat) toolIndices() []int {
 	indices := make([]int, 0)
-	for i, item := range c.messages {
-		if _, ok := item.(*toolItem); ok {
+	i := 0
+	for i < len(c.messages) {
+		tool, ok := c.messages[i].(*toolItem)
+		if !ok {
+			i++
+			continue
+		}
+		if isGroupableTool(tool.name) && tool.isDone() {
+			// Scan ahead for the full group.
+			j := i + 1
+			for j < len(c.messages) {
+				next, ok2 := c.messages[j].(*toolItem)
+				if !ok2 || next.name != tool.name || !next.isDone() {
+					break
+				}
+				j++
+			}
+			// The selection point for the whole group is its last item.
+			indices = append(indices, j-1)
+			i = j
+		} else {
 			indices = append(indices, i)
+			i++
 		}
 	}
 	return indices
@@ -1741,23 +1801,64 @@ func (c *Chat) refresh() {
 	line := 0
 	toolRegions := make([]toolRegion, 0)
 	thinkingRegions := make([]thinkingRegion, 0)
-	for i, item := range c.messages {
+	mi := 0
+	for mi < len(c.messages) {
+		item := c.messages[mi]
+
+		// ── Group detection: consecutive completed same-name groupable tools ──
 		var rendered string
-		if tool, ok := item.(*toolItem); ok {
-			rendered = tool.renderSelected(c, c.width, i == c.selectedToolIndex())
+		var isTool bool
+		var regionMsgIndex int
+
+		if tool, ok := item.(*toolItem); ok && isGroupableTool(tool.name) && tool.isDone() {
+			j := mi + 1
+			for j < len(c.messages) {
+				next, ok2 := c.messages[j].(*toolItem)
+				if !ok2 || next.name != tool.name || !next.isDone() {
+					break
+				}
+				j++
+			}
+			if j-mi >= 2 {
+				// Render the group as one summary row.
+				groupItems := make([]*toolItem, j-mi)
+				for k := mi; k < j; k++ {
+					groupItems[k-mi] = c.messages[k].(*toolItem)
+				}
+				lastIdx := j - 1
+				selectedInGroup := c.selectedTool >= mi && c.selectedTool <= lastIdx
+				rendered = renderToolGroup(c, groupItems, c.width, selectedInGroup)
+				isTool = true
+				regionMsgIndex = lastIdx // selection lands on last item in the group
+				mi = j
+			} else {
+				// Only one item — render normally.
+				rendered = tool.renderSelected(c, c.width, mi == c.selectedToolIndex())
+				isTool = true
+				regionMsgIndex = mi
+				mi++
+			}
+		} else if tool, ok := item.(*toolItem); ok {
+			rendered = tool.renderSelected(c, c.width, mi == c.selectedToolIndex())
+			isTool = true
+			regionMsgIndex = mi
+			mi++
 		} else {
 			rendered = item.render(c, c.width)
+			isTool = false
+			regionMsgIndex = mi
+			mi++
 		}
+
 		if rendered == "" {
 			continue
 		}
 		plainRendered := ansi.Strip(rendered)
 		if wroteAny {
-			_, currIsTool := item.(*toolItem)
-			if lastWasTool && currIsTool {
+			if lastWasTool && isTool {
 				sb.WriteString("\n")
 				plainSB.WriteString("\n")
-				line += 1
+				line++
 			} else {
 				sb.WriteString("\n\n")
 				plainSB.WriteString("\n\n")
@@ -1768,8 +1869,18 @@ func (c *Chat) refresh() {
 		sb.WriteString(rendered)
 		plainSB.WriteString(plainRendered)
 		height := max(1, lipgloss.Height(plainRendered))
-		if _, ok := item.(*toolItem); ok {
-			toolRegions = append(toolRegions, toolRegion{startLine: startLine, endLine: startLine + height - 1, msgIndex: i, expanderStart: 0, expanderEnd: 1, detailStart: 2, detailEnd: 3})
+		if isTool {
+			// expanderStart/End at col 0-1 (the ▸/▾ symbol). Detail click disabled
+			// (right panel is opened with keyboard or by selecting the tool).
+			toolRegions = append(toolRegions, toolRegion{
+				startLine:    startLine,
+				endLine:      startLine + height - 1,
+				msgIndex:     regionMsgIndex,
+				expanderStart: 0,
+				expanderEnd:   1,
+				detailStart:   0,
+				detailEnd:     0,
+			})
 		}
 		if assistant, ok := item.(*assistantItem); ok && assistant.thinking != nil && strings.TrimSpace(assistant.thinking.content) != "" {
 			thinkingStart := startLine
@@ -1778,10 +1889,10 @@ func (c *Chat) refresh() {
 			}
 			thinkingRendered := assistant.thinking.render(c.styles, c.width)
 			thinkingHeight := max(1, lipgloss.Height(ansi.Strip(thinkingRendered)))
-			thinkingRegions = append(thinkingRegions, thinkingRegion{startLine: thinkingStart, endLine: thinkingStart + thinkingHeight - 1, msgIndex: i})
+			thinkingRegions = append(thinkingRegions, thinkingRegion{startLine: thinkingStart, endLine: thinkingStart + thinkingHeight - 1, msgIndex: regionMsgIndex})
 		}
 		line += height
-		_, lastWasTool = item.(*toolItem)
+		lastWasTool = isTool
 		wroteAny = true
 	}
 	content := sb.String()
@@ -1886,6 +1997,76 @@ func isAutoExpandTool(name string) bool {
 		return true
 	}
 	return false
+}
+
+// isGroupableTool returns true for tools whose consecutive completed calls can be
+// collapsed into a single summary row. Tools with unique per-call output (bash,
+// edit_file, web_search…) are intentionally excluded.
+func isGroupableTool(name string) bool {
+	switch name {
+	case "read_file", "write_file", "list_directory", "glob":
+		return true
+	}
+	return false
+}
+
+// renderToolGroup renders N consecutive completed same-name tool calls as one row.
+// Format: "  ✓ ToolName (N×)  path1, path2, …  (total Xms)"
+func renderToolGroup(c *Chat, tools []*toolItem, width int, selected bool) string {
+	icon := c.styles.MsgTimestamp.Render("✓")
+	nameStyle := c.styles.UserMsg
+	name := toolDisplayName(tools[0].name)
+	count := c.styles.MsgTimestamp.Render(fmt.Sprintf("(%d×)", len(tools)))
+
+	// Collect per-call summaries (file paths, etc.).
+	var summaries []string
+	for _, t := range tools {
+		if s := t.summaryText(); s != "" {
+			summaries = append(summaries, s)
+		}
+	}
+	var summaryStr string
+	if len(summaries) > 0 {
+		const maxShow = 3
+		shown := summaries
+		rest := 0
+		if len(summaries) > maxShow {
+			shown = summaries[:maxShow]
+			rest = len(summaries) - maxShow
+		}
+		summaryStr = strings.Join(shown, ", ")
+		if rest > 0 {
+			summaryStr += fmt.Sprintf(", +%d", rest)
+		}
+	}
+
+	// Total wall-clock duration.
+	var totalDur time.Duration
+	for _, t := range tools {
+		if !t.finishedAt.IsZero() && !t.startedAt.IsZero() {
+			totalDur += t.finishedAt.Sub(t.startedAt)
+		}
+	}
+	durStr := ""
+	if totalDur > 0 {
+		durStr = "(" + formatDuration(totalDur) + ")"
+	}
+
+	// The leading space keeps column alignment with single-tool rows (expander position).
+	parts := []string{" ", icon, nameStyle.Render(name), count}
+	if summaryStr != "" {
+		maxSum := max(12, width-len(name)-30)
+		parts = append(parts, c.styles.MsgTimestamp.Render(truncate(summaryStr, maxSum)))
+	}
+	if durStr != "" {
+		parts = append(parts, c.styles.MsgTimestamp.Render(durStr))
+	}
+
+	line := strings.Join(parts, " ")
+	if selected {
+		line = lipgloss.NewStyle().Foreground(common.ColorText).Background(lipgloss.Color("#1F2937")).Render(line)
+	}
+	return line
 }
 
 // ── Directory listing ─────────────────────────────────────────────────────────

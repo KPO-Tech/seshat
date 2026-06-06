@@ -590,6 +590,23 @@ func (m *Model) handleKey(msg tea.KeyPressMsg) (bool, tea.Cmd) {
 		return true, nil
 	}
 
+	// ── Global quit/cancel — always handled before any overlay state ─────
+	// These must come first so ctrl+c / ctrl+q work even when a picker or
+	// panel is open (those state blocks all do "return true, nil" and would
+	// swallow the key otherwise).
+	switch k {
+	case "ctrl+c":
+		if m.busy {
+			m.workspace.Cancel()
+			return true, nil
+		}
+		m.cancel()
+		return true, tea.Quit
+	case "ctrl+q":
+		m.cancel()
+		return true, tea.Quit
+	}
+
 	// ── Permission dialog (all keys consumed) ────────────────────────────
 	if m.state == statePermission && m.permission.HasPending() {
 		// Scroll keys are handled by the dialog itself first.
@@ -853,17 +870,8 @@ func (m *Model) handleKey(msg tea.KeyPressMsg) (bool, tea.Cmd) {
 	}
 
 	// ── Global shortcuts (always consumed) ──────────────────────────────
+	// Note: ctrl+c and ctrl+q are already handled at the top of handleKey.
 	switch k {
-	case "ctrl+c":
-		if m.busy {
-			m.workspace.Cancel()
-			return true, nil
-		}
-		m.cancel()
-		return true, tea.Quit
-	case "ctrl+q":
-		m.cancel()
-		return true, tea.Quit
 	case "ctrl+p":
 		if m.state != stateCommands {
 			m.refreshSettingsHubData()
@@ -1377,6 +1385,24 @@ func (m Model) header() string {
 	logo := m.styles.Logo.Render("NEXUS")
 	model := m.styles.HeaderPill.Render(m.workspace.ModelString())
 	left := lipgloss.JoinHorizontal(lipgloss.Center, logo, " ", model)
+	var modeBadge string
+	switch m.chat.ExecutionMode() {
+	case "plan":
+		modeBadge = lipgloss.NewStyle().
+			Foreground(common.ColorPrimary).
+			Bold(true).
+			Render(" ◈ plan")
+	case "pair_programming":
+		modeBadge = lipgloss.NewStyle().
+			Foreground(common.ColorSecondary).
+			Bold(true).
+			Render(" ◎ pair")
+	default:
+		modeBadge = lipgloss.NewStyle().
+			Foreground(common.ColorMuted).
+			Render(" ● execute")
+	}
+	left = lipgloss.JoinHorizontal(lipgloss.Center, left, modeBadge)
 
 	var right string
 	if m.focus == uiFocusMain && m.state == stateChat {
