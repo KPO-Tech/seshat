@@ -56,6 +56,7 @@ type (
 	ThinkingContent   = types.ThinkingContent
 	TranscriptEntry   = types.TranscriptEntry
 	TurnID            = types.TurnID
+	ToolResultContent = types.ToolResultContent
 	ToolUseContent    = types.ToolUseContent
 	Role              = types.Role
 	RuntimeEvent      = types.RuntimeEvent

@@ -80,10 +80,30 @@ type SessionCreatedMsg struct {
 	Err error
 }
 
+// HistoryTool is one completed tool call embedded in a HistoryEntry.
+type HistoryTool struct {
+	ID     string
+	Name   string
+	Input  map[string]any
+	Result string // raw result content string (may include line numbers for files)
+}
+
+// HistoryEntry is one message in a replayed session transcript.
+type HistoryEntry struct {
+	Role         string // "user" | "assistant"
+	Text         string // combined text content
+	Thinking     string // thinking block content (assistant only)
+	Tools        []HistoryTool
+	InputTokens  int
+	OutputTokens int
+	StopReason   string
+}
+
 // SessionLoadedMsg signals a session was loaded successfully.
 type SessionLoadedMsg struct {
-	ID  string
-	Err error
+	ID      string
+	History []HistoryEntry
+	Err     error
 }
 
 // ErrMsg wraps an error to display in the UI.

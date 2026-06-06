@@ -256,8 +256,82 @@ func (w *nexusWorkspace) LoadSession(ctx context.Context, id string) {
 		w.sessionMu.Lock()
 		w.session = sess
 		w.sessionMu.Unlock()
-		w.send(tui.SessionLoadedMsg{ID: string(sess.GetID())})
+		history := buildSessionHistory(sess.GetMessages())
+		w.send(tui.SessionLoadedMsg{ID: string(sess.GetID()), History: history})
 	}()
+}
+
+// buildSessionHistory converts raw SDK messages into a flat list of HistoryEntry
+// values suitable for replaying in the TUI chat component.
+func buildSessionHistory(messages []sdk.Message) []tui.HistoryEntry {
+	// Pre-pass: collect tool result strings keyed by tool_use_id.
+	resultFor := make(map[string]string, len(messages))
+	for _, msg := range messages {
+		if msg.Role != sdk.RoleUser {
+			continue
+		}
+		for _, block := range msg.Content {
+			if tr, ok := block.(sdk.ToolResultContent); ok {
+				resultFor[tr.ToolUseID] = tr.Content
+			}
+		}
+	}
+
+	var entries []tui.HistoryEntry
+	for _, msg := range messages {
+		switch msg.Role {
+		case sdk.RoleUser:
+			var texts []string
+			for _, block := range msg.Content {
+				if t, ok := block.(sdk.TextContent); ok {
+					if s := strings.TrimSpace(t.Text); s != "" {
+						texts = append(texts, s)
+					}
+				}
+			}
+			if len(texts) > 0 {
+				entries = append(entries, tui.HistoryEntry{
+					Role: "user",
+					Text: strings.Join(texts, "\n"),
+				})
+			}
+
+		case sdk.RoleAssistant:
+			entry := tui.HistoryEntry{Role: "assistant"}
+			if msg.Metadata != nil {
+				if msg.Metadata.Usage != nil {
+					entry.InputTokens = msg.Metadata.Usage.InputTokens
+					entry.OutputTokens = msg.Metadata.Usage.OutputTokens
+				}
+				entry.StopReason = msg.Metadata.StopReason
+			}
+			for _, block := range msg.Content {
+				switch b := block.(type) {
+				case sdk.ThinkingContent:
+					entry.Thinking = b.Thinking
+				case sdk.TextContent:
+					if entry.Text != "" {
+						entry.Text += "\n"
+					}
+					entry.Text += b.Text
+				case sdk.ToolUseContent:
+					tool := tui.HistoryTool{
+						ID:    b.ID,
+						Name:  b.Name,
+						Input: b.Input,
+					}
+					if result, ok := resultFor[b.ID]; ok {
+						tool.Result = result
+					}
+					entry.Tools = append(entry.Tools, tool)
+				}
+			}
+			if entry.Text != "" || entry.Thinking != "" || len(entry.Tools) > 0 {
+				entries = append(entries, entry)
+			}
+		}
+	}
+	return entries
 }
 
 func (w *nexusWorkspace) DeleteSession(_ context.Context, id string) error {
@@ -461,14 +535,18 @@ func (w *nexusWorkspace) SetModel(providerID, modelID string) {
 	w.mu.Lock()
 	w.model = modelStr
 	w.mu.Unlock()
-	// Persist to DB so the selection survives restarts.
-	if cfg, err := engineconfig.Load(); err == nil {
-		if db, err := openCredentialsDB(cfg); err == nil {
-			_ = db.UpsertCredential(context.Background(), credKeyModel, modelStr)
-			_ = db.Close()
+	// Persist asynchronously — DB I/O must not block the BubbleTea event loop.
+	// Do NOT call w.send here: p.Send is a blocking channel write in BubbleTea v2,
+	// so calling it from within Update (the event loop goroutine) causes a deadlock.
+	// The header reads ModelString() directly, so no message is needed.
+	go func() {
+		if cfg, err := engineconfig.Load(); err == nil {
+			if db, err := openCredentialsDB(cfg); err == nil {
+				_ = db.UpsertCredential(context.Background(), credKeyModel, modelStr)
+				_ = db.Close()
+			}
 		}
-	}
-	w.send(tui.ModelChangedMsg{Provider: providerID, Model: modelID})
+	}()
 }
 
 // ─── Provider configuration ────────────────────────────────────────────────────

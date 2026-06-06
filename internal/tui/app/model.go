@@ -246,7 +246,29 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.state = stateChat
 			m.focus = uiFocusEditor
 			m.chat.Clear()
-			m.chat.AddSystem("Resumed session · " + common.ShortID(msg.ID))
+			for _, entry := range msg.History {
+				switch entry.Role {
+				case "user":
+					m.chat.AddUserMessage(entry.Text)
+				case "assistant":
+					m.chat.StartAssistantMessage()
+					if entry.Thinking != "" {
+						m.chat.AppendChunk(entry.Thinking, true)
+					}
+					if entry.Text != "" {
+						m.chat.AppendChunk(entry.Text, false)
+					}
+					for _, tool := range entry.Tools {
+						meta := map[string]any{"tool_input": tool.Input}
+						if tool.Result != "" {
+							meta["content"] = tool.Result
+						}
+						m.chat.AddToolProgress(tool.ID, tool.Name, "completed", "", meta)
+					}
+					m.chat.FinishAssistantMessage(entry.InputTokens, entry.OutputTokens, entry.StopReason)
+				}
+			}
+			m.chat.AddSystem("↑ session resumed · " + common.ShortID(msg.ID))
 			cmds = append(cmds, m.input.Focus()) // v2: Focus() returns a Cmd
 		}
 
