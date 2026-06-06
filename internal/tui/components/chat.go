@@ -3,6 +3,7 @@ package components
 import (
 	"encoding/json"
 	"fmt"
+	"os"
 	"path/filepath"
 	"strings"
 	"time"
@@ -579,21 +580,19 @@ func (t *toolItem) summaryText() string {
 func (t *toolItem) inlinePreview(c *Chat, width int) string {
 	bodyWidth := max(20, width-4)
 	switch t.name {
+	case "list_directory", "glob":
+		return renderDirListing(c.styles, t.resultContent(), bodyWidth, inlinePreviewLines)
 	case "read_file":
 		path := prettyPath(stringFromMap(t.toolInput(), "file_path"))
 		return renderFilePanel(c.styles, path, t.resultContent(), bodyWidth, inlinePreviewLines)
-	case "write_file", "edit_file":
+	case "write_file":
 		path := prettyPath(stringFromMap(t.toolInput(), "file_path"))
-		if diff := t.diffPreview(); diff != "" {
-			return renderDiffPanel(c.styles, diff, bodyWidth, inlinePreviewLines)
+		return renderFilePanel(c.styles, path, t.writeContent(), bodyWidth, inlinePreviewLines)
+	case "edit_file", "apply_patch":
+		if diff := t.unifiedDiff(); diff != "" {
+			return renderColoredDiff(c.styles, diff, bodyWidth, inlinePreviewLines)
 		}
-		return renderFilePanel(c.styles, path, t.resultContent(), bodyWidth, inlinePreviewLines)
-	case "apply_patch":
-		diff := stringFromMap(t.toolInput(), "patch")
-		if strings.TrimSpace(diff) == "" {
-			diff = t.resultContent()
-		}
-		return renderDiffPanel(c.styles, diff, bodyWidth, inlinePreviewLines)
+		return ""
 	case "bash":
 		return renderBashInline(c.styles, stringFromMap(t.toolInput(), "command"), t.commandOutput(), bodyWidth, inlinePreviewLines)
 	case "web_search":
@@ -652,27 +651,32 @@ func (t *toolItem) metaSummary() string {
 
 func (t *toolItem) detailBody(c *Chat, width int) string {
 	switch t.name {
+	case "list_directory", "glob":
+		return renderDirListing(c.styles, t.resultContent(), width, 0)
 	case "read_file":
 		path := stringFromMap(t.toolInput(), "file_path")
 		if flavorForPath(path) == contentFlavorCode {
 			return renderCodeBody(c.styles, path, t.resultContent(), width, 0, 0)
 		}
 		return renderContentBody(c.styles, t.resultContent(), width, flavorForPath(path))
-	case "write_file", "edit_file":
+	case "write_file":
 		path := stringFromMap(t.toolInput(), "file_path")
-		if diff := t.diffPreview(); diff != "" {
-			return renderDiffSections(c.styles, prettyPath(path), diff, width)
-		}
+		content := t.writeContent()
 		if flavorForPath(path) == contentFlavorCode {
-			return renderCodeBody(c.styles, path, t.resultContent(), width, 0, 0)
+			return renderCodeBody(c.styles, path, content, width, 0, 0)
 		}
-		return renderContentBody(c.styles, t.resultContent(), width, flavorForPath(path))
-	case "apply_patch":
-		body := stringFromMap(t.toolInput(), "patch")
-		if strings.TrimSpace(body) == "" {
-			body = t.resultContent()
+		return renderContentBody(c.styles, content, width, flavorForPath(path))
+	case "edit_file", "apply_patch":
+		path := stringFromMap(t.toolInput(), "file_path")
+		if diff := t.unifiedDiff(); diff != "" {
+			label := "patch"
+			if path != "" {
+				label = prettyPath(path)
+			}
+			label = ansi.Truncate(label, width, "…")
+			return c.styles.Key.Render(label) + "\n\n" + renderColoredDiff(c.styles, diff, width, 0)
 		}
-		return renderDiffSections(c.styles, "patch", body, width)
+		return ""
 	case "bash":
 		return renderBashDetails(c.styles, stringFromMap(t.toolInput(), "command"), t.commandOutput(), width)
 	case "web_search":
@@ -749,14 +753,15 @@ func renderWebSearchDetails(styles common.Styles, summary, body string, width in
 		sections = append(sections, styles.Key.Render("query")+"\n"+renderContentBody(styles, query, width, contentFlavorPlain))
 	}
 	if len(results) == 0 {
-		sections = append(sections, renderContentBody(styles, body, width, contentFlavorPlain))
+		sections = append(sections, renderContentBody(styles, body, width, contentFlavorMarkdown))
 		return strings.Join(sections, "\n\n")
 	}
+	sep := styles.MsgTimestamp.Render(strings.Repeat("─", max(4, width)))
 	cards := make([]string, 0, len(results))
 	for i, result := range results {
 		cards = append(cards, renderSearchResultCard(styles, i+1, result, width))
 	}
-	sections = append(sections, strings.Join(cards, "\n\n"))
+	sections = append(sections, strings.Join(cards, "\n"+sep+"\n"))
 	return strings.Join(sections, "\n\n")
 }
 
@@ -830,12 +835,15 @@ func parseWebSearchContent(body string) (string, []webSearchResult) {
 }
 
 func renderSearchResultCard(styles common.Styles, index int, result webSearchResult, width int) string {
+	linkStyle := lipgloss.NewStyle().Foreground(common.ColorBlue)
 	parts := []string{styles.AssistantLabel.Render(fmt.Sprintf("%d. %s", index, result.Title))}
 	if result.URL != "" {
-		parts = append(parts, styles.MsgTimestamp.Render(result.URL))
+		// Truncate long URLs so they don't character-wrap across lines.
+		url := ansi.Truncate(result.URL, width, "…")
+		parts = append(parts, linkStyle.Render(url))
 	}
 	if result.Description != "" {
-		parts = append(parts, renderContentBody(styles, result.Description, width, contentFlavorPlain))
+		parts = append(parts, renderContentBody(styles, result.Description, width, contentFlavorMarkdown))
 	}
 	if result.Source != "" {
 		parts = append(parts, styles.MsgTimestamp.Render("source: "+result.Source))
@@ -885,6 +893,61 @@ func (t *toolItem) diffPreview() string {
 		}
 	}
 	return ""
+}
+
+// writeContent returns the actual file content from the tool input (not the result).
+// write_file stores the content-to-write in its input, not in the result metadata.
+func (t *toolItem) writeContent() string {
+	return stringFromMap(t.toolInput(), "content")
+}
+
+// unifiedDiff returns a proper unified-diff string from the best available source.
+func (t *toolItem) unifiedDiff() string {
+	// Structured patch from result metadata (JSON hunk array from the engine)
+	if sp := t.metadata["structured_patch"]; sp != nil {
+		if diff := structuredPatchToUnified(sp); diff != "" {
+			return diff
+		}
+	}
+	// Git diff attached to metadata
+	if patch := nestedString(t.metadata["git_diff"], "patch", "Patch"); patch != "" {
+		return patch
+	}
+	// Patch field in tool input (apply_patch, edit_file with patch arg)
+	if patch := stringFromMap(t.toolInput(), "patch"); strings.TrimSpace(patch) != "" {
+		return patch
+	}
+	// Compute from old/new content fields
+	if old := stringFromMap(t.toolInput(), "old_content"); old != "" {
+		return buildSimpleDiff(old, stringFromMap(t.toolInput(), "new_content"))
+	}
+	return ""
+}
+
+// structuredPatchToUnified converts the engine's JSON hunk array to a unified diff.
+func structuredPatchToUnified(raw any) string {
+	b, err := json.Marshal(raw)
+	if err != nil {
+		return ""
+	}
+	var hunks []struct {
+		OldStart int      `json:"oldStart"`
+		OldLines int      `json:"oldLines"`
+		NewStart int      `json:"newStart"`
+		NewLines int      `json:"newLines"`
+		Lines    []string `json:"lines"`
+	}
+	if err := json.Unmarshal(b, &hunks); err != nil || len(hunks) == 0 {
+		return ""
+	}
+	var sb strings.Builder
+	for _, h := range hunks {
+		fmt.Fprintf(&sb, "@@ -%d,%d +%d,%d @@\n", h.OldStart, h.OldLines, h.NewStart, h.NewLines)
+		for _, ln := range h.Lines {
+			sb.WriteString(ln + "\n")
+		}
+	}
+	return strings.TrimRight(sb.String(), "\n")
 }
 
 func (t *toolItem) commandOutput() string {
@@ -1132,6 +1195,9 @@ func (c *Chat) AddToolProgress(toolUseID, toolName, status, label string, metada
 	c.sealActiveAssistant()
 	c.messages = append(c.messages, newToolItem(toolUseID, toolName, status, label, metadata))
 	c.selectedTool = len(c.messages) - 1
+	if isAutoExpandTool(toolName) {
+		c.detailOpen = true
+	}
 	c.refresh()
 }
 
@@ -1548,16 +1614,23 @@ func (c *Chat) renderToolDetail(t *toolItem, width, height int) string {
 	if width < 20 || height < 6 {
 		return ""
 	}
-	innerW := max(24, width-4)
+	innerW := max(10, width-4)
+	clampLines := func(s string) string {
+		lines := strings.Split(s, "\n")
+		for i, l := range lines {
+			lines[i] = ansi.Truncate(l, innerW, "…")
+		}
+		return strings.Join(lines, "\n")
+	}
 	sections := []string{
-		c.styles.AssistantLabel.Render(toolDisplayName(t.name)),
-		c.styles.MsgTimestamp.Render(strings.ToUpper(t.status)),
+		ansi.Truncate(c.styles.AssistantLabel.Render(toolDisplayName(t.name)), innerW, "…"),
+		ansi.Truncate(c.styles.MsgTimestamp.Render(strings.ToUpper(t.status)), innerW, "…"),
 	}
 	if summary := strings.TrimSpace(t.summaryText()); summary != "" {
-		sections = append(sections, wrap.String(summary, innerW))
+		sections = append(sections, clampLines(wrap.String(summary, innerW)))
 	}
 	if meta := strings.TrimSpace(t.metaSummary()); meta != "" {
-		sections = append(sections, wrap.String(meta, innerW))
+		sections = append(sections, clampLines(wrap.String(meta, innerW)))
 	}
 	header := strings.Join(sections, "\n\n")
 	body := strings.TrimSpace(t.detailBody(c, innerW))
@@ -1815,6 +1888,146 @@ func isAutoExpandTool(name string) bool {
 	return false
 }
 
+// ── Directory listing ─────────────────────────────────────────────────────────
+
+type dirEntry struct {
+	Name        string `json:"name"`
+	IsDirectory bool   `json:"is_directory"`
+	IsFile      bool   `json:"is_file"`
+	IsSymlink   bool   `json:"is_symlink"`
+	SizeBytes   int64  `json:"size_bytes"`
+	Mode        string `json:"mode"`
+}
+
+type dirListing struct {
+	Path      string     `json:"path"`
+	Entries   []dirEntry `json:"entries"`
+	Count     int        `json:"count"`
+	Truncated bool       `json:"truncated"`
+}
+
+func parseDirListing(content string) (dirListing, bool) {
+	content = strings.TrimSpace(content)
+	if !strings.HasPrefix(content, "{") {
+		return dirListing{}, false
+	}
+	var dl dirListing
+	if err := json.Unmarshal([]byte(content), &dl); err != nil {
+		return dirListing{}, false
+	}
+	return dl, true
+}
+
+func humanSize(bytes int64) string {
+	const (
+		kb = 1024
+		mb = 1024 * kb
+		gb = 1024 * mb
+	)
+	switch {
+	case bytes >= gb:
+		return fmt.Sprintf("%.1f GB", float64(bytes)/float64(gb))
+	case bytes >= mb:
+		return fmt.Sprintf("%.1f MB", float64(bytes)/float64(mb))
+	case bytes >= kb:
+		return fmt.Sprintf("%.1f KB", float64(bytes)/float64(kb))
+	default:
+		return fmt.Sprintf("%d B", bytes)
+	}
+}
+
+func shortHomePath(path string) string {
+	if path == "" {
+		return ""
+	}
+	if home, err := os.UserHomeDir(); err == nil && home != "" && strings.HasPrefix(path, home) {
+		return "~" + path[len(home):]
+	}
+	return prettyPath(path)
+}
+
+// renderDirListing renders a list_directory JSON result as a human-readable tree.
+// maxLines=0 means no truncation (detail sidebar).
+func renderDirListing(styles common.Styles, content string, width, maxLines int) string {
+	dl, ok := parseDirListing(content)
+	if !ok {
+		return renderPlainBody(content, width)
+	}
+
+	// Header: path + count
+	headerPath := styles.Key.Render(shortHomePath(dl.Path))
+	count := fmt.Sprintf("(%d entries)", dl.Count)
+	if dl.Truncated {
+		count += " [truncated]"
+	}
+	headerCount := styles.MsgTimestamp.Render(count)
+	lines := []string{headerPath + "  " + headerCount, ""}
+
+	// Compute max visible name width for alignment.
+	maxNameW := 0
+	for _, e := range dl.Entries {
+		n := e.Name
+		if e.IsDirectory {
+			n += "/"
+		}
+		if w := len("/ ") + len(n); w > maxNameW {
+			maxNameW = w
+		}
+	}
+	sizeColW := 8
+	nameColW := max(16, min(maxNameW, width-sizeColW-2))
+
+	for _, e := range dl.Entries {
+		displayName := e.Name
+		if e.IsDirectory {
+			displayName += "/"
+		}
+
+		var nameRendered string
+		switch {
+		case e.IsSymlink:
+			nameRendered = lipgloss.NewStyle().Foreground(common.ColorYellow).Render("→ " + displayName)
+		case e.IsDirectory:
+			nameRendered = lipgloss.NewStyle().Foreground(common.ColorBlue).Bold(true).Render("/ " + displayName)
+		default:
+			nameRendered = styles.PermBody.Render("· " + displayName)
+		}
+
+		// Truncate very long names to stay within nameColW.
+		visibleNameW := lipgloss.Width(nameRendered)
+		if visibleNameW > nameColW {
+			// Re-render with truncated display name.
+			truncated := ansi.Truncate(displayName, nameColW-3, "…")
+			switch {
+			case e.IsSymlink:
+				nameRendered = lipgloss.NewStyle().Foreground(common.ColorYellow).Render("→ " + truncated)
+			case e.IsDirectory:
+				nameRendered = lipgloss.NewStyle().Foreground(common.ColorBlue).Bold(true).Render("/ " + truncated)
+			default:
+				nameRendered = styles.PermBody.Render("· " + truncated)
+			}
+			visibleNameW = lipgloss.Width(nameRendered)
+		}
+
+		var sizeStr string
+		if !e.IsDirectory {
+			sizeStr = humanSize(e.SizeBytes)
+		}
+		sizeRendered := styles.MsgTimestamp.Render(fmt.Sprintf("%*s", sizeColW, sizeStr))
+
+		gap := max(1, nameColW-visibleNameW+1)
+		lines = append(lines, nameRendered+strings.Repeat(" ", gap)+sizeRendered)
+	}
+
+	if maxLines > 0 && len(lines) > maxLines {
+		hidden := len(lines) - maxLines
+		lines = lines[:maxLines]
+		lines = append(lines, styles.ToolTruncation.Render(fmt.Sprintf(previewTruncFmt, hidden)))
+	}
+
+	return strings.Join(lines, "\n")
+}
+
 // renderCodeBody renders source code with line numbers and syntax highlighting.
 // maxLines=0 means no truncation (used by the detail sidebar).
 func renderCodeBody(styles common.Styles, path, body string, width, maxLines, offset int) string {
@@ -1833,8 +2046,13 @@ func renderCodeBody(styles common.Styles, path, body string, width, maxLines, of
 
 	highlighted := common.SyntaxHighlight(strings.Join(display, "\n"), path)
 	hlLines := strings.Split(highlighted, "\n")
-	if len(hlLines) != len(display) {
-		hlLines = display
+	// Chroma may trim a trailing newline, causing one fewer output line when the
+	// last display line is blank. Pad or truncate to always match len(display).
+	for len(hlLines) < len(display) {
+		hlLines = append(hlLines, "")
+	}
+	if len(hlLines) > len(display) {
+		hlLines = hlLines[:len(display)]
 	}
 
 	maxNum := len(display) + offset
@@ -1845,13 +2063,23 @@ func renderCodeBody(styles common.Styles, path, body string, width, maxLines, of
 	numFmt := fmt.Sprintf("%%%dd ", numWidth)
 
 	numColW := numWidth + 1 // digits + trailing space
-	maxLineW := max(1, width-numColW)
+	contentW := max(1, width-numColW)
+	indent := strings.Repeat(" ", numColW)
 
 	out := make([]string, 0, len(hlLines)+1)
 	for i, ln := range hlLines {
 		lineNum := styles.ToolLineNumber.Render(fmt.Sprintf(numFmt, i+1+offset))
-		ln = ansi.Truncate(ln, maxLineW, "…")
-		out = append(out, lineNum+ln)
+		if maxLines > 0 {
+			// Inline preview: truncate to keep fixed height.
+			out = append(out, lineNum+ansi.Truncate(ln, contentW, "…"))
+		} else {
+			// Detail sidebar: soft-wrap with continuation indent.
+			parts := strings.Split(wrap.String(ln, contentW), "\n")
+			out = append(out, lineNum+parts[0])
+			for _, cont := range parts[1:] {
+				out = append(out, indent+cont)
+			}
+		}
 	}
 	if hidden > 0 {
 		out = append(out, styles.ToolTruncation.Render(fmt.Sprintf(previewTruncFmt, hidden)))
@@ -1892,6 +2120,18 @@ func renderDiffBody(styles common.Styles, body string, width, maxLines int) stri
 		out = append(out, styles.ToolTruncation.Render(fmt.Sprintf(previewTruncFmt, hidden)))
 	}
 	return strings.Join(out, "\n")
+}
+
+// renderColoredDiff renders a unified diff with full-row colored backgrounds
+// (green for added, red for deleted). maxLines=0 means no truncation.
+// Reuses renderPermDiffLines so both places stay visually identical.
+func renderColoredDiff(styles common.Styles, diffBody string, width, maxLines int) string {
+	lines := renderPermDiffLines(styles, diffBody, width)
+	if maxLines > 0 && len(lines) > maxLines {
+		hidden := len(lines) - maxLines
+		lines = append(lines[:maxLines], styles.ToolTruncation.Render(fmt.Sprintf(previewTruncFmt, hidden)))
+	}
+	return strings.Join(lines, "\n")
 }
 
 // panelBox wraps rendered content in the standard rounded border box used for inline previews.

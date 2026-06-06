@@ -178,7 +178,11 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if label == "" {
 			label = msg.Status
 		}
+		wasOpen := m.chat.DetailsOpen()
 		m.chat.AddToolProgress(msg.ToolUseID, msg.ToolName, msg.Status, label, msg.Metadata)
+		if !wasOpen && m.chat.DetailsOpen() {
+			m = m.relayout()
+		}
 
 	case tui.TurnStartMsg:
 		m.busy = true
@@ -309,8 +313,11 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 		}
 		// Mouse wheel scrolls the active content under the pointer.
+		// For the sidebar, only check the X coordinate — the sidebar occupies the
+		// right portion of the screen from detailX onward. Using a Y-range check
+		// was unreliable because minor layout-height differences caused misses.
 		if m.state == stateChat || m.state == stateWelcome {
-			if m.chat.DetailsOpen() && pointInRect(msg.X, msg.Y, layout.detailX, layout.detailY, layout.detailW, layout.detailH) {
+			if m.chat.DetailsOpen() && layout.detailW > 0 && msg.X >= layout.detailX {
 				switch msg.Button {
 				case tea.MouseWheelUp:
 					m.chat.DetailScrollUp(3)
@@ -394,37 +401,52 @@ type chatLayout struct {
 }
 
 func (m Model) currentChatLayout() chatLayout {
-	inputView := m.inputView()
-	statusView := m.statusLine()
 	contentW := m.contentWidth()
-	chatH := m.height - headerHeight - footerHeight - lipgloss.Height(statusView) - lipgloss.Height(inputView)
+	contentX := max(0, (m.width-contentW)/2)
+	chatY := headerHeight
 	chatW := contentW
+
 	inputW := max(12, contentW-2)
 	inputX := max(0, (m.width-inputW)/2)
-	popupW := 0
-	popupH := 0
-	popupX := inputX
-	detailX := 0
-	detailY := 0
-	detailW := 0
-	detailH := 0
+
+	var (
+		detailX, detailY, detailW, detailH int
+		popupW, popupH                     int
+		statusH, inputH, chatH             int
+	)
+
 	if m.chat.DetailsOpen() && contentW >= 110 {
 		paneW := max(36, contentW/3)
 		chatW = max(40, contentW-paneW-1)
 		detailW = contentW - chatW - 1
-		detailH = max(1, chatH)
-	}
-	contentX := max(0, (m.width-contentW)/2)
-	chatY := headerHeight
-	if detailW > 0 {
+
+		leftStatus := m.statusLineFor(chatW)
+		leftInput := m.inputViewFor(chatW)
+		statusH = lipgloss.Height(leftStatus)
+		inputH = lipgloss.Height(leftInput)
+		chatH = m.height - headerHeight - footerHeight - statusH - inputH
+		detailH = max(1, chatH) + statusH + inputH
+
 		detailX = contentX + chatW + 1
 		detailY = chatY
+		inputX = contentX
+		inputW = max(12, chatW-2)
+	} else {
+		statusView := m.statusLine()
+		inputView := m.inputView()
+		statusH = lipgloss.Height(statusView)
+		inputH = lipgloss.Height(inputView)
+		chatH = m.height - headerHeight - footerHeight - statusH - inputH
 	}
-	inputY := chatY + max(1, chatH) + lipgloss.Height(statusView)
+
+	inputY := chatY + max(1, chatH) + statusH
+
+	popupX := inputX
 	if m.skillCompletions.IsOpen() {
 		popupW = m.skillCompletions.Width(max(24, contentW-4))
 		popupH = m.skillCompletions.Height(max(24, contentW-4))
 	}
+
 	return chatLayout{
 		contentW: contentW,
 		contentX: contentX,
@@ -439,7 +461,7 @@ func (m Model) currentChatLayout() chatLayout {
 		inputX:   inputX,
 		inputY:   inputY,
 		inputW:   inputW,
-		inputH:   lipgloss.Height(inputView),
+		inputH:   inputH,
 		popupX:   popupX,
 		popupY:   inputY,
 		popupW:   popupW,
@@ -543,6 +565,10 @@ func (m *Model) handleKey(msg tea.KeyPressMsg) (bool, tea.Cmd) {
 
 	// ── Permission dialog (all keys consumed) ────────────────────────────
 	if m.state == statePermission && m.permission.HasPending() {
+		// Scroll keys are handled by the dialog itself first.
+		if m.permission.HandleKey(k) {
+			return true, nil
+		}
 		switch {
 		case k == "y" || k == "Y":
 			m.permission.Resolve(true, false)
@@ -773,6 +799,18 @@ func (m *Model) handleKey(msg tea.KeyPressMsg) (bool, tea.Cmd) {
 			}
 			return true, nil
 		}
+	case "ctrl+o":
+		if m.state == stateChat || m.state == stateWelcome {
+			opened := m.chat.ToggleDetails()
+			*m = m.relayout()
+			return true, boolCmd(opened)
+		}
+		return false, nil
+	case "esc":
+		if m.busy && (m.state == stateChat || m.state == stateWelcome) {
+			m.workspace.Cancel()
+			return true, nil
+		}
 	}
 
 	// ── Chat / welcome: dispatch by focus state (crush pattern) ──────────
@@ -830,9 +868,18 @@ func (m *Model) handleKey(msg tea.KeyPressMsg) (bool, tea.Cmd) {
 			case "space":
 				return true, boolCmd(m.chat.ToggleSelectedToolExpanded())
 			case "o", "enter", "right":
-				return true, boolCmd(m.chat.ToggleDetails())
+				opened := m.chat.ToggleDetails()
+				*m = m.relayout()
+				return true, boolCmd(opened)
 			case "left", "esc":
-				m.chat.CloseDetails()
+				if m.chat.DetailsOpen() {
+					m.chat.CloseDetails()
+					*m = m.relayout()
+					return true, nil
+				}
+				if !m.busy {
+					m.state = stateWelcome
+				}
 				return true, nil
 			}
 			m.focus = uiFocusEditor
@@ -900,6 +947,12 @@ func (m *Model) handleKey(msg tea.KeyPressMsg) (bool, tea.Cmd) {
 		}
 
 		switch k {
+		case "esc":
+			if !m.busy {
+				m.state = stateWelcome
+				return true, nil
+			}
+
 		case "/":
 			// Slash is reserved for skills. Let the textarea receive it directly.
 			return false, nil
@@ -1101,38 +1154,45 @@ func (m Model) viewWelcome() string {
 }
 
 func (m Model) viewChat() string {
-	inputView := m.inputView()
-	statusView := m.statusLine()
 	contentW := m.contentWidth()
-	chatH := m.height - headerHeight - footerHeight - lipgloss.Height(statusView) - lipgloss.Height(inputView)
-	chatW := contentW
-	var detailView string
+
+	// ── Sidebar-open: join left column (chat+status+input) with sidebar ───
 	if m.chat.DetailsOpen() && contentW >= 110 {
 		paneW := max(36, contentW/3)
-		chatW = max(40, contentW-paneW-1)
-		m.chat.SetSize(chatW, max(1, chatH))
-		detailView = m.chat.DetailView(contentW-chatW-1, max(1, chatH))
-	} else {
-		m.chat.SetSize(chatW, max(1, chatH))
-	}
-	chatView := m.chat.View()
-	body := chatView
-	if detailView != "" {
-		body = lipgloss.JoinHorizontal(lipgloss.Top, chatView, " ", detailView)
-	}
-	body = common.CenterHorizontally(lipgloss.NewStyle().Width(contentW).Render(body), m.width)
+		chatW := max(40, contentW-paneW-1)
+		detailW := contentW - chatW - 1
 
-	base := strings.Join([]string{
-		m.header(),
-		body,
-		statusView,
-		inputView,
-		m.footer(),
-	}, "\n")
+		leftStatus := m.statusLineFor(chatW)
+		leftInput := m.inputViewFor(chatW)
+		statusH := lipgloss.Height(leftStatus)
+		inputH := lipgloss.Height(leftInput)
+		chatH := m.height - headerHeight - footerHeight - statusH - inputH
 
+		m.chat.SetSize(chatW, max(1, chatH))
+		leftContent := strings.Join([]string{m.chat.View(), leftStatus, leftInput}, "\n")
+		sideH := lipgloss.Height(leftContent)
+
+		detailView := m.chat.DetailView(detailW, sideH)
+		body := lipgloss.JoinHorizontal(lipgloss.Top, leftContent, " ", detailView)
+		body = common.CenterHorizontally(lipgloss.NewStyle().Width(contentW).Render(body), m.width)
+
+		base := strings.Join([]string{m.header(), body, m.footer()}, "\n")
+		if m.state == statePermission && m.permission.HasPending() {
+			return common.OverlayOn(base, m.permission.View(), m.width, m.height)
+		}
+		return base
+	}
+
+	// ── Normal layout ─────────────────────────────────────────────────────
+	inputView := m.inputView()
+	statusView := m.statusLine()
+	chatH := m.height - headerHeight - footerHeight - lipgloss.Height(statusView) - lipgloss.Height(inputView)
+	m.chat.SetSize(contentW, max(1, chatH))
+	body := common.CenterHorizontally(lipgloss.NewStyle().Width(contentW).Render(m.chat.View()), m.width)
+
+	base := strings.Join([]string{m.header(), body, statusView, inputView, m.footer()}, "\n")
 	if m.state == statePermission && m.permission.HasPending() {
-		overlay := m.permission.View()
-		return common.OverlayOn(base, overlay, m.width, m.height)
+		return common.OverlayOn(base, m.permission.View(), m.width, m.height)
 	}
 	return base
 }
@@ -1217,18 +1277,21 @@ func (m Model) header() string {
 	return common.CenterHorizontally(content, m.width)
 }
 
-func (m Model) statusLine() string {
-	contentW := m.contentWidth()
+func (m Model) statusLineFor(w int) string {
 	var line string
 	switch {
 	case m.busy:
-		line = m.styles.Footer.Width(contentW).Render(m.styles.HeaderPillBusy.Render(m.spinner.View() + " working"))
+		line = m.styles.Footer.Width(w).Render(m.styles.HeaderPillBusy.Render(m.spinner.View() + " working"))
 	case m.lastTurnErr != "":
-		line = m.styles.Footer.Width(contentW).Render(m.styles.ToolError.Render("failed") + "  " + m.styles.Desc.Render(truncateStatus(m.lastTurnErr, max(12, contentW/2))))
+		line = m.styles.Footer.Width(w).Render(m.styles.ToolError.Render("failed") + "  " + m.styles.Desc.Render(truncateStatus(m.lastTurnErr, max(12, w/2))))
 	default:
-		line = m.styles.Footer.Width(contentW).Render(m.styles.Desc.Render("ready"))
+		line = m.styles.Footer.Width(w).Render(m.styles.Desc.Render("ready"))
 	}
-	return common.CenterHorizontally(line, m.width)
+	return line
+}
+
+func (m Model) statusLine() string {
+	return common.CenterHorizontally(m.statusLineFor(m.contentWidth()), m.width)
 }
 
 func (m Model) tokenSummary() string {
@@ -1287,7 +1350,7 @@ func (m Model) footer() string {
 			m.styles.Key.Render("↑↓") + " " + m.styles.Desc.Render("scroll"),
 			m.styles.Key.Render("n/p") + " " + m.styles.Desc.Render("tools"),
 			m.styles.Key.Render("space") + " " + m.styles.Desc.Render("preview"),
-			m.styles.Key.Render("o") + " " + m.styles.Desc.Render("details"),
+			m.styles.Key.Render("ctrl+o") + " " + m.styles.Desc.Render("details"),
 			m.styles.Key.Render("tab") + " " + m.styles.Desc.Render("focus"),
 			m.styles.Key.Render("ctrl+p") + " " + m.styles.Desc.Render("settings"),
 		}
@@ -1315,35 +1378,40 @@ func (m Model) footer() string {
 	return common.CenterHorizontally(line, m.width)
 }
 
-// Select mode banner takes priority.
-func (m Model) inputView() string {
-	contentW := m.contentWidth()
+// inputViewFor renders the input box at a given outer width (without global centering).
+func (m Model) inputViewFor(w int) string {
 	inner := m.input.View()
-
-	if attView := m.attachments.View(max(20, contentW-4)); attView != "" {
+	if attView := m.attachments.View(max(20, w-4)); attView != "" {
 		inner = attView + "\n" + inner
 	}
-
-	box := m.styles.InputBorder.Width(max(12, contentW-2)).Render(inner)
-	stackW := lipgloss.Width(box)
+	box := m.styles.InputBorder.Width(max(12, w-2)).Render(inner)
+	boxW := lipgloss.Width(box)
 	if m.skillCompletions.IsOpen() {
-		popup := m.skillCompletions.View(max(24, contentW-4))
-		stack := lipgloss.NewStyle().Width(stackW).Render(popup) + "\n" + box
-		return common.CenterHorizontally(stack, m.width)
+		popup := m.skillCompletions.View(max(24, w-4))
+		return lipgloss.NewStyle().Width(boxW).Render(popup) + "\n" + box
 	}
 	if m.completions.IsOpen() {
-		popup := m.completions.View(max(20, contentW-4))
-		stack := lipgloss.NewStyle().Width(stackW).Render(popup) + "\n" + box
-		return common.CenterHorizontally(stack, m.width)
+		popup := m.completions.View(max(20, w-4))
+		return lipgloss.NewStyle().Width(boxW).Render(popup) + "\n" + box
 	}
-	return common.CenterHorizontally(box, m.width)
+	return box
+}
+
+func (m Model) inputView() string {
+	return common.CenterHorizontally(m.inputViewFor(m.contentWidth()), m.width)
 }
 
 // ─── Layout ───────────────────────────────────────────────────────────────────
 
 func (m Model) relayout() Model {
 	contentW := m.contentWidth()
+	chatW := contentW
 	inputW := contentW - 4
+	if m.chat.DetailsOpen() && contentW >= 110 {
+		paneW := max(36, contentW/3)
+		chatW = max(40, contentW-paneW-1)
+		inputW = chatW - 4
+	}
 	if inputW < 10 {
 		inputW = 10
 	}
@@ -1353,15 +1421,21 @@ func (m Model) relayout() Model {
 	m.modelSelect.SetSize(m.width, m.height)
 	m.commands.SetSize(m.width, m.height)
 	m.configPanel.SetSize(m.width, m.height)
-	m.chat.SetSize(contentW, max(1, m.height-headerHeight-footerHeight-statusHeight-inputMinH-inputPadding))
+	m.chat.SetSize(chatW, max(1, m.height-headerHeight-footerHeight-statusHeight-inputMinH-inputPadding))
 	return m
 }
 
 func (m Model) resizeInput() Model {
 	// Count visual rows, not just explicit newlines.
 	// Text that wraps due to line width doesn't insert \n into the value.
-	inputW := m.contentWidth() - 4 // matches SetWidth in relayout
-	promptW := 4                    // matches SetPromptFunc(4, ...)
+	contentW := m.contentWidth()
+	inputW := contentW - 4 // matches SetWidth in relayout
+	if m.chat.DetailsOpen() && contentW >= 110 {
+		paneW := max(36, contentW/3)
+		chatW := max(40, contentW-paneW-1)
+		inputW = chatW - 4
+	}
+	promptW := 4 // matches SetPromptFunc(4, ...)
 	textW := max(1, inputW-promptW)
 
 	visualLines := 0

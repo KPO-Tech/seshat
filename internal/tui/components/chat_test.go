@@ -114,6 +114,8 @@ func TestChatToolSelectionAndDetails(t *testing.T) {
 	if !c.ToggleSelectedToolExpanded() {
 		t.Fatalf("expected selected tool expansion to succeed")
 	}
+	// Ensure details are closed before testing toggle-to-open.
+	c.CloseDetails()
 	if !c.ToggleDetails() {
 		t.Fatalf("expected selected tool details to toggle")
 	}

@@ -52,5 +52,5 @@ claude-code/
 tmp/
 .temp/
 .cache/
-openclaude
-multica
+__pycache__
+commit.sh

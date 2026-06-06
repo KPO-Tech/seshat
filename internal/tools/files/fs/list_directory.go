@@ -2,6 +2,7 @@ package fs
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"os"
 	"sort"
@@ -134,7 +135,12 @@ func (t *ListDirectoryTool) Call(
 func (t *ListDirectoryTool) IsEnabled() bool                         { return true }
 func (t *ListDirectoryTool) IsReadOnly(_ map[string]any) bool        { return true }
 func (t *ListDirectoryTool) IsConcurrencySafe(_ map[string]any) bool { return true }
-func (t *ListDirectoryTool) FormatResult(data any) string            { return fmt.Sprintf("%v", data) }
+func (t *ListDirectoryTool) FormatResult(data any) string {
+	if b, err := json.Marshal(data); err == nil {
+		return string(b)
+	}
+	return fmt.Sprintf("%v", data)
+}
 func (t *ListDirectoryTool) BackfillInput(_ context.Context, in map[string]any) map[string]any {
 	return in
 }
