@@ -186,6 +186,8 @@ type SessionInfo struct {
 	CreatedAt time.Time
 	Turns     int
 	Tokens    int
+	// Preview is the first user message, truncated — empty for old sessions.
+	Preview string
 }
 
 // ToolInfo is the TUI's lightweight view of one registered tool.

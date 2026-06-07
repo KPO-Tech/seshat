@@ -245,6 +245,8 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case tui.SessionLoadedMsg:
 		if msg.Err != nil {
 			m.lastErr = msg.Err
+			m.lastTurnErr = "session load failed: " + msg.Err.Error()
+			m.state = stateChat
 		} else {
 			m.activeSession = msg.ID
 			m.state = stateChat

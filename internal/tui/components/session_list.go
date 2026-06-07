@@ -23,7 +23,9 @@ func NewSessionList(styles common.Styles) *SessionList {
 	return &SessionList{
 		styles: styles,
 		list: common.NewListState(func(sess tui.SessionInfo, needle string) bool {
-			return strings.Contains(strings.ToLower(sess.ShortID), needle)
+			needle = strings.ToLower(needle)
+			return strings.Contains(strings.ToLower(sess.ShortID), needle) ||
+				strings.Contains(strings.ToLower(sess.Preview), needle)
 		}),
 		editing: true,
 	}
@@ -101,14 +103,33 @@ func (s *SessionList) View() string {
 	for i := start; i < end; i++ {
 		sess := filtered[i]
 		age := formatAge(sess.UpdatedAt)
-		info := fmt.Sprintf("%s · %s · %d turns", sess.ShortID, age, sess.Turns)
-		if len(info) > w-4 {
-			info = info[:w-4]
+		meta := fmt.Sprintf("%s · %s · %d turns", sess.ShortID, age, sess.Turns)
+		if len(meta) > w-4 {
+			meta = meta[:w-4]
+		}
+		preview := sess.Preview
+		if preview != "" {
+			maxPreview := w - 6
+			if maxPreview < 0 {
+				maxPreview = 0
+			}
+			r := []rune(preview)
+			if len(r) > maxPreview {
+				preview = string(r[:maxPreview]) + "…"
+			}
 		}
 		if i == cursor {
-			rows = append(rows, s.styles.BrowserSelected.Width(w-2).Render("▶ "+info))
+			line := "▶ " + meta
+			if preview != "" {
+				line += "\n  " + preview
+			}
+			rows = append(rows, s.styles.BrowserSelected.Width(w-2).Render(line))
 		} else {
-			rows = append(rows, s.styles.BrowserItem.Width(w-2).Render("  "+info))
+			line := "  " + meta
+			if preview != "" {
+				line += "\n  " + s.styles.Desc.Render(preview)
+			}
+			rows = append(rows, s.styles.BrowserItem.Width(w-2).Render(line))
 		}
 	}
 

@@ -227,10 +227,13 @@ func (w *nexusWorkspace) ListSessions(ctx context.Context) {
 			}
 			id := string(info.ID)
 			sessions = append(sessions, tui.SessionInfo{
-				ID:      id,
-				ShortID: shortIDStr(id),
-				Turns:   info.TotalTurns,
-				Tokens:  info.TotalTokens,
+				ID:        id,
+				ShortID:   shortIDStr(id),
+				Turns:     info.TotalTurns,
+				Tokens:    info.TotalTokens,
+				UpdatedAt: time.Unix(info.UpdatedAt, 0),
+				CreatedAt: time.Unix(info.CreatedAt, 0),
+				Preview:   info.Preview,
 			})
 		}
 		w.send(tui.SessionListMsg{Sessions: sessions})

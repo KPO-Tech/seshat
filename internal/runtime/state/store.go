@@ -284,14 +284,22 @@ func (s *Store) GetSessionInfo(sessionID types.SessionID) (*SessionInfo, error) 
 		return nil, err
 	}
 
-	return &SessionInfo{
+	info := &SessionInfo{
 		ID:          metadata.ID,
 		Status:      metadata.Status,
 		CreatedAt:   metadata.CreatedAt.Unix(),
 		UpdatedAt:   metadata.UpdatedAt.Unix(),
 		TotalTurns:  metadata.TotalTurns,
 		TotalTokens: metadata.TotalTokens,
-	}, nil
+	}
+	if metadata.Additional != nil {
+		if ct, ok := metadata.Additional["canonical_transcript"].(map[string]any); ok {
+			if v, ok := ct["first_user_message"].(string); ok {
+				info.Preview = v
+			}
+		}
+	}
+	return info, nil
 }
 
 // GetAllSessionsInfo gets information about all sessions
