@@ -42,6 +42,24 @@ func sqliteCoreMigrations() []schemaMigration {
 			Scope: migrationScopeCoreSQLite,
 			Run:   migrateSQLiteSessionFiles,
 		},
+		{
+			// Unique constraint on session_files.tool_use_id prevents duplicate records
+			// from concurrent live-recording and backfill goroutines.
+			// Composite indexes on mailbox_messages cover the two hottest query shapes:
+			//   GetUnreadMessages (to_agent + read_at IS NULL + created_at ASC)
+			//   GetMessageHistory (to_agent + created_at DESC)
+			ID:    "20260607_008_indexes_and_constraints",
+			Scope: migrationScopeCoreSQLite,
+			Run:   migrateSQLiteIndexesAndConstraints,
+		},
+		{
+			// FTS5 virtual table for O(log n) transcript full-text search.
+			// INSERT/DELETE triggers keep it in sync with session_transcript_entries,
+			// including rows removed by ON DELETE CASCADE from session_metadata.
+			ID:    "20260607_009_transcript_fts5",
+			Scope: migrationScopeCoreSQLite,
+			Run:   migrateSQLiteTranscriptFTS5,
+		},
 	}
 }
 
@@ -139,6 +157,69 @@ func migrateSQLiteAgentProfiles(ctx context.Context, db *DB) error {
 
 func migrateSQLiteMailboxMessages(ctx context.Context, db *DB) error {
 	return db.gormDB.WithContext(ctx).AutoMigrate(&GMailboxMessage{})
+}
+
+func migrateSQLiteIndexesAndConstraints(ctx context.Context, db *DB) error {
+	statements := []string{
+		// Deduplicate any existing session_files rows before adding the unique index
+		// (duplicates can occur if a live-recording goroutine races with backfill).
+		`DELETE FROM session_files
+		 WHERE id NOT IN (
+		     SELECT MIN(id) FROM session_files
+		     WHERE tool_use_id != ''
+		     GROUP BY tool_use_id
+		 ) AND tool_use_id != ''`,
+		// One row per tool_use_id (skips rows where tool_use_id is empty).
+		`CREATE UNIQUE INDEX IF NOT EXISTS idx_session_files_tool_use_unique
+		     ON session_files(tool_use_id) WHERE tool_use_id != ''`,
+		// Partial covering index: to_agent + created_at on unread messages only.
+		// Covers WHERE to_agent = ? AND read_at IS NULL ORDER BY created_at ASC.
+		`CREATE INDEX IF NOT EXISTS idx_mailbox_to_agent_unread
+		     ON mailbox_messages(to_agent, created_at ASC) WHERE read_at IS NULL`,
+		// Covering index for GetMessageHistory: to_agent + newest-first ordering.
+		`CREATE INDEX IF NOT EXISTS idx_mailbox_to_agent_history
+		     ON mailbox_messages(to_agent, created_at DESC)`,
+	}
+	for _, stmt := range statements {
+		if err := db.gormDB.WithContext(ctx).Exec(stmt).Error; err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func migrateSQLiteTranscriptFTS5(ctx context.Context, db *DB) error {
+	statements := []string{
+		// FTS5 index over raw transcript JSON — enables MATCH queries replacing LIKE full scans.
+		// session_id is stored but not tokenized (used only for grouping in DISTINCT queries).
+		`CREATE VIRTUAL TABLE IF NOT EXISTS session_transcript_fts USING fts5(
+		     session_id UNINDEXED,
+		     entry_json,
+		     tokenize = 'unicode61 remove_diacritics 1'
+		 )`,
+		// Backfill from any existing transcript entries.
+		`INSERT OR IGNORE INTO session_transcript_fts(rowid, session_id, entry_json)
+		 SELECT rowid, session_id, entry_json FROM session_transcript_entries`,
+		// Trigger: keep FTS5 in sync on insert.
+		`CREATE TRIGGER IF NOT EXISTS trg_transcript_fts_insert
+		 AFTER INSERT ON session_transcript_entries BEGIN
+		     INSERT OR REPLACE INTO session_transcript_fts(rowid, session_id, entry_json)
+		     VALUES (new.rowid, new.session_id, new.entry_json);
+		 END`,
+		// Trigger: keep FTS5 in sync on delete (also fires for ON DELETE CASCADE rows).
+		`CREATE TRIGGER IF NOT EXISTS trg_transcript_fts_delete
+		 AFTER DELETE ON session_transcript_entries BEGIN
+		     INSERT INTO session_transcript_fts(session_transcript_fts, rowid)
+		     VALUES ('delete', old.rowid);
+		 END`,
+	}
+	for _, stmt := range statements {
+		if err := db.gormDB.WithContext(ctx).Exec(stmt).Error; err != nil {
+			// FTS5 is an enhancement; a failure must not block startup.
+			_ = err
+		}
+	}
+	return nil
 }
 
 func migrateSQLiteSessionFiles(ctx context.Context, db *DB) error {

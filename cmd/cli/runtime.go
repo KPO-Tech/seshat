@@ -2,12 +2,17 @@ package main
 
 import (
 	"fmt"
+	"log"
 	"os"
 	"path/filepath"
 	"strings"
 	"time"
 
+	"github.com/EngineerProjects/nexus-engine/internal/rag/embedder"
+	"github.com/EngineerProjects/nexus-engine/internal/vector"
 	engineconfig "github.com/EngineerProjects/nexus-engine/pkg/config"
+	internalrag "github.com/EngineerProjects/nexus-engine/internal/rag"
+	"github.com/EngineerProjects/nexus-engine/pkg/runtimepath"
 	"github.com/EngineerProjects/nexus-engine/pkg/sdk"
 )
 
@@ -25,6 +30,10 @@ type runtimeOptions struct {
 	StorageGCLimit          int
 	StorageGCNamespaces     []string
 	Debug                   bool
+
+	// RAGService is the embedded HNSW-backed RAG service.
+	// Nil when the embedding provider is not configured (RAG_EMBEDDING_URL / RAG_EMBEDDING_MODEL absent).
+	RAGService *sdk.RAGService
 
 	// Monitoring is an optional pre-built monitoring system.
 	// Set by runInteractive to redirect logs away from stdout/stderr when
@@ -87,6 +96,8 @@ func loadRuntimeOptions(overrides runtimeOverrides) (runtimeOptions, error) {
 	model := resolveModel(config)
 	apiKey := engineconfig.ResolveAPIKey(config, model.Provider)
 
+	hnswDir := runtimepath.HNSWDataDir(config.RuntimeRoot)
+
 	return runtimeOptions{
 		Model:                   model,
 		PermissionMode:          permissionMode,
@@ -101,6 +112,7 @@ func loadRuntimeOptions(overrides runtimeOverrides) (runtimeOptions, error) {
 		StorageGCLimit:          config.StorageGCLimit,
 		StorageGCNamespaces:     splitCommaList(config.StorageGCNamespaces),
 		Debug:                   config.Debug,
+		RAGService:              buildRAGService(hnswDir),
 	}, nil
 }
 
@@ -146,6 +158,7 @@ func newClient(
 		PreToolHooks:            preToolHooks,
 		EnableMonitoring:        enableMonitoring,
 		Monitoring:              options.Monitoring,
+		RAGService:              options.RAGService,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("create SDK client: %w", err)
@@ -203,6 +216,23 @@ func parsePermissionMode(raw string) (sdk.PermissionMode, error) {
 	default:
 		return "", fmt.Errorf("unsupported permission mode %q", raw)
 	}
+}
+
+// buildRAGService creates an HNSW-backed RAG service when an embedding provider
+// is configured via env vars (RAG_EMBEDDING_URL + RAG_EMBEDDING_MODEL).
+// Returns nil when embedding is not configured — rag_ingest / rag_search tools
+// will then be unavailable but all other tools continue working normally.
+func buildRAGService(hnswDir string) *sdk.RAGService {
+	emb := embedder.NewFromEnv()
+	if emb == nil {
+		return nil
+	}
+	store, err := vector.NewHNSWStore(hnswDir)
+	if err != nil {
+		log.Printf("[cli] hnsw vector store unavailable, rag disabled: %v", err)
+		return nil
+	}
+	return internalrag.NewService(nil, store, emb, nil)
 }
 
 func resolveModel(config engineconfig.Config) sdk.ModelIdentifier {

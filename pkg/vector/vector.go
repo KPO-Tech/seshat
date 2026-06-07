@@ -23,6 +23,7 @@ const (
 	BackendQdrant   = internalvector.BackendQdrant
 	BackendChroma   = internalvector.BackendChroma
 	BackendMemory   = internalvector.BackendMemory
+	BackendHNSW     = internalvector.BackendHNSW
 )
 
 // DBHandle is the public vector-facing database descriptor.
@@ -63,6 +64,9 @@ type Config struct {
 	ChromaAPIKey               string
 	ChromaTenant               string
 	ChromaDatabase             string
+	// HNSWDir is the directory for HNSW index files (BackendHNSW only).
+	// Defaults to <runtime_root>/data/hnsw via pkg/config helpers.
+	HNSWDir string
 }
 
 func NewMemoryStore() *internalvector.MemoryStore {
@@ -91,6 +95,7 @@ func NewStore(ctx context.Context, cfg Config) (Store, error) {
 		ChromaAPIKey:               cfg.ChromaAPIKey,
 		ChromaTenant:               cfg.ChromaTenant,
 		ChromaDatabase:             cfg.ChromaDatabase,
+		HNSWDir:                    cfg.HNSWDir,
 	})
 }
 

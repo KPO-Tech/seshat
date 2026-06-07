@@ -116,6 +116,7 @@ func (db *DB) Ping(ctx context.Context) error {
 }
 
 // Close closes the underlying database handle.
+// For SQLite, PRAGMA optimize is run first to update the query planner statistics.
 func (db *DB) Close() error {
 	if db == nil || db.gormDB == nil {
 		return nil
@@ -123,6 +124,9 @@ func (db *DB) Close() error {
 	sqlDB, err := db.gormDB.DB()
 	if err != nil {
 		return err
+	}
+	if db.driver == DriverSQLite {
+		_, _ = sqlDB.Exec("PRAGMA optimize")
 	}
 	return sqlDB.Close()
 }
@@ -142,6 +146,10 @@ func (db *DB) configure(ctx context.Context, cfg Config) error {
 			"PRAGMA foreign_keys = ON",
 			"PRAGMA journal_mode = WAL",
 			"PRAGMA synchronous = NORMAL",
+			"PRAGMA cache_size = -20000",       // 20 MB page cache (default ~2 MB)
+			"PRAGMA mmap_size = 134217728",     // 128 MB memory-mapped I/O
+			"PRAGMA temp_store = MEMORY",       // temp tables in RAM, never disk
+			"PRAGMA wal_autocheckpoint = 1000", // checkpoint every 1 000 WAL pages
 		}
 		if cfg.BusyTimeoutMS > 0 {
 			pragmaStatements = append(pragmaStatements, fmt.Sprintf("PRAGMA busy_timeout = %d", cfg.BusyTimeoutMS))

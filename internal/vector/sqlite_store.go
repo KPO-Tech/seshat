@@ -306,13 +306,13 @@ func (s *SQLiteStore) Get(ctx context.Context, namespace string, keys []string) 
 
 // HasNamespace reports whether at least one record exists in the namespace.
 func (s *SQLiteStore) HasNamespace(ctx context.Context, namespace string) (bool, error) {
-	var count int
+	var exists bool
 	err := s.db.SQL().QueryRowContext(ctx,
-		`SELECT COUNT(*) FROM vector_records WHERE namespace = ? LIMIT 1`, namespace).Scan(&count)
+		`SELECT EXISTS(SELECT 1 FROM vector_records WHERE namespace = ? LIMIT 1)`, namespace).Scan(&exists)
 	if err != nil {
 		return false, fmt.Errorf("has namespace: %w", err)
 	}
-	return count > 0, nil
+	return exists, nil
 }
 
 // DeleteNamespace removes all records for a namespace.

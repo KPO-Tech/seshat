@@ -22,15 +22,15 @@ type SessionFile struct {
 	LinesRemoved  int
 }
 
-// UpsertSessionFile records (or updates) a file operation for a session.
-// Multiple operations on the same file within the same second are coalesced
-// by incrementing the counters rather than inserting duplicates.
+// UpsertSessionFile records a file operation for a session.
+// When tool_use_id is non-empty, INSERT OR IGNORE silently skips duplicates
+// (the unique index on tool_use_id WHERE tool_use_id != '' enforces this).
 func (db *DB) UpsertSessionFile(ctx context.Context, sf SessionFile) error {
 	if sf.TimestampUnix == 0 {
 		sf.TimestampUnix = time.Now().Unix()
 	}
 	_, err := db.SQL().ExecContext(ctx, `
-		INSERT INTO session_files
+		INSERT OR IGNORE INTO session_files
 			(session_id, tool_use_id, file_path, operation, timestamp_unix, lines_added, lines_removed)
 		VALUES (?, ?, ?, ?, ?, ?, ?)`,
 		sf.SessionID, sf.ToolUseID, sf.FilePath, sf.Operation,
@@ -103,13 +103,13 @@ func (db *DB) GetFileSessions(ctx context.Context, filePath string) ([]SessionFi
 // HasSessionFileEntry returns true if session_files already has at least one
 // row for the given session. Used to detect whether backfill is needed.
 func (db *DB) HasSessionFileEntry(ctx context.Context, sessionID string) (bool, error) {
-	var n int
+	var exists bool
 	err := db.SQL().QueryRowContext(ctx,
-		`SELECT COUNT(*) FROM session_files WHERE session_id = ? LIMIT 1`,
+		`SELECT EXISTS(SELECT 1 FROM session_files WHERE session_id = ? LIMIT 1)`,
 		sessionID,
-	).Scan(&n)
+	).Scan(&exists)
 	if err != nil && err != sql.ErrNoRows {
 		return false, err
 	}
-	return n > 0, nil
+	return exists, nil
 }
