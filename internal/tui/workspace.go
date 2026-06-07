@@ -81,11 +81,14 @@ type SessionCreatedMsg struct {
 }
 
 // HistoryTool is one completed tool call embedded in a HistoryEntry.
+// Metadata is the full TUI metadata map (content, execution_duration_ms, etc.)
+// stored alongside the tool result in the transcript.
+// Input is the tool's input map (stored separately in ToolUseContent).
 type HistoryTool struct {
-	ID     string
-	Name   string
-	Input  map[string]any
-	Result string // raw result content string (may include line numbers for files)
+	ID       string
+	Name     string
+	Input    map[string]any
+	Metadata map[string]any // includes "content", "execution_duration_ms", etc.
 }
 
 // HistoryEntry is one message in a replayed session transcript.

@@ -259,10 +259,15 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 						m.chat.AppendChunk(entry.Text, false)
 					}
 					for _, tool := range entry.Tools {
-						meta := map[string]any{"tool_input": tool.Input}
-						if tool.Result != "" {
-							meta["content"] = tool.Result
+						// Start from the persisted TUI metadata (content,
+						// execution_duration_ms, lines_added, exit_code, …).
+						// Always inject tool_input so detail renderers can
+						// access file paths, commands, etc.
+						meta := make(map[string]any, len(tool.Metadata)+1)
+						for k, v := range tool.Metadata {
+							meta[k] = v
 						}
+						meta["tool_input"] = tool.Input
 						m.chat.AddToolProgress(tool.ID, tool.Name, "completed", "", meta)
 					}
 					m.chat.FinishAssistantMessage(entry.InputTokens, entry.OutputTokens, entry.StopReason)

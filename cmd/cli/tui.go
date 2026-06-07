@@ -263,16 +263,28 @@ func (w *nexusWorkspace) LoadSession(ctx context.Context, id string) {
 
 // buildSessionHistory converts raw SDK messages into a flat list of HistoryEntry
 // values suitable for replaying in the TUI chat component.
+// ToolResultContent.Metadata already carries the full TUI metadata map
+// (content, execution_duration_ms, lines_added, exit_code, …) written by
+// buildToolResultMessages in the engine — no data is lost.
 func buildSessionHistory(messages []sdk.Message) []tui.HistoryEntry {
-	// Pre-pass: collect tool result strings keyed by tool_use_id.
-	resultFor := make(map[string]string, len(messages))
+	// Pre-pass: collect tool result metadata keyed by tool_use_id.
+	// Both the raw content string and the full metadata map are captured.
+	type toolResult struct {
+		content  string
+		metadata map[string]any
+	}
+	resultFor := make(map[string]toolResult, len(messages))
 	for _, msg := range messages {
 		if msg.Role != sdk.RoleUser {
 			continue
 		}
 		for _, block := range msg.Content {
 			if tr, ok := block.(sdk.ToolResultContent); ok {
-				resultFor[tr.ToolUseID] = tr.Content
+				r := toolResult{content: tr.Content}
+				if tr.Metadata != nil {
+					r.metadata = *tr.Metadata
+				}
+				resultFor[tr.ToolUseID] = r
 			}
 		}
 	}
@@ -320,8 +332,14 @@ func buildSessionHistory(messages []sdk.Message) []tui.HistoryEntry {
 						Name:  b.Name,
 						Input: b.Input,
 					}
-					if result, ok := resultFor[b.ID]; ok {
-						tool.Result = result
+					if r, ok := resultFor[b.ID]; ok {
+						// Use the persisted metadata map directly; fall back to
+						// building a minimal one from the raw content string.
+						if r.metadata != nil {
+							tool.Metadata = r.metadata
+						} else if r.content != "" {
+							tool.Metadata = map[string]any{"content": r.content}
+						}
 					}
 					entry.Tools = append(entry.Tools, tool)
 				}
