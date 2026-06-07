@@ -8,11 +8,15 @@ import (
 )
 
 // SessionFile represents one file operation recorded against a session.
+// ToolUseID is the tool_use_id from the transcript — use it to look up the
+// full ToolResultContent.Metadata (structured_patch, git_diff, content, …)
+// in session_transcript_entries without scanning the whole transcript.
 type SessionFile struct {
 	ID            int64
 	SessionID     string
+	ToolUseID     string // foreign key into session_transcript_entries JSON
 	FilePath      string
-	Operation     string // "create" | "update" | "edit" | "patch" | "read"
+	Operation     string // "create" | "update" | "edit" | "patch"
 	TimestampUnix int64
 	LinesAdded    int
 	LinesRemoved  int
@@ -27,9 +31,9 @@ func (db *DB) UpsertSessionFile(ctx context.Context, sf SessionFile) error {
 	}
 	_, err := db.SQL().ExecContext(ctx, `
 		INSERT INTO session_files
-			(session_id, file_path, operation, timestamp_unix, lines_added, lines_removed)
-		VALUES (?, ?, ?, ?, ?, ?)`,
-		sf.SessionID, sf.FilePath, sf.Operation,
+			(session_id, tool_use_id, file_path, operation, timestamp_unix, lines_added, lines_removed)
+		VALUES (?, ?, ?, ?, ?, ?, ?)`,
+		sf.SessionID, sf.ToolUseID, sf.FilePath, sf.Operation,
 		sf.TimestampUnix, sf.LinesAdded, sf.LinesRemoved,
 	)
 	if err != nil {
@@ -42,7 +46,7 @@ func (db *DB) UpsertSessionFile(ctx context.Context, sf SessionFile) error {
 // ordered by timestamp ascending.
 func (db *DB) GetSessionFiles(ctx context.Context, sessionID string) ([]SessionFile, error) {
 	rows, err := db.SQL().QueryContext(ctx, `
-		SELECT id, session_id, file_path, operation, timestamp_unix, lines_added, lines_removed
+		SELECT id, session_id, tool_use_id, file_path, operation, timestamp_unix, lines_added, lines_removed
 		FROM session_files
 		WHERE session_id = ?
 		ORDER BY timestamp_unix ASC, id ASC`,
@@ -57,7 +61,7 @@ func (db *DB) GetSessionFiles(ctx context.Context, sessionID string) ([]SessionF
 	for rows.Next() {
 		var f SessionFile
 		if err := rows.Scan(
-			&f.ID, &f.SessionID, &f.FilePath, &f.Operation,
+			&f.ID, &f.SessionID, &f.ToolUseID, &f.FilePath, &f.Operation,
 			&f.TimestampUnix, &f.LinesAdded, &f.LinesRemoved,
 		); err != nil {
 			return nil, fmt.Errorf("scan session file: %w", err)
@@ -71,7 +75,7 @@ func (db *DB) GetSessionFiles(ctx context.Context, sessionID string) ([]SessionF
 // ordered by most recent first.
 func (db *DB) GetFileSessions(ctx context.Context, filePath string) ([]SessionFile, error) {
 	rows, err := db.SQL().QueryContext(ctx, `
-		SELECT id, session_id, file_path, operation, timestamp_unix, lines_added, lines_removed
+		SELECT id, session_id, tool_use_id, file_path, operation, timestamp_unix, lines_added, lines_removed
 		FROM session_files
 		WHERE file_path = ?
 		ORDER BY timestamp_unix DESC, id DESC`,
@@ -86,7 +90,7 @@ func (db *DB) GetFileSessions(ctx context.Context, filePath string) ([]SessionFi
 	for rows.Next() {
 		var f SessionFile
 		if err := rows.Scan(
-			&f.ID, &f.SessionID, &f.FilePath, &f.Operation,
+			&f.ID, &f.SessionID, &f.ToolUseID, &f.FilePath, &f.Operation,
 			&f.TimestampUnix, &f.LinesAdded, &f.LinesRemoved,
 		); err != nil {
 			return nil, fmt.Errorf("scan file session: %w", err)

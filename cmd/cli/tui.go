@@ -909,6 +909,7 @@ func (w *nexusWorkspace) recordSessionFile(progress sdk.ToolProgress) {
 		defer database.Close()
 		_ = database.UpsertSessionFile(context.Background(), db.SessionFile{
 			SessionID:    sessionID,
+			ToolUseID:    progress.ToolUseID,
 			FilePath:     filePath,
 			Operation:    op,
 			LinesAdded:   linesAdded,
@@ -974,12 +975,13 @@ func backfillSessionFiles(ctx context.Context, database *db.DB, sessionID string
 				ts = time.Now().Unix()
 			}
 			_ = database.UpsertSessionFile(ctx, db.SessionFile{
-				SessionID:    sessionID,
-				FilePath:     filePath,
-				Operation:    op,
+				SessionID:     sessionID,
+				ToolUseID:     tu.ID,
+				FilePath:      filePath,
+				Operation:     op,
 				TimestampUnix: ts,
-				LinesAdded:   linesAdded,
-				LinesRemoved: linesRemoved,
+				LinesAdded:    linesAdded,
+				LinesRemoved:  linesRemoved,
 			})
 		}
 	}

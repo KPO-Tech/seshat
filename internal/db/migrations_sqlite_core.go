@@ -143,9 +143,13 @@ func migrateSQLiteMailboxMessages(ctx context.Context, db *DB) error {
 
 func migrateSQLiteSessionFiles(ctx context.Context, db *DB) error {
 	statements := []string{
+		// tool_use_id links back to the ToolResultContent in session_transcript_entries
+		// so the full metadata (structured_patch, git_diff, content, …) can be
+		// retrieved without scanning the entire transcript JSON.
 		`CREATE TABLE IF NOT EXISTS session_files (
 			id              INTEGER PRIMARY KEY AUTOINCREMENT,
 			session_id      TEXT    NOT NULL,
+			tool_use_id     TEXT    NOT NULL DEFAULT '',
 			file_path       TEXT    NOT NULL,
 			operation       TEXT    NOT NULL,
 			timestamp_unix  INTEGER NOT NULL,
@@ -157,6 +161,8 @@ func migrateSQLiteSessionFiles(ctx context.Context, db *DB) error {
 			ON session_files(session_id, timestamp_unix)`,
 		`CREATE INDEX IF NOT EXISTS idx_session_files_path
 			ON session_files(file_path)`,
+		`CREATE INDEX IF NOT EXISTS idx_session_files_tool_use
+			ON session_files(tool_use_id)`,
 	}
 	for _, stmt := range statements {
 		if err := db.gormDB.WithContext(ctx).Exec(stmt).Error; err != nil {
