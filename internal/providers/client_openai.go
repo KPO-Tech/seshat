@@ -62,10 +62,78 @@ func (c *Client) buildOpenAIMessages(req types.APIRequest) []map[string]any {
 			"content": systemPrompt,
 		})
 	}
-	for _, message := range req.Messages {
+	// Strip orphaned tool results before conversion to avoid invalid_request_message_order
+	// from OpenAI-compat APIs (z-ai/GLM, OpenAI, etc.).
+	sanitized := sanitizeToolResultOrphans(req.Messages)
+	for _, message := range sanitized {
 		messages = append(messages, openAIMessageParts(message)...)
 	}
 	return messages
+}
+
+// sanitizeToolResultOrphans removes tool_result blocks from user messages when
+// the referenced tool_use_id does not exist in any preceding assistant message.
+// This prevents "Unexpected tool call id X in tool results" (invalid_request_message_order)
+// from OpenAI-compatible APIs when parallel or background agents cause message
+// history desynchronization.
+func sanitizeToolResultOrphans(messages []types.Message) []types.Message {
+	// Build the set of all tool_use IDs seen in assistant messages.
+	knownToolUseIDs := make(map[string]struct{}, 16)
+	for _, m := range messages {
+		if m.Role != types.RoleAssistant {
+			continue
+		}
+		for _, block := range m.Content {
+			if tu, ok := block.(types.ToolUseContent); ok {
+				knownToolUseIDs[tu.ID] = struct{}{}
+			}
+		}
+	}
+
+	// If no assistant tool_calls exist in this conversation, there's nothing to
+	// be orphaned from — pass through unchanged to avoid stripping valid results.
+	if len(knownToolUseIDs) == 0 {
+		return messages
+	}
+
+	result := make([]types.Message, 0, len(messages))
+	for _, m := range messages {
+		if m.Role != types.RoleUser {
+			result = append(result, m)
+			continue
+		}
+		// Filter out tool_result blocks whose IDs are not in knownToolUseIDs.
+		hasOrphan := false
+		for _, block := range m.Content {
+			if tr, ok := block.(types.ToolResultContent); ok {
+				if _, known := knownToolUseIDs[tr.ToolUseID]; !known {
+					hasOrphan = true
+					break
+				}
+			}
+		}
+		if !hasOrphan {
+			result = append(result, m)
+			continue
+		}
+		// Rebuild message content without orphaned tool results.
+		clean := make([]types.ContentBlock, 0, len(m.Content))
+		for _, block := range m.Content {
+			if tr, ok := block.(types.ToolResultContent); ok {
+				if _, known := knownToolUseIDs[tr.ToolUseID]; !known {
+					continue // drop orphan
+				}
+			}
+			clean = append(clean, block)
+		}
+		if len(clean) > 0 {
+			cleaned := m
+			cleaned.Content = clean
+			result = append(result, cleaned)
+		}
+		// If all content was orphaned tool results, the message is dropped entirely.
+	}
+	return result
 }
 
 func openAIMessageParts(message types.Message) []map[string]any {

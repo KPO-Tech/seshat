@@ -1053,7 +1053,11 @@ func runInteractive(ctx context.Context, options runtimeOptions) error {
 	// Redirect all log output to a file before entering alt-screen (crush pattern).
 	// Without this, monitoring logs and stdlib log output bleed into the TUI.
 	options.Monitoring = buildTUIMonitoring()
-	log.SetOutput(io.Discard)
+	if lf := openCLILogFile(); lf != nil {
+		log.SetOutput(lf)
+	} else {
+		log.SetOutput(io.Discard)
+	}
 
 	ws, err := newNexusWorkspace(options)
 	if err != nil {
@@ -1087,6 +1091,24 @@ func nexusLogDir() string {
 		return os.TempDir()
 	}
 	return filepath.Join(home, ".nexus")
+}
+
+// openCLILogFile opens (or creates) ~/.config/nexus-cli/logs/cli.log for appending.
+// Returns nil if the file cannot be created — caller falls back to io.Discard.
+func openCLILogFile() *os.File {
+	config, err := engineconfig.Load()
+	if err != nil {
+		return nil
+	}
+	logDir := filepath.Join(config.RuntimeRoot, "logs")
+	if err := os.MkdirAll(logDir, 0o755); err != nil {
+		return nil
+	}
+	f, err := os.OpenFile(filepath.Join(logDir, "cli.log"), os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0o640)
+	if err != nil {
+		return nil
+	}
+	return f
 }
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
