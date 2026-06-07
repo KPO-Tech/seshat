@@ -103,7 +103,12 @@ func (t *WaitAgentTool) Call(
 
 	ag, err := t.manager.GetAgent(agentID)
 	if err != nil {
-		return tool.NewErrorResult(fmt.Errorf("agent not found: %s", agentID)), nil
+		// Help the LLM distinguish agent_id (from spawn_agent) from tool_use_id.
+		hint := ""
+		if len(agentID) > 10 && (agentID[8] == '-' || agentID[4] == '-') {
+			hint = " (this looks like a tool_use_id — use the agent_id returned by spawn_agent instead)"
+		}
+		return tool.NewErrorResult(fmt.Errorf("agent not found: %s%s", agentID, hint)), nil
 	}
 
 	callID := input.ToolContextValue().ToolUseID
