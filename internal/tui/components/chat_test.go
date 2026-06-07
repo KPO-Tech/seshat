@@ -219,22 +219,22 @@ func TestChatThinkingLineClickTogglesCollapse(t *testing.T) {
 	}
 }
 
-func TestThinkingBlockRenderShowsMouseHint(t *testing.T) {
+func TestThinkingBlockRenderShowsKeyHint(t *testing.T) {
 	tb := newThinkingBlock()
 	for i := 0; i < 12; i++ {
 		tb.append("line\n")
 	}
 	tb.finish()
 	rendered := tb.render(common.DefaultStyles(), 50)
-	if !strings.Contains(rendered, "click to expand") {
-		t.Fatalf("expected mouse hint in thinking footer, got %q", rendered)
+	if !strings.Contains(rendered, "ctrl+t to expand") {
+		t.Fatalf("expected keyboard hint in thinking footer, got %q", rendered)
 	}
-	if strings.Contains(rendered, "ctrl+t") {
-		t.Fatalf("expected ctrl+t hint to be removed from visible footer, got %q", rendered)
+	if strings.Contains(rendered, "click to") {
+		t.Fatalf("expected old mouse hint to be removed from footer, got %q", rendered)
 	}
 }
 
-func TestChatToolDetailsZoneTogglesDetails(t *testing.T) {
+func TestChatToolSelectThenDetailsViaToggle(t *testing.T) {
 	c := NewChat(common.DefaultStyles(), 80, 20)
 	c.AddToolProgress("tool-1", "read_file", "completed", "done", map[string]any{
 		"tool_input": map[string]any{"file_path": "/tmp/a.txt"},
@@ -243,15 +243,14 @@ func TestChatToolDetailsZoneTogglesDetails(t *testing.T) {
 	if len(c.toolRegions) == 0 {
 		t.Fatalf("expected tool regions to be populated")
 	}
-	region := c.toolRegions[0]
-	if !c.HandleMouseDown(region.detailStart, region.startLine) {
-		t.Fatalf("expected mouse down on tool detail zone to be handled")
+	// Verify a tool is selected after AddToolProgress.
+	if !c.HasSelectedTool() {
+		t.Fatalf("expected a tool to be selected after AddToolProgress")
 	}
-	if got := c.HandleMouseUp(region.detailStart, region.startLine); got != "" {
-		t.Fatalf("expected click on tool detail zone not to copy text, got %q", got)
-	}
+	// Opening the detail pane is now keyboard-driven (ToggleDetails).
+	c.ToggleDetails()
 	if !c.DetailsOpen() {
-		t.Fatalf("expected details pane to open from detail click zone")
+		t.Fatalf("expected details pane to open via ToggleDetails")
 	}
 }
 
