@@ -15,13 +15,12 @@ import (
 	"time"
 
 	tea "charm.land/bubbletea/v2"
+	"github.com/EngineerProjects/nexus-engine/cmd/cli/appdir"
 	db "github.com/EngineerProjects/nexus-engine/internal/db"
-	modeexec "github.com/EngineerProjects/nexus-engine/internal/modes/execution"
 	"github.com/EngineerProjects/nexus-engine/internal/monitoring"
 	"github.com/EngineerProjects/nexus-engine/internal/providers"
 	"github.com/EngineerProjects/nexus-engine/internal/tui"
 	tuiapp "github.com/EngineerProjects/nexus-engine/internal/tui/app"
-	"github.com/EngineerProjects/nexus-engine/internal/types"
 	engineconfig "github.com/EngineerProjects/nexus-engine/pkg/config"
 	"github.com/EngineerProjects/nexus-engine/pkg/sdk"
 	skillspkg "github.com/EngineerProjects/nexus-engine/pkg/skills"
@@ -160,6 +159,7 @@ func ollamaBaseURLFromDB(ctx context.Context, database interface {
 // newNexusWorkspace creates a nexusWorkspace. The workspace registers its own
 // callbacks on the ClientConfig so that events are forwarded to the TUI.
 func newNexusWorkspace(options runtimeOptions) (*nexusWorkspace, error) {
+	_ = appdir.EnsureAppDirs()
 	// Keep w.model as "" when no provider is configured — the TUI uses this
 	// to detect first-run and auto-open the provider settings panel.
 	modelStr := ""
@@ -249,6 +249,7 @@ func (w *nexusWorkspace) CreateSession(ctx context.Context) {
 			w.send(tui.SessionCreatedMsg{Err: err})
 			return
 		}
+		_ = appdir.EnsureSessionDir(string(sess.GetID()))
 		w.sessionMu.Lock()
 		w.session = sess
 		w.sessionMu.Unlock()
@@ -263,6 +264,7 @@ func (w *nexusWorkspace) LoadSession(ctx context.Context, id string) {
 			w.send(tui.SessionLoadedMsg{Err: err})
 			return
 		}
+		_ = appdir.EnsureSessionDir(id)
 		w.sessionMu.Lock()
 		w.session = sess
 		w.sessionMu.Unlock()
@@ -385,13 +387,8 @@ func (w *nexusWorkspace) DeleteSession(_ context.Context, id string) error {
 	if err := w.client.DeleteSession(sdk.SessionID(id)); err != nil {
 		return err
 	}
-	sid := types.SessionID(id)
-	// Best-effort plan file cleanup. GetPlanFilePath generates a slug when none
-	// exists — os.Remove is a no-op on paths that don't exist.
-	planPath := modeexec.GetPlanFilePath(sid, nil)
-	_ = os.Remove(planPath)
-	modeexec.ClearState(sid)
-	modeexec.ClearPlanSlug(sid)
+	// Remove the entire session directory: images, plans, tools, logs — one call.
+	appdir.DeleteSessionDir(id)
 	return nil
 }
 

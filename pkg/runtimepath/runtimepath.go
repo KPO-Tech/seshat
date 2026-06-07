@@ -85,3 +85,35 @@ func ElectronSessionDataDir(root string) string { return Join(root, "electron", 
 func ElectronLogsDir(root string) string { return Join(root, "electron", "logs") }
 
 func ElectronCrashDumpsDir(root string) string { return Join(root, "electron", "crash-dumps") }
+
+// ─── Session-scoped directories ───────────────────────────────────────────────
+//
+// All per-session physical data lives under sessions/{session_id}/. Deleting a
+// session requires only os.RemoveAll(SessionDir(root, id)) for filesystem data
+// and store.DeleteSession(id) for the database — nothing else.
+
+func SessionsDir(root string) string { return Join(root, "sessions") }
+
+func SessionDir(root, sessionID string) string {
+	return filepath.Join(ResolveRoot(root), "sessions", sessionID)
+}
+
+// SessionImagesDir holds browser screenshots and AI-generated images.
+func SessionImagesDir(root, sessionID string) string {
+	return filepath.Join(ResolveRoot(root), "sessions", sessionID, "images")
+}
+
+// SessionPlansDir holds plan-mode markdown files for the session.
+func SessionPlansDir(root, sessionID string) string {
+	return filepath.Join(ResolveRoot(root), "sessions", sessionID, "plans")
+}
+
+// SessionToolsDir holds browser downloads and tool-produced output files.
+func SessionToolsDir(root, sessionID string) string {
+	return filepath.Join(ResolveRoot(root), "sessions", sessionID, "tools")
+}
+
+// SessionLogPath is the per-session log file for errors and diagnostics.
+func SessionLogPath(root, sessionID string) string {
+	return filepath.Join(ResolveRoot(root), "sessions", sessionID, "session.log")
+}

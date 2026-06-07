@@ -329,22 +329,16 @@ func (c *Client) DeleteSession(sessionID SessionID) error {
 	return nil
 }
 
-// deleteSessionArtifacts removes all browser screenshots and downloads stored
-// under the session prefix. Errors are intentionally ignored — artifact cleanup
-// is best-effort and must not block session deletion.
+// deleteSessionArtifacts removes all artifacts stored under sessions/{id}/.
+// This handles S3 storage where os.RemoveAll is not available.
+// Errors are intentionally ignored — artifact cleanup is best-effort.
 func deleteSessionArtifacts(ctx context.Context, store ArtifactStore, sessionID string) {
-	prefixes := []string{
-		"artifacts/browser/screenshots/" + sessionID,
-		"artifacts/browser/downloads/" + sessionID,
+	refs, err := store.List(ctx, ArtifactListOptions{Prefix: "sessions/" + sessionID})
+	if err != nil {
+		return
 	}
-	for _, prefix := range prefixes {
-		refs, err := store.List(ctx, ArtifactListOptions{Prefix: prefix})
-		if err != nil {
-			continue
-		}
-		for _, ref := range refs {
-			_ = store.Delete(ctx, ref.Key)
-		}
+	for _, ref := range refs {
+		_ = store.Delete(ctx, ref.Key)
 	}
 }
 

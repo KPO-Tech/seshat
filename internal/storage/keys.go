@@ -39,26 +39,37 @@ func PDFKey(title string, now time.Time) string {
 	})
 }
 
+// ScreenshotKey builds a session-scoped storage key for a browser screenshot.
+// Layout: sessions/{sessionID}/images/{pageID}/{date}/{timestamp}-screenshot.png
 func ScreenshotKey(sessionID, pageID string, now time.Time) string {
-	return BuildArtifactKey(ArtifactPutRequest{
-		Namespace:   NamespaceBrowserScreenshots,
-		Filename:    "screenshot.png",
-		SessionID:   sessionID,
-		PageID:      pageID,
-		ContentType: "image/png",
-		Timestamp:   now,
-	})
+	now = now.UTC()
+	if now.IsZero() {
+		now = time.Now().UTC()
+	}
+	datePrefix := fmt.Sprintf("%04d/%02d/%02d", now.Year(), now.Month(), now.Day())
+	parts := []string{"sessions", sanitizePathSegment(sessionID), "images"}
+	if pageID != "" {
+		parts = append(parts, sanitizePathSegment(pageID))
+	}
+	parts = append(parts, datePrefix)
+	return path.Join(append(parts, fmt.Sprintf("%d-screenshot.png", now.UnixNano()))...)
 }
 
+// DownloadKey builds a session-scoped storage key for a browser download.
+// Layout: sessions/{sessionID}/tools/{pageID}/{date}/{timestamp}-{filename}
 func DownloadKey(sessionID, pageID, filename string, now time.Time) string {
-	return BuildArtifactKey(ArtifactPutRequest{
-		Namespace:   NamespaceBrowserDownloads,
-		Filename:    filename,
-		SessionID:   sessionID,
-		PageID:      pageID,
-		ContentType: DetectContentType(filename),
-		Timestamp:   now,
-	})
+	now = now.UTC()
+	if now.IsZero() {
+		now = time.Now().UTC()
+	}
+	datePrefix := fmt.Sprintf("%04d/%02d/%02d", now.Year(), now.Month(), now.Day())
+	filename = normalizeArtifactFilename(filename, DetectContentType(filename), "download")
+	parts := []string{"sessions", sanitizePathSegment(sessionID), "tools"}
+	if pageID != "" {
+		parts = append(parts, sanitizePathSegment(pageID))
+	}
+	parts = append(parts, datePrefix)
+	return path.Join(append(parts, fmt.Sprintf("%d-%s", now.UnixNano(), filename))...)
 }
 
 func DocumentKey(filename string, now time.Time) string {

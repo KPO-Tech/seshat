@@ -176,14 +176,8 @@ func StoreScreenshotRef(ctx context.Context, store ArtifactStore, data []byte, s
 			return ArtifactRef{}, err
 		}
 	}
-	return store.PutArtifact(ctx, ArtifactPutRequest{
-		Namespace:   NamespaceBrowserScreenshots,
-		Filename:    "screenshot.png",
-		SessionID:   sessionID,
-		PageID:      pageID,
-		ContentType: "image/png",
-		Timestamp:   time.Now().UTC(),
-	}, data)
+	key := ScreenshotKey(sessionID, pageID, time.Now().UTC())
+	return store.Put(ctx, key, data, "image/png")
 }
 
 func StoreDocumentRef(ctx context.Context, store ArtifactStore, data []byte, filename string) (ArtifactRef, error) {

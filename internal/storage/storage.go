@@ -30,8 +30,13 @@ const (
 
 const DefaultS3Region = "us-east-1"
 
+// DefaultLocalPath returns the root directory for the local artifact store.
+// Using the runtime root directly (not a storage/ subdirectory) so that
+// session-scoped keys (sessions/{id}/images/, sessions/{id}/tools/, …) land
+// at the same level as plans and logs — all under ~/.config/nexus-cli/.
+// Non-session namespaces (documents/, rag/, artifacts/web/) are unaffected.
 func DefaultLocalPath() string {
-	return runtimepath.StorageDir("")
+	return runtimepath.ResolveRoot("")
 }
 
 type Config struct {
