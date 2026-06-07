@@ -15,6 +15,7 @@ import (
 	"time"
 
 	tea "charm.land/bubbletea/v2"
+	db "github.com/EngineerProjects/nexus-engine/internal/db"
 	"github.com/EngineerProjects/nexus-engine/internal/monitoring"
 	"github.com/EngineerProjects/nexus-engine/internal/providers"
 	"github.com/EngineerProjects/nexus-engine/internal/tui"
@@ -256,8 +257,27 @@ func (w *nexusWorkspace) LoadSession(ctx context.Context, id string) {
 		w.sessionMu.Lock()
 		w.session = sess
 		w.sessionMu.Unlock()
-		history := buildSessionHistory(sess.GetMessages())
+		messages := sess.GetMessages()
+		history := buildSessionHistory(messages)
 		w.send(tui.SessionLoadedMsg{ID: string(sess.GetID()), History: history})
+
+		// Backfill session_files for sessions that predate live recording.
+		go func(sessionID string, msgs []sdk.Message) {
+			cfg, err := engineconfig.Load()
+			if err != nil {
+				return
+			}
+			database, err := openCredentialsDB(cfg)
+			if err != nil {
+				return
+			}
+			defer database.Close()
+			ctx := context.Background()
+			if already, _ := database.HasSessionFileEntry(ctx, sessionID); already {
+				return // already populated, nothing to do
+			}
+			backfillSessionFiles(ctx, database, sessionID, msgs)
+		}(string(sess.GetID()), messages)
 	}()
 }
 
@@ -848,6 +868,148 @@ func (w *nexusWorkspace) onProgress(progress sdk.ToolProgress) {
 		Label:     label,
 		Metadata:  progress.Metadata,
 	})
+	// Record file operations in session_files as they complete.
+	if string(progress.Stage) == "completed" {
+		switch progress.ToolName {
+		case "write_file", "edit_file", "apply_patch":
+			w.recordSessionFile(progress)
+		}
+	}
+}
+
+// recordSessionFile persists a completed file-write operation to session_files.
+// Runs asynchronously so it never blocks the TUI event loop.
+func (w *nexusWorkspace) recordSessionFile(progress sdk.ToolProgress) {
+	w.sessionMu.Lock()
+	sess := w.session
+	w.sessionMu.Unlock()
+	if sess == nil {
+		return
+	}
+	sessionID := string(sess.GetID())
+	meta := progress.Metadata
+
+	filePath, _ := meta["file_path"].(string)
+	if filePath == "" {
+		return
+	}
+	op := fileOperation(progress.ToolName, meta)
+	linesAdded, _ := intFromAny(meta["lines_added"])
+	linesRemoved, _ := intFromAny(meta["lines_removed"])
+
+	go func() {
+		cfg, err := engineconfig.Load()
+		if err != nil {
+			return
+		}
+		database, err := openCredentialsDB(cfg)
+		if err != nil {
+			return
+		}
+		defer database.Close()
+		_ = database.UpsertSessionFile(context.Background(), db.SessionFile{
+			SessionID:    sessionID,
+			FilePath:     filePath,
+			Operation:    op,
+			LinesAdded:   linesAdded,
+			LinesRemoved: linesRemoved,
+		})
+	}()
+}
+
+// backfillSessionFiles scans a transcript and populates session_files for any
+// write_file, edit_file, or apply_patch tool results found there.
+func backfillSessionFiles(ctx context.Context, database *db.DB, sessionID string, messages []sdk.Message) {
+	// Build a map: tool_use_id → ToolResultContent.Metadata for file ops.
+	type resultMeta struct {
+		metadata map[string]any
+		ts       int64
+	}
+	resultMap := make(map[string]resultMeta)
+	for _, msg := range messages {
+		ts := msg.Timestamp.Unix()
+		if ts <= 0 {
+			ts = time.Now().Unix()
+		}
+		for _, block := range msg.Content {
+			if tr, ok := block.(sdk.ToolResultContent); ok && tr.Metadata != nil {
+				resultMap[tr.ToolUseID] = resultMeta{metadata: *tr.Metadata, ts: ts}
+			}
+		}
+	}
+
+	for _, msg := range messages {
+		if msg.Role != sdk.RoleAssistant {
+			continue
+		}
+		for _, block := range msg.Content {
+			tu, ok := block.(sdk.ToolUseContent)
+			if !ok {
+				continue
+			}
+			switch tu.Name {
+			case "write_file", "edit_file", "apply_patch":
+			default:
+				continue
+			}
+			r, hasResult := resultMap[tu.ID]
+			var meta map[string]any
+			if hasResult {
+				meta = r.metadata
+			} else {
+				meta = map[string]any{}
+			}
+			filePath, _ := meta["file_path"].(string)
+			if filePath == "" {
+				filePath, _ = tu.Input["file_path"].(string)
+			}
+			if filePath == "" {
+				continue
+			}
+			op := fileOperation(tu.Name, meta)
+			linesAdded, _ := intFromAny(meta["lines_added"])
+			linesRemoved, _ := intFromAny(meta["lines_removed"])
+			ts := r.ts
+			if ts == 0 {
+				ts = time.Now().Unix()
+			}
+			_ = database.UpsertSessionFile(ctx, db.SessionFile{
+				SessionID:    sessionID,
+				FilePath:     filePath,
+				Operation:    op,
+				TimestampUnix: ts,
+				LinesAdded:   linesAdded,
+				LinesRemoved: linesRemoved,
+			})
+		}
+	}
+}
+
+func fileOperation(toolName string, meta map[string]any) string {
+	switch toolName {
+	case "write_file":
+		if t, _ := meta["type"].(string); t != "" {
+			return t // "create" or "update"
+		}
+		return "write"
+	case "edit_file":
+		return "edit"
+	case "apply_patch":
+		return "patch"
+	}
+	return toolName
+}
+
+func intFromAny(v any) (int, bool) {
+	switch n := v.(type) {
+	case int:
+		return n, true
+	case int64:
+		return int(n), true
+	case float64:
+		return int(n), true
+	}
+	return 0, false
 }
 
 // promptFn blocks the calling (agent) goroutine until the TUI resolves it.

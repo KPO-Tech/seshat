@@ -37,6 +37,11 @@ func sqliteCoreMigrations() []schemaMigration {
 			Scope: migrationScopeCoreSQLite,
 			Run:   migrateSQLiteMailboxMessages,
 		},
+		{
+			ID:    "20260607_007_session_files",
+			Scope: migrationScopeCoreSQLite,
+			Run:   migrateSQLiteSessionFiles,
+		},
 	}
 }
 
@@ -134,4 +139,29 @@ func migrateSQLiteAgentProfiles(ctx context.Context, db *DB) error {
 
 func migrateSQLiteMailboxMessages(ctx context.Context, db *DB) error {
 	return db.gormDB.WithContext(ctx).AutoMigrate(&GMailboxMessage{})
+}
+
+func migrateSQLiteSessionFiles(ctx context.Context, db *DB) error {
+	statements := []string{
+		`CREATE TABLE IF NOT EXISTS session_files (
+			id              INTEGER PRIMARY KEY AUTOINCREMENT,
+			session_id      TEXT    NOT NULL,
+			file_path       TEXT    NOT NULL,
+			operation       TEXT    NOT NULL,
+			timestamp_unix  INTEGER NOT NULL,
+			lines_added     INTEGER NOT NULL DEFAULT 0,
+			lines_removed   INTEGER NOT NULL DEFAULT 0,
+			FOREIGN KEY (session_id) REFERENCES session_metadata(session_id) ON DELETE CASCADE
+		)`,
+		`CREATE INDEX IF NOT EXISTS idx_session_files_session
+			ON session_files(session_id, timestamp_unix)`,
+		`CREATE INDEX IF NOT EXISTS idx_session_files_path
+			ON session_files(file_path)`,
+	}
+	for _, stmt := range statements {
+		if err := db.gormDB.WithContext(ctx).Exec(stmt).Error; err != nil {
+			return err
+		}
+	}
+	return nil
 }
