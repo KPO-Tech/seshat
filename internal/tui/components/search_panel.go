@@ -112,11 +112,13 @@ func (p *SearchPanel) EnterList() (openedMode, openedKey bool) {
 	}
 	prov := p.config.Providers[idx]
 	if !prov.NeedsKey {
+		// Truly no configuration needed (e.g. DuckDuckGo).
 		return false, false
 	}
 	p.editEntry = prov
 	p.draft = ""
-	p.showSecret = false
+	// URL fields are not secrets — reveal by default.
+	p.showSecret = prov.FieldLabel == ""
 	p.statusMsg = ""
 	p.editingKey = true
 	return false, true
@@ -306,7 +308,12 @@ func (p *SearchPanel) viewKeyEdit(w, innerW int) string {
 	)
 	sep := p.styles.MsgTimestamp.Render(strings.Repeat("─", innerW))
 
-	labelLine := "  " + lipgloss.NewStyle().Bold(true).Foreground(common.ColorPrimary).Render("API Key")
+	fieldLabel := p.editEntry.FieldLabel
+	if fieldLabel == "" {
+		fieldLabel = "API Key"
+	}
+	isURL := p.editEntry.FieldLabel != "" // URL fields have an explicit label
+	labelLine := "  " + lipgloss.NewStyle().Bold(true).Foreground(common.ColorPrimary).Render(fieldLabel)
 	if p.editEntry.EnvVar != "" {
 		labelLine += "  " + p.styles.MsgTimestamp.Render("("+p.editEntry.EnvVar+")")
 	}
@@ -315,21 +322,32 @@ func (p *SearchPanel) viewKeyEdit(w, innerW int) string {
 	}
 
 	display := p.draft
-	if !p.showSecret && display != "" {
+	if !isURL && !p.showSecret && display != "" {
+		// Mask secrets (API keys), but not URLs.
 		display = strings.Repeat("•", len(display))
 	}
 	if display == "" && p.editEntry.IsSet {
 		display = p.styles.MsgTimestamp.Render("(keep existing — type to replace)")
 	}
 	cur := lipgloss.NewStyle().Foreground(common.ColorPrimary).Render("█")
-	revealHint := "ctrl+r: reveal"
-	if p.showSecret {
-		revealHint = "ctrl+r: hide"
-	}
-	valLine := "  ▶ " + lipgloss.NewStyle().Foreground(common.ColorText).Render(display) + cur +
-		"  " + p.styles.MsgTimestamp.Render(revealHint)
 
-	hint := p.styles.Footer.Render("  enter: save  ctrl+v: paste  ctrl+r: reveal  ← back  esc: close")
+	var valLine string
+	if isURL {
+		valLine = "  ▶ " + lipgloss.NewStyle().Foreground(common.ColorText).Render(display) + cur
+	} else {
+		revealHint := "ctrl+r: reveal"
+		if p.showSecret {
+			revealHint = "ctrl+r: hide"
+		}
+		valLine = "  ▶ " + lipgloss.NewStyle().Foreground(common.ColorText).Render(display) + cur +
+			"  " + p.styles.MsgTimestamp.Render(revealHint)
+	}
+
+	hintText := "  enter: save  ctrl+v: paste  ← back  esc: close"
+	if !isURL {
+		hintText = "  enter: save  ctrl+v: paste  ctrl+r: reveal  ← back  esc: close"
+	}
+	hint := p.styles.Footer.Render(hintText)
 	parts := []string{title, sep, "", labelLine, valLine, "", sep}
 	if line := p.statusLine(); line != "" {
 		parts = append(parts, line)
@@ -388,7 +406,7 @@ func (p *SearchPanel) viewModeEdit(w, innerW int) string {
 
 func (p *SearchPanel) statusTag(pv tui.SearchKeyStatus) string {
 	if !pv.NeedsKey {
-		return p.styles.MsgTimestamp.Render("─ no key needed")
+		return p.styles.MsgTimestamp.Render("─ no config needed")
 	}
 	if pv.IsSet {
 		return lipgloss.NewStyle().Foreground(common.ColorGreen).Render("✓ configured")

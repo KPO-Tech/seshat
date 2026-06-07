@@ -6,6 +6,7 @@ import (
 	"flag"
 	"fmt"
 	"io"
+	"os"
 	"strconv"
 	"strings"
 
@@ -455,6 +456,12 @@ func loadCredsIntoConfig(database *db.DB, config *engineconfig.Config) {
 	config.TavilyAPIKey = loadCred(credKeyTavily)
 	config.ExaAPIKey = loadCred(credKeyExa)
 	config.JinaAPIKey = loadCred(credKeyJina)
+
+	// SearXNG is not in the Config struct (no YAML field) — apply directly as an
+	// env var so NewSearXNGProvider() picks it up via os.Getenv("SEARXNG_BASE_URL").
+	if v := loadCred(credKeySearXNG); v != "" && os.Getenv("SEARXNG_BASE_URL") == "" {
+		os.Setenv("SEARXNG_BASE_URL", v)
+	}
 }
 
 func stripRuntimeSecrets(config engineconfig.Config) engineconfig.Config {

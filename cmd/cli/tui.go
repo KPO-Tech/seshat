@@ -92,6 +92,10 @@ type nexusWorkspace struct {
 
 	busy     atomic.Bool
 	debounce *chunkDebounce
+
+	// submitMu guards submitCancel, which is non-nil while a Submit goroutine runs.
+	submitMu     sync.Mutex
+	submitCancel context.CancelFunc
 }
 
 // credKeyOllamaModels is the DB key for the cached Ollama model list.
@@ -386,11 +390,23 @@ func (w *nexusWorkspace) Submit(ctx context.Context, prompt string) {
 	}
 	w.busy.Store(true)
 
+	// Wrap with a per-submit cancel so Cancel() can interrupt the API call.
+	submitCtx, cancel := context.WithCancel(ctx)
+	w.submitMu.Lock()
+	w.submitCancel = cancel
+	w.submitMu.Unlock()
+
 	go func() {
+		defer func() {
+			w.submitMu.Lock()
+			w.submitCancel = nil
+			w.submitMu.Unlock()
+			cancel()
+		}()
 		w.send(tui.TurnStartMsg{
 			SessionID: string(sess.GetID()),
 		})
-		resp, err := sess.SubmitMessage(ctx, prompt)
+		resp, err := sess.SubmitMessage(submitCtx, prompt)
 		w.busy.Store(false)
 
 		done := tui.TurnDoneMsg{
@@ -409,9 +425,13 @@ func (w *nexusWorkspace) Submit(ctx context.Context, prompt string) {
 }
 
 func (w *nexusWorkspace) Cancel() {
-	// The SDK doesn't expose a per-session cancel yet; cancel via context
-	// when the workspace is closed or a parent context is cancelled.
-	// For now, mark as not busy so the UI unblocks.
+	w.submitMu.Lock()
+	cancel := w.submitCancel
+	w.submitMu.Unlock()
+	if cancel != nil {
+		cancel()
+	}
+	// Safety net: unblock the UI immediately even if TurnDoneMsg is delayed.
 	w.busy.Store(false)
 }
 
@@ -683,12 +703,14 @@ func (w *nexusWorkspace) DeleteProviderField(ctx context.Context, providerID, fi
 }
 
 // searchProviderCatalog is the static metadata for each search provider.
+const credKeySearXNG = "SEARXNG_BASE_URL"
+
 var searchProviderCatalog = []tui.SearchKeyStatus{
 	{ID: "tavily", DisplayName: "Tavily", Description: "AI-optimised search", EnvVar: "TAVILY_API_KEY", DBKey: "TAVILY_API_KEY", NeedsKey: true},
 	{ID: "exa", DisplayName: "Exa", Description: "Neural search engine", EnvVar: "EXA_API_KEY", DBKey: "EXA_API_KEY", NeedsKey: true},
 	{ID: "jina", DisplayName: "Jina AI", Description: "Reader-based web retrieval", EnvVar: "JINA_API_KEY", DBKey: "JINA_API_KEY", NeedsKey: true},
 	{ID: "langsearch", DisplayName: "LangSearch", Description: "Free AI-optimised search", EnvVar: "LANGSEARCH_API_KEY", DBKey: "LANGSEARCH_API_KEY", NeedsKey: true},
-	{ID: "searxng", DisplayName: "SearXNG", Description: "Self-hosted meta-search", NeedsKey: false},
+	{ID: "searxng", DisplayName: "SearXNG", Description: "Self-hosted meta-search (needs instance URL)", EnvVar: "SEARXNG_BASE_URL", DBKey: credKeySearXNG, NeedsKey: true, FieldLabel: "Instance URL"},
 	{ID: "ddg", DisplayName: "DuckDuckGo", Description: "Privacy-friendly fallback", NeedsKey: false},
 }
 

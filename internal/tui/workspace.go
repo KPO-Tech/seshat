@@ -144,7 +144,8 @@ type SearchKeyStatus struct {
 	Description string
 	EnvVar      string // e.g. "TAVILY_API_KEY"
 	DBKey       string // credential DB key
-	NeedsKey    bool   // false for DDG, SearXNG
+	NeedsKey    bool   // false for DDG (truly no config), true for all others
+	FieldLabel  string // label shown in the edit dialog; defaults to "API Key"
 	IsSet       bool   // a value is currently stored in the DB
 }
 

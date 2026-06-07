@@ -82,6 +82,7 @@ type Model struct {
 
 	focus               uiFocus
 	busy                bool
+	cancelling          bool // true between ESC press and TurnDoneMsg arrival
 	activeSession       string
 	lastErr             error
 	permInput           string
@@ -199,7 +200,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		cmds = append(cmds, m.spinner.Tick)
 
 	case tui.TurnDoneMsg:
+		wasCancelling := m.cancelling
 		m.busy = false
+		m.cancelling = false
 		m.lastInputTokens = msg.InputTokens
 		m.lastOutputTokens = msg.OutputTokens
 		m.lastStopReason = msg.StopReason
@@ -207,7 +210,8 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.sessionOutputTokens += msg.OutputTokens
 		m.lastTurnErr = ""
 		m.chat.FinishAssistantMessage(msg.InputTokens, msg.OutputTokens, msg.StopReason)
-		if msg.Err != nil {
+		if msg.Err != nil && !wasCancelling &&
+			msg.Err != context.Canceled && msg.Err != context.DeadlineExceeded {
 			m.lastTurnErr = msg.Err.Error()
 			m.chat.AddError(msg.Err)
 		}
@@ -625,6 +629,7 @@ func (m *Model) handleKey(msg tea.KeyPressMsg) (bool, tea.Cmd) {
 	case "ctrl+c":
 		if m.busy {
 			m.workspace.Cancel()
+			m.cancelling = true
 			return true, nil
 		}
 		m.cancel()
@@ -956,6 +961,7 @@ func (m *Model) handleKey(msg tea.KeyPressMsg) (bool, tea.Cmd) {
 	case "esc":
 		if m.busy && (m.state == stateChat || m.state == stateWelcome) {
 			m.workspace.Cancel()
+			m.cancelling = true
 			return true, nil
 		}
 	}
@@ -1469,6 +1475,8 @@ func (m Model) header() string {
 func (m Model) statusLineFor(w int) string {
 	var line string
 	switch {
+	case m.busy && m.cancelling:
+		line = m.styles.Footer.Width(w).Render(m.styles.HeaderPillBusy.Render(m.spinner.View() + " interrupting…"))
 	case m.busy:
 		line = m.styles.Footer.Width(w).Render(m.styles.HeaderPillBusy.Render(m.spinner.View() + " working"))
 	case m.lastTurnErr != "":
