@@ -318,7 +318,7 @@ func (c *Config) BuildAuthHeaders() map[string]string {
 
 	case types.APIProviderZAi:
 		if c.APIKey != "" {
-			headers["Authorization"] = "Bearer " + c.APIKey
+			headers["x-api-key"] = c.APIKey
 		}
 		headers["Content-Type"] = "application/json"
 		headers["Accept-Language"] = "en-US,en"
