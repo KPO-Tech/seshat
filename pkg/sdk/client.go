@@ -152,11 +152,16 @@ func NewClient(config *ClientConfig) (*Client, error) {
 		return nil, fmt.Errorf("failed to register agent tool: %w", err)
 	}
 
-	// spawn_agent needs the live engine instance — registered here, not in builtin.go.
+	// spawn_agent and resume_agent need the live engine instance — registered here, not in builtin.go.
 	// nil tools → sub-agent inherits all tools from the engine registry at call time.
-	spawnAgentTool := agentTool.NewSpawnAgentTool(queryEngine, nil, coreagent.NewAgentRegistry())
+	agentRegistry := coreagent.NewAgentRegistry()
+	spawnAgentTool := agentTool.NewSpawnAgentTool(queryEngine, nil, agentRegistry)
 	if err := reg.Register(spawnAgentTool); err != nil {
 		return nil, fmt.Errorf("failed to register spawn_agent tool: %w", err)
+	}
+	resumeAgentTool := agentTool.NewResumeAgentTool(queryEngine, nil, agentRegistry)
+	if err := reg.Register(resumeAgentTool); err != nil {
+		return nil, fmt.Errorf("failed to register resume_agent tool: %w", err)
 	}
 
 	client := &Client{

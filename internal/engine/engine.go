@@ -1,6 +1,8 @@
 package engine
 
 import (
+	"context"
+	"fmt"
 	"os"
 
 	"github.com/EngineerProjects/nexus-engine/internal/execution"
@@ -19,6 +21,13 @@ import (
 // SessionStore persists canonical session metadata and transcript state.
 type SessionStore interface {
 	SaveSessionState(sessionID types.SessionID, metadata *types.SessionMetadata, previousMessages []types.Message, currentMessages []types.Message) error
+}
+
+// sessionRestorer is an optional capability of a SessionStore implementation
+// that supports loading a previously persisted session back into memory.
+// state.Store satisfies this interface; a nil or stub store does not.
+type sessionRestorer interface {
+	RestoreSessionState(sessionID types.SessionID) (*types.SessionMetadata, []types.Message, error)
 }
 
 // Engine orchestrates query sessions.
@@ -130,6 +139,21 @@ func (e *Engine) SetAPIClient(apiClient *providers.Client) {
 	if e.permissionIntegrator != nil {
 		e.permissionIntegrator.SetAutoModeProviderClient(apiClient, e.config.Model)
 	}
+}
+
+// OpenSession loads a previously persisted session by ID so it can receive new
+// turns. Returns an error if the store does not support session restoration or
+// if the session is not found.
+func (e *Engine) OpenSession(ctx context.Context, sessionID types.SessionID) (*Session, error) {
+	r, ok := e.sessionStore.(sessionRestorer)
+	if !ok {
+		return nil, fmt.Errorf("session store does not support restoration")
+	}
+	meta, msgs, err := r.RestoreSessionState(sessionID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to restore session %s: %w", sessionID, err)
+	}
+	return e.NewSessionFromState(ctx, sessionID, meta, msgs)
 }
 
 // HookRegistry returns the engine's hook registry for external hook registration.

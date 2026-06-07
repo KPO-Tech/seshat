@@ -24,6 +24,7 @@ The result includes:
 - ` + "`output`" + `: the agent's final output text
 - ` + "`turns`" + `: number of turns taken
 - ` + "`elapsed_seconds`" + `: wall-clock time the agent ran
+- ` + "`session_id`" + `: persisted session ID — pass to ` + "`resume_agent`" + ` to continue from where the agent left off
 
 Mirrors Codex's CollabAgentTool = "wait" + CollabWaitingBeginEvent / CollabWaitingEndEvent.`
 
@@ -184,6 +185,9 @@ func buildWaitResult(ag *coreagent.AsyncAgent) map[string]any {
 		if len(ag.Result.Sources) > 0 {
 			resp["sources"] = ag.Result.Sources
 		}
+	}
+	if ag.SessionID != "" {
+		resp["session_id"] = ag.SessionID
 	}
 	if ag.Error != nil {
 		resp["error"] = ag.Error.Error()

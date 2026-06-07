@@ -325,6 +325,11 @@ func (s *Session) Close() error {
 	return s.persistSessionState(messages)
 }
 
+// GetSessionID returns the stable identifier for this session.
+func (s *Session) GetSessionID() types.SessionID {
+	return s.state.SessionID
+}
+
 func (s *Session) enforceMaxTurns() error {
 	if s == nil || s.config == nil {
 		return nil

@@ -7,6 +7,8 @@ import (
 	"reflect"
 	"sync"
 	"time"
+
+	"github.com/EngineerProjects/nexus-engine/internal/types"
 )
 
 // ---------------------------------------------------------------------------
@@ -109,6 +111,10 @@ type AsyncAgent struct {
 	// Role is the optional role assigned at spawn time (e.g. "reviewer").
 	// Mirrors Codex's agent_role in CollabAgentRef.
 	Role string
+
+	// SessionID is the engine session ID used by this agent's run. Set after
+	// the run completes and exposes the session for resumption via resume_agent.
+	SessionID types.SessionID
 
 	// Current status
 	Status AgentStatus
@@ -420,12 +426,16 @@ func (m *AsyncAgentManager) runAgent(agent *AsyncAgent) {
 	// Run the agent
 	result, err := RunAgent(&config)
 
-	// Sync final tool-use count from result into agent.ToolUses so GetProgress()
-	// returns accurate data even if the per-turn callback missed the last turn.
+	// Sync final counts from result so GetProgress() is accurate after completion.
 	if result != nil {
 		agent.progressMu.Lock()
 		agent.ToolUses = result.ToolUses
 		agent.progressMu.Unlock()
+		if result.SessionID != "" {
+			agent.stateMu.Lock()
+			agent.SessionID = result.SessionID
+			agent.stateMu.Unlock()
+		}
 	}
 
 	endTime := time.Now()

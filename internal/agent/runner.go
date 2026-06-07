@@ -44,6 +44,10 @@ type RunResult struct {
 	// WorktreePath is the worktree directory (for isolation mode)
 	WorktreePath string `json:"worktreePath,omitempty"`
 
+	// SessionID is the engine session ID for this run. Callers can pass it to
+	// RunConfig.ResumeFromSessionID to continue from where this run left off.
+	SessionID types.SessionID `json:"session_id,omitempty"`
+
 	// Error is the error if failed
 	Error string `json:"error,omitempty"`
 }
@@ -126,6 +130,11 @@ type RunConfig struct {
 	// Set to types.PermissionModeBypass for headless background agents so they
 	// can execute tools without waiting for interactive prompts.
 	PermissionMode types.PermissionMode
+
+	// ResumeFromSessionID, when set, opens an existing persisted session instead
+	// of creating a new one. The first message sent to the resumed session is
+	// config.Task, continuing where the previous run left off.
+	ResumeFromSessionID types.SessionID
 }
 
 // RunAgent runs an agent and returns the result
@@ -175,28 +184,39 @@ func RunAgent(config *RunConfig) (*RunResult, error) {
 		ctx = context.Background()
 	}
 
-	// Create session
+	// Create or restore session.
 	var session *engine.Session
 	var err error
-	subagentMetadata := &types.SessionMetadata{
-		Status:        types.SessionStatusActive,
-		CreatedAt:     time.Now(),
-		UpdatedAt:     time.Now(),
-		Additional:    map[string]any{"tool_surface_profile": tool.ToolSurfaceProfileSubagent},
-		SchemaVersion: types.SessionMetadataSchemaVersion,
-	}
-	if len(config.ForkFromMessages) > 0 {
-		inheritedMessages := append([]types.Message(nil), config.ForkFromMessages...)
-		session, err = runtimeEngine.NewSessionFromState(ctx, "", subagentMetadata, inheritedMessages)
+	if config.ResumeFromSessionID != "" {
+		session, err = runtimeEngine.OpenSession(ctx, config.ResumeFromSessionID)
+		if err != nil {
+			return &RunResult{
+				AgentType: config.AgentType,
+				Success:   false,
+				Error:     fmt.Sprintf("failed to restore session %s: %v", config.ResumeFromSessionID, err),
+			}, nil
+		}
 	} else {
-		session, err = runtimeEngine.NewSessionFromState(ctx, "", subagentMetadata, nil)
-	}
-	if err != nil {
-		return &RunResult{
-			AgentType: config.AgentType,
-			Success:   false,
-			Error:     fmt.Sprintf("failed to create session: %v", err),
-		}, nil
+		subagentMetadata := &types.SessionMetadata{
+			Status:        types.SessionStatusActive,
+			CreatedAt:     time.Now(),
+			UpdatedAt:     time.Now(),
+			Additional:    map[string]any{"tool_surface_profile": tool.ToolSurfaceProfileSubagent},
+			SchemaVersion: types.SessionMetadataSchemaVersion,
+		}
+		if len(config.ForkFromMessages) > 0 {
+			inheritedMessages := append([]types.Message(nil), config.ForkFromMessages...)
+			session, err = runtimeEngine.NewSessionFromState(ctx, "", subagentMetadata, inheritedMessages)
+		} else {
+			session, err = runtimeEngine.NewSessionFromState(ctx, "", subagentMetadata, nil)
+		}
+		if err != nil {
+			return &RunResult{
+				AgentType: config.AgentType,
+				Success:   false,
+				Error:     fmt.Sprintf("failed to create session: %v", err),
+			}, nil
+		}
 	}
 
 	// Apply permission mode override (e.g. bypass for headless background agents).
@@ -296,6 +316,7 @@ func RunAgent(config *RunConfig) (*RunResult, error) {
 				Turns:     turns,
 				ToolUses:  totalToolUses,
 				Sources:   sources,
+				SessionID: session.GetSessionID(),
 				Error:     err.Error(),
 			}, nil
 		}
@@ -347,6 +368,7 @@ func RunAgent(config *RunConfig) (*RunResult, error) {
 				Turns:     turns,
 				ToolUses:  totalToolUses,
 				Sources:   sources,
+				SessionID: session.GetSessionID(),
 				Error:     ctx.Err().Error(),
 			}, nil
 		default:
@@ -360,6 +382,7 @@ func RunAgent(config *RunConfig) (*RunResult, error) {
 		Turns:     turns,
 		ToolUses:  totalToolUses,
 		Sources:   sources,
+		SessionID: session.GetSessionID(),
 	}, nil
 }
 
