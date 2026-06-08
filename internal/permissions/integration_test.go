@@ -2,9 +2,13 @@ package permissions
 
 import (
 	"context"
+	"encoding/json"
+	"os"
+	"path/filepath"
 	"testing"
 
 	"github.com/EngineerProjects/nexus-engine/internal/types"
+	"github.com/EngineerProjects/nexus-engine/pkg/runtimepath"
 )
 
 // ─── mock classifier for e2e tests ───────────────────────────────────────────
@@ -19,6 +23,7 @@ func (c *e2eClassifier) Classify(_ context.Context, _ string, _ map[string]any) 
 }
 
 func TestResolverUsesPromptFnApproval(t *testing.T) {
+	t.Setenv("NEXUS_RUNTIME_ROOT", t.TempDir())
 	engine := NewEngine()
 	if err := engine.AddRule(PermissionRule{
 		Value:    PermissionRuleValue{ToolName: "bash", RuleContent: "echo *"},
@@ -72,6 +77,7 @@ func TestResolverUsesPromptFnApproval(t *testing.T) {
 // TestIntegratorAutoModeClassifierAllows verifies the full path:
 // engine + auto-mode + mock classifier → allow decision.
 func TestIntegratorAutoModeClassifierAllows(t *testing.T) {
+	t.Setenv("NEXUS_RUNTIME_ROOT", t.TempDir())
 	engine := NewEngine()
 	engine.SetClassifier(&e2eClassifier{allowed: true, reason: "safe operation"})
 
@@ -97,6 +103,7 @@ func TestIntegratorAutoModeClassifierAllows(t *testing.T) {
 // TestIntegratorAutoModeClassifierDenies verifies the full path:
 // engine + auto-mode + mock classifier → deny decision.
 func TestIntegratorAutoModeClassifierDenies(t *testing.T) {
+	t.Setenv("NEXUS_RUNTIME_ROOT", t.TempDir())
 	engine := NewEngine()
 	engine.SetClassifier(&e2eClassifier{allowed: false, reason: "dangerous command"})
 
@@ -122,6 +129,7 @@ func TestIntegratorAutoModeClassifierDenies(t *testing.T) {
 // TestIntegratorDenyRuleTakesPrecedenceOverAutoMode verifies that an explicit
 // deny rule fires before the auto-mode classifier is consulted.
 func TestIntegratorDenyRuleTakesPrecedenceOverAutoMode(t *testing.T) {
+	t.Setenv("NEXUS_RUNTIME_ROOT", t.TempDir())
 	engine := NewEngine()
 	// Classifier would allow, but deny rule should win.
 	engine.SetClassifier(&e2eClassifier{allowed: true, reason: "would allow"})
@@ -155,6 +163,7 @@ func TestIntegratorDenyRuleTakesPrecedenceOverAutoMode(t *testing.T) {
 }
 
 func TestResolverUsesPromptFnDenial(t *testing.T) {
+	t.Setenv("NEXUS_RUNTIME_ROOT", t.TempDir())
 	engine := NewEngine()
 	if err := engine.AddRule(PermissionRule{
 		Value:    PermissionRuleValue{ToolName: "bash", RuleContent: "echo *"},
@@ -192,6 +201,7 @@ func TestResolverUsesPromptFnDenial(t *testing.T) {
 }
 
 func TestResolverSessionAutoApproval(t *testing.T) {
+	t.Setenv("NEXUS_RUNTIME_ROOT", t.TempDir())
 	engine := NewEngine()
 	if err := engine.AddRule(PermissionRule{
 		Value:    PermissionRuleValue{ToolName: "bash", RuleContent: "echo *"},
@@ -270,5 +280,56 @@ func TestResolverSessionAutoApproval(t *testing.T) {
 	}
 	if !result3.IsAllowed() {
 		t.Fatalf("expected prompt approval to allow tool use, got %#v", result3)
+	}
+}
+
+func TestResolverSessionAutoApprovalPersistence(t *testing.T) {
+	tempRoot := t.TempDir()
+	t.Setenv("NEXUS_RUNTIME_ROOT", tempRoot)
+
+	engine := NewEngine()
+	integrator := NewIntegrator(engine)
+
+	sessionID := types.SessionID("session-persistent")
+	sessionDir := runtimepath.SessionDir(tempRoot, string(sessionID))
+	if err := os.MkdirAll(sessionDir, 0700); err != nil {
+		t.Fatalf("failed to create session dir: %v", err)
+	}
+
+	mockPerms := map[string]bool{"bash": true}
+	data, err := json.Marshal(mockPerms)
+	if err != nil {
+		t.Fatalf("failed to marshal mock perms: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(sessionDir, "permissions.json"), data, 0600); err != nil {
+		t.Fatalf("failed to write permissions.json: %v", err)
+	}
+
+	promptCalled := false
+	integrator.SetPromptFn(func(ctx context.Context, request types.PromptRequest) (types.PromptResponse, error) {
+		promptCalled = true
+		return types.PromptResponse{Value: false}, nil
+	})
+
+	resolver := integrator.Resolver(sessionID, "turn-1", types.PermissionModeOnRequest)
+	result := resolver.ResolvePermission(context.Background(), types.GlobalToolPermissionRequest(
+		"bash",
+		map[string]any{"command": "echo hi"},
+		"tool-1",
+		sessionID,
+		"turn-1",
+		types.PermissionModeOnRequest,
+		"",
+		nil,
+	))
+
+	if promptCalled {
+		t.Fatal("expected promptFn NOT to be called because permissions were pre-loaded from permissions.json")
+	}
+	if !result.IsAllowed() {
+		t.Fatalf("expected tool use to be allowed from disk persistence, got %#v", result)
+	}
+	if result.DecisionReason == nil || result.DecisionReason.Source != "session" {
+		t.Fatalf("expected session decision reason, got %#v", result.DecisionReason)
 	}
 }

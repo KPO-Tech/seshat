@@ -71,6 +71,7 @@ La variable d'environnement `NEXUS_RUNTIME_ROOT` continue de prendre la priorit�
         ├── plans/            # fichiers de plan mode ({slug}.md ou plan.md)
         ├── tools/            # fichiers téléchargés, outputs d'outils, metadata non-DB
         └── session.log       # log spécifique à cette session
+        └── permissions.json  # Save permissions per tools during the session
 ```
 
 ### Principes
