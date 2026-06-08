@@ -334,6 +334,7 @@ func (s *Store) GetSessionInfo(sessionID types.SessionID) (*SessionInfo, error) 
 		UpdatedAt:   metadata.UpdatedAt.Unix(),
 		TotalTurns:  metadata.TotalTurns,
 		TotalTokens: metadata.TotalTokens,
+		Title:       metadata.Title,
 	}
 	if metadata.Additional != nil {
 		if ct, ok := metadata.Additional["canonical_transcript"].(map[string]any); ok {

@@ -19,6 +19,9 @@ type SessionInfo struct {
 	UpdatedAt   int64               `json:"updated_at"`
 	TotalTurns  int                 `json:"total_turns"`
 	TotalTokens int                 `json:"total_tokens"`
+	// Title is the human-readable name assigned at creation (e.g. "untitled_session_1").
+	// Empty for sessions created before this field was introduced.
+	Title string `json:"title,omitempty"`
 	// Preview is the first user message text, truncated to ~120 runes.
 	// Empty for sessions saved before this field was introduced.
 	Preview string `json:"preview,omitempty"`

@@ -51,8 +51,12 @@ func (e *Engine) NewSessionFromState(
 	metadata *types.SessionMetadata,
 	messages []types.Message,
 ) (*Session, error) {
-	_ = ctx
-	createdFresh := metadata == nil
+	// createdFresh is true when creating a brand-new session:
+	// - metadata is nil (classic NewSession path), OR
+	// - sessionID is empty (SDK CreateSession path: metadata with Title but no ID).
+	// Both cases require an immediate store write so LoadSession works before
+	// the first SubmitMessage.
+	createdFresh := metadata == nil || sessionID == ""
 	if sessionID == "" {
 		sessionID = types.NewSessionID(generateID())
 	}
@@ -129,6 +133,11 @@ func (e *Engine) NewSessionFromState(
 		runtimeEventQueue: execution.NewRuntimeEventQueue(execution.DefaultRuntimeEventQueueCapacity),
 	}
 
+	// createdFresh is true when the caller is creating a brand-new session:
+	// - metadata was nil (classic NewSession path), OR
+	// - sessionID was empty (SDK path that passes pre-built metadata but no ID).
+	// In both cases the store entry must be written immediately so that
+	// LoadSession can succeed before the first SubmitMessage.
 	if createdFresh && e.sessionStore != nil {
 		if err := e.sessionStore.SaveSessionState(sessionID, metadata, nil, messageCopy); err != nil {
 			return nil, fmt.Errorf("failed to persist new session: %w", err)

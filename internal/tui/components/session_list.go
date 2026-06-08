@@ -25,6 +25,7 @@ func NewSessionList(styles common.Styles) *SessionList {
 		list: common.NewListState(func(sess tui.SessionInfo, needle string) bool {
 			needle = strings.ToLower(needle)
 			return strings.Contains(strings.ToLower(sess.ShortID), needle) ||
+				strings.Contains(strings.ToLower(sess.Title), needle) ||
 				strings.Contains(strings.ToLower(sess.Preview), needle)
 		}),
 		editing: true,
@@ -107,26 +108,27 @@ func (s *SessionList) View() string {
 		if len(meta) > w-4 {
 			meta = meta[:w-4]
 		}
-		// Use preview (first user message line) as the primary title.
-		// Fall back to ShortID when no preview is stored yet.
-		title := sess.Preview
-		if title == "" {
-			title = sess.ShortID
-		} else {
-			maxTitle := w - 6
-			if maxTitle < 0 {
-				maxTitle = 0
-			}
-			r := []rune(title)
-			if len(r) > maxTitle {
-				title = string(r[:maxTitle]) + "…"
-			}
+		// Priority: Title > Preview > ShortID
+		label := sess.Title
+		if label == "" {
+			label = sess.Preview
+		}
+		if label == "" {
+			label = sess.ShortID
+		}
+		maxLabel := w - 6
+		if maxLabel < 0 {
+			maxLabel = 0
+		}
+		r := []rune(label)
+		if len(r) > maxLabel {
+			label = string(r[:maxLabel]) + "…"
 		}
 		if i == cursor {
-			line := "▶ " + title + "\n  " + meta
+			line := "▶ " + label + "\n  " + meta
 			rows = append(rows, s.styles.BrowserSelected.Width(w-2).Render(line))
 		} else {
-			line := "  " + title + "\n  " + s.styles.Desc.Render(meta)
+			line := "  " + label + "\n  " + s.styles.Desc.Render(meta)
 			rows = append(rows, s.styles.BrowserItem.Width(w-2).Render(line))
 		}
 	}

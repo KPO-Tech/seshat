@@ -182,6 +182,7 @@ type ProviderStatus struct {
 type SessionInfo struct {
 	ID        string
 	ShortID   string // first 8 chars of ID for display
+	Title     string // human-readable name (e.g. "untitled_session_1")
 	UpdatedAt time.Time
 	CreatedAt time.Time
 	Turns     int
