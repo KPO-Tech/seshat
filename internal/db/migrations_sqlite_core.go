@@ -63,6 +63,12 @@ func sqliteCoreMigrations() []schemaMigration {
 			Scope: migrationScopeCoreSQLite,
 			Run:   migrateSQLiteTranscriptFTS5,
 		},
+		{
+			// Rebuild FTS5 virtual table and triggers to cleanly fix legacy FTS3/4 delete trigger syntax.
+			ID:    "20260608_010_rebuild_transcript_fts5",
+			Scope: migrationScopeCoreSQLite,
+			Run:   migrateSQLiteTranscriptFTS5Rebuild,
+		},
 	}
 }
 
@@ -248,6 +254,36 @@ func migrateSQLiteSessionFiles(ctx context.Context, db *DB) error {
 			ON session_files(file_path)`,
 		`CREATE INDEX IF NOT EXISTS idx_session_files_tool_use
 			ON session_files(tool_use_id)`,
+	}
+	for _, stmt := range statements {
+		if err := db.gormDB.WithContext(ctx).Exec(stmt).Error; err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func migrateSQLiteTranscriptFTS5Rebuild(ctx context.Context, db *DB) error {
+	statements := []string{
+		`DROP TRIGGER IF EXISTS trg_transcript_fts_insert`,
+		`DROP TRIGGER IF EXISTS trg_transcript_fts_delete`,
+		`DROP TABLE IF EXISTS session_transcript_fts`,
+		`CREATE VIRTUAL TABLE IF NOT EXISTS session_transcript_fts USING fts5(
+		     session_id UNINDEXED,
+		     entry_json,
+		     tokenize = 'unicode61 remove_diacritics 1'
+		 )`,
+		`INSERT OR IGNORE INTO session_transcript_fts(rowid, session_id, entry_json)
+		 SELECT rowid, session_id, entry_json FROM session_transcript_entries`,
+		`CREATE TRIGGER IF NOT EXISTS trg_transcript_fts_insert
+		 AFTER INSERT ON session_transcript_entries BEGIN
+		     INSERT OR REPLACE INTO session_transcript_fts(rowid, session_id, entry_json)
+		     VALUES (new.rowid, new.session_id, new.entry_json);
+		 END`,
+		`CREATE TRIGGER IF NOT EXISTS trg_transcript_fts_delete
+		 AFTER DELETE ON session_transcript_entries BEGIN
+		     DELETE FROM session_transcript_fts WHERE rowid = old.rowid;
+		 END`,
 	}
 	for _, stmt := range statements {
 		if err := db.gormDB.WithContext(ctx).Exec(stmt).Error; err != nil {

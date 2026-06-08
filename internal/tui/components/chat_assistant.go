@@ -220,14 +220,10 @@ func (a *assistantItem) render(c *Chat, width int) string {
 				rendered = renderCompactAssistantNarration(c.styles, a.content, width-2)
 			} else {
 				var err error
-				mu := common.LockMarkdownRenderer(c.renderer)
-				mu.Lock()
-				rendered, err = c.renderer.Render(a.content)
-				mu.Unlock()
+				rendered, err = common.RenderMarkdown(max(10, width-2), a.content)
 				if err != nil {
 					rendered = a.content
 				}
-				rendered = strings.TrimRight(rendered, "\n")
 			}
 			if !a.streaming {
 				a.contentCacheWidth = width

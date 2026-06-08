@@ -139,8 +139,8 @@ func (db *DB) configure(ctx context.Context, cfg Config) error {
 
 	switch db.driver {
 	case DriverSQLite:
-		sqlDB.SetMaxOpenConns(1)
-		sqlDB.SetMaxIdleConns(1)
+		sqlDB.SetMaxOpenConns(10)
+		sqlDB.SetMaxIdleConns(10)
 
 		pragmaStatements := []string{
 			"PRAGMA foreign_keys = ON",

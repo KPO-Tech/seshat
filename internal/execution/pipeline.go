@@ -2,6 +2,7 @@ package execution
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 
 	"go.opentelemetry.io/otel"
@@ -30,7 +31,11 @@ func (o *Orchestrator) executePreparedTool(
 	state := o.newRuntimeStateFromPrepared(prepared, req, toolCtx)
 	state = state.withValidatedInput(prepared.validatedInput)
 	state = state.withBackfilledInput(prepared.backfilledInput)
-	state.callInput.Raw = fmt.Sprintf("%v", prepared.validatedInput)
+	if rawBytes, err := json.Marshal(prepared.validatedInput); err == nil {
+		state.callInput.Raw = string(rawBytes)
+	} else {
+		state.callInput.Raw = "{}"
+	}
 	state.callInput.Parsed = cloneToolInput(prepared.validatedInput)
 	state.trace.FinalInput = cloneToolInput(prepared.validatedInput)
 
@@ -105,7 +110,11 @@ func (o *Orchestrator) executePreparedToolPipeline(
 	}
 	state = state.withPermissionResults(permResult.LocalPermission, permResult.GlobalPermission, permResult.FinalInput)
 	if !observableInputModified && mapsEqual(prepared.backfilledInput, permResult.FinalInput) {
-		state.callInput.Raw = fmt.Sprintf("%v", prepared.validatedInput)
+		if rawBytes, err := json.Marshal(prepared.validatedInput); err == nil {
+			state.callInput.Raw = string(rawBytes)
+		} else {
+			state.callInput.Raw = "{}"
+		}
 		state.callInput.Parsed = cloneToolInput(prepared.validatedInput)
 		state.trace.FinalInput = cloneToolInput(prepared.validatedInput)
 	}

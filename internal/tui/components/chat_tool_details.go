@@ -142,7 +142,7 @@ func (t *toolItem) detailBody(c *Chat, width int) string {
 	case "web_fetch":
 		res = renderWebFetchDetails(c.styles, t.summaryText(), t.resultContent(), width)
 	case "agent", "spawn_agent":
-		res = t.renderSubagentInline(c, width)
+		res = t.renderSubagentDetails(c, width)
 	case "wait_agent", "close_agent", "send_agent_message":
 		res = renderContentBody(c.styles, t.agentDetails(), width, contentFlavorMarkdown)
 	default:
@@ -451,15 +451,10 @@ func (t *toolItem) renderSubagentInline(c *Chat, width int) string {
 	logText := stringFromMap(t.metadata, "subagent_log")
 	var activityBlock string
 	if logText != "" {
-		var err error
-		mu := common.LockMarkdownRenderer(c.renderer)
-		mu.Lock()
-		renderedLog, err := c.renderer.Render(logText)
-		mu.Unlock()
+		renderedLog, err := common.RenderMarkdown(bodyWidth, logText)
 		if err != nil {
 			renderedLog = logText
 		}
-		renderedLog = strings.TrimRight(renderedLog, "\n")
 
 		lines := strings.Split(renderedLog, "\n")
 		for i, line := range lines {
@@ -477,16 +472,10 @@ func (t *toolItem) renderSubagentInline(c *Chat, width int) string {
 	var resultBlock string
 	if res := t.resultContent(); res != "" {
 		headerRes := c.styles.AssistantLabel.Render("✦ Subagent Result")
-		var renderedRes string
-		var err error
-		mu := common.LockMarkdownRenderer(c.renderer)
-		mu.Lock()
-		renderedRes, err = c.renderer.Render(res)
-		mu.Unlock()
+		renderedRes, err := common.RenderMarkdown(bodyWidth, res)
 		if err != nil {
 			renderedRes = res
 		}
-		renderedRes = strings.TrimRight(renderedRes, "\n")
 
 		lines := strings.Split(renderedRes, "\n")
 		for i, line := range lines {
@@ -497,6 +486,72 @@ func (t *toolItem) renderSubagentInline(c *Chat, width int) string {
 			}
 		}
 		resultBlock = "\n\n  " + headerRes + "\n" + strings.Join(lines, "\n")
+	}
+
+	return promptBlock + activityBlock + resultBlock
+}
+
+func (t *toolItem) renderSubagentDetails(c *Chat, width int) string {
+	input := t.toolInput()
+	prompt := stringFromMap(input, "prompt")
+	if prompt == "" {
+		prompt = stringFromMap(input, "task")
+	}
+
+	nickname := stringFromMap(input, "nickname")
+	role := stringFromMap(input, "role")
+	agentType := stringFromMap(input, "agent_type")
+	if agentType == "" {
+		agentType = stringFromMap(input, "type")
+	}
+	if agentType == "" {
+		agentType = "general-purpose"
+	}
+
+	title := "🤖 Subagent Task"
+	var metaParts []string
+	if agentType != "" {
+		metaParts = append(metaParts, agentType)
+	}
+	if role != "" {
+		metaParts = append(metaParts, role)
+	}
+	if nickname != "" {
+		metaParts = append(metaParts, nickname)
+	}
+	if len(metaParts) > 0 {
+		title += fmt.Sprintf(" (%s)", strings.Join(metaParts, " · "))
+	}
+
+	header := c.styles.SubagentLabel.Render(title)
+	bodyWidth := max(12, width-2)
+	wrapped := strings.Split(wrap.String(prompt, bodyWidth), "\n")
+	if len(wrapped) == 0 {
+		wrapped = []string{""}
+	}
+	for i := 0; i < len(wrapped); i++ {
+		wrapped[i] = c.styles.UserMsg.Render(wrapped[i])
+	}
+	promptBlock := header + "\n" + strings.Join(wrapped, "\n")
+
+	logText := stringFromMap(t.metadata, "subagent_log")
+	var activityBlock string
+	if logText != "" {
+		renderedLog, err := common.RenderMarkdown(bodyWidth, logText)
+		if err != nil {
+			renderedLog = logText
+		}
+		activityBlock = "\n\n" + c.styles.AssistantLabel.Render("✦ Subagent Activity") + "\n" + renderedLog
+	}
+
+	var resultBlock string
+	if res := t.resultContent(); res != "" {
+		headerRes := c.styles.AssistantLabel.Render("✦ Subagent Result")
+		renderedRes, err := common.RenderMarkdown(bodyWidth, res)
+		if err != nil {
+			renderedRes = res
+		}
+		resultBlock = "\n\n" + headerRes + "\n" + renderedRes
 	}
 
 	return promptBlock + activityBlock + resultBlock
@@ -558,10 +613,15 @@ func (c *Chat) renderToolDetail(t *toolItem, width, height int) string {
 		c.detailToolID = t.id
 
 	case c.detailKey != key:
-		// Same tool, content grew (streaming) or size changed: preserve scroll position.
+		// Same tool, content grew (streaming) or size changed: preserve scroll position or auto-scroll to bottom.
 		yOffset := c.detail.YOffset()
+		wasAtBottom := c.detail.AtBottom()
 		c.detail.SetContent(body)
-		c.detail.SetYOffset(yOffset)
+		if wasAtBottom {
+			c.detail.GotoBottom()
+		} else {
+			c.detail.SetYOffset(yOffset)
+		}
 		c.detailKey = key
 
 	case sizeChanged:
@@ -955,18 +1015,11 @@ func renderContentBody(styles common.Styles, body string, width int, flavor cont
 }
 
 func renderMarkdownBody(body string, width int) string {
-	renderer := common.MarkdownRenderer(width)
-	if renderer == nil {
-		return ""
-	}
-	mu := common.LockMarkdownRenderer(renderer)
-	mu.Lock()
-	defer mu.Unlock()
-	rendered, err := renderer.Render(strings.ReplaceAll(body, "\r\n", "\n"))
+	rendered, err := common.RenderMarkdown(width, body)
 	if err != nil {
 		return ""
 	}
-	return strings.TrimRight(rendered, "\n")
+	return rendered
 }
 
 func renderPlainBody(body string, width int) string {
@@ -980,10 +1033,7 @@ func renderPlainBody(body string, width int) string {
 }
 
 func cloneMap(in map[string]any) map[string]any {
-	if len(in) == 0 {
-		return nil
-	}
-	out := make(map[string]any, len(in))
+	out := make(map[string]any)
 	for k, v := range in {
 		out[k] = v
 	}

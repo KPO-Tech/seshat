@@ -2,6 +2,7 @@ package execution
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 
 	tool "github.com/EngineerProjects/nexus-engine/internal/tools/contract"
@@ -176,7 +177,11 @@ func (s toolRuntimeState) withPermissionResults(localPermission, globalPermissio
 	s.trace.LocalPermission = clonePermissionResult(localPermission)
 	s.trace.GlobalPermission = clonePermissionResult(globalPermission)
 	s.trace.FinalInput = cloneToolInput(finalInput)
-	s.callInput.Raw = fmt.Sprintf("%v", finalInput)
+	if rawBytes, err := json.Marshal(finalInput); err == nil {
+		s.callInput.Raw = string(rawBytes)
+	} else {
+		s.callInput.Raw = "{}"
+	}
 	s.callInput.Parsed = cloneToolInput(finalInput)
 	return s
 }
