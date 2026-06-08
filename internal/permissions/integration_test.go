@@ -190,3 +190,85 @@ func TestResolverUsesPromptFnDenial(t *testing.T) {
 		t.Fatalf("expected prompt decision reason, got %#v", result.DecisionReason)
 	}
 }
+
+func TestResolverSessionAutoApproval(t *testing.T) {
+	engine := NewEngine()
+	if err := engine.AddRule(PermissionRule{
+		Value:    PermissionRuleValue{ToolName: "bash", RuleContent: "echo *"},
+		Behavior: types.PermissionBehaviorAsk,
+		Priority: 100,
+		Reason:   "echo commands require approval in this test",
+		Source:   types.PermissionSourceStatic,
+	}); err != nil {
+		t.Fatalf("failed to add permission rule: %v", err)
+	}
+
+	integrator := NewIntegrator(engine)
+	promptCalls := 0
+	integrator.SetPromptFn(func(ctx context.Context, request types.PromptRequest) (types.PromptResponse, error) {
+		promptCalls++
+		return types.PromptResponse{Value: "always"}, nil
+	})
+
+	resolver := integrator.Resolver("session-1", "turn-1", types.PermissionModeOnRequest)
+
+	// First call should call promptFn and return "always", which should allow it and remember it for session-1.
+	result1 := resolver.ResolvePermission(context.Background(), types.GlobalToolPermissionRequest(
+		"bash",
+		map[string]any{"command": "echo first"},
+		"tool-1",
+		"session-1",
+		"turn-1",
+		types.PermissionModeOnRequest,
+		"",
+		nil,
+	))
+
+	if promptCalls != 1 {
+		t.Fatalf("expected promptFn to be called once, got %d", promptCalls)
+	}
+	if !result1.IsAllowed() {
+		t.Fatalf("expected prompt approval to allow tool use, got %#v", result1)
+	}
+
+	// Second call with same session-1 and same tool "bash" should NOT trigger a prompt.
+	result2 := resolver.ResolvePermission(context.Background(), types.GlobalToolPermissionRequest(
+		"bash",
+		map[string]any{"command": "echo second"},
+		"tool-2",
+		"session-1",
+		"turn-2",
+		types.PermissionModeOnRequest,
+		"",
+		nil,
+	))
+
+	if promptCalls != 1 {
+		t.Fatalf("expected promptFn NOT to be called again, got %d calls total", promptCalls)
+	}
+	if !result2.IsAllowed() {
+		t.Fatalf("expected auto-approval for session to allow tool use, got %#v", result2)
+	}
+	if result2.DecisionReason == nil || result2.DecisionReason.Source != "session" {
+		t.Fatalf("expected session decision reason, got %#v", result2.DecisionReason)
+	}
+
+	// Third call with DIFFERENT session "session-2" should trigger the prompt.
+	result3 := resolver.ResolvePermission(context.Background(), types.GlobalToolPermissionRequest(
+		"bash",
+		map[string]any{"command": "echo third"},
+		"tool-3",
+		"session-2",
+		"turn-3",
+		types.PermissionModeOnRequest,
+		"",
+		nil,
+	))
+
+	if promptCalls != 2 {
+		t.Fatalf("expected promptFn to be called again for session-2, got %d calls total", promptCalls)
+	}
+	if !result3.IsAllowed() {
+		t.Fatalf("expected prompt approval to allow tool use, got %#v", result3)
+	}
+}

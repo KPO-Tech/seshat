@@ -3,11 +3,13 @@ package permissions
 import (
 	"context"
 	"fmt"
+	"sync"
 
 	automode "github.com/EngineerProjects/nexus-engine/internal/permissions/auto"
 	"github.com/EngineerProjects/nexus-engine/internal/providers"
 	tool "github.com/EngineerProjects/nexus-engine/internal/tools/registry"
 	"github.com/EngineerProjects/nexus-engine/internal/types"
+	"github.com/EngineerProjects/nexus-engine/internal/utils"
 )
 
 // Integrator integrates permission checking with tool execution.
@@ -18,12 +20,16 @@ type Integrator struct {
 	engine *Engine
 
 	promptFn types.PromptFn
+
+	mu           sync.RWMutex
+	sessionTools map[types.SessionID]map[string]bool
 }
 
 // NewIntegrator creates a new permission integrator.
 func NewIntegrator(engine *Engine) *Integrator {
 	return &Integrator{
-		engine: engine,
+		engine:       engine,
+		sessionTools: make(map[types.SessionID]map[string]bool),
 	}
 }
 
@@ -60,6 +66,22 @@ func (i *Integrator) ResolverWithContext(
 		requestSessionID := request.SessionID
 		if requestSessionID == "" {
 			requestSessionID = sessionID
+		}
+
+		if requestSessionID != "" {
+			i.mu.RLock()
+			var allowed bool
+			if i.sessionTools != nil && i.sessionTools[requestSessionID] != nil {
+				allowed = i.sessionTools[requestSessionID][toolName]
+			}
+			i.mu.RUnlock()
+			if allowed {
+				return types.AllowWithInputAndDecisionReason("auto-approved for session", utils.CloneInput(toolInput), &types.PermissionDecisionReason{
+					Type:   types.PermissionDecisionReasonMode,
+					Source: "session",
+					Reason: "auto-approved for session",
+				})
+			}
 		}
 		requestTurnID := request.TurnID
 		if requestTurnID == "" {
@@ -176,11 +198,35 @@ func (i *Integrator) ResolverWithContext(
 			})
 		}
 
-		if approved, ok := response.Value.(bool); ok && approved {
-			return types.AllowWithInputAndDecisionReason("user approved", result.UpdatedInput, &types.PermissionDecisionReason{
+		var approved bool
+		var always bool
+		if b, ok := response.Value.(bool); ok {
+			approved = b
+		} else if s, ok := response.Value.(string); ok {
+			if s == "always" {
+				approved = true
+				always = true
+			}
+		}
+
+		if approved {
+			reason := "user approved"
+			if always && requestSessionID != "" {
+				i.mu.Lock()
+				if i.sessionTools == nil {
+					i.sessionTools = make(map[types.SessionID]map[string]bool)
+				}
+				if i.sessionTools[requestSessionID] == nil {
+					i.sessionTools[requestSessionID] = make(map[string]bool)
+				}
+				i.sessionTools[requestSessionID][toolName] = true
+				i.mu.Unlock()
+				reason = "always approved for session"
+			}
+			return types.AllowWithInputAndDecisionReason(reason, result.UpdatedInput, &types.PermissionDecisionReason{
 				Type:   types.PermissionDecisionReasonPrompt,
 				Source: "prompt",
-				Reason: "user approved",
+				Reason: reason,
 			})
 		}
 
