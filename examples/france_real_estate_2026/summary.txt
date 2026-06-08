@@ -1,0 +1,74 @@
+ÉTUDE DE MARCHÉ IMMOBILIER RÉSIDENTIEL FRANCE 2026
+====================================================
+
+RÉSUMÉ EXÉCUTIF
+-----------------
+Le marché immobilier français montre des signes de reprise progressive en 2026, avec des prix quasi stables à l'échelle nationale (+0,1% sur un an au T1 2026). La reprise est portée par l'Île-de-France, tandis que les prix en province restent stables.
+
+POINTS CLÉS
+-----------
+• Prix nationaux : +0,2% au T1 2026 (trimestriel), +0,1% sur un an
+• Appartements : +0,6% sur un an, Maisons : -0,2% sur un an
+• Taux crédit moyen : 3,46% à 4,35% selon la durée
+• Rendements locatifs : de 3,2% (Paris) à 8,6% (Mulhouse)
+
+RÉGIONS LES PLUS INTÉRESSANTES
+-------------------------------
+1. VILLES À HAUT RENDEMENT (6,5-8,6%)
+   - Mulhouse (8,6%) - Haut rendement, risque élevé
+   - Saint-Étienne (7,8%) - Haut rendement, image difficile
+   - Le Mans (6,8%) - Bon équilibre rendement/risque
+   - Limoges (6,5%) - Bon équilibre rendement/risque
+
+2. VILLES À COMPROMIS OPTIMAL (4,0%)
+   - Toulouse - Meilleur rapport risque/rendement
+   - Rennes - Meilleur rapport risque/rendement
+   • Démographie en hausse
+   • Bassins d'emploi dynamiques
+   • Tension locative réelle
+
+3. VILLES VALEUR REFUGE (3,2-3,4%)
+   - Paris (3,2%) - Rareté foncière, liquidité élevée
+   - Lyon (3,4%) - Demande locative très solide
+
+RECOMMANDATIONS D'INVESTISSEMENT
+---------------------------------
+• INVESTISSEURS RENDEMENT : Mulhouse, Saint-Étienne
+  - Accepter le risque pour un rendement élevé
+  - Gestion active nécessaire
+
+• INVESTISSEURS ÉQUILIBRÉS : Toulouse, Rennes
+  - Meilleur compromis prix/croissance/rendement
+  - Marchés liquides et dynamiques
+
+• INVESTISSEURS SÉCURITÉ : Paris, Lyon
+  - Préservation du capital à long terme
+  - Rendement faible mais sécurité élevée
+
+PRINCIPAUX RISQUES
+------------------
+• Vacance locative élevée dans les villes à haut rendement
+• Dépréciation possible du capital dans les marchés fragilisés
+• Fiscalité réduit le rendement net de 2-3 points
+• Liquidité variable selon les villes
+
+TENDANCES 2026
+---------------
+• Reprise progressive des transactions
+• Stabilisation des prix à l'échelle nationale
+• Baisse des taux d'intérêt depuis mi-2024
+• Demande locative solide dans les grandes villes
+
+DONNÉES MANQUANTES
+------------------
+• Prix détaillés par région
+• Rendements pour les villes moyennes
+• Évolutions démographiques récentes
+• Données sur les nouveaux programmes immobiliers
+
+MÉTHODOLOGIE
+------------
+Données INSEE, Banque de France et Notaires pour T1 2026.
+Rendements calculés sur prix réels de transaction (DVF).
+
+Pour plus de détails, consulter report.md, data.json et sources.md.

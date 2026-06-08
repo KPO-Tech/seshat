@@ -2,6 +2,7 @@ package state
 
 import (
 	"fmt"
+	"log/slog"
 	"sync"
 	"time"
 
@@ -257,9 +258,51 @@ func checkpointMatchesMessages(checkpoint *Checkpoint, messages []types.Message)
 		return false, err
 	}
 	if checkpoint.MessagesHash != "" && checkpoint.MessagesHash != messagesHash {
+		// Fallback 1: check if legacy hash matches
+		legacyHash, err := types.LegacyCanonicalTranscriptHash(messages)
+		if err == nil && checkpoint.MessagesHash == legacyHash {
+			return true, nil
+		}
+
+		// Fallback 2: compare logical transcript summaries
+		expectedSummary := checkpointCanonicalSummary(checkpoint)
+		if expectedSummary != nil {
+			currentSummary := canonicalTranscriptSummary(messages)
+			if summariesMatch(expectedSummary, currentSummary) {
+				slog.Warn("Session checkpoint hash mismatch detected, but transcript summary matches. Proceeding.",
+					"session_id", checkpoint.SessionID,
+					"expected_hash", checkpoint.MessagesHash,
+					"computed_hash", messagesHash)
+				return true, nil
+			}
+		}
 		return false, nil
 	}
 	return true, nil
+}
+
+func summariesMatch(a, b map[string]any) bool {
+	if a == nil || b == nil {
+		return a == nil && b == nil
+	}
+	keys := []string{"message_count", "turn_count", "tool_results", "first_user_message"}
+	for _, k := range keys {
+		va := a[k]
+		vb := b[k]
+
+		// Normalize numeric types (json unmarshals as float64, while in-memory uses int)
+		if ka, ok := va.(float64); ok {
+			va = int(ka)
+		}
+		if kb, ok := vb.(float64); ok {
+			vb = int(kb)
+		}
+
+		if va != vb {
+			return false
+		}
+	}
+	return true
 }
 
 func applyCheckpointMetadata(metadata *types.SessionMetadata, checkpoint *Checkpoint) {
@@ -284,14 +327,22 @@ func (s *Store) GetSessionInfo(sessionID types.SessionID) (*SessionInfo, error) 
 		return nil, err
 	}
 
-	return &SessionInfo{
+	info := &SessionInfo{
 		ID:          metadata.ID,
 		Status:      metadata.Status,
 		CreatedAt:   metadata.CreatedAt.Unix(),
 		UpdatedAt:   metadata.UpdatedAt.Unix(),
 		TotalTurns:  metadata.TotalTurns,
 		TotalTokens: metadata.TotalTokens,
-	}, nil
+	}
+	if metadata.Additional != nil {
+		if ct, ok := metadata.Additional["canonical_transcript"].(map[string]any); ok {
+			if v, ok := ct["first_user_message"].(string); ok {
+				info.Preview = v
+			}
+		}
+	}
+	return info, nil
 }
 
 // GetAllSessionsInfo gets information about all sessions

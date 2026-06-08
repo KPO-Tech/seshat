@@ -11,6 +11,12 @@ import (
 	"github.com/EngineerProjects/nexus-engine/internal/types"
 )
 
+// dbCtx returns a context with a timeout for short DB operations.
+// This is a pragmatic guard until the Backend interface accepts ctx directly (see L-A in audit).
+func dbCtx(timeout time.Duration) (context.Context, context.CancelFunc) {
+	return context.WithTimeout(context.Background(), timeout)
+}
+
 // SQLiteBackend persists session state in a shared application database.
 type SQLiteBackend struct {
 	db *dbpkg.DB
@@ -96,27 +102,18 @@ func (b *SQLiteBackend) LoadSession(sessionID types.SessionID) (*types.SessionMe
 }
 
 func (b *SQLiteBackend) DeleteSession(sessionID types.SessionID) error {
-	tx, err := b.db.SQL().BeginTx(context.Background(), nil)
-	if err != nil {
-		return fmt.Errorf("failed to begin delete transaction: %w", err)
-	}
-	defer func() {
-		_ = tx.Rollback()
-	}()
-
-	statements := []string{
-		`DELETE FROM session_transcript_entries WHERE session_id = ?`,
-		`DELETE FROM session_checkpoints WHERE session_id = ?`,
+	// A single DELETE on the parent row is sufficient: FOREIGN KEY ON DELETE CASCADE
+	// propagates to session_transcript_entries, session_checkpoints, and session_files.
+	// The trg_transcript_fts_delete trigger keeps session_transcript_fts in sync for
+	// every cascade-deleted transcript row.
+	ctx, cancel := dbCtx(10 * time.Second)
+	defer cancel()
+	_, err := b.db.SQL().ExecContext(ctx,
 		`DELETE FROM session_metadata WHERE session_id = ?`,
-	}
-	for _, statement := range statements {
-		if _, err := tx.Exec(statement, sessionID.String()); err != nil {
-			return fmt.Errorf("failed to delete session %s: %w", sessionID, err)
-		}
-	}
-
-	if err := tx.Commit(); err != nil {
-		return fmt.Errorf("failed to commit delete session %s: %w", sessionID, err)
+		sessionID.String(),
+	)
+	if err != nil {
+		return fmt.Errorf("delete session %s: %w", sessionID, err)
 	}
 	return nil
 }
@@ -148,7 +145,9 @@ func (b *SQLiteBackend) AppendTranscriptEntries(sessionID types.SessionID, entri
 	if len(entries) == 0 {
 		return nil
 	}
-	tx, err := b.db.SQL().BeginTx(context.Background(), nil)
+	ctx, cancel := dbCtx(30 * time.Second)
+	defer cancel()
+	tx, err := b.db.SQL().BeginTx(ctx, nil)
 	if err != nil {
 		return fmt.Errorf("failed to begin transcript append transaction: %w", err)
 	}
@@ -170,7 +169,9 @@ func (b *SQLiteBackend) AppendTranscriptEntries(sessionID types.SessionID, entri
 }
 
 func (b *SQLiteBackend) ReplaceTranscript(sessionID types.SessionID, entries []types.TranscriptEntry) error {
-	tx, err := b.db.SQL().BeginTx(context.Background(), nil)
+	ctx, cancel := dbCtx(30 * time.Second)
+	defer cancel()
+	tx, err := b.db.SQL().BeginTx(ctx, nil)
 	if err != nil {
 		return fmt.Errorf("failed to begin transcript replace transaction: %w", err)
 	}
@@ -191,32 +192,44 @@ func (b *SQLiteBackend) ReplaceTranscript(sessionID types.SessionID, entries []t
 }
 
 // SearchTranscriptsByContent returns IDs of sessions whose stored transcript
-// JSON contains needle. Uses a SQL LIKE to avoid loading full transcripts.
+// JSON contains needle. Uses the session_transcript_fts FTS5 index when available
+// (O(log n)); falls back to a LIKE full scan on older databases.
 func (b *SQLiteBackend) SearchTranscriptsByContent(needle string, limit int) ([]types.SessionID, error) {
-	pattern := "%" + needle + "%"
-	var query string
-	var args []any
-	if limit > 0 {
-		query = `SELECT DISTINCT session_id FROM session_transcript_entries WHERE entry_json LIKE ? LIMIT ?`
-		args = []any{pattern, limit}
-	} else {
-		query = `SELECT DISTINCT session_id FROM session_transcript_entries WHERE entry_json LIKE ?`
-		args = []any{pattern}
+	scan := func(rows *sql.Rows) ([]types.SessionID, error) {
+		defer rows.Close()
+		var ids []types.SessionID
+		for rows.Next() {
+			var id string
+			if err := rows.Scan(&id); err != nil {
+				return nil, fmt.Errorf("scan session id: %w", err)
+			}
+			ids = append(ids, types.SessionID(id))
+		}
+		return ids, rows.Err()
 	}
-	rows, err := b.db.SQL().Query(query, args...)
+
+	// Try FTS5 first — MATCH is word-token based, fast on large datasets.
+	ftsQuery := `SELECT DISTINCT session_id FROM session_transcript_fts WHERE entry_json MATCH ?`
+	if limit > 0 {
+		ftsQuery += fmt.Sprintf(" LIMIT %d", limit)
+	}
+	if rows, err := b.db.SQL().Query(ftsQuery, needle); err == nil {
+		if ids, err := scan(rows); err == nil {
+			return ids, nil
+		}
+	}
+
+	// Fallback: LIKE scan (O(n)) for databases without the FTS5 table.
+	pattern := "%" + needle + "%"
+	likeQuery := `SELECT DISTINCT session_id FROM session_transcript_entries WHERE entry_json LIKE ?`
+	if limit > 0 {
+		likeQuery += fmt.Sprintf(" LIMIT %d", limit)
+	}
+	rows, err := b.db.SQL().Query(likeQuery, pattern)
 	if err != nil {
 		return nil, fmt.Errorf("search transcripts by content: %w", err)
 	}
-	defer rows.Close()
-	var ids []types.SessionID
-	for rows.Next() {
-		var id string
-		if err := rows.Scan(&id); err != nil {
-			return nil, fmt.Errorf("scan session id: %w", err)
-		}
-		ids = append(ids, types.SessionID(id))
-	}
-	return ids, rows.Err()
+	return scan(rows)
 }
 
 func (b *SQLiteBackend) LoadTranscript(sessionID types.SessionID) ([]types.TranscriptEntry, error) {

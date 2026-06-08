@@ -246,6 +246,32 @@ func TestAsyncAgentManager_AgentCancellation(t *testing.T) {
 	assert.Greater(t, len(events), 0, "Should receive at least some events")
 }
 
+func TestAsyncAgentManager_CloseAllAgentsRemovesTrackedAgents(t *testing.T) {
+	manager := NewAsyncAgentManager()
+	defer manager.Shutdown()
+
+	configs := []*RunConfig{
+		{AgentType: AgentTypeExplore, Task: "Long-running task A", MaxTurns: 10, Context: context.Background()},
+		{AgentType: AgentTypeExplore, Task: "Long-running task B", MaxTurns: 10, Context: context.Background()},
+	}
+
+	agents := make([]*AsyncAgent, 0, len(configs))
+	for _, cfg := range configs {
+		agent, err := manager.StartAgent(cfg)
+		require.NoError(t, err)
+		agents = append(agents, agent)
+	}
+
+	closed := manager.CloseAllAgents()
+	assert.Equal(t, len(agents), closed)
+	assert.Empty(t, manager.ListAgents())
+
+	for _, agent := range agents {
+		agent.Wait()
+		assert.True(t, agent.IsComplete())
+	}
+}
+
 // TestAsyncAgentManager_ConcurrentAgents tests multiple concurrent agents
 func TestAsyncAgentManager_ConcurrentAgents(t *testing.T) {
 	manager := NewAsyncAgentManager()

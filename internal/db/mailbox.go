@@ -3,6 +3,7 @@ package db
 import (
 	"context"
 	"errors"
+	"fmt"
 	"time"
 
 	"gorm.io/gorm"
@@ -97,19 +98,23 @@ func (db *DB) GetMessageThread(ctx context.Context, rootID string) ([]GMailboxMe
 // GetTeamAgents returns the distinct to_agent values that have received
 // messages tagged with teamID. Used for broadcast expansion.
 func (db *DB) GetTeamAgents(ctx context.Context, teamID string) ([]string, error) {
-	var rows []GMailboxMessage
-	err := db.gormDB.WithContext(ctx).
-		Select("DISTINCT to_agent").
-		Where("team_id = ?", teamID).
-		Find(&rows).Error
+	rows, err := db.SQL().QueryContext(ctx,
+		`SELECT DISTINCT to_agent FROM mailbox_messages WHERE team_id = ? ORDER BY to_agent`,
+		teamID,
+	)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("get team agents: %w", err)
 	}
-	agents := make([]string, 0, len(rows))
-	for _, r := range rows {
-		agents = append(agents, r.ToAgent)
+	defer rows.Close()
+	var agents []string
+	for rows.Next() {
+		var agent string
+		if err := rows.Scan(&agent); err != nil {
+			return nil, fmt.Errorf("scan team agent: %w", err)
+		}
+		agents = append(agents, agent)
 	}
-	return agents, nil
+	return agents, rows.Err()
 }
 
 // DeleteMessage removes a message record permanently.

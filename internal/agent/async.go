@@ -7,6 +7,8 @@ import (
 	"reflect"
 	"sync"
 	"time"
+
+	"github.com/EngineerProjects/nexus-engine/internal/types"
 )
 
 // ---------------------------------------------------------------------------
@@ -109,6 +111,10 @@ type AsyncAgent struct {
 	// Role is the optional role assigned at spawn time (e.g. "reviewer").
 	// Mirrors Codex's agent_role in CollabAgentRef.
 	Role string
+
+	// SessionID is the engine session ID used by this agent's run. Set after
+	// the run completes and exposes the session for resumption via resume_agent.
+	SessionID types.SessionID
 
 	// Current status
 	Status AgentStatus
@@ -375,6 +381,11 @@ func (m *AsyncAgentManager) runAgent(agent *AsyncAgent) {
 
 	// Create a config with progress callback and message injection.
 	config := *agent.Config
+	// Replace the caller-supplied context (typically the parent session's turn
+	// context, which gets canceled when that turn ends) with the async agent's
+	// own independent context. Without this, the sub-agent's API calls and
+	// permission prompts fail as soon as the parent turn finishes.
+	config.Context = agent.Ctx
 
 	// Wire ContinuationMessage to drain pending inter-agent messages.
 	// If no message is queued, fall back to the existing callback or the default.
@@ -389,25 +400,23 @@ func (m *AsyncAgentManager) runAgent(agent *AsyncAgent) {
 		return "" // runner uses its own default
 	}
 
-	config.Callback = func(turn int, output string) {
+	config.Callback = func(turn int, output string, toolUses int) {
 		agent.progressMu.Lock()
 		agent.CurrentTurn = turn
 		agent.CurrentOutput = output
+		agent.ToolUses = toolUses
 
-		// Calculate progress percentage
 		maxTurns := config.MaxTurns
 		if maxTurns == 0 {
 			maxTurns = DefaultMaxTurns
 		}
 		percentComplete := float64(turn) / float64(maxTurns) * 100
-
 		agent.progressMu.Unlock()
 
-		// Send progress event
 		progress := &AgentProgress{
 			CurrentTurn:     turn,
 			MaxTurns:        maxTurns,
-			ToolUses:        agent.ToolUses,
+			ToolUses:        toolUses,
 			Output:          output,
 			PercentComplete: percentComplete,
 		}
@@ -416,6 +425,18 @@ func (m *AsyncAgentManager) runAgent(agent *AsyncAgent) {
 
 	// Run the agent
 	result, err := RunAgent(&config)
+
+	// Sync final counts from result so GetProgress() is accurate after completion.
+	if result != nil {
+		agent.progressMu.Lock()
+		agent.ToolUses = result.ToolUses
+		agent.progressMu.Unlock()
+		if result.SessionID != "" {
+			agent.stateMu.Lock()
+			agent.SessionID = result.SessionID
+			agent.stateMu.Unlock()
+		}
+	}
 
 	endTime := time.Now()
 	agent.stateMu.Lock()
@@ -438,6 +459,11 @@ func (m *AsyncAgentManager) runAgent(agent *AsyncAgent) {
 	if finalStatus == AgentStatusCompleted {
 		m.emitEvent(agent, AgentEventCompleted, finalResult, nil, nil)
 	} else {
+		slog.Error("async agent failed",
+			"agent_id", agent.ID,
+			"agent_type", agent.Config.AgentType,
+			"error", finalErr,
+		)
 		m.emitEvent(agent, AgentEventFailed, nil, nil, finalErr)
 	}
 }
@@ -535,6 +561,10 @@ func (m *AsyncAgentManager) Shutdown() {
 	// goroutines transition out of AgentStatusRunning.
 	m.agentsWg.Wait()
 
+	// Release memory held by completed/failed/cancelled agents now that all
+	// goroutines are done and no new ones can start (shutdown=true).
+	m.Cleanup()
+
 	// Stop event dispatcher and wait for event workers.
 	m.dispatcherCancel()
 	m.workersWg.Wait()
@@ -591,6 +621,24 @@ func (m *AsyncAgentManager) CloseAgent(agentID string) error {
 	delete(m.agents, agentID)
 	m.agentsMu.Unlock()
 	return nil
+}
+
+// CloseAllAgents terminates every tracked async agent and removes them from the registry.
+func (m *AsyncAgentManager) CloseAllAgents() int {
+	m.agentsMu.RLock()
+	ids := make([]string, 0, len(m.agents))
+	for id := range m.agents {
+		ids = append(ids, id)
+	}
+	m.agentsMu.RUnlock()
+
+	closed := 0
+	for _, id := range ids {
+		if err := m.CloseAgent(id); err == nil {
+			closed++
+		}
+	}
+	return closed
 }
 
 // emitEvent emits an event for an agent

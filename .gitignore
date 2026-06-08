@@ -8,6 +8,9 @@
 *.so
 *.dylib
 
+# Compiled CLI binary at repo root (use make build → bin/)
+/cli
+
 # Test binary, built with `go test -c`
 *.test
 
@@ -46,6 +49,7 @@ Thumbs.db
 .openclaude-profile.json
 .blackboxcli/
 claude-code/
+private/
 
 # Temporary files
 *.log

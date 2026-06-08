@@ -14,6 +14,12 @@ import (
 )
 
 // RunResult is the result of running an agent
+// SourceRef records a resource consulted by the sub-agent during execution.
+type SourceRef struct {
+	Type  string `json:"type"`  // "file", "url", "search", "glob", "grep"
+	Value string `json:"value"` // path, URL, or query string
+}
+
 type RunResult struct {
 	// AgentType is the type of agent
 	AgentType string `json:"agentType"`
@@ -30,8 +36,17 @@ type RunResult struct {
 	// ToolUses is the number of tool uses
 	ToolUses int `json:"toolUses"`
 
+	// Sources lists every file, URL, and search query the agent consulted.
+	// Collected automatically from tool calls — the parent receives this
+	// without relying on the sub-agent to format it in its output.
+	Sources []SourceRef `json:"sources,omitempty"`
+
 	// WorktreePath is the worktree directory (for isolation mode)
 	WorktreePath string `json:"worktreePath,omitempty"`
+
+	// SessionID is the engine session ID for this run. Callers can pass it to
+	// RunConfig.ResumeFromSessionID to continue from where this run left off.
+	SessionID types.SessionID `json:"session_id,omitempty"`
 
 	// Error is the error if failed
 	Error string `json:"error,omitempty"`
@@ -73,8 +88,8 @@ type RunConfig struct {
 	// Context is the parent context
 	Context context.Context
 
-	// Callback is called on each turn completion
-	Callback func(turn int, output string)
+	// Callback is called on each turn completion with cumulative tool use count.
+	Callback func(turn int, output string, toolUses int)
 
 	// ForkFromMessages is message context inherited from parent
 	ForkFromMessages []types.Message
@@ -110,6 +125,16 @@ type RunConfig struct {
 	// GoalSessionID is the key used to look up the goal in GoalStore.
 	// Usually set to types.ToolContext.SessionID by the caller.
 	GoalSessionID string
+
+	// PermissionMode, when non-empty, overrides the session's permission mode.
+	// Set to types.PermissionModeBypass for headless background agents so they
+	// can execute tools without waiting for interactive prompts.
+	PermissionMode types.PermissionMode
+
+	// ResumeFromSessionID, when set, opens an existing persisted session instead
+	// of creating a new one. The first message sent to the resumed session is
+	// config.Task, continuing where the previous run left off.
+	ResumeFromSessionID types.SessionID
 }
 
 // RunAgent runs an agent and returns the result
@@ -159,28 +184,44 @@ func RunAgent(config *RunConfig) (*RunResult, error) {
 		ctx = context.Background()
 	}
 
-	// Create session
+	// Create or restore session.
 	var session *engine.Session
 	var err error
-	subagentMetadata := &types.SessionMetadata{
-		Status:        types.SessionStatusActive,
-		CreatedAt:     time.Now(),
-		UpdatedAt:     time.Now(),
-		Additional:    map[string]any{"tool_surface_profile": tool.ToolSurfaceProfileSubagent},
-		SchemaVersion: types.SessionMetadataSchemaVersion,
-	}
-	if len(config.ForkFromMessages) > 0 {
-		inheritedMessages := append([]types.Message(nil), config.ForkFromMessages...)
-		session, err = runtimeEngine.NewSessionFromState(ctx, "", subagentMetadata, inheritedMessages)
+	if config.ResumeFromSessionID != "" {
+		session, err = runtimeEngine.OpenSession(ctx, config.ResumeFromSessionID)
+		if err != nil {
+			return &RunResult{
+				AgentType: config.AgentType,
+				Success:   false,
+				Error:     fmt.Sprintf("failed to restore session %s: %v", config.ResumeFromSessionID, err),
+			}, nil
+		}
 	} else {
-		session, err = runtimeEngine.NewSessionFromState(ctx, "", subagentMetadata, nil)
+		subagentMetadata := &types.SessionMetadata{
+			Status:        types.SessionStatusActive,
+			CreatedAt:     time.Now(),
+			UpdatedAt:     time.Now(),
+			Additional:    map[string]any{"tool_surface_profile": tool.ToolSurfaceProfileSubagent},
+			SchemaVersion: types.SessionMetadataSchemaVersion,
+		}
+		if len(config.ForkFromMessages) > 0 {
+			inheritedMessages := append([]types.Message(nil), config.ForkFromMessages...)
+			session, err = runtimeEngine.NewSessionFromState(ctx, "", subagentMetadata, inheritedMessages)
+		} else {
+			session, err = runtimeEngine.NewSessionFromState(ctx, "", subagentMetadata, nil)
+		}
+		if err != nil {
+			return &RunResult{
+				AgentType: config.AgentType,
+				Success:   false,
+				Error:     fmt.Sprintf("failed to create session: %v", err),
+			}, nil
+		}
 	}
-	if err != nil {
-		return &RunResult{
-			AgentType: config.AgentType,
-			Success:   false,
-			Error:     fmt.Sprintf("failed to create session: %v", err),
-		}, nil
+
+	// Apply permission mode override (e.g. bypass for headless background agents).
+	if config.PermissionMode != "" {
+		session.SetPermissionMode(config.PermissionMode)
 	}
 
 	// Give the agent its own system prompt identity so it does not inherit the
@@ -254,6 +295,8 @@ func RunAgent(config *RunConfig) (*RunResult, error) {
 	var lastOutput strings.Builder
 	turns := 0
 	totalToolUses := 0
+	var sources []SourceRef
+	seenSources := make(map[string]bool)
 
 	for turn := 1; turn <= maxTurns; turn++ {
 		var msg string
@@ -272,11 +315,24 @@ func RunAgent(config *RunConfig) (*RunResult, error) {
 				Output:    lastOutput.String(),
 				Turns:     turns,
 				ToolUses:  totalToolUses,
+				Sources:   sources,
+				SessionID: session.GetSessionID(),
 				Error:     err.Error(),
 			}, nil
 		}
 		turns++
 		totalToolUses += len(resp.GetLastToolResults())
+
+		// Collect sources from every tool call in this turn.
+		for _, tu := range resp.ToolUses {
+			for _, ref := range extractSources(tu) {
+				key := ref.Type + ":" + ref.Value
+				if !seenSources[key] {
+					seenSources[key] = true
+					sources = append(sources, ref)
+				}
+			}
+		}
 
 		// Collect this turn's output.
 		lastOutput.Reset()
@@ -289,7 +345,7 @@ func RunAgent(config *RunConfig) (*RunResult, error) {
 		}
 
 		if config.Callback != nil {
-			config.Callback(turn, lastOutput.String())
+			config.Callback(turn, lastOutput.String(), totalToolUses)
 		}
 
 		// Check stop condition; if true the agent considers itself done.
@@ -311,6 +367,8 @@ func RunAgent(config *RunConfig) (*RunResult, error) {
 				Output:    lastOutput.String(),
 				Turns:     turns,
 				ToolUses:  totalToolUses,
+				Sources:   sources,
+				SessionID: session.GetSessionID(),
 				Error:     ctx.Err().Error(),
 			}, nil
 		default:
@@ -323,7 +381,53 @@ func RunAgent(config *RunConfig) (*RunResult, error) {
 		Output:    lastOutput.String(),
 		Turns:     turns,
 		ToolUses:  totalToolUses,
+		Sources:   sources,
+		SessionID: session.GetSessionID(),
 	}, nil
+}
+
+// extractSources inspects a single tool call and returns any source references
+// (files read, URLs fetched, search queries). Deduplication happens in the caller.
+func extractSources(tu types.ToolUseContent) []SourceRef {
+	str := func(key string) string {
+		if v, ok := tu.Input[key].(string); ok {
+			return strings.TrimSpace(v)
+		}
+		return ""
+	}
+
+	switch tu.Name {
+	case "read_file", "write_file", "edit_file":
+		if p := str("path"); p != "" {
+			return []SourceRef{{Type: "file", Value: p}}
+		}
+	case "glob":
+		if p := str("pattern"); p != "" {
+			return []SourceRef{{Type: "glob", Value: p}}
+		}
+	case "grep":
+		refs := []SourceRef{}
+		if p := str("pattern"); p != "" {
+			refs = append(refs, SourceRef{Type: "grep", Value: p})
+		}
+		if p := str("path"); p != "" {
+			refs = append(refs, SourceRef{Type: "file", Value: p})
+		}
+		return refs
+	case "web_search", "wikipedia", "scholarly_search", "langsearch":
+		if q := str("query"); q != "" {
+			return []SourceRef{{Type: "search", Value: q}}
+		}
+	case "web_fetch", "web_crawl", "web_map":
+		if u := str("url"); u != "" {
+			return []SourceRef{{Type: "url", Value: u}}
+		}
+	case "browser_navigate", "browser_open":
+		if u := str("url"); u != "" {
+			return []SourceRef{{Type: "url", Value: u}}
+		}
+	}
+	return nil
 }
 
 // RunForkedAgent runs an agent in fork mode (like OpenClaude's forkSubagent)

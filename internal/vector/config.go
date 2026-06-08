@@ -17,6 +17,7 @@ const (
 	BackendQdrant   Backend = "qdrant"
 	BackendChroma   Backend = "chroma"
 	BackendMemory   Backend = "memory" // in-process, for tests and dev
+	BackendHNSW     Backend = "hnsw"   // embedded HNSW, no CGO, no external service
 )
 
 // Config describes how to open a vector store.
@@ -71,6 +72,11 @@ type Config struct {
 	// Defaults to "default_tenant" / "default_database".
 	ChromaTenant   string
 	ChromaDatabase string
+
+	// HNSWDir is the directory where HNSW index files are stored.
+	// Each namespace gets its own pair of files (<slug>.hnsw + <slug>.meta.json).
+	// Defaults to <runtime_root>/data/hnsw when not set.
+	HNSWDir string
 }
 
 // NewStore creates and returns a ready-to-use Store from cfg.
@@ -142,6 +148,13 @@ func NewStore(ctx context.Context, cfg Config) (Store, error) {
 			Tenant:   tenant,
 			Database: database,
 		}), nil
+
+	case BackendHNSW:
+		dir := strings.TrimSpace(cfg.HNSWDir)
+		if dir == "" {
+			return nil, fmt.Errorf("vector.NewStore: HNSWDir is required for hnsw backend")
+		}
+		return NewHNSWStore(dir)
 
 	default:
 		return nil, fmt.Errorf("vector.NewStore: unknown backend %q", cfg.Backend)

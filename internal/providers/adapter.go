@@ -49,7 +49,9 @@ type providerAdapter interface {
 // mirrors exactly the branches of the former switch statements in client.go.
 func adapterForProvider(p types.APIProvider) providerAdapter {
 	switch p {
-	case types.APIProviderOpenAI, types.APIProviderZAi, types.APIProviderMiniMax, types.APIProviderOpenRouter, types.APIProviderMistral, types.APIProviderDeepSeek, types.APIProviderOpenCode:
+	case types.APIProviderZAi, "zai", "z.ai":
+		return zAiAdapter{}
+	case types.APIProviderOpenAI, types.APIProviderMiniMax, types.APIProviderOpenRouter, types.APIProviderMistral, types.APIProviderDeepSeek, types.APIProviderOpenCode:
 		return openAICompatAdapter{}
 	case types.APIProviderCodex:
 		return codexAdapter{}
@@ -115,7 +117,21 @@ func (foundryAdapter) applyAuthHeaders(c *Client, req *http.Request) {
 }
 
 // ---------------------------------------------------------------------------
-// OpenAI-compatible /chat/completions (openai, z-ai, minimax, openrouter, mistral)
+// z-ai (api.z.ai) — OpenAI-compat body format but x-api-key auth header.
+// The api.z.ai endpoint uses Anthropic-style authentication (x-api-key)
+// while the request/response body follows the OpenAI /chat/completions format.
+// ---------------------------------------------------------------------------
+
+type zAiAdapter struct{ openAICompatAdapter }
+
+func (zAiAdapter) applyAuthHeaders(c *Client, req *http.Request) {
+	if c.apiKey != "" {
+		req.Header.Set("x-api-key", c.apiKey)
+	}
+}
+
+// ---------------------------------------------------------------------------
+// OpenAI-compatible /chat/completions (openai, minimax, openrouter, mistral)
 // ---------------------------------------------------------------------------
 
 type openAICompatAdapter struct{}

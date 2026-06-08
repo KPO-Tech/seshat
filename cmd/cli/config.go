@@ -6,6 +6,7 @@ import (
 	"flag"
 	"fmt"
 	"io"
+	"os"
 	"strconv"
 	"strings"
 
@@ -16,14 +17,16 @@ import (
 
 // credentialKey constants — these are the keys used in the credentials table.
 const (
-	credKeyAPIKey    = "api_key"
-	credKeyBaseURL   = "provider_base_url"
-	credKeyRegion    = "provider_region"
-	credKeyProjectID = "provider_project_id"
-	credKeyResource  = "provider_resource"
-	credKeyTavily    = "TAVILY_API_KEY"
-	credKeyExa       = "EXA_API_KEY"
-	credKeyJina      = "JINA_API_KEY"
+	credKeyModel      = "model"
+	credKeyAPIKey     = "api_key"
+	credKeyBaseURL    = "provider_base_url"
+	credKeyRegion     = "provider_region"
+	credKeyProjectID  = "provider_project_id"
+	credKeyResource   = "provider_resource"
+	credKeyTavily     = "TAVILY_API_KEY"
+	credKeyExa        = "EXA_API_KEY"
+	credKeyJina       = "JINA_API_KEY"
+	credKeyLangSearch = "LANGSEARCH_API_KEY"
 )
 
 func runConfig(args []string, stdin io.Reader, stdout, stderr io.Writer) error {
@@ -153,6 +156,11 @@ func runConfig(args []string, stdin io.Reader, stdout, stderr io.Writer) error {
 		return err
 	}
 
+	// Persist model selection to DB so it survives YAML resets.
+	if err := saveCredential(database, credKeyModel, config.Model); err != nil {
+		return err
+	}
+
 	// Strip runtime-only secrets from YAML before saving.
 	yamlConfig := stripRuntimeSecrets(config)
 	if err := engineconfig.Save(yamlConfig); err != nil {
@@ -166,11 +174,14 @@ func runConfig(args []string, stdin io.Reader, stdout, stderr io.Writer) error {
 	return nil
 }
 
-// configureSearchKeys prompts for Tavily / Exa / Jina API keys.
+// configureSearchKeys prompts for Tavily / Exa / Jina / LangSearch API keys.
 func configureSearchKeys(reader *bufio.Reader, stdout io.Writer, database *db.DB, config *engineconfig.Config) error {
 	fmt.Fprintln(stdout, "\n─── Search tool API keys ────────────────────────────────────────")
 	fmt.Fprintln(stdout, "Leave blank to keep the current value. Enter \"-\" to clear.")
 	fmt.Fprintln(stdout)
+
+	// LangSearch has no Config struct field — use a local var and apply as env var.
+	langSearchCurrent := os.Getenv("LANGSEARCH_API_KEY")
 
 	fields := []struct {
 		credKey string
@@ -181,6 +192,7 @@ func configureSearchKeys(reader *bufio.Reader, stdout io.Writer, database *db.DB
 		{credKeyTavily, "Tavily API key", "TAVILY_API_KEY", &config.TavilyAPIKey},
 		{credKeyExa, "Exa API key", "EXA_API_KEY", &config.ExaAPIKey},
 		{credKeyJina, "Jina AI API key", "JINA_API_KEY", &config.JinaAPIKey},
+		{credKeyLangSearch, "LangSearch API key", "LANGSEARCH_API_KEY", &langSearchCurrent},
 	}
 
 	for _, f := range fields {
@@ -244,6 +256,7 @@ func printConfigSummary(out io.Writer, config engineconfig.Config, model sdk.Mod
 		{"tavily", config.TavilyAPIKey},
 		{"exa", config.ExaAPIKey},
 		{"jina", config.JinaAPIKey},
+		{"langsearch", os.Getenv("LANGSEARCH_API_KEY")},
 	}
 	anySearch := false
 	for _, f := range searchFields {
@@ -411,17 +424,34 @@ func loadCredsIntoConfig(database *db.DB, config *engineconfig.Config) {
 	// TUI config panel), then falls back to the global key (written by `nexus config`).
 	loadCredScoped := func(fieldKey, providerID string) string {
 		if providerID != "" {
-			if v := loadCred(fieldKey + ":" + strings.ToLower(providerID)); v != "" {
+			// Normalize providerID to ensure consistent lookups (e.g. "zai" -> "z-ai").
+			normalized := string(engineconfig.ResolveProvider(providerID))
+			if normalized == "" {
+				normalized = strings.ToLower(providerID)
+			}
+			if v := loadCred(fieldKey + ":" + normalized); v != "" {
 				return v
 			}
 		}
 		return loadCred(fieldKey)
 	}
 
+	// Load persisted model selection from DB when YAML has none.
+	// This is the primary source of truth for which provider is "active".
+	if strings.TrimSpace(config.Model) == "" {
+		if v := loadCred(credKeyModel); v != "" {
+			config.Model = v
+		}
+	}
+
 	// Determine the active provider from the config model string.
+	// We use the raw model string to avoid circularity in resolveModel.
 	activeProvider := ""
-	if m := resolveModel(*config); m.Provider != "" {
+	if m := engineconfig.ParseModelIdentifier(config.Model); m.Provider != "" {
 		activeProvider = string(m.Provider)
+	}
+	if activeProvider == "" {
+		activeProvider = string(engineconfig.DetectProviderFromModel(config.Model))
 	}
 
 	if v := loadCredScoped(credKeyAPIKey, activeProvider); v != "" {
@@ -442,9 +472,22 @@ func loadCredsIntoConfig(database *db.DB, config *engineconfig.Config) {
 	config.TavilyAPIKey = loadCred(credKeyTavily)
 	config.ExaAPIKey = loadCred(credKeyExa)
 	config.JinaAPIKey = loadCred(credKeyJina)
+
+	if config.WebSearchProvider == "" {
+		config.WebSearchProvider = loadCred("WEB_SEARCH_PROVIDER")
+	}
+
+	// LangSearch and SearXNG have no Config struct field — apply directly as env vars.
+	if v := loadCred(credKeyLangSearch); v != "" && os.Getenv("LANGSEARCH_API_KEY") == "" {
+		os.Setenv("LANGSEARCH_API_KEY", v)
+	}
+	if v := loadCred(credKeySearXNG); v != "" && os.Getenv("SEARXNG_BASE_URL") == "" {
+		os.Setenv("SEARXNG_BASE_URL", v)
+	}
 }
 
 func stripRuntimeSecrets(config engineconfig.Config) engineconfig.Config {
+	// Strip secrets — stored in the DB, never in YAML.
 	config.APIKey = ""
 	config.ProviderBaseURL = ""
 	config.ProviderRegion = ""
@@ -453,6 +496,10 @@ func stripRuntimeSecrets(config engineconfig.Config) engineconfig.Config {
 	config.TavilyAPIKey = ""
 	config.ExaAPIKey = ""
 	config.JinaAPIKey = ""
+	// RuntimeRoot is always re-computed at startup from NEXUS_RUNTIME_ROOT or
+	// the XDG default (~/.config/nexus-cli). Never persist it so the YAML stays
+	// portable and doesn't hard-code absolute paths.
+	config.RuntimeRoot = ""
 	return config
 }
 

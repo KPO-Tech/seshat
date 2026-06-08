@@ -143,6 +143,14 @@ func (m *Manager) CreateAgentTask(ctx context.Context, prompt string, tools []to
 	if err != nil {
 		return nil, fmt.Errorf("failed to create agent session: %w", err)
 	}
+	// sessionOwned tracks whether the goroutine has taken ownership of the session.
+	// If we return an error before launching the goroutine, we must close the session.
+	sessionOwned := false
+	defer func() {
+		if !sessionOwned {
+			_ = session.Close()
+		}
+	}()
 	if err := session.RegisterTools(tools); err != nil {
 		return nil, fmt.Errorf("failed to register tools: %w", err)
 	}
@@ -160,6 +168,7 @@ func (m *Manager) CreateAgentTask(ctx context.Context, prompt string, tools []to
 	}
 	m.tasks[taskID] = task
 	m.persistTasksLocked()
+	sessionOwned = true
 	go m.runAgentTask(ctx, task, session)
 	return cloneTask(task), nil
 }

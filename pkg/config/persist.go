@@ -5,15 +5,12 @@ import (
 	"os"
 	"path/filepath"
 
+	"github.com/EngineerProjects/nexus-engine/pkg/runtimepath"
 	"gopkg.in/yaml.v3"
 )
 
 func DefaultConfigPath() string {
-	home, err := os.UserHomeDir()
-	if err != nil || home == "" {
-		return ".nexus.yaml"
-	}
-	return filepath.Join(home, ".nexus.yaml")
+	return runtimepath.Join("", "config.yaml")
 }
 
 func Save(config Config) error {

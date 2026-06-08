@@ -2,12 +2,18 @@ package main
 
 import (
 	"fmt"
+	"log"
 	"os"
 	"path/filepath"
 	"strings"
 	"time"
 
+	"github.com/EngineerProjects/nexus-engine/internal/providers"
+	internalrag "github.com/EngineerProjects/nexus-engine/internal/rag"
+	"github.com/EngineerProjects/nexus-engine/internal/rag/embedder"
+	"github.com/EngineerProjects/nexus-engine/internal/vector"
 	engineconfig "github.com/EngineerProjects/nexus-engine/pkg/config"
+	"github.com/EngineerProjects/nexus-engine/pkg/runtimepath"
 	"github.com/EngineerProjects/nexus-engine/pkg/sdk"
 )
 
@@ -17,6 +23,10 @@ type runtimeOptions struct {
 	WorkingDir              string
 	SQLitePath              string
 	APIKey                  string
+	ProviderBaseURL         string
+	ProviderRegion          string
+	ProviderProjectID       string
+	ProviderResource        string
 	BrowserRemoteControlURL string
 	BrowserExecutablePath   string
 	DoclingURL              string
@@ -25,6 +35,10 @@ type runtimeOptions struct {
 	StorageGCLimit          int
 	StorageGCNamespaces     []string
 	Debug                   bool
+
+	// RAGService is the embedded HNSW-backed RAG service.
+	// Nil when the embedding provider is not configured (RAG_EMBEDDING_URL / RAG_EMBEDDING_MODEL absent).
+	RAGService *sdk.RAGService
 
 	// Monitoring is an optional pre-built monitoring system.
 	// Set by runInteractive to redirect logs away from stdout/stderr when
@@ -46,6 +60,14 @@ func loadRuntimeOptions(overrides runtimeOverrides) (runtimeOptions, error) {
 		return runtimeOptions{}, err
 	}
 
+	// Apply the model override before loading credentials so that
+	// loadCredsIntoConfig resolves the API key for the correct provider.
+	// Without this, loadCredsIntoConfig sees config.Model="" and falls back
+	// to the default provider (anthropic), missing the scoped key for z-ai etc.
+	if value := strings.TrimSpace(overrides.Model); value != "" {
+		config.Model = value
+	}
+
 	// Overlay secrets from the credentials DB so that search keys and provider
 	// API keys stored there take effect without being in the YAML file.
 	if database, dbErr := openCredentialsDB(config); dbErr == nil {
@@ -56,9 +78,6 @@ func loadRuntimeOptions(overrides runtimeOverrides) (runtimeOptions, error) {
 
 	if overrides.Debug != nil {
 		config.Debug = *overrides.Debug
-	}
-	if value := strings.TrimSpace(overrides.Model); value != "" {
-		config.Model = value
 	}
 	if value := strings.TrimSpace(overrides.WorkingDir); value != "" {
 		config.Cwd = value
@@ -87,12 +106,18 @@ func loadRuntimeOptions(overrides runtimeOverrides) (runtimeOptions, error) {
 	model := resolveModel(config)
 	apiKey := engineconfig.ResolveAPIKey(config, model.Provider)
 
+	hnswDir := runtimepath.HNSWDataDir(config.RuntimeRoot)
+
 	return runtimeOptions{
 		Model:                   model,
 		PermissionMode:          permissionMode,
 		WorkingDir:              workingDir,
 		SQLitePath:              engineconfig.EffectiveSessionDBPath(config),
 		APIKey:                  apiKey,
+		ProviderBaseURL:         config.ProviderBaseURL,
+		ProviderRegion:          config.ProviderRegion,
+		ProviderProjectID:       config.ProviderProjectID,
+		ProviderResource:        config.ProviderResource,
 		BrowserRemoteControlURL: strings.TrimSpace(config.BrowserRemoteControlURL),
 		BrowserExecutablePath:   strings.TrimSpace(config.BrowserExecutablePath),
 		DoclingURL:              strings.TrimSpace(config.DoclingURL),
@@ -101,6 +126,7 @@ func loadRuntimeOptions(overrides runtimeOverrides) (runtimeOptions, error) {
 		StorageGCLimit:          config.StorageGCLimit,
 		StorageGCNamespaces:     splitCommaList(config.StorageGCNamespaces),
 		Debug:                   config.Debug,
+		RAGService:              buildRAGService(hnswDir),
 	}, nil
 }
 
@@ -120,6 +146,25 @@ func newClient(
 				Timeout: entry.Timeout,
 			})
 		}
+	}
+
+	// Build the provider configuration.
+	providerConfig := providers.GetProviderConfig(options.Model.Provider)
+	if providerConfig == nil {
+		providerConfig = &providers.Config{Provider: options.Model.Provider}
+	}
+	providerConfig.APIKey = options.APIKey
+	if options.ProviderBaseURL != "" {
+		providerConfig.BaseURL = options.ProviderBaseURL
+	}
+	if options.ProviderRegion != "" {
+		providerConfig.Region = options.ProviderRegion
+	}
+	if options.ProviderProjectID != "" {
+		providerConfig.ProjectID = options.ProviderProjectID
+	}
+	if options.ProviderResource != "" && options.Model.Provider == sdk.APIProviderFoundry {
+		providerConfig.Region = options.ProviderResource
 	}
 
 	// EnableMonitoring must be true so initMonitoringSystem honours
@@ -146,6 +191,8 @@ func newClient(
 		PreToolHooks:            preToolHooks,
 		EnableMonitoring:        enableMonitoring,
 		Monitoring:              options.Monitoring,
+		RAGService:              options.RAGService,
+		ProviderConfig:          providerConfig,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("create SDK client: %w", err)
@@ -189,20 +236,37 @@ func parsePermissionMode(raw string) (sdk.PermissionMode, error) {
 		return "", fmt.Errorf("unsupported permission mode %q: plan is now an execution mode, not a permission mode", raw)
 	}
 
-	switch sdk.PermissionMode(strings.ToLower(value)) {
-	case sdk.PermissionModeOnRequest:
+	switch {
+	case strings.EqualFold(value, string(sdk.PermissionModeOnRequest)):
 		return sdk.PermissionModeOnRequest, nil
-	case sdk.PermissionModeAuto:
+	case strings.EqualFold(value, string(sdk.PermissionModeAuto)):
 		return sdk.PermissionModeAuto, nil
-	case sdk.PermissionMode("acceptedits"):
+	case strings.EqualFold(value, "acceptEdits") || strings.EqualFold(value, "acceptedits"):
 		return sdk.PermissionMode("acceptEdits"), nil
-	case sdk.PermissionModeBypass:
+	case strings.EqualFold(value, string(sdk.PermissionModeBypass)):
 		return sdk.PermissionModeBypass, nil
-	case sdk.PermissionModeNever:
+	case strings.EqualFold(value, string(sdk.PermissionModeNever)):
 		return sdk.PermissionModeNever, nil
 	default:
 		return "", fmt.Errorf("unsupported permission mode %q", raw)
 	}
+}
+
+// buildRAGService creates an HNSW-backed RAG service when an embedding provider
+// is configured via env vars (RAG_EMBEDDING_URL + RAG_EMBEDDING_MODEL).
+// Returns nil when embedding is not configured — rag_ingest / rag_search tools
+// will then be unavailable but all other tools continue working normally.
+func buildRAGService(hnswDir string) *sdk.RAGService {
+	emb := embedder.NewFromEnv()
+	if emb == nil {
+		return nil
+	}
+	store, err := vector.NewHNSWStore(hnswDir)
+	if err != nil {
+		log.Printf("[cli] hnsw vector store unavailable, rag disabled: %v", err)
+		return nil
+	}
+	return internalrag.NewService(nil, store, emb, nil)
 }
 
 func resolveModel(config engineconfig.Config) sdk.ModelIdentifier {

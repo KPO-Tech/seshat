@@ -50,16 +50,12 @@ func inferArtifactFilename(rawURL string, contentType string) string {
 	}
 }
 
-func (s *Service) persistArtifact(ctx context.Context, finalURL string, contentType string, body []byte) (string, int, error) {
+func (s *Service) persistArtifact(ctx context.Context, sessionID, finalURL, contentType string, body []byte) (string, int, error) {
 	if s.artifactStore == nil || len(body) == 0 {
 		return "", 0, nil
 	}
 	filename := inferArtifactFilename(finalURL, contentType)
-	ref, err := s.artifactStore.PutArtifact(ctx, storage.ArtifactPutRequest{
-		Namespace:   storage.NamespaceWebArtifacts,
-		Filename:    filename,
-		ContentType: contentType,
-	}, body)
+	ref, err := storage.StoreWebArtifactRef(ctx, s.artifactStore, body, sessionID, filename, contentType)
 	if err != nil {
 		return "", 0, fmt.Errorf("persist fetched artifact: %w", err)
 	}

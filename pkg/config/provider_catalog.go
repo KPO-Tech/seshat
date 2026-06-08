@@ -312,6 +312,13 @@ func setupFieldsForProvider(provider sdk.APIProvider) []ProviderSetupField {
 				Required:    true,
 			},
 		)
+	case sdk.APIProviderOllama:
+		fields = append(fields, ProviderSetupField{
+			Key:         "provider_base_url",
+			Label:       "Ollama endpoint",
+			Description: "Leave blank for http://localhost:11434",
+			EnvVar:      "OLLAMA_HOST",
+		})
 	case sdk.APIProviderFoundry:
 		fields = append(fields,
 			ProviderSetupField{
@@ -335,7 +342,7 @@ func setupFieldsForProvider(provider sdk.APIProvider) []ProviderSetupField {
 func setupHintForProvider(provider sdk.APIProvider) string {
 	switch provider {
 	case sdk.APIProviderOllama:
-		return "Uses the default local Ollama endpoint at http://localhost:11434."
+		return "No API key required. Leave endpoint blank to use http://localhost:11434."
 	case sdk.APIProviderBedrock:
 		return "Requires AWS credentials in your environment or profile in addition to the region."
 	case sdk.APIProviderVertex:

@@ -1,21 +1,13 @@
 package components
 
 import (
-	"encoding/json"
-	"fmt"
-	"os"
-	"path/filepath"
 	"strings"
 	"time"
 	"unicode"
 
-	"github.com/EngineerProjects/nexus-engine/internal/tui/common"
-	"github.com/muesli/reflow/wrap"
-
 	"charm.land/bubbles/v2/viewport"
 	"charm.land/glamour/v2"
-	"charm.land/lipgloss/v2"
-	"github.com/charmbracelet/x/ansi"
+	"github.com/EngineerProjects/nexus-engine/internal/tui/common"
 )
 
 var toolIcons = map[string]string{
@@ -46,984 +38,6 @@ func toolIconFor(name string) string {
 	return "◆"
 }
 
-type msgItem interface {
-	render(c *Chat, width int) string
-	isFinished() bool
-	invalidate()
-}
-
-const thinkTailLines = 4
-const interimNarrationLines = 2
-
-type thinkingBlock struct {
-	content    string
-	streaming  bool
-	startedAt  time.Time
-	finishedAt time.Time
-	collapsed  bool
-
-	cacheWidth  int
-	cacheRender string
-}
-
-func newThinkingBlock() *thinkingBlock {
-	return &thinkingBlock{
-		streaming: true,
-		collapsed: true,
-		startedAt: time.Now(),
-	}
-}
-
-func (tb *thinkingBlock) append(text string) {
-	tb.content += text
-	tb.cacheWidth = 0
-}
-
-func (tb *thinkingBlock) finish() {
-	tb.streaming = false
-	tb.finishedAt = time.Now()
-	tb.cacheWidth = 0
-}
-
-func (tb *thinkingBlock) toggle() {
-	tb.collapsed = !tb.collapsed
-	tb.cacheWidth = 0
-}
-
-func (tb *thinkingBlock) render(styles common.Styles, width int) string {
-	if !tb.streaming && tb.cacheWidth == width && tb.cacheRender != "" {
-		return tb.cacheRender
-	}
-
-	innerW := width - 6
-	if innerW < 10 {
-		innerW = 10
-	}
-
-	lines := strings.Split(strings.TrimRight(tb.content, "\n"), "\n")
-	var shownLines []string
-	var hiddenCount int
-
-	if tb.collapsed && len(lines) > thinkTailLines {
-		hiddenCount = len(lines) - thinkTailLines
-		shownLines = lines[len(lines)-thinkTailLines:]
-	} else {
-		shownLines = lines
-	}
-
-	var inner strings.Builder
-	if hiddenCount > 0 {
-		inner.WriteString(styles.MsgTimestamp.Render(fmt.Sprintf("… %d lines hidden", hiddenCount)))
-		inner.WriteString("\n")
-	}
-	for i, line := range shownLines {
-		inner.WriteString(styles.MsgTimestamp.Render(wrap.String(line, innerW)))
-		if i < len(shownLines)-1 {
-			inner.WriteString("\n")
-		}
-	}
-
-	boxStyle := lipgloss.NewStyle().
-		Border(lipgloss.RoundedBorder()).
-		BorderForeground(common.ColorBorder).
-		Padding(0, 1).
-		Width(width - 2)
-
-	box := boxStyle.Render(inner.String())
-
-	var footParts []string
-	if tb.streaming {
-		footParts = append(footParts, styles.MsgTimestamp.Render("thinking…"))
-	} else {
-		dur := tb.finishedAt.Sub(tb.startedAt).Round(100 * time.Millisecond)
-		footParts = append(footParts,
-			styles.MsgTimestamp.Render(fmt.Sprintf("Thought for %.1fs", dur.Seconds())))
-		if tb.collapsed {
-			footParts = append(footParts, styles.Desc.Render("click to expand"))
-		} else {
-			footParts = append(footParts, styles.Desc.Render("click to collapse"))
-		}
-	}
-	foot := "  " + strings.Join(footParts, "  ")
-
-	result := box + "\n" + foot
-	if !tb.streaming {
-		tb.cacheWidth = width
-		tb.cacheRender = result
-	}
-	return result
-}
-
-type assistantItem struct {
-	thinking     *thinkingBlock
-	content      string
-	streaming    bool
-	startedAt    time.Time
-	finishedAt   time.Time
-	showLabel    bool
-	showMeta     bool
-	inputTokens  int
-	outputTokens int
-	stopReason   string
-
-	contentCacheWidth  int
-	contentCacheRender string
-}
-
-func newAssistantItem() *assistantItem {
-	return &assistantItem{streaming: true, showLabel: true, startedAt: time.Now()}
-}
-
-func newContinuationItem(startedAt time.Time) *assistantItem {
-	if startedAt.IsZero() {
-		startedAt = time.Now()
-	}
-	return &assistantItem{streaming: true, showLabel: false, startedAt: startedAt}
-}
-
-func (a *assistantItem) appendThinking(text string) {
-	if text == "" {
-		return
-	}
-	if a.thinking == nil {
-		a.thinking = newThinkingBlock()
-	}
-	a.thinking.append(text)
-	a.contentCacheWidth = 0
-}
-
-func (a *assistantItem) appendContent(text string) {
-	if a.thinking != nil && a.thinking.streaming {
-		a.thinking.finish()
-	}
-	a.content += text
-	a.contentCacheWidth = 0
-}
-
-func (a *assistantItem) finish(inputTokens, outputTokens int, stopReason string, showMeta bool) {
-	a.streaming = false
-	a.finishedAt = time.Now()
-	a.showMeta = showMeta
-	a.inputTokens = inputTokens
-	a.outputTokens = outputTokens
-	a.stopReason = stopReason
-	if a.thinking != nil && a.thinking.streaming {
-		a.thinking.finish()
-	}
-	a.contentCacheWidth = 0
-}
-
-func (a *assistantItem) isFinished() bool { return !a.streaming }
-func (a *assistantItem) invalidate()      { a.contentCacheWidth = 0 }
-
-func (a *assistantItem) render(c *Chat, width int) string {
-	var sb strings.Builder
-	if a.showLabel {
-		sb.WriteString(c.styles.AssistantMarker.Render("●"))
-		sb.WriteString("\n")
-	}
-	if a.thinking != nil && strings.TrimSpace(a.thinking.content) != "" {
-		sb.WriteString(a.thinking.render(c.styles, width))
-		if a.content != "" {
-			sb.WriteString("\n\n")
-		} else {
-			sb.WriteString("\n")
-		}
-	}
-	if a.content != "" {
-		var rendered string
-		if !a.streaming && a.contentCacheWidth == width && a.contentCacheRender != "" {
-			rendered = a.contentCacheRender
-		} else {
-			if !a.streaming && !a.showMeta && !c.verboseInterim {
-				rendered = renderCompactAssistantNarration(c.styles, a.content, width)
-			} else {
-				var err error
-				mu := common.LockMarkdownRenderer(c.renderer)
-				mu.Lock()
-				rendered, err = c.renderer.Render(a.content)
-				mu.Unlock()
-				if err != nil {
-					rendered = a.content
-				}
-				rendered = strings.TrimRight(rendered, "\n")
-			}
-			if !a.streaming {
-				a.contentCacheWidth = width
-				a.contentCacheRender = rendered
-			}
-		}
-		sb.WriteString(rendered)
-	} else if a.streaming {
-		sb.WriteString(c.styles.MsgTimestamp.Render("…"))
-	}
-	if meta := a.metaLine(c.styles, width); meta != "" {
-		if sb.Len() > 0 {
-			sb.WriteString("\n\n")
-		}
-		sb.WriteString(meta)
-	}
-	return sb.String()
-}
-
-func renderCompactAssistantNarration(styles common.Styles, content string, width int) string {
-	innerW := max(20, width-2)
-	normalized := strings.Join(strings.Fields(strings.TrimSpace(content)), " ")
-	if normalized == "" {
-		return ""
-	}
-	wrapped := strings.TrimSpace(wrap.String(normalized, innerW))
-	lines := strings.Split(wrapped, "\n")
-	if len(lines) > interimNarrationLines {
-		lines = lines[:interimNarrationLines]
-		last := []rune(strings.TrimRight(lines[len(lines)-1], " "))
-		if len(last) >= innerW {
-			last = last[:innerW-1]
-		}
-		lines[len(lines)-1] = strings.TrimRight(string(last), " ") + "…"
-	}
-	for i, line := range lines {
-		lines[i] = styles.InterimAssistant.Render(line)
-	}
-	return strings.Join(lines, "\n")
-}
-
-func (a *assistantItem) metaLine(styles common.Styles, width int) string {
-	if a.streaming || a.finishedAt.IsZero() || !a.showMeta {
-		return ""
-	}
-	left := styles.ToolDone.Render("done")
-	if !a.startedAt.IsZero() {
-		left += styles.TurnMeta.Render(" · " + formatDuration(a.finishedAt.Sub(a.startedAt)))
-	}
-	turnTokens := a.inputTokens + a.outputTokens
-	if turnTokens <= 0 {
-		return left
-	}
-	right := styles.TurnMeta.Render(compactTokenCount(turnTokens) + " tok")
-	sepLen := width - lipgloss.Width(left) - lipgloss.Width(right) - 2
-	if sepLen < 3 {
-		sepLen = 3
-	}
-	sep := styles.TurnMeta.Render(strings.Repeat("·", sepLen))
-	return left + " " + sep + " " + right
-}
-
-type userItem struct {
-	content   string
-	timestamp time.Time
-	cacheW    int
-	cacheR    string
-}
-
-func (u *userItem) isFinished() bool { return true }
-func (u *userItem) invalidate()      { u.cacheW = 0 }
-
-func (u *userItem) render(c *Chat, width int) string {
-	if u.cacheW == width && u.cacheR != "" {
-		return u.cacheR
-	}
-	_ = u.timestamp
-	prefix := "● > "
-	bodyWidth := max(12, width-lipgloss.Width(prefix))
-	wrapped := strings.Split(wrap.String(u.content, bodyWidth), "\n")
-	if len(wrapped) == 0 {
-		wrapped = []string{""}
-	}
-	wrapped[0] = c.styles.UserMarker.Render(prefix) + c.styles.UserMsg.Render(wrapped[0])
-	for i := 1; i < len(wrapped); i++ {
-		wrapped[i] = strings.Repeat(" ", lipgloss.Width(prefix)) + c.styles.UserMsg.Render(wrapped[i])
-	}
-	r := strings.Join(wrapped, "\n")
-	u.cacheW = width
-	u.cacheR = r
-	return r
-}
-
-type toolItem struct {
-	id         string
-	name       string
-	status     string
-	label      string
-	metadata   map[string]any
-	expanded   bool
-	startedAt  time.Time
-	finishedAt time.Time
-
-	cacheW int
-	cacheR string
-}
-
-func newToolItem(id, name, status, label string, metadata map[string]any) *toolItem {
-	return &toolItem{
-		id:        id,
-		name:      name,
-		status:    status,
-		label:     label,
-		metadata:  cloneMap(metadata),
-		startedAt: time.Now(),
-	}
-}
-
-func (t *toolItem) isDone() bool {
-	return t.status == "completed" || t.status == "failed" || t.status == "done" || t.status == "error"
-}
-
-func (t *toolItem) isFinished() bool { return t.isDone() }
-func (t *toolItem) invalidate()      { t.cacheW = 0; t.cacheR = "" }
-
-func (t *toolItem) render(c *Chat, width int) string {
-	return t.renderSelected(c, width, false)
-}
-
-func (t *toolItem) expanderSymbol() string {
-	if !t.supportsPreview() {
-		return " "
-	}
-	if t.expanded {
-		return "▾"
-	}
-	return "▸"
-}
-
-func (t *toolItem) detailsSymbol(selected, detailsOpen bool) string {
-	if selected && detailsOpen {
-		return "⊟"
-	}
-	return "⊞"
-}
-
-func (t *toolItem) renderSelected(c *Chat, width int, selected bool) string {
-	if t.isDone() && !selected && !t.expanded && t.cacheW == width && t.cacheR != "" {
-		return t.cacheR
-	}
-
-	icon := t.renderIcon(c.styles)
-	nameStyle := t.renderNameStyle(c.styles)
-	summary := truncate(t.summaryText(), max(12, width-34))
-	expander := c.styles.MsgTimestamp.Render(t.expanderSymbol())
-	details := c.styles.MsgTimestamp.Render(t.detailsSymbol(selected, c.detailOpen && selected))
-	status := c.styles.MsgTimestamp.Render(t.statusLabel())
-
-	parts := []string{expander, details, icon, nameStyle.Render(toolDisplayName(t.name)), status}
-	if summary != "" {
-		parts = append(parts, c.styles.MsgTimestamp.Render(summary))
-	}
-	if dur := t.durationText(); dur != "" {
-		parts = append(parts, c.styles.MsgTimestamp.Render("("+dur+")"))
-	}
-
-	line := strings.Join(parts, " ")
-	if selected {
-		line = lipgloss.NewStyle().Foreground(common.ColorText).Background(lipgloss.Color("#1F2937")).Render(line)
-	}
-
-	if !t.expanded {
-		if t.isDone() && !selected {
-			t.cacheW = width
-			t.cacheR = line
-		}
-		return line
-	}
-
-	preview := t.inlinePreview(c, width)
-	if preview == "" {
-		preview = c.styles.MsgTimestamp.Render("No preview available.")
-	}
-	result := line + "\n" + indentBlock(preview, "    ")
-	if t.isDone() && !selected {
-		t.cacheW = width
-		t.cacheR = result
-	}
-	return result
-}
-
-func (t *toolItem) renderIcon(styles common.Styles) string {
-	switch {
-	case t.status == "completed" || t.status == "done":
-		return styles.MsgTimestamp.Render("✓")
-	case t.status == "failed" || t.status == "error":
-		return styles.ToolError.Render("✗")
-	default:
-		return styles.ToolProgress.Render(toolIconFor(t.name))
-	}
-}
-
-func (t *toolItem) renderNameStyle(styles common.Styles) lipgloss.Style {
-	switch {
-	case t.status == "completed" || t.status == "done":
-		return styles.UserMsg
-	case t.status == "failed" || t.status == "error":
-		return styles.ToolError
-	default:
-		return styles.ToolProgress
-	}
-}
-
-func (t *toolItem) durationText() string {
-	if !t.isDone() || t.finishedAt.IsZero() {
-		if ms, ok := intFromMap(t.metadata, "execution_duration_ms"); ok && ms > 0 {
-			return formatDuration(time.Duration(ms) * time.Millisecond)
-		}
-		return ""
-	}
-	return formatDuration(t.finishedAt.Sub(t.startedAt))
-}
-
-func (t *toolItem) toolInput() map[string]any {
-	return normalizeMap(t.metadata["tool_input"])
-}
-
-func (t *toolItem) supportsPreview() bool {
-	switch t.name {
-	case "read_file", "write_file", "edit_file", "apply_patch", "bash", "web_search", "web_fetch", "spawn_agent", "wait_agent", "close_agent", "send_agent_message":
-		return true
-	default:
-		return strings.TrimSpace(t.resultContent()) != ""
-	}
-}
-
-func (t *toolItem) statusLabel() string {
-	switch t.status {
-	case "completed", "done":
-		return "done"
-	case "failed", "error":
-		return "failed"
-	case "running", "started":
-		return "running"
-	default:
-		return t.status
-	}
-}
-
-func (t *toolItem) summaryText() string {
-	input := t.toolInput()
-	switch t.name {
-	case "read_file":
-		path := compactPath(stringFromMap(input, "file_path"))
-		if path == "" {
-			path = t.label
-		}
-		return path
-	case "write_file", "edit_file":
-		path := compactPath(stringFromMap(input, "file_path"))
-		parts := make([]string, 0, 3)
-		if path != "" {
-			parts = append(parts, path)
-		}
-		if kind := stringFromMap(t.metadata, "type"); kind != "" {
-			parts = append(parts, kind)
-		}
-		if stats := t.changeStatsText(); stats != "" {
-			parts = append(parts, stats)
-		}
-		return strings.Join(parts, " · ")
-	case "apply_patch":
-		if stats := t.changeStatsText(); stats != "" {
-			return "patch · " + stats
-		}
-		if patch := stringFromMap(input, "patch"); patch != "" {
-			return firstLine(strings.TrimSpace(patch))
-		}
-		if content := stringFromMap(t.metadata, "content"); content != "" {
-			return firstLine(content)
-		}
-	case "bash":
-		cmd := strings.TrimSpace(stringFromMap(input, "command"))
-		if cmd == "" {
-			cmd = strings.TrimSpace(stringFromMap(t.metadata, "description"))
-		}
-		return cmd
-	case "web_search":
-		query := strings.TrimSpace(stringFromMap(input, "query"))
-		if query == "" {
-			query = strings.TrimSpace(stringFromMap(t.metadata, "query"))
-		}
-		if count, ok := intFromMap(t.metadata, "result_count"); ok && count > 0 {
-			return fmt.Sprintf("%s · %d results", query, count)
-		}
-		return query
-	case "web_fetch":
-		summary := strings.TrimSpace(stringFromMap(input, "url"))
-		if summary == "" {
-			summary = strings.TrimSpace(stringFromMap(t.metadata, "url"))
-		}
-		if title := strings.TrimSpace(stringFromMap(t.metadata, "title")); title != "" {
-			summary = title
-		}
-		if code, ok := intFromMap(t.metadata, "code"); ok && code > 0 {
-			return fmt.Sprintf("%s · %d", compactPath(summary), code)
-		}
-		return compactPath(summary)
-	case "spawn_agent":
-		prompt := strings.TrimSpace(stringFromMap(input, "prompt"))
-		nickname := strings.TrimSpace(stringFromMap(input, "nickname"))
-		if nickname != "" {
-			return nickname + " · " + prompt
-		}
-		return prompt
-	case "wait_agent", "close_agent", "send_agent_message":
-		agentID := strings.TrimSpace(stringFromMap(input, "agent_id"))
-		if agentID != "" {
-			return agentID
-		}
-	}
-	if t.label != "" && t.label != t.status {
-		return strings.TrimSpace(t.label)
-	}
-	if msg := strings.TrimSpace(stringFromMap(t.metadata, "content")); msg != "" {
-		return firstLine(msg)
-	}
-	return ""
-}
-
-func (t *toolItem) inlinePreview(c *Chat, width int) string {
-	bodyWidth := max(20, width-4)
-	switch t.name {
-	case "list_directory", "glob":
-		return renderDirListing(c.styles, t.resultContent(), bodyWidth, inlinePreviewLines)
-	case "read_file":
-		path := prettyPath(stringFromMap(t.toolInput(), "file_path"))
-		return renderFilePanel(c.styles, path, t.resultContent(), bodyWidth, inlinePreviewLines)
-	case "write_file":
-		path := prettyPath(stringFromMap(t.toolInput(), "file_path"))
-		return renderFilePanel(c.styles, path, t.writeContent(), bodyWidth, inlinePreviewLines)
-	case "edit_file", "apply_patch":
-		if diff := t.unifiedDiff(); diff != "" {
-			return renderColoredDiff(c.styles, diff, bodyWidth, inlinePreviewLines)
-		}
-		return ""
-	case "bash":
-		return renderBashInline(c.styles, stringFromMap(t.toolInput(), "command"), t.commandOutput(), bodyWidth, inlinePreviewLines)
-	case "web_search":
-		return renderContentPanel(c.styles, "results", t.resultContent(), bodyWidth, 8, contentFlavorMarkdown)
-	case "web_fetch":
-		return renderContentPanel(c.styles, "page", t.resultContent(), bodyWidth, 8, contentFlavorMarkdown)
-	case "spawn_agent", "wait_agent", "close_agent", "send_agent_message":
-		return renderContentPanel(c.styles, "agent", t.agentDetails(), bodyWidth, 8, contentFlavorPlain)
-	default:
-		return renderContentPanel(c.styles, toolDisplayName(t.name), t.resultContent(), bodyWidth, 8, contentFlavorPlain)
-	}
-}
-
-func (t *toolItem) detailView(c *Chat, width, height int) string {
-	return c.renderToolDetail(t, width, height)
-}
-
-func (t *toolItem) metaSummary() string {
-	var lines []string
-	if dur := t.durationText(); dur != "" {
-		lines = append(lines, "duration: "+dur)
-	}
-	if code, ok := intFromMap(t.metadata, "exit_code"); ok {
-		lines = append(lines, fmt.Sprintf("exit code: %d", code))
-	}
-	if cwd := stringFromMap(t.metadata, "cwd"); cwd != "" {
-		lines = append(lines, "cwd: "+cwd)
-	}
-	if taskID := stringFromMap(t.metadata, "task_id"); taskID != "" {
-		lines = append(lines, "task: "+taskID)
-	}
-	if stats := t.changeStatsText(); stats != "" {
-		lines = append(lines, "changes: "+stats)
-	}
-	if t.name == "web_search" {
-		if provider := stringFromMap(t.metadata, "provider"); provider != "" {
-			lines = append(lines, "provider: "+provider)
-		}
-		if count, ok := intFromMap(t.metadata, "result_count"); ok {
-			lines = append(lines, fmt.Sprintf("results: %d", count))
-		}
-	}
-	if t.name == "web_fetch" {
-		if code, ok := intFromMap(t.metadata, "code"); ok && code > 0 {
-			lines = append(lines, fmt.Sprintf("status: %d", code))
-		}
-		if mode := stringFromMap(t.metadata, "mode"); mode != "" {
-			lines = append(lines, "mode: "+mode)
-		}
-		if rawURL := stringFromMap(t.metadata, "url"); rawURL != "" {
-			lines = append(lines, "url: "+rawURL)
-		}
-	}
-	return strings.Join(lines, "\n")
-}
-
-func (t *toolItem) detailBody(c *Chat, width int) string {
-	switch t.name {
-	case "list_directory", "glob":
-		return renderDirListing(c.styles, t.resultContent(), width, 0)
-	case "read_file":
-		path := stringFromMap(t.toolInput(), "file_path")
-		if flavorForPath(path) == contentFlavorCode {
-			return renderCodeBody(c.styles, path, t.resultContent(), width, 0, 0)
-		}
-		return renderContentBody(c.styles, t.resultContent(), width, flavorForPath(path))
-	case "write_file":
-		path := stringFromMap(t.toolInput(), "file_path")
-		content := t.writeContent()
-		if flavorForPath(path) == contentFlavorCode {
-			return renderCodeBody(c.styles, path, content, width, 0, 0)
-		}
-		return renderContentBody(c.styles, content, width, flavorForPath(path))
-	case "edit_file", "apply_patch":
-		path := stringFromMap(t.toolInput(), "file_path")
-		if diff := t.unifiedDiff(); diff != "" {
-			label := "patch"
-			if path != "" {
-				label = prettyPath(path)
-			}
-			label = ansi.Truncate(label, width, "…")
-			return c.styles.Key.Render(label) + "\n\n" + renderColoredDiff(c.styles, diff, width, 0)
-		}
-		return ""
-	case "bash":
-		return renderBashDetails(c.styles, stringFromMap(t.toolInput(), "command"), t.commandOutput(), width)
-	case "web_search":
-		return renderWebSearchDetails(c.styles, t.summaryText(), t.resultContent(), width)
-	case "web_fetch":
-		return renderWebFetchDetails(c.styles, t.summaryText(), t.resultContent(), width)
-	case "spawn_agent", "wait_agent", "close_agent", "send_agent_message":
-		return renderContentBody(c.styles, t.agentDetails(), width, contentFlavorPlain)
-	default:
-		return renderContentBody(c.styles, t.resultContent(), width, contentFlavorPlain)
-	}
-}
-
-type contentFlavor uint8
-
-const (
-	contentFlavorPlain contentFlavor = iota
-	contentFlavorMarkdown
-	contentFlavorCode
-	contentFlavorDiff
-)
-
-func flavorForPath(path string) contentFlavor {
-	switch strings.ToLower(filepath.Ext(path)) {
-	case ".md", ".markdown", ".mdx":
-		return contentFlavorMarkdown
-	case ".go", ".js", ".jsx", ".ts", ".tsx", ".json", ".yaml", ".yml", ".toml", ".sh", ".bash", ".zsh", ".py", ".rb", ".rs", ".java", ".kt", ".swift", ".css", ".scss", ".html", ".sql", ".proto":
-		return contentFlavorCode
-	default:
-		return contentFlavorPlain
-	}
-}
-
-func (t *toolItem) detailCacheKey(width, height int, body string) string {
-	return fmt.Sprintf("%s|%s|%d|%d|%s|%s", t.id, t.status, width, height, t.summaryText(), body)
-}
-
-func (t *toolItem) changeStatsText() string {
-	added, addedOK := intFromMap(t.metadata, "lines_added")
-	removed, removedOK := intFromMap(t.metadata, "lines_removed")
-	if !addedOK && !removedOK {
-		return ""
-	}
-	return fmt.Sprintf("+%d -%d", added, removed)
-}
-
-func renderDiffSections(styles common.Styles, title, body string, width int) string {
-	parts := make([]string, 0, 2)
-	if title = strings.TrimSpace(title); title != "" {
-		parts = append(parts, styles.Key.Render(title))
-	}
-	parts = append(parts, renderDiffBody(styles, body, width, 0))
-	return strings.Join(parts, "\n\n")
-}
-
-func renderBashDetails(styles common.Styles, cmd, output string, width int) string {
-	sections := make([]string, 0, 2)
-	if cmd = strings.TrimSpace(cmd); cmd != "" {
-		sections = append(sections, styles.Key.Render("command")+"\n"+renderPlainBody("$ "+cmd, width))
-	}
-	if output = strings.TrimSpace(output); output != "" {
-		sections = append(sections, styles.Key.Render("output")+"\n"+renderPlainBody(output, width))
-	}
-	return strings.Join(sections, "\n\n")
-}
-
-func renderWebSearchDetails(styles common.Styles, summary, body string, width int) string {
-	query, results := parseWebSearchContent(body)
-	sections := make([]string, 0, 2)
-	if strings.TrimSpace(query) == "" {
-		query = summary
-	}
-	if query = strings.TrimSpace(query); query != "" {
-		sections = append(sections, styles.Key.Render("query")+"\n"+renderContentBody(styles, query, width, contentFlavorPlain))
-	}
-	if len(results) == 0 {
-		sections = append(sections, renderContentBody(styles, body, width, contentFlavorMarkdown))
-		return strings.Join(sections, "\n\n")
-	}
-	sep := styles.MsgTimestamp.Render(strings.Repeat("─", max(4, width)))
-	cards := make([]string, 0, len(results))
-	for i, result := range results {
-		cards = append(cards, renderSearchResultCard(styles, i+1, result, width))
-	}
-	sections = append(sections, strings.Join(cards, "\n"+sep+"\n"))
-	return strings.Join(sections, "\n\n")
-}
-
-func renderWebFetchDetails(styles common.Styles, summary, body string, width int) string {
-	meta, extracted := splitWebFetchContent(body)
-	sections := make([]string, 0, 3)
-	if summary = strings.TrimSpace(summary); summary != "" {
-		sections = append(sections, styles.Key.Render("page")+"\n"+renderContentBody(styles, summary, width, contentFlavorPlain))
-	}
-	if meta = strings.TrimSpace(meta); meta != "" {
-		sections = append(sections, styles.Key.Render("fetch")+"\n"+renderContentBody(styles, meta, width, contentFlavorPlain))
-	}
-	if extracted = strings.TrimSpace(extracted); extracted != "" {
-		sections = append(sections, styles.Key.Render("result")+"\n"+renderContentBody(styles, extracted, width, contentFlavorMarkdown))
-	}
-	if len(sections) == 0 {
-		return renderContentBody(styles, body, width, contentFlavorMarkdown)
-	}
-	return strings.Join(sections, "\n\n")
-}
-
-type webSearchResult struct {
-	Title       string
-	URL         string
-	Description string
-	Source      string
-}
-
-func parseWebSearchContent(body string) (string, []webSearchResult) {
-	lines := strings.Split(strings.ReplaceAll(body, "\r\n", "\n"), "\n")
-	var query string
-	results := make([]webSearchResult, 0)
-	var current *webSearchResult
-	for _, raw := range lines {
-		line := strings.TrimSpace(raw)
-		if line == "" {
-			continue
-		}
-		if strings.HasPrefix(line, "Query: ") {
-			query = strings.TrimSpace(strings.TrimPrefix(line, "Query: "))
-			continue
-		}
-		if idx := leadingNumberedItem(line); idx >= 0 {
-			if current != nil {
-				results = append(results, *current)
-			}
-			current = &webSearchResult{Title: strings.TrimSpace(line[idx:])}
-			continue
-		}
-		if current == nil {
-			continue
-		}
-		if current.URL == "" && strings.HasPrefix(line, "http") {
-			current.URL = line
-			continue
-		}
-		if strings.HasPrefix(line, "Source: ") {
-			current.Source = strings.TrimSpace(strings.TrimPrefix(line, "Source: "))
-			continue
-		}
-		if current.Description == "" {
-			current.Description = line
-		} else {
-			current.Description += "\n" + line
-		}
-	}
-	if current != nil {
-		results = append(results, *current)
-	}
-	return query, results
-}
-
-func renderSearchResultCard(styles common.Styles, index int, result webSearchResult, width int) string {
-	linkStyle := lipgloss.NewStyle().Foreground(common.ColorBlue)
-	parts := []string{styles.AssistantLabel.Render(fmt.Sprintf("%d. %s", index, result.Title))}
-	if result.URL != "" {
-		// Truncate long URLs so they don't character-wrap across lines.
-		url := ansi.Truncate(result.URL, width, "…")
-		parts = append(parts, linkStyle.Render(url))
-	}
-	if result.Description != "" {
-		parts = append(parts, renderContentBody(styles, result.Description, width, contentFlavorMarkdown))
-	}
-	if result.Source != "" {
-		parts = append(parts, styles.MsgTimestamp.Render("source: "+result.Source))
-	}
-	return strings.Join(parts, "\n")
-}
-
-func leadingNumberedItem(line string) int {
-	dot := strings.Index(line, ".")
-	if dot <= 0 {
-		return -1
-	}
-	for _, r := range line[:dot] {
-		if r < '0' || r > '9' {
-			return -1
-		}
-	}
-	return dot + 1
-}
-
-func splitWebFetchContent(body string) (string, string) {
-	normalized := strings.ReplaceAll(body, "\r\n", "\n")
-	parts := strings.SplitN(normalized, "Result:\n", 2)
-	if len(parts) != 2 {
-		return "", normalized
-	}
-	return strings.TrimSpace(parts[0]), strings.TrimSpace(parts[1])
-}
-
-func (t *toolItem) resultContent() string {
-	if content := stringFromMap(t.metadata, "content"); content != "" {
-		return content
-	}
-	return ""
-}
-
-func (t *toolItem) diffPreview() string {
-	if patch := nestedString(t.metadata["git_diff"], "patch", "Patch"); patch != "" {
-		return patch
-	}
-	if structured := prettyJSON(t.metadata["structured_patch"]); structured != "" {
-		return structured
-	}
-	if original := stringFromMap(t.metadata, "original_file"); original != "" {
-		if content := stringFromMap(t.metadata, "content"); content != "" {
-			return "--- before\n" + original + "\n\n+++ after\n" + content
-		}
-	}
-	return ""
-}
-
-// writeContent returns the actual file content from the tool input (not the result).
-// write_file stores the content-to-write in its input, not in the result metadata.
-func (t *toolItem) writeContent() string {
-	return stringFromMap(t.toolInput(), "content")
-}
-
-// unifiedDiff returns a proper unified-diff string from the best available source.
-func (t *toolItem) unifiedDiff() string {
-	// Structured patch from result metadata (JSON hunk array from the engine)
-	if sp := t.metadata["structured_patch"]; sp != nil {
-		if diff := structuredPatchToUnified(sp); diff != "" {
-			return diff
-		}
-	}
-	// Git diff attached to metadata
-	if patch := nestedString(t.metadata["git_diff"], "patch", "Patch"); patch != "" {
-		return patch
-	}
-	// Patch field in tool input (apply_patch, edit_file with patch arg)
-	if patch := stringFromMap(t.toolInput(), "patch"); strings.TrimSpace(patch) != "" {
-		return patch
-	}
-	// Compute from old/new content fields
-	if old := stringFromMap(t.toolInput(), "old_content"); old != "" {
-		return buildSimpleDiff(old, stringFromMap(t.toolInput(), "new_content"))
-	}
-	return ""
-}
-
-// structuredPatchToUnified converts the engine's JSON hunk array to a unified diff.
-func structuredPatchToUnified(raw any) string {
-	b, err := json.Marshal(raw)
-	if err != nil {
-		return ""
-	}
-	var hunks []struct {
-		OldStart int      `json:"oldStart"`
-		OldLines int      `json:"oldLines"`
-		NewStart int      `json:"newStart"`
-		NewLines int      `json:"newLines"`
-		Lines    []string `json:"lines"`
-	}
-	if err := json.Unmarshal(b, &hunks); err != nil || len(hunks) == 0 {
-		return ""
-	}
-	var sb strings.Builder
-	for _, h := range hunks {
-		fmt.Fprintf(&sb, "@@ -%d,%d +%d,%d @@\n", h.OldStart, h.OldLines, h.NewStart, h.NewLines)
-		for _, ln := range h.Lines {
-			sb.WriteString(ln + "\n")
-		}
-	}
-	return strings.TrimRight(sb.String(), "\n")
-}
-
-func (t *toolItem) commandOutput() string {
-	stdout := stringFromMap(t.metadata, "stdout")
-	stderr := stringFromMap(t.metadata, "stderr")
-	if stdout == "" && stderr == "" {
-		if content := t.resultContent(); content != "" {
-			return content
-		}
-		return t.label
-	}
-	if stdout != "" && stderr != "" {
-		return stdout + "\n\n[stderr]\n" + stderr
-	}
-	if stdout != "" {
-		return stdout
-	}
-	return stderr
-}
-
-func (t *toolItem) agentDetails() string {
-	input := t.toolInput()
-	var parts []string
-	if nickname := stringFromMap(input, "nickname"); nickname != "" {
-		parts = append(parts, "nickname: "+nickname)
-	}
-	if role := stringFromMap(input, "role"); role != "" {
-		parts = append(parts, "role: "+role)
-	}
-	if agentID := stringFromMap(input, "agent_id"); agentID != "" {
-		parts = append(parts, "agent: "+agentID)
-	}
-	if prompt := stringFromMap(input, "prompt"); prompt != "" {
-		parts = append(parts, "prompt:\n"+prompt)
-	}
-	if msg := stringFromMap(input, "message"); msg != "" {
-		parts = append(parts, "message:\n"+msg)
-	}
-	if content := t.resultContent(); content != "" {
-		parts = append(parts, content)
-	}
-	return strings.Join(parts, "\n\n")
-}
-
-type systemItem struct{ content string }
-
-func (s *systemItem) isFinished() bool { return true }
-func (s *systemItem) invalidate()      {}
-func (s *systemItem) render(c *Chat, _ int) string {
-	return c.styles.MsgTimestamp.Render("─ " + s.content)
-}
-
-type errorItem struct{ content string }
-
-func (e *errorItem) isFinished() bool { return true }
-func (e *errorItem) invalidate()      {}
-func (e *errorItem) render(c *Chat, _ int) string {
-	return c.styles.ToolError.Render("✗ " + e.content)
-}
-
-type toolRegion struct {
-	startLine     int
-	endLine       int
-	msgIndex      int
-	expanderStart int
-	expanderEnd   int
-	detailStart   int
-	detailEnd     int
-}
-
-type thinkingRegion struct {
-	startLine int
-	endLine   int
-	msgIndex  int
-}
-
 type Chat struct {
 	styles   common.Styles
 	viewport *viewport.Model
@@ -1036,6 +50,8 @@ type Chat struct {
 
 	selectedTool int
 	detailOpen   bool
+	planDepth    int // incremented by enter_plan_mode, decremented by exit_plan_mode
+	pairDepth    int // incremented by enter_pair_programming_mode, decremented by exit_pair_programming_mode
 
 	renderedContent string
 	renderedLines   []string
@@ -1046,6 +62,7 @@ type Chat struct {
 	selection       mouseSelection
 	verboseInterim  bool
 	detailKey       string
+	detailToolID    string // ID of tool currently rendered in the detail sidebar
 }
 
 func NewChat(styles common.Styles, width, height int) *Chat {
@@ -1067,11 +84,13 @@ func NewChat(styles common.Styles, width, height int) *Chat {
 }
 
 func (c *Chat) SetSize(width, height int) {
+	if c.width == width && c.height == height {
+		return
+	}
 	c.width = width
 	c.height = height
 	c.viewport.SetWidth(width)
 	c.viewport.SetHeight(height)
-	c.detailKey = ""
 	if r := common.MarkdownRenderer(width); r != nil {
 		c.renderer = r
 	}
@@ -1096,20 +115,35 @@ func (c *Chat) VerboseInterim() bool {
 	return c.verboseInterim
 }
 
+func (c *Chat) PlanMode() bool { return c.planDepth > 0 }
+func (c *Chat) PairMode() bool { return c.pairDepth > 0 }
+
+// ExecutionMode returns "plan", "pair_programming", or "execute" (default).
+func (c *Chat) ExecutionMode() string {
+	if c.planDepth > 0 {
+		return "plan"
+	}
+	if c.pairDepth > 0 {
+		return "pair_programming"
+	}
+	return "execute"
+}
+
 func (c *Chat) AddUserMessage(text string) {
+	c.sealActiveAssistant()
+	c.selection.clear()
 	c.messages = append(c.messages, &userItem{content: text, timestamp: time.Now()})
 	c.refresh()
 }
 
 func (c *Chat) StartAssistantMessage() {
+	c.sealActiveAssistant()
+	c.selection.clear()
 	c.messages = append(c.messages, newAssistantItem())
 	c.refresh()
 }
 
 func (c *Chat) AppendChunk(text string, isThinking bool) {
-	if text == "" {
-		return
-	}
 	for i := len(c.messages) - 1; i >= 0; i-- {
 		if a, ok := c.messages[i].(*assistantItem); ok && a.streaming {
 			if isThinking {
@@ -1152,52 +186,57 @@ func (c *Chat) FinishAssistantMessage(inputTokens, outputTokens int, stopReason 
 }
 
 func (c *Chat) AddToolProgress(toolUseID, toolName, status, label string, metadata map[string]any) {
-	if toolUseID != "" {
-		for i := len(c.messages) - 1; i >= 0; i-- {
-			if t, ok := c.messages[i].(*toolItem); ok && t.id == toolUseID {
-				t.status = status
-				t.label = label
-				if len(metadata) > 0 {
-					t.metadata = cloneMap(metadata)
-				}
-				if t.isDone() {
-					t.finishedAt = time.Now()
-					if isAutoExpandTool(t.name) && !t.expanded {
-						t.expanded = true
-					}
-				}
-				t.invalidate()
-				c.refresh()
-				return
-			}
-		}
-	} else {
-		for i := len(c.messages) - 1; i >= 0; i-- {
-			if t, ok := c.messages[i].(*toolItem); ok && t.name == toolName && !t.isDone() {
-				t.status = status
-				t.label = label
-				if len(metadata) > 0 {
-					t.metadata = cloneMap(metadata)
-				}
-				if t.isDone() {
-					t.finishedAt = time.Now()
-					if isAutoExpandTool(t.name) && !t.expanded {
-						t.expanded = true
-					}
-				}
-				t.invalidate()
-				c.refresh()
-				return
-			}
+	// Plan mode / Pair programming mode intercepts.
+	if status == "completed" {
+		switch toolName {
+		case "enter_plan_mode":
+			c.planDepth++
+		case "exit_plan_mode":
+			c.planDepth = max(0, c.planDepth-1)
+		case "enter_pair_programming_mode":
+			c.pairDepth++
+		case "exit_pair_programming_mode":
+			c.pairDepth = max(0, c.pairDepth-1)
 		}
 	}
 
+	// Update existing tool item if we find it.
+	for _, m := range c.messages {
+		if t, ok := m.(*toolItem); ok && t.id == toolUseID {
+			t.status = status
+			t.label = label
+			for k, v := range metadata {
+				t.metadata[k] = v
+			}
+			if t.isDone() {
+				t.finishedAt = time.Now()
+				if isAutoExpandTool(t.name) && !t.expanded {
+					t.expanded = true
+				}
+			}
+			t.invalidate()
+			c.refresh()
+			return
+		}
+	}
+
+	// Not found: seal active assistant item (if any) so the tool row starts cleanly.
 	c.sealActiveAssistant()
-	c.messages = append(c.messages, newToolItem(toolUseID, toolName, status, label, metadata))
+	c.selection.clear()
+
+	// Append as a new toolItem.
+	tool := newToolItem(toolUseID, toolName, status, label, metadata)
+	if tool.isDone() && isAutoExpandTool(toolName) {
+		tool.expanded = true
+	}
+	c.messages = append(c.messages, tool)
+
+	// If this new tool starts, automatically select it.
 	c.selectedTool = len(c.messages) - 1
 	if isAutoExpandTool(toolName) {
 		c.detailOpen = true
 	}
+
 	c.refresh()
 }
 
@@ -1218,19 +257,30 @@ func (c *Chat) sealActiveAssistant() {
 }
 
 func (c *Chat) AddError(err error) {
+	c.sealActiveAssistant()
+	c.selection.clear()
 	c.messages = append(c.messages, &errorItem{content: err.Error()})
 	c.refresh()
 }
 
 func (c *Chat) AddSystem(text string) {
+	c.sealActiveAssistant()
+	c.selection.clear()
 	c.messages = append(c.messages, &systemItem{content: text})
 	c.refresh()
 }
 
 func (c *Chat) Clear() {
-	c.messages = c.messages[:0]
+	c.messages = nil
 	c.selectedTool = -1
 	c.detailOpen = false
+	c.planDepth = 0
+	c.pairDepth = 0
+	c.detailKey = ""
+	c.detailToolID = ""
+	c.selection.clear()
+	c.viewport.SetContent("")
+	c.detail.SetContent("")
 	c.refresh()
 }
 
@@ -1256,8 +306,8 @@ done:
 
 func (c *Chat) GetLastUserText() string {
 	for i := len(c.messages) - 1; i >= 0; i-- {
-		if u, ok := c.messages[i].(*userItem); ok {
-			return u.content
+		if user, ok := c.messages[i].(*userItem); ok {
+			return user.content
 		}
 	}
 	return ""
@@ -1265,28 +315,29 @@ func (c *Chat) GetLastUserText() string {
 
 func (c *Chat) ToggleThinking() {
 	for i := len(c.messages) - 1; i >= 0; i-- {
-		if a, ok := c.messages[i].(*assistantItem); ok {
-			if a.thinking != nil {
-				a.thinking.toggle()
+		if assistant, ok := c.messages[i].(*assistantItem); ok {
+			if assistant.thinking != nil {
+				assistant.thinking.toggle()
+				assistant.invalidate()
 				c.refresh()
 			}
-			return
+			break
 		}
 	}
 }
 
 func (c *Chat) HasThinking() bool {
-	for i := len(c.messages) - 1; i >= 0; i-- {
-		if a, ok := c.messages[i].(*assistantItem); ok {
-			return a.thinking != nil
+	for _, m := range c.messages {
+		if assistant, ok := m.(*assistantItem); ok && assistant.thinking != nil {
+			return true
 		}
 	}
 	return false
 }
 
 func (c *Chat) HasTools() bool {
-	for _, item := range c.messages {
-		if _, ok := item.(*toolItem); ok {
+	for _, m := range c.messages {
+		if _, ok := m.(*toolItem); ok {
 			return true
 		}
 	}
@@ -1298,11 +349,11 @@ func (c *Chat) HasSelectedTool() bool {
 }
 
 func (c *Chat) DetailsOpen() bool {
-	return c.detailOpen && c.HasSelectedTool()
+	return c.detailOpen
 }
 
 func (c *Chat) ToggleSelectedToolExpanded() bool {
-	if tool := c.selectedToolItem(); tool != nil {
+	if tool := c.selectedToolItem(); tool != nil && tool.supportsPreview() {
 		tool.expanded = !tool.expanded
 		tool.invalidate()
 		c.refresh()
@@ -1328,15 +379,14 @@ func (c *Chat) CloseDetails() {
 }
 
 func (c *Chat) SelectNextTool() bool {
-	for i, start := range c.toolIndices() {
-		if start > c.selectedToolIndex() {
-			c.selectedTool = start
+	indices := c.toolIndices()
+	for _, idx := range indices {
+		if idx > c.selectedToolIndex() {
+			c.selectedTool = idx
 			c.refresh()
-			_ = i
 			return true
 		}
 	}
-	indices := c.toolIndices()
 	if len(indices) > 0 && c.selectedToolIndex() < 0 {
 		c.selectedTool = indices[0]
 		c.refresh()
@@ -1592,294 +642,11 @@ func (c *Chat) selectionRange() (int, int, int, int) {
 	return c.selection.rangeOrInvalid()
 }
 
-func clampInt(v, lo, hi int) int {
-	if v < lo {
-		return lo
-	}
-	if v > hi {
-		return hi
-	}
-	return v
-}
-
-func (c *Chat) DetailView(width, height int) string {
-	tool := c.selectedToolItem()
-	if tool == nil {
-		return ""
-	}
-	return tool.detailView(c, width, height)
-}
-
-func (c *Chat) renderToolDetail(t *toolItem, width, height int) string {
-	if width < 20 || height < 6 {
-		return ""
-	}
-	innerW := max(10, width-4)
-	clampLines := func(s string) string {
-		lines := strings.Split(s, "\n")
-		for i, l := range lines {
-			lines[i] = ansi.Truncate(l, innerW, "…")
-		}
-		return strings.Join(lines, "\n")
-	}
-	sections := []string{
-		ansi.Truncate(c.styles.AssistantLabel.Render(toolDisplayName(t.name)), innerW, "…"),
-		ansi.Truncate(c.styles.MsgTimestamp.Render(strings.ToUpper(t.status)), innerW, "…"),
-	}
-	if summary := strings.TrimSpace(t.summaryText()); summary != "" {
-		sections = append(sections, clampLines(wrap.String(summary, innerW)))
-	}
-	if meta := strings.TrimSpace(t.metaSummary()); meta != "" {
-		sections = append(sections, clampLines(wrap.String(meta, innerW)))
-	}
-	header := strings.Join(sections, "\n\n")
-	body := strings.TrimSpace(t.detailBody(c, innerW))
-	if body == "" {
-		body = c.styles.MsgTimestamp.Render("No output")
-	}
-	bodyH := max(3, height-lipgloss.Height(header)-4)
-	key := t.detailCacheKey(innerW, bodyH, body)
-	sizeChanged := c.detail.Width() != innerW || c.detail.Height() != bodyH
-	if c.detail.Width() != innerW {
-		c.detail.SetWidth(innerW)
-	}
-	if c.detail.Height() != bodyH {
-		c.detail.SetHeight(bodyH)
-	}
-	if c.detailKey != key || sizeChanged {
-		yOffset := c.detail.YOffset()
-		c.detail.SetContent(body)
-		if c.detailKey != key {
-			c.detail.GotoTop()
-		} else {
-			c.detail.SetYOffset(yOffset)
-		}
-		c.detailKey = key
-	}
-	content := header + "\n\n" + c.detail.View()
-	return lipgloss.NewStyle().
-		Border(lipgloss.RoundedBorder()).
-		BorderForeground(common.ColorBorder).
-		Padding(0, 1).
-		Width(width).
-		Height(height).
-		Render(content)
-}
-
-func (c *Chat) ScrollUp(n int)   { c.follow = false; c.viewport.ScrollUp(n) }
-func (c *Chat) ScrollDown(n int) { c.viewport.ScrollDown(n); c.follow = c.viewport.AtBottom() }
-func (c *Chat) PageUp()          { c.follow = false; c.viewport.HalfPageUp() }
-func (c *Chat) PageDown()        { c.viewport.HalfPageDown(); c.follow = c.viewport.AtBottom() }
-func (c *Chat) GotoTop()         { c.follow = false; c.viewport.GotoTop() }
-func (c *Chat) GotoBottom()      { c.follow = true; c.viewport.GotoBottom() }
-func (c *Chat) DetailScrollUp(n int) {
-	if c.detail != nil {
-		c.detail.ScrollUp(n)
-	}
-}
-func (c *Chat) DetailScrollDown(n int) {
-	if c.detail != nil {
-		c.detail.ScrollDown(n)
-	}
-}
-func (c *Chat) DetailPageUp() {
-	if c.detail != nil {
-		c.detail.HalfPageUp()
-	}
-}
-func (c *Chat) DetailPageDown() {
-	if c.detail != nil {
-		c.detail.HalfPageDown()
-	}
-}
-func (c *Chat) DetailGotoTop() {
-	if c.detail != nil {
-		c.detail.GotoTop()
-	}
-}
-func (c *Chat) DetailGotoBottom() {
-	if c.detail != nil {
-		c.detail.GotoBottom()
-	}
-}
-func (c *Chat) View() string { return c.viewport.View() }
-
-func (c *Chat) selectedToolIndex() int {
-	if c.selectedTool < 0 || c.selectedTool >= len(c.messages) {
-		return -1
-	}
-	if _, ok := c.messages[c.selectedTool].(*toolItem); !ok {
-		return -1
-	}
-	return c.selectedTool
-}
-
-func (c *Chat) selectedToolItem() *toolItem {
-	if idx := c.selectedToolIndex(); idx >= 0 {
-		if tool, ok := c.messages[idx].(*toolItem); ok {
-			return tool
-		}
-	}
-	return nil
-}
-
-func (c *Chat) toolIndices() []int {
-	indices := make([]int, 0)
-	for i, item := range c.messages {
-		if _, ok := item.(*toolItem); ok {
-			indices = append(indices, i)
-		}
-	}
-	return indices
-}
-
-func (c *Chat) refresh() {
-	var sb strings.Builder
-	var plainSB strings.Builder
-	lastWasTool := false
-	wroteAny := false
-	line := 0
-	toolRegions := make([]toolRegion, 0)
-	thinkingRegions := make([]thinkingRegion, 0)
-	for i, item := range c.messages {
-		var rendered string
-		if tool, ok := item.(*toolItem); ok {
-			rendered = tool.renderSelected(c, c.width, i == c.selectedToolIndex())
-		} else {
-			rendered = item.render(c, c.width)
-		}
-		if rendered == "" {
-			continue
-		}
-		plainRendered := ansi.Strip(rendered)
-		if wroteAny {
-			_, currIsTool := item.(*toolItem)
-			if lastWasTool && currIsTool {
-				sb.WriteString("\n")
-				plainSB.WriteString("\n")
-				line += 1
-			} else {
-				sb.WriteString("\n\n")
-				plainSB.WriteString("\n\n")
-				line += 2
-			}
-		}
-		startLine := line
-		sb.WriteString(rendered)
-		plainSB.WriteString(plainRendered)
-		height := max(1, lipgloss.Height(plainRendered))
-		if _, ok := item.(*toolItem); ok {
-			toolRegions = append(toolRegions, toolRegion{startLine: startLine, endLine: startLine + height - 1, msgIndex: i, expanderStart: 0, expanderEnd: 1, detailStart: 2, detailEnd: 3})
-		}
-		if assistant, ok := item.(*assistantItem); ok && assistant.thinking != nil && strings.TrimSpace(assistant.thinking.content) != "" {
-			thinkingStart := startLine
-			if assistant.showLabel {
-				thinkingStart++
-			}
-			thinkingRendered := assistant.thinking.render(c.styles, c.width)
-			thinkingHeight := max(1, lipgloss.Height(ansi.Strip(thinkingRendered)))
-			thinkingRegions = append(thinkingRegions, thinkingRegion{startLine: thinkingStart, endLine: thinkingStart + thinkingHeight - 1, msgIndex: i})
-		}
-		line += height
-		_, lastWasTool = item.(*toolItem)
-		wroteAny = true
-	}
-	content := sb.String()
-	plain := plainSB.String()
-	c.renderedContent = content
-	if content == "" {
-		c.renderedLines = nil
-	} else {
-		c.renderedLines = strings.Split(content, "\n")
-	}
-	c.plainContent = plain
-	if plain == "" {
-		c.plainLines = nil
-	} else {
-		c.plainLines = strings.Split(plain, "\n")
-	}
-	c.toolRegions = toolRegions
-	c.thinkingRegions = thinkingRegions
-	if c.selection.hasSelection() {
-		c.viewport.SetContent(c.highlightedSelectionContent())
-	} else {
-		c.viewport.SetContent(content)
-	}
-	if c.follow {
-		c.viewport.GotoBottom()
-	}
-}
-func (c *Chat) highlightedSelectionContent() string {
-	if len(c.renderedLines) == 0 {
-		return c.renderedContent
-	}
-	startLn, startCo, endLn, endCo := c.selectionRange()
-	if startLn < 0 || endLn < 0 {
-		return c.renderedContent
-	}
-	lines := make([]string, len(c.renderedLines))
-	copy(lines, c.renderedLines)
-	for line := startLn; line <= endLn; line++ {
-		renderedLine := lines[line]
-		lineWidth := ansi.StringWidth(renderedLine)
-		lineStart := 0
-		lineEnd := lineWidth
-		if line == startLn {
-			lineStart = clampInt(startCo, 0, lineWidth)
-		}
-		if line == endLn {
-			lineEnd = clampInt(endCo, 0, lineWidth)
-		}
-		if line == startLn && line == endLn && lineEnd < lineStart {
-			lineStart, lineEnd = lineEnd, lineStart
-		}
-		if lineEnd < lineStart {
-			lineEnd = lineStart
-		}
-		before := ansi.Cut(renderedLine, 0, lineStart)
-		middle := ansi.Cut(renderedLine, lineStart, lineEnd)
-		after := ansi.Cut(renderedLine, lineEnd, lineWidth)
-		if middle == "" && lineStart < lineWidth {
-			middle = ansi.Cut(renderedLine, lineStart, lineStart+1)
-			after = ansi.Cut(renderedLine, lineStart+1, lineWidth)
-		}
-		lines[line] = before + applySelectionStyle(middle, c.styles.Selection) + after
-	}
-	return strings.Join(lines, "\n")
-}
-
-func headerLine(style lipgloss.Style, width int) string {
-	return style.Render(strings.Repeat("─", max(0, width)))
-}
-
-func compactTokenCount(n int) string {
-	switch {
-	case n >= 1_000_000:
-		return strings.TrimSuffix(strings.TrimSuffix(fmt.Sprintf("%.1f", float64(n)/1_000_000), ".0"), ".") + "M"
-	case n >= 1_000:
-		return strings.TrimSuffix(strings.TrimSuffix(fmt.Sprintf("%.1f", float64(n)/1_000), ".0"), ".") + "k"
-	default:
-		return fmt.Sprintf("%d", n)
-	}
-}
-
-func truncate(s string, maxLen int) string {
-	if maxLen <= 0 || len([]rune(s)) <= maxLen {
-		return s
-	}
-	r := []rune(s)
-	return string(r[:maxLen-1]) + "…"
-}
-
 func (c *Chat) Size() (int, int) { return c.width, c.height }
 
-// inlinePreviewLines is the default number of lines shown in collapsed inline previews.
 const inlinePreviewLines = 10
-
-// previewTruncFmt is the footer shown when a preview is truncated.
 const previewTruncFmt = "… (%d lines hidden) [enter for full view]"
 
-// isAutoExpandTool returns true for tools whose inline preview should open by default.
 func isAutoExpandTool(name string) bool {
 	switch name {
 	case "write_file", "edit_file", "apply_patch", "bash", "spawn_agent":
@@ -1888,516 +655,20 @@ func isAutoExpandTool(name string) bool {
 	return false
 }
 
-// ── Directory listing ─────────────────────────────────────────────────────────
-
-type dirEntry struct {
-	Name        string `json:"name"`
-	IsDirectory bool   `json:"is_directory"`
-	IsFile      bool   `json:"is_file"`
-	IsSymlink   bool   `json:"is_symlink"`
-	SizeBytes   int64  `json:"size_bytes"`
-	Mode        string `json:"mode"`
+func isGroupableTool(name string) bool {
+	switch name {
+	case "read_file", "write_file", "list_directory", "glob":
+		return true
+	}
+	return false
 }
 
-type dirListing struct {
-	Path      string     `json:"path"`
-	Entries   []dirEntry `json:"entries"`
-	Count     int        `json:"count"`
-	Truncated bool       `json:"truncated"`
-}
-
-func parseDirListing(content string) (dirListing, bool) {
-	content = strings.TrimSpace(content)
-	if !strings.HasPrefix(content, "{") {
-		return dirListing{}, false
+func clampInt(v, lo, hi int) int {
+	if v < lo {
+		return lo
 	}
-	var dl dirListing
-	if err := json.Unmarshal([]byte(content), &dl); err != nil {
-		return dirListing{}, false
+	if v > hi {
+		return hi
 	}
-	return dl, true
-}
-
-func humanSize(bytes int64) string {
-	const (
-		kb = 1024
-		mb = 1024 * kb
-		gb = 1024 * mb
-	)
-	switch {
-	case bytes >= gb:
-		return fmt.Sprintf("%.1f GB", float64(bytes)/float64(gb))
-	case bytes >= mb:
-		return fmt.Sprintf("%.1f MB", float64(bytes)/float64(mb))
-	case bytes >= kb:
-		return fmt.Sprintf("%.1f KB", float64(bytes)/float64(kb))
-	default:
-		return fmt.Sprintf("%d B", bytes)
-	}
-}
-
-func shortHomePath(path string) string {
-	if path == "" {
-		return ""
-	}
-	if home, err := os.UserHomeDir(); err == nil && home != "" && strings.HasPrefix(path, home) {
-		return "~" + path[len(home):]
-	}
-	return prettyPath(path)
-}
-
-// renderDirListing renders a list_directory JSON result as a human-readable tree.
-// maxLines=0 means no truncation (detail sidebar).
-func renderDirListing(styles common.Styles, content string, width, maxLines int) string {
-	dl, ok := parseDirListing(content)
-	if !ok {
-		return renderPlainBody(content, width)
-	}
-
-	// Header: path + count
-	headerPath := styles.Key.Render(shortHomePath(dl.Path))
-	count := fmt.Sprintf("(%d entries)", dl.Count)
-	if dl.Truncated {
-		count += " [truncated]"
-	}
-	headerCount := styles.MsgTimestamp.Render(count)
-	lines := []string{headerPath + "  " + headerCount, ""}
-
-	// Compute max visible name width for alignment.
-	maxNameW := 0
-	for _, e := range dl.Entries {
-		n := e.Name
-		if e.IsDirectory {
-			n += "/"
-		}
-		if w := len("/ ") + len(n); w > maxNameW {
-			maxNameW = w
-		}
-	}
-	sizeColW := 8
-	nameColW := max(16, min(maxNameW, width-sizeColW-2))
-
-	for _, e := range dl.Entries {
-		displayName := e.Name
-		if e.IsDirectory {
-			displayName += "/"
-		}
-
-		var nameRendered string
-		switch {
-		case e.IsSymlink:
-			nameRendered = lipgloss.NewStyle().Foreground(common.ColorYellow).Render("→ " + displayName)
-		case e.IsDirectory:
-			nameRendered = lipgloss.NewStyle().Foreground(common.ColorBlue).Bold(true).Render("/ " + displayName)
-		default:
-			nameRendered = styles.PermBody.Render("· " + displayName)
-		}
-
-		// Truncate very long names to stay within nameColW.
-		visibleNameW := lipgloss.Width(nameRendered)
-		if visibleNameW > nameColW {
-			// Re-render with truncated display name.
-			truncated := ansi.Truncate(displayName, nameColW-3, "…")
-			switch {
-			case e.IsSymlink:
-				nameRendered = lipgloss.NewStyle().Foreground(common.ColorYellow).Render("→ " + truncated)
-			case e.IsDirectory:
-				nameRendered = lipgloss.NewStyle().Foreground(common.ColorBlue).Bold(true).Render("/ " + truncated)
-			default:
-				nameRendered = styles.PermBody.Render("· " + truncated)
-			}
-			visibleNameW = lipgloss.Width(nameRendered)
-		}
-
-		var sizeStr string
-		if !e.IsDirectory {
-			sizeStr = humanSize(e.SizeBytes)
-		}
-		sizeRendered := styles.MsgTimestamp.Render(fmt.Sprintf("%*s", sizeColW, sizeStr))
-
-		gap := max(1, nameColW-visibleNameW+1)
-		lines = append(lines, nameRendered+strings.Repeat(" ", gap)+sizeRendered)
-	}
-
-	if maxLines > 0 && len(lines) > maxLines {
-		hidden := len(lines) - maxLines
-		lines = lines[:maxLines]
-		lines = append(lines, styles.ToolTruncation.Render(fmt.Sprintf(previewTruncFmt, hidden)))
-	}
-
-	return strings.Join(lines, "\n")
-}
-
-// renderCodeBody renders source code with line numbers and syntax highlighting.
-// maxLines=0 means no truncation (used by the detail sidebar).
-func renderCodeBody(styles common.Styles, path, body string, width, maxLines, offset int) string {
-	if strings.TrimSpace(body) == "" {
-		return ""
-	}
-	body = strings.ReplaceAll(body, "\r\n", "\n")
-	allLines := strings.Split(body, "\n")
-
-	display := allLines
-	hidden := 0
-	if maxLines > 0 && len(allLines) > maxLines {
-		hidden = len(allLines) - maxLines
-		display = allLines[:maxLines]
-	}
-
-	highlighted := common.SyntaxHighlight(strings.Join(display, "\n"), path)
-	hlLines := strings.Split(highlighted, "\n")
-	// Chroma may trim a trailing newline, causing one fewer output line when the
-	// last display line is blank. Pad or truncate to always match len(display).
-	for len(hlLines) < len(display) {
-		hlLines = append(hlLines, "")
-	}
-	if len(hlLines) > len(display) {
-		hlLines = hlLines[:len(display)]
-	}
-
-	maxNum := len(display) + offset
-	numWidth := len(fmt.Sprintf("%d", maxNum))
-	if numWidth < 1 {
-		numWidth = 1
-	}
-	numFmt := fmt.Sprintf("%%%dd ", numWidth)
-
-	numColW := numWidth + 1 // digits + trailing space
-	contentW := max(1, width-numColW)
-	indent := strings.Repeat(" ", numColW)
-
-	out := make([]string, 0, len(hlLines)+1)
-	for i, ln := range hlLines {
-		lineNum := styles.ToolLineNumber.Render(fmt.Sprintf(numFmt, i+1+offset))
-		if maxLines > 0 {
-			// Inline preview: truncate to keep fixed height.
-			out = append(out, lineNum+ansi.Truncate(ln, contentW, "…"))
-		} else {
-			// Detail sidebar: soft-wrap with continuation indent.
-			parts := strings.Split(wrap.String(ln, contentW), "\n")
-			out = append(out, lineNum+parts[0])
-			for _, cont := range parts[1:] {
-				out = append(out, indent+cont)
-			}
-		}
-	}
-	if hidden > 0 {
-		out = append(out, styles.ToolTruncation.Render(fmt.Sprintf(previewTruncFmt, hidden)))
-	}
-	return strings.Join(out, "\n")
-}
-
-// renderDiffBody renders a unified diff with +/- line coloring.
-// maxLines=0 means no truncation (used by the detail sidebar).
-func renderDiffBody(styles common.Styles, body string, width, maxLines int) string {
-	if strings.TrimSpace(body) == "" {
-		return ""
-	}
-	body = strings.ReplaceAll(body, "\r\n", "\n")
-	allLines := strings.Split(body, "\n")
-
-	display := allLines
-	hidden := 0
-	if maxLines > 0 && len(allLines) > maxLines {
-		hidden = len(allLines) - maxLines
-		display = allLines[:maxLines]
-	}
-
-	out := make([]string, 0, len(display)+1)
-	for _, ln := range display {
-		switch {
-		case strings.HasPrefix(ln, "+") && !strings.HasPrefix(ln, "+++"):
-			out = append(out, styles.ToolDiffAdd.Render(ln))
-		case strings.HasPrefix(ln, "-") && !strings.HasPrefix(ln, "---"):
-			out = append(out, styles.ToolDiffDel.Render(ln))
-		case strings.HasPrefix(ln, "@@"):
-			out = append(out, styles.ToolDiffHunk.Render(ln))
-		default:
-			out = append(out, common.Escape(ln))
-		}
-	}
-	if hidden > 0 {
-		out = append(out, styles.ToolTruncation.Render(fmt.Sprintf(previewTruncFmt, hidden)))
-	}
-	return strings.Join(out, "\n")
-}
-
-// renderColoredDiff renders a unified diff with full-row colored backgrounds
-// (green for added, red for deleted). maxLines=0 means no truncation.
-// Reuses renderPermDiffLines so both places stay visually identical.
-func renderColoredDiff(styles common.Styles, diffBody string, width, maxLines int) string {
-	lines := renderPermDiffLines(styles, diffBody, width)
-	if maxLines > 0 && len(lines) > maxLines {
-		hidden := len(lines) - maxLines
-		lines = append(lines[:maxLines], styles.ToolTruncation.Render(fmt.Sprintf(previewTruncFmt, hidden)))
-	}
-	return strings.Join(lines, "\n")
-}
-
-// panelBox wraps rendered content in the standard rounded border box used for inline previews.
-func panelBox(styles common.Styles, content string, width int) string {
-	if strings.TrimSpace(content) == "" {
-		content = styles.MsgTimestamp.Render("No output")
-	}
-	return lipgloss.NewStyle().
-		Border(lipgloss.RoundedBorder()).
-		BorderForeground(common.ColorBorder).
-		Padding(0, 1).
-		Width(width).
-		Render(content)
-}
-
-// renderCodePanel renders a file's content as a code block for inline preview (no border).
-func renderCodePanel(styles common.Styles, path, body string, width, maxLines, offset int) string {
-	return renderCodeBody(styles, path, body, width, maxLines, offset)
-}
-
-// renderDiffPanel renders a unified diff for inline preview (no border).
-func renderDiffPanel(styles common.Styles, body string, width, maxLines int) string {
-	return renderDiffBody(styles, body, width, maxLines)
-}
-
-// renderBashInline renders a bash inline preview: a dim `$ cmd` prompt line
-// followed by the command output, all truncated to maxLines (no border).
-func renderBashInline(styles common.Styles, cmd, output string, width, maxLines int) string {
-	var lines []string
-	if cmd = strings.TrimSpace(cmd); cmd != "" {
-		cmdOneLine := strings.ReplaceAll(cmd, "\n", "; ")
-		lines = append(lines, styles.MsgTimestamp.Render("$ "+ansi.Truncate(cmdOneLine, max(1, width-2), "…")))
-	}
-	if output = strings.TrimSpace(output); output != "" {
-		for _, ln := range strings.Split(strings.ReplaceAll(output, "\r\n", "\n"), "\n") {
-			lines = append(lines, wrap.String(common.Escape(ln), width))
-		}
-	}
-	hidden := 0
-	if maxLines > 0 && len(lines) > maxLines {
-		hidden = len(lines) - maxLines
-		lines = lines[:maxLines]
-	}
-	if hidden > 0 {
-		lines = append(lines, styles.ToolTruncation.Render(fmt.Sprintf(previewTruncFmt, hidden)))
-	}
-	return strings.Join(lines, "\n")
-}
-
-// renderFilePanel picks the right panel renderer based on the file extension.
-func renderFilePanel(styles common.Styles, path, body string, width, maxLines int) string {
-	switch flavorForPath(path) {
-	case contentFlavorCode:
-		return renderCodePanel(styles, path, body, width, maxLines, 0)
-	default:
-		return renderContentPanel(styles, "", body, width, maxLines, flavorForPath(path))
-	}
-}
-
-func renderContentPanel(styles common.Styles, title, body string, width, maxLines int, flavor contentFlavor) string {
-	panelBody := renderContentBody(styles, body, width, flavor)
-	if maxLines > 0 {
-		lines := strings.Split(panelBody, "\n")
-		if len(lines) > maxLines {
-			hidden := len(lines) - maxLines
-			lines = append(lines[:maxLines], styles.ToolTruncation.Render(fmt.Sprintf(previewTruncFmt, hidden)))
-		}
-		panelBody = strings.Join(lines, "\n")
-	}
-	if title != "" {
-		panelBody = styles.Key.Render(title) + "\n" + panelBody
-	}
-	return panelBody
-}
-
-func renderContentBody(styles common.Styles, body string, width int, flavor contentFlavor) string {
-	if strings.TrimSpace(body) == "" {
-		return ""
-	}
-	switch flavor {
-	case contentFlavorMarkdown:
-		if rendered := renderMarkdownBody(body, width); rendered != "" {
-			return rendered
-		}
-	}
-	return renderPlainBody(body, width)
-}
-
-func renderMarkdownBody(body string, width int) string {
-	renderer := common.MarkdownRenderer(width)
-	if renderer == nil {
-		return ""
-	}
-	mu := common.LockMarkdownRenderer(renderer)
-	mu.Lock()
-	defer mu.Unlock()
-	rendered, err := renderer.Render(strings.ReplaceAll(body, "\r\n", "\n"))
-	if err != nil {
-		return ""
-	}
-	return strings.TrimRight(rendered, "\n")
-}
-
-func renderPlainBody(body string, width int) string {
-	rawLines := strings.Split(strings.ReplaceAll(body, "\r\n", "\n"), "\n")
-	wrapped := make([]string, 0, len(rawLines))
-	innerW := max(16, width)
-	for _, line := range rawLines {
-		wrapped = append(wrapped, wrap.String(common.Escape(line), innerW))
-	}
-	return strings.Join(wrapped, "\n")
-}
-
-func cloneMap(in map[string]any) map[string]any {
-	if len(in) == 0 {
-		return nil
-	}
-	out := make(map[string]any, len(in))
-	for k, v := range in {
-		out[k] = v
-	}
-	return out
-}
-
-func normalizeMap(v any) map[string]any {
-	switch m := v.(type) {
-	case map[string]any:
-		return m
-	case nil:
-		return nil
-	default:
-		b, err := json.Marshal(v)
-		if err != nil {
-			return nil
-		}
-		var out map[string]any
-		if err := json.Unmarshal(b, &out); err != nil {
-			return nil
-		}
-		return out
-	}
-}
-
-func nestedString(v any, keys ...string) string {
-	m := normalizeMap(v)
-	for _, key := range keys {
-		if s, ok := stringAny(m[key]); ok {
-			return s
-		}
-	}
-	return ""
-}
-
-func stringFromMap(m map[string]any, key string) string {
-	if m == nil {
-		return ""
-	}
-	s, _ := stringAny(m[key])
-	return s
-}
-
-func intFromMap(m map[string]any, key string) (int, bool) {
-	if m == nil {
-		return 0, false
-	}
-	switch v := m[key].(type) {
-	case int:
-		return v, true
-	case int32:
-		return int(v), true
-	case int64:
-		return int(v), true
-	case float64:
-		return int(v), true
-	case float32:
-		return int(v), true
-	case json.Number:
-		i, err := v.Int64()
-		return int(i), err == nil
-	default:
-		return 0, false
-	}
-}
-
-func stringAny(v any) (string, bool) {
-	switch x := v.(type) {
-	case string:
-		return x, true
-	case json.Number:
-		return x.String(), true
-	case fmt.Stringer:
-		return x.String(), true
-	case nil:
-		return "", false
-	default:
-		return fmt.Sprintf("%v", x), true
-	}
-}
-
-func prettyPath(path string) string {
-	if path == "" {
-		return ""
-	}
-	clean := filepath.Clean(path)
-	return strings.ReplaceAll(clean, "\\", "/")
-}
-
-func compactPath(path string) string {
-	pretty := prettyPath(path)
-	if pretty == "" {
-		return ""
-	}
-	base := filepath.Base(pretty)
-	if base == "." || base == "/" {
-		return pretty
-	}
-	return base
-}
-
-func prettyJSON(v any) string {
-	if v == nil {
-		return ""
-	}
-	b, err := json.MarshalIndent(v, "", "  ")
-	if err != nil {
-		return ""
-	}
-	return string(b)
-}
-
-func indentBlock(s, indent string) string {
-	lines := strings.Split(s, "\n")
-	for i, line := range lines {
-		lines[i] = indent + line
-	}
-	return strings.Join(lines, "\n")
-}
-
-func formatDuration(d time.Duration) string {
-	if d < time.Second {
-		return fmt.Sprintf("%dms", d.Milliseconds())
-	}
-	return fmt.Sprintf("%.1fs", d.Seconds())
-}
-
-func toolDisplayName(name string) string {
-	name = strings.ReplaceAll(name, "_", " ")
-	name = strings.ReplaceAll(name, "-", " ")
-	parts := strings.Fields(name)
-	for i, part := range parts {
-		if part == "api" || part == "mcp" {
-			parts[i] = strings.ToUpper(part)
-			continue
-		}
-		parts[i] = strings.ToUpper(part[:1]) + part[1:]
-	}
-	return strings.Join(parts, " ")
-}
-
-func firstLine(s string) string {
-	s = strings.TrimSpace(s)
-	if s == "" {
-		return ""
-	}
-	if idx := strings.IndexByte(s, '\n'); idx >= 0 {
-		return s[:idx]
-	}
-	return s
+	return v
 }

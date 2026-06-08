@@ -92,13 +92,8 @@ func (m *RodManager) persistDownload(ctx context.Context, session *sessionState,
 		entry.ErrorText = err.Error()
 		return entry
 	}
-	ref, err := m.config.ArtifactStore.PutArtifact(ctx, storage.ArtifactPutRequest{
-		Namespace:   storage.NamespaceBrowserDownloads,
-		Filename:    filename,
-		SessionID:   string(session.id),
-		PageID:      entry.PageID,
-		ContentType: storage.DetectContentType(filename),
-	}, body)
+	key := storage.DownloadKey(string(session.id), entry.PageID, filename, time.Now().UTC())
+	ref, err := m.config.ArtifactStore.Put(ctx, key, body, storage.DetectContentType(filename))
 	if err != nil {
 		entry.ErrorText = err.Error()
 		return entry

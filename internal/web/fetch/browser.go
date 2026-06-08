@@ -28,7 +28,7 @@ func (s *Service) Fetch(ctx context.Context, request Request) (FetchedContent, e
 	case webcore.RenderModeBrowser:
 		fetched, err = s.fetchViaBrowser(ctx, plan)
 	case webcore.RenderModeHTTP:
-		fetched, err = s.fetchViaHTTP(ctx, plan.NormalizedURL)
+		fetched, err = s.fetchViaHTTP(ctx, plan.NormalizedURL, string(plan.Request.SessionID))
 	default:
 		return FetchedContent{}, fmt.Errorf("unsupported fetch mode %q", plan.Mode)
 	}
@@ -46,7 +46,7 @@ func (s *Service) fetchAuto(ctx context.Context, plan *fetchPlan) (FetchedConten
 		if cachedMode, ok := s.decisionCache.Get(decisionCacheKey(plan.NormalizedURL)); ok {
 			switch cachedMode {
 			case webcore.RenderModeHTTP:
-				httpFetched, err := s.fetchViaHTTP(ctx, plan.NormalizedURL)
+				httpFetched, err := s.fetchViaHTTP(ctx, plan.NormalizedURL, string(plan.Request.SessionID))
 				if err == nil {
 					httpFetched.Mode = webcore.RenderModeHTTP
 				}
@@ -61,7 +61,7 @@ func (s *Service) fetchAuto(ctx context.Context, plan *fetchPlan) (FetchedConten
 		}
 	}
 
-	httpFetched, err := s.fetchViaHTTP(ctx, plan.NormalizedURL)
+	httpFetched, err := s.fetchViaHTTP(ctx, plan.NormalizedURL, string(plan.Request.SessionID))
 	if err != nil {
 		return FetchedContent{}, err
 	}

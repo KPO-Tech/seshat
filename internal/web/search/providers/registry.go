@@ -2,6 +2,7 @@ package providers
 
 import (
 	"fmt"
+	"log"
 	"os"
 	"sort"
 	"strings"
@@ -66,7 +67,7 @@ func RunSearch(input SearchInput, chain []SearchProvider, mode ProviderMode) (Pr
 		output, err := provider.Search(input)
 		if err == nil {
 			if mode == ProviderModeAuto && len(output.Hits) == 0 && shouldFallbackOnEmpty(provider) && i < len(chain)-1 {
-				fmt.Fprintf(os.Stderr, "[web-search] %s returned 0 hits, trying next provider...\n", provider.Name())
+				log.Printf("[web-search] %s returned 0 hits, trying next provider...", provider.Name())
 				continue
 			}
 			return output, nil
@@ -81,7 +82,7 @@ func RunSearch(input SearchInput, chain []SearchProvider, mode ProviderMode) (Pr
 
 		// In auto mode, try next provider
 		if i < len(chain)-1 {
-			fmt.Fprintf(os.Stderr, "[web-search] %s failed: %v, trying next provider...\n", provider.Name(), err)
+			log.Printf("[web-search] %s failed: %v, trying next provider...", provider.Name(), err)
 		}
 	}
 

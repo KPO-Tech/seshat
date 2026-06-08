@@ -208,7 +208,11 @@ func loadChatSession(ctx context.Context, client *sdk.Client, sessionID string) 
 func printChatBanner(out io.Writer, options runtimeOptions, session *sdk.Session, showThinking bool) {
 	fmt.Fprintf(out, "Nexus dev chat\n")
 	fmt.Fprintf(out, "workspace: %s\n", options.WorkingDir)
-	fmt.Fprintf(out, "model: %s/%s\n", options.Model.Provider, options.Model.Model)
+	modelLabel := options.Model.String()
+	if options.Model.Provider == "" {
+		modelLabel = "(not configured — run `nexus config`)"
+	}
+	fmt.Fprintf(out, "model: %s\n", modelLabel)
 	fmt.Fprintf(out, "permission: %s\n", options.PermissionMode)
 	fmt.Fprintf(out, "session: %s\n", session.GetID().String())
 	if showThinking {
@@ -280,6 +284,9 @@ func splitCommand(raw string) (string, string) {
 }
 
 func validateProviderSetup(options runtimeOptions) error {
+	if options.Model.Provider == "" {
+		return nil // nothing configured yet; TUI will guide the user
+	}
 	config, err := engineconfig.Load()
 	if err != nil {
 		return err
@@ -287,7 +294,7 @@ func validateProviderSetup(options runtimeOptions) error {
 	config.Model = options.Model.String()
 	config.APIKey = options.APIKey
 	if validateErr := engineconfig.ValidateProviderSetup(config, options.Model.Provider); validateErr != nil {
-		return fmt.Errorf("%w; run `go run ./cmd/cli config` first", validateErr)
+		return fmt.Errorf("%w; run `nexus config` first", validateErr)
 	}
 	return nil
 }

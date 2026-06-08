@@ -2,12 +2,18 @@ package permissions
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
+	"os"
+	"path/filepath"
+	"sync"
 
 	automode "github.com/EngineerProjects/nexus-engine/internal/permissions/auto"
 	"github.com/EngineerProjects/nexus-engine/internal/providers"
 	tool "github.com/EngineerProjects/nexus-engine/internal/tools/registry"
 	"github.com/EngineerProjects/nexus-engine/internal/types"
+	"github.com/EngineerProjects/nexus-engine/internal/utils"
+	"github.com/EngineerProjects/nexus-engine/pkg/runtimepath"
 )
 
 // Integrator integrates permission checking with tool execution.
@@ -18,12 +24,16 @@ type Integrator struct {
 	engine *Engine
 
 	promptFn types.PromptFn
+
+	mu           sync.RWMutex
+	sessionTools map[types.SessionID]map[string]bool
 }
 
 // NewIntegrator creates a new permission integrator.
 func NewIntegrator(engine *Engine) *Integrator {
 	return &Integrator{
-		engine: engine,
+		engine:       engine,
+		sessionTools: make(map[types.SessionID]map[string]bool),
 	}
 }
 
@@ -60,6 +70,45 @@ func (i *Integrator) ResolverWithContext(
 		requestSessionID := request.SessionID
 		if requestSessionID == "" {
 			requestSessionID = sessionID
+		}
+
+		if requestSessionID != "" {
+			// 1. Fast path: check in-memory map
+			i.mu.RLock()
+			hasSession := i.sessionTools != nil && i.sessionTools[requestSessionID] != nil
+			var allowed bool
+			if hasSession {
+				allowed = i.sessionTools[requestSessionID][toolName]
+			}
+			i.mu.RUnlock()
+
+			// 2. Slow path: if session is not in memory, try to load from disk
+			if !hasSession {
+				i.mu.Lock()
+				// Double-check inside lock
+				if i.sessionTools == nil {
+					i.sessionTools = make(map[types.SessionID]map[string]bool)
+				}
+				if i.sessionTools[requestSessionID] == nil {
+					sessionDir := runtimepath.SessionDir("", string(requestSessionID))
+					filePath := filepath.Join(sessionDir, "permissions.json")
+					loadedMap := make(map[string]bool)
+					if data, err := os.ReadFile(filePath); err == nil {
+						_ = json.Unmarshal(data, &loadedMap)
+					}
+					i.sessionTools[requestSessionID] = loadedMap
+				}
+				allowed = i.sessionTools[requestSessionID][toolName]
+				i.mu.Unlock()
+			}
+
+			if allowed {
+				return types.AllowWithInputAndDecisionReason("auto-approved for session", utils.CloneInput(toolInput), &types.PermissionDecisionReason{
+					Type:   types.PermissionDecisionReasonMode,
+					Source: "session",
+					Reason: "auto-approved for session",
+				})
+			}
 		}
 		requestTurnID := request.TurnID
 		if requestTurnID == "" {
@@ -176,11 +225,44 @@ func (i *Integrator) ResolverWithContext(
 			})
 		}
 
-		if approved, ok := response.Value.(bool); ok && approved {
-			return types.AllowWithInputAndDecisionReason("user approved", result.UpdatedInput, &types.PermissionDecisionReason{
+		var approved bool
+		var always bool
+		if b, ok := response.Value.(bool); ok {
+			approved = b
+		} else if s, ok := response.Value.(string); ok {
+			if s == "always" {
+				approved = true
+				always = true
+			}
+		}
+
+		if approved {
+			reason := "user approved"
+			if always && requestSessionID != "" {
+				i.mu.Lock()
+				if i.sessionTools == nil {
+					i.sessionTools = make(map[types.SessionID]map[string]bool)
+				}
+				if i.sessionTools[requestSessionID] == nil {
+					i.sessionTools[requestSessionID] = make(map[string]bool)
+				}
+				i.sessionTools[requestSessionID][toolName] = true
+
+				// Save to disk
+				sessionDir := runtimepath.SessionDir("", string(requestSessionID))
+				filePath := filepath.Join(sessionDir, "permissions.json")
+				if err := os.MkdirAll(sessionDir, 0700); err == nil {
+					if data, err := json.Marshal(i.sessionTools[requestSessionID]); err == nil {
+						_ = os.WriteFile(filePath, data, 0600)
+					}
+				}
+				i.mu.Unlock()
+				reason = "always approved for session"
+			}
+			return types.AllowWithInputAndDecisionReason(reason, result.UpdatedInput, &types.PermissionDecisionReason{
 				Type:   types.PermissionDecisionReasonPrompt,
 				Source: "prompt",
-				Reason: "user approved",
+				Reason: reason,
 			})
 		}
 

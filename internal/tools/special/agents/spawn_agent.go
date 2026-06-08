@@ -159,6 +159,10 @@ func (t *SpawnAgentTool) Call(
 		Registry:  t.reg,
 		Nickname:  nickname,
 		Role:      role,
+		// Background agents run in a goroutine that outlives the parent turn;
+		// bypass permissions so tools are not stuck waiting for an interactive
+		// prompt after the parent's turn context has been canceled.
+		PermissionMode: types.PermissionModeBypass,
 	}
 
 	ag, err := t.manager.StartAgent(config)

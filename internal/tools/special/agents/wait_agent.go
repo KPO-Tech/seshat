@@ -24,6 +24,7 @@ The result includes:
 - ` + "`output`" + `: the agent's final output text
 - ` + "`turns`" + `: number of turns taken
 - ` + "`elapsed_seconds`" + `: wall-clock time the agent ran
+- ` + "`session_id`" + `: persisted session ID — pass to ` + "`resume_agent`" + ` to continue from where the agent left off
 
 Mirrors Codex's CollabAgentTool = "wait" + CollabWaitingBeginEvent / CollabWaitingEndEvent.`
 
@@ -103,7 +104,12 @@ func (t *WaitAgentTool) Call(
 
 	ag, err := t.manager.GetAgent(agentID)
 	if err != nil {
-		return tool.NewErrorResult(fmt.Errorf("agent not found: %s", agentID)), nil
+		// Help the LLM distinguish agent_id (from spawn_agent) from tool_use_id.
+		hint := ""
+		if len(agentID) > 10 && (agentID[8] == '-' || agentID[4] == '-') {
+			hint = " (this looks like a tool_use_id — use the agent_id returned by spawn_agent instead)"
+		}
+		return tool.NewErrorResult(fmt.Errorf("agent not found: %s%s", agentID, hint)), nil
 	}
 
 	callID := input.ToolContextValue().ToolUseID
@@ -176,6 +182,12 @@ func buildWaitResult(ag *coreagent.AsyncAgent) map[string]any {
 		resp["output"] = ag.Result.Output
 		resp["turns"] = ag.Result.Turns
 		resp["tool_uses"] = ag.Result.ToolUses
+		if len(ag.Result.Sources) > 0 {
+			resp["sources"] = ag.Result.Sources
+		}
+	}
+	if ag.SessionID != "" {
+		resp["session_id"] = ag.SessionID
 	}
 	if ag.Error != nil {
 		resp["error"] = ag.Error.Error()
@@ -191,7 +203,14 @@ func formatWaitSummary(ag *coreagent.AsyncAgent) string {
 		if ag.Result != nil {
 			output = ag.Result.Output
 		}
-		return fmt.Sprintf("Agent %s completed in %.1fs:\n%s", ag.ID, ag.GetDuration().Seconds(), output)
+		summary := fmt.Sprintf("Agent %s completed in %.1fs:\n%s", ag.ID, ag.GetDuration().Seconds(), output)
+		if ag.Result != nil && len(ag.Result.Sources) > 0 {
+			summary += fmt.Sprintf("\n\nSources consulted (%d):", len(ag.Result.Sources))
+			for _, s := range ag.Result.Sources {
+				summary += fmt.Sprintf("\n  [%s] %s", s.Type, s.Value)
+			}
+		}
+		return summary
 	case "errored":
 		errMsg := ""
 		if ag.Error != nil {

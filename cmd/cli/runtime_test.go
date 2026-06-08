@@ -37,3 +37,35 @@ func TestParsePermissionModeRejectsPlan(t *testing.T) {
 		t.Fatalf("expected execution mode guidance, got %q", err)
 	}
 }
+
+func TestParsePermissionModeCaseInsensitive(t *testing.T) {
+	tests := []struct {
+		input string
+		want  sdk.PermissionMode
+	}{
+		{"onRequest", sdk.PermissionModeOnRequest},
+		{"onrequest", sdk.PermissionModeOnRequest},
+		{"ONREQUEST", sdk.PermissionModeOnRequest},
+		{"auto", sdk.PermissionModeAuto},
+		{"AUTO", sdk.PermissionModeAuto},
+		{"acceptEdits", sdk.PermissionMode("acceptEdits")},
+		{"acceptedits", sdk.PermissionMode("acceptEdits")},
+		{"ACCEPTEDITS", sdk.PermissionMode("acceptEdits")},
+		{"bypass", sdk.PermissionModeBypass},
+		{"BYPASS", sdk.PermissionModeBypass},
+		{"never", sdk.PermissionModeNever},
+		{"NEVER", sdk.PermissionModeNever},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.input, func(t *testing.T) {
+			got, err := parsePermissionMode(tc.input)
+			if err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+			if got != tc.want {
+				t.Fatalf("expected %q, got %q", tc.want, got)
+			}
+		})
+	}
+}

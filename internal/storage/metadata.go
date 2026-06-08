@@ -108,6 +108,13 @@ func inferMetadataForDirectPut(key string, contentType string, body []byte) Arti
 func inferNamespaceFromKey(key string) string {
 	cleaned := strings.Trim(strings.TrimSpace(key), "/")
 	switch {
+	// Session-scoped keys: sessions/{id}/{type}/… → namespace is sessions/{id}/{type}
+	case strings.HasPrefix(cleaned, "sessions/"):
+		parts := strings.SplitN(cleaned, "/", 4)
+		if len(parts) >= 3 {
+			return strings.Join(parts[:3], "/")
+		}
+		return "sessions"
 	case strings.HasPrefix(cleaned, string(NamespaceBrowserScreenshots)+"/"):
 		return string(NamespaceBrowserScreenshots)
 	case strings.HasPrefix(cleaned, string(NamespaceBrowserDownloads)+"/"):

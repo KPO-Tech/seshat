@@ -8,6 +8,7 @@ import (
 	"os"
 	"strings"
 	"sync"
+	"time"
 
 	coreagent "github.com/EngineerProjects/nexus-engine/internal/agent"
 	"github.com/EngineerProjects/nexus-engine/internal/engine"
@@ -152,11 +153,16 @@ func NewClient(config *ClientConfig) (*Client, error) {
 		return nil, fmt.Errorf("failed to register agent tool: %w", err)
 	}
 
-	// spawn_agent needs the live engine instance — registered here, not in builtin.go.
+	// spawn_agent and resume_agent need the live engine instance — registered here, not in builtin.go.
 	// nil tools → sub-agent inherits all tools from the engine registry at call time.
-	spawnAgentTool := agentTool.NewSpawnAgentTool(queryEngine, nil, coreagent.NewAgentRegistry())
+	agentRegistry := coreagent.NewAgentRegistry()
+	spawnAgentTool := agentTool.NewSpawnAgentTool(queryEngine, nil, agentRegistry)
 	if err := reg.Register(spawnAgentTool); err != nil {
 		return nil, fmt.Errorf("failed to register spawn_agent tool: %w", err)
+	}
+	resumeAgentTool := agentTool.NewResumeAgentTool(queryEngine, nil, agentRegistry)
+	if err := reg.Register(resumeAgentTool); err != nil {
+		return nil, fmt.Errorf("failed to register resume_agent tool: %w", err)
 	}
 
 	client := &Client{
@@ -307,12 +313,33 @@ func (c *Client) ListSessions() ([]*SessionInfo, error) {
 	return c.store.GetAllSessionsInfo()
 }
 
-// DeleteSession deletes a session.
+// DeleteSession deletes a session and all associated artifacts from storage.
 func (c *Client) DeleteSession(sessionID SessionID) error {
 	if c.store == nil {
 		return fmt.Errorf("session persistence not enabled")
 	}
-	return c.store.DeleteSession(sessionID)
+	if err := c.store.DeleteSession(sessionID); err != nil {
+		return err
+	}
+	if c.artifacts != nil {
+		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+		defer cancel()
+		deleteSessionArtifacts(ctx, c.artifacts, string(sessionID))
+	}
+	return nil
+}
+
+// deleteSessionArtifacts removes all artifacts stored under sessions/{id}/.
+// This handles S3 storage where os.RemoveAll is not available.
+// Errors are intentionally ignored — artifact cleanup is best-effort.
+func deleteSessionArtifacts(ctx context.Context, store ArtifactStore, sessionID string) {
+	refs, err := store.List(ctx, ArtifactListOptions{Prefix: "sessions/" + sessionID})
+	if err != nil {
+		return
+	}
+	for _, ref := range refs {
+		_ = store.Delete(ctx, ref.Key)
+	}
 }
 
 // Close releases SDK-owned resources. Safe to call multiple times.

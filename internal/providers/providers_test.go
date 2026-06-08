@@ -36,7 +36,7 @@ func TestProviderAdapterDispatch(t *testing.T) {
 		{"anthropic", types.APIProviderAnthropic, "claude-x", "/v1/messages", [2]string{"x-api-key", "k"}, "messages"},
 		{"foundry", types.APIProviderFoundry, "claude-x", "/v1/messages", [2]string{"api-key", "k"}, "messages"},
 		{"openai", types.APIProviderOpenAI, "gpt", "/chat/completions", [2]string{"Authorization", "Bearer k"}, "messages"},
-		{"zai", types.APIProviderZAi, "glm", "/chat/completions", [2]string{"Authorization", "Bearer k"}, "messages"},
+		{"zai", types.APIProviderZAi, "glm", "/chat/completions", [2]string{"x-api-key", "k"}, "messages"},
 		{"minimax", types.APIProviderMiniMax, "mm", "/chat/completions", [2]string{"Authorization", "Bearer k"}, "messages"},
 		{"openrouter", types.APIProviderOpenRouter, "or", "/chat/completions", [2]string{"Authorization", "Bearer k"}, "messages"},
 		{"mistral", types.APIProviderMistral, "mi", "/chat/completions", [2]string{"Authorization", "Bearer k"}, "messages"},

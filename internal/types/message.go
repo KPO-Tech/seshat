@@ -626,13 +626,40 @@ func CanonicalMessagesFromTranscriptEntries(entries []TranscriptEntry) []Message
 	return messages
 }
 
-func CanonicalTranscriptHash(messages []Message) (string, error) {
+// LegacyCanonicalTranscriptHash calculates the hash of the raw marshaled entries
+// without recursively normalizing nested objects to maps.
+func LegacyCanonicalTranscriptHash(messages []Message) (string, error) {
 	entries := CanonicalTranscriptEntriesFromMessages(messages, "")
 	payload, err := json.Marshal(entries)
 	if err != nil {
 		return "", fmt.Errorf("failed to marshal canonical transcript entries: %w", err)
 	}
 	hash := sha256.Sum256(payload)
+	return hex.EncodeToString(hash[:]), nil
+}
+
+// CanonicalTranscriptHash computes a stable, normalized SHA-256 hash of the
+// canonical transcript entries. It round-trips the JSON payload through a generic
+// unmarshaling step to convert any nested structures (such as GitDiff) to generic
+// maps, ensuring key ordering is consistently alphabetical.
+func CanonicalTranscriptHash(messages []Message) (string, error) {
+	entries := CanonicalTranscriptEntriesFromMessages(messages, "")
+	payload, err := json.Marshal(entries)
+	if err != nil {
+		return "", fmt.Errorf("failed to marshal canonical transcript entries: %w", err)
+	}
+
+	var raw any
+	if err := json.Unmarshal(payload, &raw); err != nil {
+		return "", fmt.Errorf("failed to unmarshal canonical transcript entries for normalization: %w", err)
+	}
+
+	normalizedPayload, err := json.Marshal(raw)
+	if err != nil {
+		return "", fmt.Errorf("failed to marshal normalized canonical transcript entries: %w", err)
+	}
+
+	hash := sha256.Sum256(normalizedPayload)
 	return hex.EncodeToString(hash[:]), nil
 }
 
@@ -984,6 +1011,11 @@ func ValidateCompactionBoundary(messages []Message) error {
 		return err
 	}
 	if metadata.PreservedTailHash != actualHash {
+		// Fallback: check if the legacy hash matches
+		legacyHash, err := LegacyCanonicalTranscriptHash(preserved)
+		if err == nil && metadata.PreservedTailHash == legacyHash {
+			return nil
+		}
 		return fmt.Errorf("compaction boundary preserved tail hash mismatch")
 	}
 	if err := validatePreservedTailToolResults(preserved); err != nil {

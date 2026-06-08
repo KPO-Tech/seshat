@@ -80,10 +80,33 @@ type SessionCreatedMsg struct {
 	Err error
 }
 
+// HistoryTool is one completed tool call embedded in a HistoryEntry.
+// Metadata is the full TUI metadata map (content, execution_duration_ms, etc.)
+// stored alongside the tool result in the transcript.
+// Input is the tool's input map (stored separately in ToolUseContent).
+type HistoryTool struct {
+	ID       string
+	Name     string
+	Input    map[string]any
+	Metadata map[string]any // includes "content", "execution_duration_ms", etc.
+}
+
+// HistoryEntry is one message in a replayed session transcript.
+type HistoryEntry struct {
+	Role         string // "user" | "assistant"
+	Text         string // combined text content
+	Thinking     string // thinking block content (assistant only)
+	Tools        []HistoryTool
+	InputTokens  int
+	OutputTokens int
+	StopReason   string
+}
+
 // SessionLoadedMsg signals a session was loaded successfully.
 type SessionLoadedMsg struct {
-	ID  string
-	Err error
+	ID      string
+	History []HistoryEntry
+	Err     error
 }
 
 // ErrMsg wraps an error to display in the UI.
@@ -110,6 +133,26 @@ type ModelListMsg struct {
 type ModelChangedMsg struct {
 	Provider string
 	Model    string
+}
+
+// ─── Search config types ──────────────────────────────────────────────────────
+
+// SearchKeyStatus describes one web-search provider in the TUI.
+type SearchKeyStatus struct {
+	ID          string // "tavily", "exa", "jina", "langsearch", "searxng", "ddg"
+	DisplayName string
+	Description string
+	EnvVar      string // e.g. "TAVILY_API_KEY"
+	DBKey       string // credential DB key
+	NeedsKey    bool   // false for DDG (truly no config), true for all others
+	FieldLabel  string // label shown in the edit dialog; defaults to "API Key"
+	IsSet       bool   // a value is currently stored in the DB
+}
+
+// SearchConfig is the TUI's view of the web search configuration.
+type SearchConfig struct {
+	Mode      string // "auto", "tavily", "exa", etc.
+	Providers []SearchKeyStatus
 }
 
 // ─── Provider config types ────────────────────────────────────────────────────
@@ -143,6 +186,8 @@ type SessionInfo struct {
 	CreatedAt time.Time
 	Turns     int
 	Tokens    int
+	// Preview is the first user message, truncated — empty for old sessions.
+	Preview string
 }
 
 // ToolInfo is the TUI's lightweight view of one registered tool.
@@ -231,4 +276,15 @@ type Workspace interface {
 
 	// DeleteProviderField removes a credential field for a provider.
 	DeleteProviderField(ctx context.Context, providerID, fieldKey string) error
+
+	// ── Search configuration ──────────────────────────────────────────────
+
+	// LoadSearchConfig returns the current web search provider configuration.
+	LoadSearchConfig(ctx context.Context) SearchConfig
+
+	// SaveSearchKey persists an API key for a search provider under dbKey.
+	SaveSearchKey(ctx context.Context, dbKey, value string) error
+
+	// SaveSearchMode sets the active web search provider mode (e.g. "auto", "tavily").
+	SaveSearchMode(ctx context.Context, mode string) error
 }

@@ -57,10 +57,12 @@ func ClearPlanSlug(sessionID types.SessionID) { planCache.ClearSlug(sessionID) }
 func ClearAllPlanSlugs() { planCache.ClearAllSlugs() }
 
 // GetPlanFilePath returns the full path to the plan file for a session.
-// When agentID is non-nil the path includes the agent identifier, allowing
+// Plans are stored under sessions/{sessionID}/plans/ so that deleting a session
+// directory removes all its plans in one shot.
+// When agentID is non-nil the filename includes the agent identifier, allowing
 // separate plan files per sub-agent within the same session.
 func GetPlanFilePath(sessionID types.SessionID, agentID *types.AgentID) string {
-	dir := planCache.GetDirectory()
+	dir := runtimepath.SessionPlansDir("", string(sessionID))
 	slug := planCache.GetSlug(sessionID)
 	if agentID != nil {
 		return filepath.Join(dir, slug+"-"+string(*agentID)+".md")
@@ -68,8 +70,17 @@ func GetPlanFilePath(sessionID types.SessionID, agentID *types.AgentID) string {
 	return filepath.Join(dir, slug+".md")
 }
 
-// GetDisplayPath returns a user-friendly relative path to the plan file.
-func GetDisplayPath(planFilePath string) string { return planCache.GetDisplayPath(planFilePath) }
+// GetDisplayPath returns a user-friendly tilde-prefixed path to the plan file.
+func GetDisplayPath(planFilePath string) string {
+	home, err := os.UserHomeDir()
+	if err != nil || home == "" {
+		return planFilePath
+	}
+	if rel, err := filepath.Rel(home, planFilePath); err == nil && !filepath.IsAbs(rel) {
+		return "~/" + rel
+	}
+	return planFilePath
+}
 
 // PlanExists checks if a plan file exists for the session.
 func PlanExists(sessionID types.SessionID, agentID *types.AgentID) bool {

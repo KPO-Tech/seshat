@@ -2,10 +2,11 @@ package vector
 
 import (
 	"context"
-	dbpkg "github.com/EngineerProjects/nexus-engine/internal/db"
 	"os"
 	"path/filepath"
 	"testing"
+
+	dbpkg "github.com/EngineerProjects/nexus-engine/internal/db"
 )
 
 func TestMemoryStoreSearchRanksByCosineSimilarity(t *testing.T) {
@@ -627,5 +628,114 @@ func TestSQLiteStore_HybridSearch_FilterWithHybrid(t *testing.T) {
 		if r.Record.Metadata["src"] != "doc-a" {
 			t.Errorf("filter bypassed in hybrid search: got src=%s", r.Record.Metadata["src"])
 		}
+	}
+}
+
+func TestHNSWStore_UpsertSearchPersistence(t *testing.T) {
+	dir := t.TempDir()
+	ctx := context.Background()
+
+	store, err := NewHNSWStore(dir)
+	if err != nil {
+		t.Fatalf("NewHNSWStore: %v", err)
+	}
+
+	records := []Record{
+		{Namespace: "ns", Key: "a", Text: "apple", Vector: []float32{1, 0, 0}},
+		{Namespace: "ns", Key: "b", Text: "banana", Vector: []float32{0, 1, 0}},
+		{Namespace: "ns", Key: "c", Text: "cherry", Vector: []float32{0, 0, 1}},
+	}
+	if err := store.Upsert(ctx, records); err != nil {
+		t.Fatalf("Upsert: %v", err)
+	}
+
+	// Vector [1,0,0] should rank "a" first.
+	results, err := store.Search(ctx, Query{Namespace: "ns", Vector: []float32{1, 0, 0}, TopK: 1})
+	if err != nil {
+		t.Fatalf("Search: %v", err)
+	}
+	if len(results) == 0 || results[0].Record.Key != "a" {
+		t.Fatalf("expected key=a as top result, got %+v", results)
+	}
+	if results[0].Record.Text != "apple" {
+		t.Fatalf("expected text=apple, got %q", results[0].Record.Text)
+	}
+
+	// Score should be ~1.0 for identical direction.
+	if results[0].Score < 0.99 {
+		t.Fatalf("expected score ~1, got %f", results[0].Score)
+	}
+
+	// HasNamespace
+	has, err := store.HasNamespace(ctx, "ns")
+	if err != nil || !has {
+		t.Fatalf("HasNamespace: has=%v err=%v", has, err)
+	}
+
+	// --- Persistence: reload from disk ---
+	store2, err := NewHNSWStore(dir)
+	if err != nil {
+		t.Fatalf("reload NewHNSWStore: %v", err)
+	}
+	results2, err := store2.Search(ctx, Query{Namespace: "ns", Vector: []float32{0, 1, 0}, TopK: 1})
+	if err != nil {
+		t.Fatalf("Search after reload: %v", err)
+	}
+	if len(results2) == 0 || results2[0].Record.Key != "b" {
+		t.Fatalf("expected key=b after reload, got %+v", results2)
+	}
+
+	// DeleteKeys
+	if err := store2.DeleteKeys(ctx, "ns", []string{"a"}); err != nil {
+		t.Fatalf("DeleteKeys: %v", err)
+	}
+	got, err := store2.Get(ctx, "ns", []string{"a"})
+	if err != nil {
+		t.Fatalf("Get after delete: %v", err)
+	}
+	if len(got) != 0 {
+		t.Fatalf("expected key=a deleted, still got %+v", got)
+	}
+
+	// DeleteNamespace
+	if err := store2.DeleteNamespace(ctx, "ns"); err != nil {
+		t.Fatalf("DeleteNamespace: %v", err)
+	}
+	has, err = store2.HasNamespace(ctx, "ns")
+	if err != nil || has {
+		t.Fatalf("after DeleteNamespace: has=%v err=%v", has, err)
+	}
+}
+
+func TestHNSWStore_HybridKeywordBlend(t *testing.T) {
+	dir := t.TempDir()
+	ctx := context.Background()
+
+	store, err := NewHNSWStore(dir)
+	if err != nil {
+		t.Fatalf("NewHNSWStore: %v", err)
+	}
+	_ = store.Upsert(ctx, []Record{
+		{Namespace: "k", Key: "x", Text: "the quick brown fox", Vector: []float32{1, 0}},
+		{Namespace: "k", Key: "y", Text: "lazy dog sleeps", Vector: []float32{1, 0}}, // same vector direction
+	})
+
+	// Without hybrid both should have the same vector score.
+	// With hybrid=1 "fox" should rank "x" higher.
+	results, err := store.Search(ctx, Query{
+		Namespace:    "k",
+		Vector:       []float32{1, 0},
+		TopK:         2,
+		HybridWeight: 1.0,
+		QueryText:    "fox",
+	})
+	if err != nil {
+		t.Fatalf("hybrid search: %v", err)
+	}
+	if len(results) < 2 {
+		t.Fatalf("expected 2 results, got %d", len(results))
+	}
+	if results[0].Record.Key != "x" {
+		t.Fatalf("expected 'x' to rank first with keyword 'fox', got %+v", results)
 	}
 }

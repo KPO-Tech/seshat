@@ -39,7 +39,7 @@ func DefaultHTTPClient(resolver webcore.HostResolver) *http.Client {
 }
 
 // fetchViaHTTP keeps the fast path lean and cache-backed for the common case of static or server-rendered pages.
-func (s *Service) fetchViaHTTP(ctx context.Context, urlStr string) (FetchedContent, error) {
+func (s *Service) fetchViaHTTP(ctx context.Context, urlStr string, sessionID string) (FetchedContent, error) {
 	if entry, ok := s.cache.Get(urlStr); ok {
 		return FetchedContent{
 			Content:            entry.Content,
@@ -97,7 +97,7 @@ func (s *Service) fetchViaHTTP(ctx context.Context, urlStr string) (FetchedConte
 		browserRecommended = shouldRecommendBrowser(string(body))
 		content = HTMLToMarkdown(content, finalURL)
 	} else if !isTextualContentType(contentType) {
-		persistedPath, persistedSize, err = s.persistArtifact(requestCtx, finalURL, contentType, body)
+		persistedPath, persistedSize, err = s.persistArtifact(requestCtx, sessionID, finalURL, contentType, body)
 		if err != nil {
 			return FetchedContent{}, err
 		}

@@ -11,6 +11,7 @@ import (
 	"github.com/EngineerProjects/nexus-engine/internal/engine"
 	"github.com/EngineerProjects/nexus-engine/internal/runtime/tasks"
 	tool "github.com/EngineerProjects/nexus-engine/internal/tools/registry"
+	"github.com/EngineerProjects/nexus-engine/internal/tools/schema"
 	worktreeTool "github.com/EngineerProjects/nexus-engine/internal/tools/special/worktree"
 	"github.com/EngineerProjects/nexus-engine/internal/types"
 )
@@ -116,6 +117,47 @@ func (t *AgentTool) Definition() tool.Definition {
 			"is_stateful":   false,
 			"subagent_type": "agent",
 		},
+		InputSchema: schema.FromMap(map[string]any{
+			"type": "object",
+			"properties": map[string]any{
+				"type": map[string]any{
+					"type":        "string",
+					"description": "Agent type to run. Must be one of the built-in types.",
+					"enum":        []string{"general-purpose", "explore", "browse", "plan", "verify"},
+				},
+				"task": map[string]any{
+					"type":        "string",
+					"description": "The self-contained task description for the agent. Include exact file paths, goals, constraints, and what to return.",
+				},
+				"maxTurns": map[string]any{
+					"type":        "integer",
+					"description": "Maximum autonomous turns. Default: 10 for sub-agents.",
+					"minimum":     1,
+					"maximum":     200,
+				},
+				"run_in_background": map[string]any{
+					"type":        "boolean",
+					"description": "When true, the agent runs asynchronously and returns a task ID immediately. Use TaskGet to poll status.",
+					"default":     false,
+				},
+				"fork": map[string]any{
+					"type":        "boolean",
+					"description": "When true, the sub-agent inherits the parent session's message history.",
+					"default":     false,
+				},
+				"isolation": map[string]any{
+					"type":        "string",
+					"description": "Set to 'worktree' to run the agent in an isolated git worktree. Changes are isolated until merged.",
+					"enum":        []string{"worktree"},
+				},
+				"tools": map[string]any{
+					"type":        "array",
+					"description": "Optional list of tool name patterns to restrict the sub-agent's tool surface.",
+					"items":       map[string]any{"type": "string"},
+				},
+			},
+			"required": []string{"type", "task"},
+		}),
 	}
 }
 
@@ -136,8 +178,15 @@ func (t *AgentTool) Call(
 	agentType := ""
 	task := ""
 
+	// Accept both "type" and "agent_type" — the LLM sometimes uses the spawn_agent
+	// convention. Priority: "type" > "agent_type" to keep backwards compat.
 	if v, ok := parsedInput["type"].(string); ok {
 		agentType = v
+	}
+	if agentType == "" {
+		if v, ok := parsedInput["agent_type"].(string); ok {
+			agentType = v
+		}
 	}
 	if v, ok := parsedInput["task"].(string); ok {
 		task = v
@@ -147,9 +196,17 @@ func (t *AgentTool) Call(
 	}
 
 	if agentType == "" {
+		available := t.listAvailableAgents()
+		typeList := ""
+		for _, a := range available {
+			typeList += fmt.Sprintf("  - %s: %s\n", a["type"], a["whenToUse"])
+		}
 		return tool.CallResult{
-			Data:    map[string]any{"error": "type is required"},
-			Content: "Error: type is required",
+			Data: map[string]any{
+				"error":     "type is required",
+				"available": available,
+			},
+			Content: fmt.Sprintf("Error: 'type' field is required. Available agent types:\n%s", typeList),
 		}, nil
 	}
 	if task == "" {
@@ -236,16 +293,20 @@ func (t *AgentTool) Call(
 				Content: fmt.Sprintf("Agent failed (worktree): %s\n\nError: %s", result.Output, result.Error),
 			}, nil
 		}
+		wtData := map[string]any{
+			"agentType":    agentType,
+			"task":         task,
+			"turns":        result.Turns,
+			"toolUses":     result.ToolUses,
+			"success":      result.Success,
+			"isolation":    "worktree",
+			"worktreePath": result.WorktreePath,
+		}
+		if len(result.Sources) > 0 {
+			wtData["sources"] = result.Sources
+		}
 		return tool.CallResult{
-			Data: map[string]any{
-				"agentType":    agentType,
-				"task":         task,
-				"turns":        result.Turns,
-				"toolUses":     result.ToolUses,
-				"success":      result.Success,
-				"isolation":    "worktree",
-				"worktreePath": result.WorktreePath,
-			},
+			Data:    wtData,
 			Content: result.Output + "\n\nWorktree created at: " + result.WorktreePath + "\nUse ExitWorktree to merge or discard changes.",
 		}, nil
 	}
@@ -267,17 +328,18 @@ func (t *AgentTool) Call(
 				Content: fmt.Sprintf("Fork agent failed: %s\n\nError: %s", result.Output, result.Error),
 			}, nil
 		}
-		return tool.CallResult{
-			Data: map[string]any{
-				"agentType": agentType,
-				"task":      task,
-				"turns":     result.Turns,
-				"toolUses":  result.ToolUses,
-				"success":   result.Success,
-				"fork":      true,
-			},
-			Content: result.Output,
-		}, nil
+		forkData := map[string]any{
+			"agentType": agentType,
+			"task":      task,
+			"turns":     result.Turns,
+			"toolUses":  result.ToolUses,
+			"success":   result.Success,
+			"fork":      true,
+		}
+		if len(result.Sources) > 0 {
+			forkData["sources"] = result.Sources
+		}
+		return tool.CallResult{Data: forkData, Content: result.Output}, nil
 	}
 
 	result := t.runAgent(ctx, agentType, task, maxTurns, allowedTools, agentEventFn)
@@ -287,16 +349,17 @@ func (t *AgentTool) Call(
 			Content: fmt.Sprintf("Agent failed: %s\n\nError: %s", result.Output, result.Error),
 		}, nil
 	}
-	return tool.CallResult{
-		Data: map[string]any{
-			"agentType": agentType,
-			"task":      task,
-			"turns":     result.Turns,
-			"toolUses":  result.ToolUses,
-			"success":   result.Success,
-		},
-		Content: result.Output,
-	}, nil
+	data := map[string]any{
+		"agentType": agentType,
+		"task":      task,
+		"turns":     result.Turns,
+		"toolUses":  result.ToolUses,
+		"success":   result.Success,
+	}
+	if len(result.Sources) > 0 {
+		data["sources"] = result.Sources
+	}
+	return tool.CallResult{Data: data, Content: result.Output}, nil
 }
 
 // runAgent executes the agent synchronously.

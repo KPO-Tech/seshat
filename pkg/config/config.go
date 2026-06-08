@@ -141,7 +141,7 @@ func DefaultConfig() Config {
 	return Config{
 		RuntimeRoot:             "",
 		Cwd:                     ".",
-		Model:                   "glm-4.5",
+		Model:                   "",
 		MaxTokens:               4096,
 		Temperature:             0.7,
 		MCPEnabled:              true,
@@ -194,11 +194,15 @@ func LoadInto(config *Config) error {
 	loadEnvFile("../.env") //nolint:errcheck // best-effort .env loading
 
 	v := viper.New()
-	v.SetConfigName(".nexus")
 	v.SetConfigType("yaml")
-	v.AddConfigPath("$HOME")
-	v.AddConfigPath(".")
 	v.SetEnvPrefix("NEXUS")
+
+	// Primary location: derived from NEXUS_RUNTIME_ROOT (or ~/.config/nexus by default).
+	// CLI sets NEXUS_RUNTIME_ROOT=~/.config/nexus-cli before calling Load().
+	v.SetConfigName("config")
+	v.AddConfigPath(runtimepath.ResolveRoot(""))
+	// Fallback: legacy ~/.nexus.yaml for migration
+	v.AddConfigPath("$HOME")
 
 	v.BindEnv("runtime_root", runtimepath.EnvRuntimeRoot)
 	v.BindEnv("cwd", "NEXUS_CWD")
@@ -269,7 +273,16 @@ func LoadInto(config *Config) error {
 	v.SetDefault("enable_api_keys", true)
 
 	if err := v.ReadInConfig(); err != nil {
-		if _, ok := err.(viper.ConfigFileNotFoundError); !ok {
+		if _, ok := err.(viper.ConfigFileNotFoundError); ok {
+			// Primary config not found — try legacy ~/.nexus.yaml as a one-time fallback.
+			if home, herr := os.UserHomeDir(); herr == nil {
+				legacy := filepath.Join(home, ".nexus.yaml")
+				if _, serr := os.Stat(legacy); serr == nil {
+					v.SetConfigFile(legacy)
+					_ = v.ReadInConfig() //nolint:errcheck // best-effort legacy read
+				}
+			}
+		} else {
 			return fmt.Errorf("failed to read config: %w", err)
 		}
 	}
@@ -400,10 +413,12 @@ func DetectProviderFromModel(model string) sdk.APIProvider {
 }
 
 // ParseModelIdentifier normalizes optional provider prefixes like "openai:gpt-4o".
+// Returns an empty ModelIdentifier when raw is empty — callers that need a
+// concrete default should apply sdk.DefaultClientConfig().Model themselves.
 func ParseModelIdentifier(raw string) sdk.ModelIdentifier {
 	value := strings.TrimSpace(raw)
 	if value == "" {
-		return sdk.DefaultClientConfig().Model
+		return sdk.ModelIdentifier{}
 	}
 
 	provider := sdk.APIProviderAnthropic

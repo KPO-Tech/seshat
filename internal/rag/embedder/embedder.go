@@ -140,7 +140,19 @@ func (e *Embedder) embedOpenAI(ctx context.Context, texts []string) ([][]float32
 
 	out := make([][]float32, len(result.Data))
 	for i, d := range result.Data {
+		if len(d.Embedding) == 0 {
+			return nil, fmt.Errorf("embedding %d from API is empty", i)
+		}
 		out[i] = d.Embedding
+	}
+	// Validate that all embeddings share the same dimension (catches misconfigured models).
+	if len(out) > 0 {
+		dim := len(out[0])
+		for i, v := range out {
+			if len(v) != dim {
+				return nil, fmt.Errorf("embedding dimension mismatch: expected %d, got %d at index %d", dim, len(v), i)
+			}
+		}
 	}
 	return out, nil
 }
@@ -200,6 +212,18 @@ func (e *Embedder) embedOllama(ctx context.Context, texts []string) ([][]float32
 	}
 	if len(result.Embeddings) != len(texts) {
 		return nil, fmt.Errorf("expected %d embeddings from ollama, got %d", len(texts), len(result.Embeddings))
+	}
+	// Validate that all embeddings share the same dimension.
+	if len(result.Embeddings) > 0 {
+		dim := len(result.Embeddings[0])
+		if dim == 0 {
+			return nil, fmt.Errorf("ollama returned empty embedding vector")
+		}
+		for i, v := range result.Embeddings {
+			if len(v) != dim {
+				return nil, fmt.Errorf("ollama embedding dimension mismatch: expected %d, got %d at index %d", dim, len(v), i)
+			}
+		}
 	}
 	return result.Embeddings, nil
 }

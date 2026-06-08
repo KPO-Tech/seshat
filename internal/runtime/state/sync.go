@@ -1,6 +1,7 @@
 package state
 
 import (
+	"strings"
 	"time"
 
 	"github.com/EngineerProjects/nexus-engine/internal/types"
@@ -65,6 +66,35 @@ func countCanonicalTranscriptToolResults(messages []types.Message) int {
 	return types.CountToolResultMessages(canonicalTranscriptMessages(messages))
 }
 
+// firstUserMessagePreview returns a trimmed preview of the first user text
+// message in the canonical transcript (at most 120 runes).
+func firstUserMessagePreview(messages []types.Message) string {
+	for _, msg := range messages {
+		if msg.Role != types.RoleUser {
+			continue
+		}
+		for _, block := range msg.Content {
+			if tc, ok := block.(types.TextContent); ok {
+				text := strings.TrimSpace(tc.Text)
+				if text == "" {
+					continue
+				}
+				// Trim to first line and cap at 120 runes.
+				if idx := strings.IndexByte(text, '\n'); idx >= 0 {
+					text = text[:idx]
+				}
+				r := []rune(text)
+				if len(r) > 120 {
+					r = r[:120]
+					text = string(r) + "…"
+				}
+				return text
+			}
+		}
+	}
+	return ""
+}
+
 // canonicalTranscriptSummary derives the metadata snapshot stored alongside a
 // persisted session so restore/list operations can inspect transcript shape
 // without reparsing the whole history at each call site.
@@ -73,6 +103,9 @@ func canonicalTranscriptSummary(messages []types.Message) map[string]any {
 		"message_count": countCanonicalTranscriptMessages(messages),
 		"turn_count":    countCanonicalTranscriptTurns(messages),
 		"tool_results":  countCanonicalTranscriptToolResults(messages),
+	}
+	if preview := firstUserMessagePreview(messages); preview != "" {
+		summary["first_user_message"] = preview
 	}
 	if compaction := lastCompactionMetadata(messages); compaction != nil {
 		summary["last_compaction_kind"] = compaction.Kind

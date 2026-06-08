@@ -176,14 +176,8 @@ func StoreScreenshotRef(ctx context.Context, store ArtifactStore, data []byte, s
 			return ArtifactRef{}, err
 		}
 	}
-	return store.PutArtifact(ctx, ArtifactPutRequest{
-		Namespace:   NamespaceBrowserScreenshots,
-		Filename:    "screenshot.png",
-		SessionID:   sessionID,
-		PageID:      pageID,
-		ContentType: "image/png",
-		Timestamp:   time.Now().UTC(),
-	}, data)
+	key := ScreenshotKey(sessionID, pageID, time.Now().UTC())
+	return store.Put(ctx, key, data, "image/png")
 }
 
 func StoreDocumentRef(ctx context.Context, store ArtifactStore, data []byte, filename string) (ArtifactRef, error) {
@@ -218,7 +212,8 @@ func StoreRAGDocumentRef(ctx context.Context, store ArtifactStore, data []byte, 
 	}, data)
 }
 
-func StoreWebArtifactRef(ctx context.Context, store ArtifactStore, data []byte, filename string, contentType string) (ArtifactRef, error) {
+// StoreWebArtifactRef persists web-fetched content under the session's artifacts/web/ dir.
+func StoreWebArtifactRef(ctx context.Context, store ArtifactStore, data []byte, sessionID, filename, contentType string) (ArtifactRef, error) {
 	if store == nil {
 		var err error
 		store, err = DefaultArtifactStore()
@@ -229,12 +224,40 @@ func StoreWebArtifactRef(ctx context.Context, store ArtifactStore, data []byte, 
 	if contentType == "" {
 		contentType = DetectContentType(filename)
 	}
-	return store.PutArtifact(ctx, ArtifactPutRequest{
-		Namespace:   NamespaceWebArtifacts,
-		Filename:    filename,
-		ContentType: contentType,
-		Timestamp:   time.Now().UTC(),
-	}, data)
+	key := WebArtifactKey(sessionID, filename, time.Now().UTC())
+	return store.Put(ctx, key, data, contentType)
+}
+
+// StoreGeneratedImageRef persists an AI-generated image under the session's artifacts/images/ dir.
+func StoreGeneratedImageRef(ctx context.Context, store ArtifactStore, data []byte, sessionID, filename, contentType string) (ArtifactRef, error) {
+	if store == nil {
+		var err error
+		store, err = DefaultArtifactStore()
+		if err != nil {
+			return ArtifactRef{}, err
+		}
+	}
+	if contentType == "" {
+		contentType = DetectContentType(filename)
+	}
+	key := GeneratedImageKey(sessionID, filename, time.Now().UTC())
+	return store.Put(ctx, key, data, contentType)
+}
+
+// StoreAudioRef persists a TTS/STT audio file under the session's artifacts/audio/ dir.
+func StoreAudioRef(ctx context.Context, store ArtifactStore, data []byte, sessionID, filename, contentType string) (ArtifactRef, error) {
+	if store == nil {
+		var err error
+		store, err = DefaultArtifactStore()
+		if err != nil {
+			return ArtifactRef{}, err
+		}
+	}
+	if contentType == "" {
+		contentType = DetectContentType(filename)
+	}
+	key := AudioKey(sessionID, filename, time.Now().UTC())
+	return store.Put(ctx, key, data, contentType)
 }
 
 func copyRefURL(ref ArtifactRef) (string, error) {

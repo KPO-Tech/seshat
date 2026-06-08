@@ -8,9 +8,25 @@ import (
 	tea "charm.land/bubbletea/v2"
 	"github.com/EngineerProjects/nexus-engine/internal/tui"
 	"github.com/EngineerProjects/nexus-engine/internal/tui/common"
+	"github.com/charmbracelet/x/ansi"
 )
 
 type mockWorkspace struct{}
+
+type trackingWorkspace struct {
+	mockWorkspace
+	deleteCalls []string
+	listCalls   int
+}
+
+func (w *trackingWorkspace) DeleteSession(_ context.Context, id string) error {
+	w.deleteCalls = append(w.deleteCalls, id)
+	return nil
+}
+
+func (w *trackingWorkspace) ListSessions(context.Context) {
+	w.listCalls++
+}
 
 func (mockWorkspace) ListSessions(context.Context)                {}
 func (mockWorkspace) CreateSession(context.Context)               {}
@@ -45,6 +61,11 @@ func (mockWorkspace) SaveProviderField(context.Context, string, string, string) 
 func (mockWorkspace) DeleteProviderField(context.Context, string, string) error {
 	return nil
 }
+func (mockWorkspace) LoadSearchConfig(context.Context) tui.SearchConfig {
+	return tui.SearchConfig{Mode: "auto"}
+}
+func (mockWorkspace) SaveSearchKey(context.Context, string, string) error { return nil }
+func (mockWorkspace) SaveSearchMode(context.Context, string) error        { return nil }
 
 func TestModelRelayoutPropagatesChildSizes(t *testing.T) {
 	m := New(mockWorkspace{}, context.Background())
@@ -57,8 +78,8 @@ func TestModelRelayoutPropagatesChildSizes(t *testing.T) {
 	if cw != 76 {
 		t.Fatalf("expected chat width 76, got %d", cw)
 	}
-	if ch != 19 {
-		t.Fatalf("expected chat height 19, got %d", ch)
+	if ch != 18 {
+		t.Fatalf("expected chat height 18, got %d", ch)
 	}
 	sw, sh := m.sessions.Size()
 	if sw != 80 {
@@ -156,6 +177,111 @@ func TestModelFooterSimplifiesPrimaryActions(t *testing.T) {
 	}
 	if !strings.Contains(footer, "ctrl+p") || !strings.Contains(footer, "settings") || !strings.Contains(footer, "15 total") {
 		t.Fatalf("expected footer to include settings and total token usage, got %q", footer)
+	}
+}
+
+func TestModelViewChatIncludesSpacingBelowHeader(t *testing.T) {
+	m := New(mockWorkspace{}, context.Background())
+	m.width = 120
+	m.height = 30
+	m.activeSession = "session-123"
+	m.state = stateChat
+	m = m.relayout()
+	m.chat.AddUserMessage("hello")
+	plain := ansi.Strip(m.viewChat())
+	if !strings.Contains(plain, "\n\n  ● > hello") {
+		t.Fatalf("expected blank line between header and first message, got %q", plain)
+	}
+}
+
+func TestModelSessionDeleteKeyDispatchesDelete(t *testing.T) {
+	ws := &trackingWorkspace{}
+	m := New(ws, context.Background())
+	m.state = stateSessions
+	m.sessions.SetSessions([]tui.SessionInfo{{ID: "sess-1", ShortID: "sess-1"}})
+
+	consumed, cmd := m.handleKey(tea.KeyPressMsg{Text: "d"})
+	if !consumed {
+		t.Fatal("expected d to be handled in sessions view")
+	}
+	if cmd == nil {
+		t.Fatal("expected delete command")
+	}
+	msg := cmd()
+	result, ok := msg.(sessionDeleteResultMsg)
+	if !ok {
+		t.Fatalf("expected sessionDeleteResultMsg, got %T", msg)
+	}
+	if result.err != nil {
+		t.Fatalf("unexpected delete error: %v", result.err)
+	}
+	if len(ws.deleteCalls) != 1 || ws.deleteCalls[0] != "sess-1" {
+		t.Fatalf("expected delete of sess-1, got %#v", ws.deleteCalls)
+	}
+	if ws.listCalls != 1 {
+		t.Fatalf("expected session list refresh, got %d", ws.listCalls)
+	}
+}
+
+func TestModelCtrlSOpensSessionsAndLoadsList(t *testing.T) {
+	ws := &trackingWorkspace{}
+	m := New(ws, context.Background())
+	m.state = stateChat
+
+	consumed, cmd := m.handleKey(tea.KeyPressMsg{Code: 's', Mod: tea.ModCtrl})
+	if !consumed {
+		t.Fatal("expected ctrl+s to be handled")
+	}
+	if got := m.state; got != stateSessions {
+		t.Fatalf("expected sessions state, got %v", got)
+	}
+	if cmd == nil {
+		t.Fatal("expected session browser load command")
+	}
+	if msg := cmd(); msg != nil {
+		t.Fatalf("expected nil message from async load cmd, got %T", msg)
+	}
+	if ws.listCalls != 1 {
+		t.Fatalf("expected one session list refresh, got %d", ws.listCalls)
+	}
+}
+
+func TestModelDeletingActiveSessionResetsChatState(t *testing.T) {
+	ws := &trackingWorkspace{}
+	m := New(ws, context.Background())
+	m.state = stateSessions
+	m.activeSession = "sess-1"
+	m.busy = true
+	m.lastErr = context.Canceled
+	m.lastTurnErr = "boom"
+	m.chat.AddUserMessage("hello")
+	m.sessions.SetSessions([]tui.SessionInfo{{ID: "sess-1", ShortID: "sess-1"}})
+
+	consumed, cmd := m.handleKey(tea.KeyPressMsg{Text: "d"})
+	if !consumed {
+		t.Fatal("expected d to be handled in sessions view")
+	}
+	if got := m.state; got != stateWelcome {
+		t.Fatalf("expected welcome state after deleting active session, got %v", got)
+	}
+	if m.activeSession != "" {
+		t.Fatalf("expected active session to be cleared, got %q", m.activeSession)
+	}
+	if m.busy {
+		t.Fatal("expected busy flag to be cleared")
+	}
+	if m.lastErr != nil {
+		t.Fatalf("expected lastErr to be cleared, got %v", m.lastErr)
+	}
+	if m.lastTurnErr != "" {
+		t.Fatalf("expected lastTurnErr to be cleared, got %q", m.lastTurnErr)
+	}
+	if cmd == nil {
+		t.Fatal("expected delete command")
+	}
+	_ = cmd()
+	if len(ws.deleteCalls) != 1 || ws.deleteCalls[0] != "sess-1" {
+		t.Fatalf("expected delete of sess-1, got %#v", ws.deleteCalls)
 	}
 }
 

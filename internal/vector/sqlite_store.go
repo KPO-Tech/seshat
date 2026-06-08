@@ -7,6 +7,7 @@ import (
 	"encoding/binary"
 	"encoding/json"
 	"fmt"
+	"log"
 	"sort"
 	"strings"
 
@@ -290,7 +291,11 @@ func (s *SQLiteStore) Get(ctx context.Context, namespace string, keys []string) 
 			return nil, fmt.Errorf("scan vector record: %w", err)
 		}
 		var meta map[string]string
-		_ = json.Unmarshal([]byte(metaJSON), &meta)
+		if metaJSON != "" && metaJSON != "{}" {
+			if err := json.Unmarshal([]byte(metaJSON), &meta); err != nil {
+				log.Printf("[vector/sqlite] metadata unmarshal warning for key %q in namespace %q: %v", key, namespace, err)
+			}
+		}
 		results = append(results, Record{
 			Namespace: namespace,
 			Key:       key,
@@ -306,13 +311,13 @@ func (s *SQLiteStore) Get(ctx context.Context, namespace string, keys []string) 
 
 // HasNamespace reports whether at least one record exists in the namespace.
 func (s *SQLiteStore) HasNamespace(ctx context.Context, namespace string) (bool, error) {
-	var count int
+	var exists bool
 	err := s.db.SQL().QueryRowContext(ctx,
-		`SELECT COUNT(*) FROM vector_records WHERE namespace = ? LIMIT 1`, namespace).Scan(&count)
+		`SELECT EXISTS(SELECT 1 FROM vector_records WHERE namespace = ? LIMIT 1)`, namespace).Scan(&exists)
 	if err != nil {
 		return false, fmt.Errorf("has namespace: %w", err)
 	}
-	return count > 0, nil
+	return exists, nil
 }
 
 // DeleteNamespace removes all records for a namespace.

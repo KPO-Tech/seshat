@@ -5,7 +5,6 @@ import (
 	"time"
 
 	"github.com/EngineerProjects/nexus-engine/internal/providers"
-	"github.com/EngineerProjects/nexus-engine/internal/storage"
 	"github.com/EngineerProjects/nexus-engine/pkg/runtimepath"
 )
 
@@ -145,10 +144,9 @@ func DefaultClientConfig() *ClientConfig {
 		StorageGCEnabled:  true,
 		StorageGCInterval: time.Hour,
 		StorageGCLimit:    512,
-		StorageGCNamespaces: []string{
-			string(storage.NamespaceWebArtifacts),
-			string(storage.NamespaceBrowserScreenshots),
-			string(storage.NamespaceBrowserDownloads),
-		},
+		// Session-scoped artifacts are cleaned up via DeleteSessionDir on session
+		// deletion, not by periodic GC. Global namespaces with expiring content
+		// would go here if added in the future.
+		StorageGCNamespaces: []string{},
 	}
 }

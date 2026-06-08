@@ -1,0 +1,102 @@
+{
+  "prix_moyen_par_region": {
+    "source": "INSEE - Données 4ème trimestre 2025",
+    "evolution_nationale": {
+      "trimestrielle": "+0,2%",
+      "annuelle": "+0,1%",
+      "periode": "T1 2026"
+    },
+    "appartements": {
+      "evolution_annuelle": "+0,6%",
+      "evolution_trimestrielle": "+0,1%"
+    },
+    "maisons": {
+      "evolution_annuelle": "-0,2%",
+      "evolution_trimestrielle": "stable"
+    },
+    "regions": {
+      "Île-de-France": {
+        "evolution_trimestrielle": "positive",
+        "statut": "en hausse"
+      },
+      "Province": {
+        "evolution_trimestrielle": "stable",
+        "statut": "stable"
+      }
+    }
+  },
+  "taux_credit_immobilier": {
+    "source": "Banque de France - Taux d'usure Q1 2025",
+    "taux_moyens_pratiques": {
+      "pret_fixe_moins_10_ans": "3,46%",
+      "pret_fixe_10_20_ans": "4,35%",
+      "pret_fixe_plus_20_ans": "4,25%",
+      "pret_variable": "4,40%",
+      "pret_relais": "4,98%"
+    },
+    "taux_usure": {
+      "pret_fixe_moins_10_ans": "4,61%",
+      "pret_fixe_10_20_ans": "5,80%",
+      "pret_fixe_plus_20_ans": "5,67%",
+      "pret_variable": "5,87%",
+      "pret_relais": "6,64%"
+    }
+  },
+  "rendement_locatif_par_ville": {
+    "source": "DVF 2025 - Calculs sur prix réels de transaction",
+    "unites": "rendement brut annuel",
+    "villes": {
+      "Mulhouse": "8,6%",
+      "prix_moyen_m2": "1 180 €",
+      "profil": "haut rendement, risque élevé"
+    },
+    "Saint-Étienne": {
+      "rendement": "7,8%",
+      "prix_moyen_m2": "1 120 €",
+      "profil": "haut rendement, image difficile"
+    },
+    "Le Mans": {
+      "rendement": "6,8%",
+      "prix_moyen_m2": "non spécifié",
+      "profil": "équilibre rendement/risque"
+    },
+    "Limoges": {
+      "rendement": "6,5%",
+      "prix_moyen_m2": "non spécifié",
+      "profil": "équilibre rendement/risque"
+    },
+    "Toulouse": {
+      "rendement": "4,0%",
+      "prix_moyen_m2": "non spécifié",
+      "profil": "meilleur compromis risque/rendement"
+    },
+    "Rennes": {
+      "rendement": "4,0%",
+      "prix_moyen_m2": "non spécifié",
+      "profil": "meilleur compromis risque/rendement"
+    },
+    "Lyon": {
+      "rendement": "3,4%",
+      "prix_moyen_m2": "non spécifié",
+      "profil": "valeur refuge, demande solide"
+    },
+    "Paris": {
+      "rendement": "3,2%",
+      "prix_moyen_m2": "9 870 €",
+      "profil": "valeur refuge, rareté foncière"
+    }
+  },
+  "tendances_marche": {
+    "reprise_progressive": "Oui",
+    "transactions": "en augmentation",
+    "prix": "quasi stables à l'échelle nationale",
+    "demande_locative": "solide dans les grandes villes",
+    "liquidite": "variable selon les villes"
+  },
+  "risques": {
+    "vacance_locative": "élevée dans les villes à haut rendement",
+    "depreciation_capital": "possible dans les marchés fragilisés",
+    "fiscalite": "réduit le rendement net de 2-3 points",
+    "taux_interet": "stabilisation à la baisse depuis mi-2024"
+  }
+}
