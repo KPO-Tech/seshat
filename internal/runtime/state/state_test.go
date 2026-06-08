@@ -206,3 +206,79 @@ func TestRestoreSessionStateFailsOnMalformedTranscriptEntry(t *testing.T) {
 		t.Fatalf("expected ErrMalformedTranscriptEntry, got %v", err)
 	}
 }
+
+func TestRestoreSessionStateWithCheckpointMismatchFallback(t *testing.T) {
+	store, err := NewStoreWithBackend(NewMemoryBackend())
+	if err != nil {
+		t.Fatalf("NewStoreWithBackend failed: %v", err)
+	}
+
+	sessionID := types.SessionID("session-fallback-mismatch")
+	createdAt := time.Unix(1700000000, 0).UTC()
+	updatedAt := createdAt.Add(2 * time.Minute)
+	metadata := &types.SessionMetadata{
+		ID:          sessionID,
+		Status:      types.SessionStatusActive,
+		CreatedAt:   createdAt,
+		UpdatedAt:   updatedAt,
+		TotalTurns:  1,
+		TotalTokens: 42,
+		Additional: map[string]any{
+			"canonical_transcript": map[string]any{
+				"message_count":      2,
+				"turn_count":         1,
+				"tool_results":       0,
+				"first_user_message": "hello",
+			},
+		},
+	}
+
+	msg1 := types.UserMessage("msg-1", "hello")
+	msg1.Metadata = &types.MessageMetadata{TurnID: "turn-1"}
+	msg2 := types.AssistantMessage("msg-2", []types.ContentBlock{
+		types.TextContent{Text: "world"},
+	})
+	msg2.Metadata = &types.MessageMetadata{TurnID: "turn-1"}
+	messages := []types.Message{msg1, msg2}
+
+	// Save the session and transcript first
+	if err := store.SaveSession(sessionID, metadata); err != nil {
+		t.Fatalf("SaveSession failed: %v", err)
+	}
+	if err := store.SaveCanonicalMessages(sessionID, messages); err != nil {
+		t.Fatalf("SaveCanonicalMessages failed: %v", err)
+	}
+
+	// Save a checkpoint with a completely wrong MessagesHash, but matching metadata summary
+	checkpoint := &Checkpoint{
+		SessionID:    sessionID,
+		TurnNumber:   1,
+		MessagesHash: "wrong-hash-should-fallback",
+		Timestamp:    time.Now().Unix(),
+		Metadata: map[string]any{
+			"status": "active",
+			"canonical_transcript": map[string]any{
+				"message_count":      2,
+				"turn_count":         1,
+				"tool_results":       0,
+				"first_user_message": "hello",
+			},
+		},
+	}
+	if err := store.SaveCheckpoint(sessionID, checkpoint); err != nil {
+		t.Fatalf("SaveCheckpoint failed: %v", err)
+	}
+
+	// Restoring should succeed thanks to our fallback verification logic!
+	restoredMetadata, restoredMessages, err := store.RestoreSessionState(sessionID)
+	if err != nil {
+		t.Fatalf("RestoreSessionState failed despite matching summary: %v", err)
+	}
+
+	if len(restoredMessages) != 2 {
+		t.Fatalf("expected 2 restored messages, got %d", len(restoredMessages))
+	}
+	if restoredMetadata.ID != sessionID {
+		t.Fatalf("expected restored metadata ID %q, got %q", sessionID, restoredMetadata.ID)
+	}
+}
