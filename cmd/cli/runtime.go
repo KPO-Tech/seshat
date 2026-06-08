@@ -236,16 +236,16 @@ func parsePermissionMode(raw string) (sdk.PermissionMode, error) {
 		return "", fmt.Errorf("unsupported permission mode %q: plan is now an execution mode, not a permission mode", raw)
 	}
 
-	switch sdk.PermissionMode(strings.ToLower(value)) {
-	case sdk.PermissionModeOnRequest:
+	switch {
+	case strings.EqualFold(value, string(sdk.PermissionModeOnRequest)):
 		return sdk.PermissionModeOnRequest, nil
-	case sdk.PermissionModeAuto:
+	case strings.EqualFold(value, string(sdk.PermissionModeAuto)):
 		return sdk.PermissionModeAuto, nil
-	case sdk.PermissionMode("acceptedits"):
+	case strings.EqualFold(value, "acceptEdits") || strings.EqualFold(value, "acceptedits"):
 		return sdk.PermissionMode("acceptEdits"), nil
-	case sdk.PermissionModeBypass:
+	case strings.EqualFold(value, string(sdk.PermissionModeBypass)):
 		return sdk.PermissionModeBypass, nil
-	case sdk.PermissionModeNever:
+	case strings.EqualFold(value, string(sdk.PermissionModeNever)):
 		return sdk.PermissionModeNever, nil
 	default:
 		return "", fmt.Errorf("unsupported permission mode %q", raw)
