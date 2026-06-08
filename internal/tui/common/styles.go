@@ -43,6 +43,8 @@ type Styles struct {
 	AssistantLabel   lipgloss.Style
 	UserMarker       lipgloss.Style
 	AssistantMarker  lipgloss.Style
+	SubagentLabel    lipgloss.Style
+	SubagentMarker   lipgloss.Style
 	TurnMeta         lipgloss.Style
 	UserMsg          lipgloss.Style
 	InterimAssistant lipgloss.Style
@@ -141,6 +143,12 @@ func DefaultStyles() Styles {
 		Bold(true).
 		Foreground(ColorBlue)
 	s.AssistantMarker = lipgloss.NewStyle().
+		Bold(true).
+		Foreground(ColorPrimary)
+	s.SubagentLabel = lipgloss.NewStyle().
+		Bold(true).
+		Foreground(ColorPrimary)
+	s.SubagentMarker = lipgloss.NewStyle().
 		Bold(true).
 		Foreground(ColorPrimary)
 	s.TurnMeta = lipgloss.NewStyle().

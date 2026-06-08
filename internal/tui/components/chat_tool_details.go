@@ -50,6 +50,8 @@ func (t *toolItem) inlinePreview(c *Chat, width int) string {
 		return renderContentPanel(c.styles, "", stringFromMap(t.metadata, "content"), width-4, inlinePreviewLines, contentFlavorPlain)
 	case "web_fetch":
 		return renderContentPanel(c.styles, "", stringFromMap(t.metadata, "content"), width-4, inlinePreviewLines, contentFlavorPlain)
+	case "agent", "spawn_agent":
+		return t.renderSubagentInline(c, width)
 	}
 	if res := t.resultContent(); res != "" {
 		return renderPlainBody(res, width-4)
@@ -139,7 +141,9 @@ func (t *toolItem) detailBody(c *Chat, width int) string {
 		res = renderWebSearchDetails(c.styles, t.summaryText(), t.resultContent(), width)
 	case "web_fetch":
 		res = renderWebFetchDetails(c.styles, t.summaryText(), t.resultContent(), width)
-	case "agent", "spawn_agent", "wait_agent", "close_agent", "send_agent_message":
+	case "agent", "spawn_agent":
+		res = t.renderSubagentInline(c, width)
+	case "wait_agent", "close_agent", "send_agent_message":
 		res = renderContentBody(c.styles, t.agentDetails(), width, contentFlavorMarkdown)
 	default:
 		res = renderContentBody(c.styles, t.resultContent(), width, contentFlavorPlain)
@@ -396,6 +400,106 @@ func (t *toolItem) agentDetails() string {
 		sb.WriteString("### Result\n" + res)
 	}
 	return sb.String()
+}
+
+func (t *toolItem) renderSubagentInline(c *Chat, width int) string {
+	input := t.toolInput()
+	prompt := stringFromMap(input, "prompt")
+	if prompt == "" {
+		prompt = stringFromMap(input, "task")
+	}
+
+	nickname := stringFromMap(input, "nickname")
+	role := stringFromMap(input, "role")
+	agentType := stringFromMap(input, "agent_type")
+	if agentType == "" {
+		agentType = stringFromMap(input, "type")
+	}
+	if agentType == "" {
+		agentType = "general-purpose"
+	}
+
+	title := "🤖 Subagent Task"
+	var metaParts []string
+	if agentType != "" {
+		metaParts = append(metaParts, agentType)
+	}
+	if role != "" {
+		metaParts = append(metaParts, role)
+	}
+	if nickname != "" {
+		metaParts = append(metaParts, nickname)
+	}
+	if len(metaParts) > 0 {
+		title += fmt.Sprintf(" (%s)", strings.Join(metaParts, " · "))
+	}
+
+	header := c.styles.SubagentLabel.Render(title)
+	bar := c.styles.SubagentMarker.Render("│")
+	prefix := "  " + bar + " "
+
+	bodyWidth := max(12, width-8)
+	wrapped := strings.Split(wrap.String(prompt, bodyWidth), "\n")
+	if len(wrapped) == 0 {
+		wrapped = []string{""}
+	}
+	for i := 0; i < len(wrapped); i++ {
+		wrapped[i] = prefix + c.styles.UserMsg.Render(wrapped[i])
+	}
+	promptBlock := header + "\n" + strings.Join(wrapped, "\n")
+
+	logText := stringFromMap(t.metadata, "subagent_log")
+	var activityBlock string
+	if logText != "" {
+		var err error
+		mu := common.LockMarkdownRenderer(c.renderer)
+		mu.Lock()
+		renderedLog, err := c.renderer.Render(logText)
+		mu.Unlock()
+		if err != nil {
+			renderedLog = logText
+		}
+		renderedLog = strings.TrimRight(renderedLog, "\n")
+
+		lines := strings.Split(renderedLog, "\n")
+		for i, line := range lines {
+			if line != "" {
+				lines[i] = "  " + line
+			} else {
+				lines[i] = ""
+			}
+		}
+		activityBlock = "\n\n" + strings.Join(lines, "\n")
+	} else if !t.isDone() {
+		activityBlock = "\n\n  " + c.styles.MsgTimestamp.Render("… initializing subagent …")
+	}
+
+	var resultBlock string
+	if res := t.resultContent(); res != "" {
+		headerRes := c.styles.AssistantLabel.Render("✦ Subagent Result")
+		var renderedRes string
+		var err error
+		mu := common.LockMarkdownRenderer(c.renderer)
+		mu.Lock()
+		renderedRes, err = c.renderer.Render(res)
+		mu.Unlock()
+		if err != nil {
+			renderedRes = res
+		}
+		renderedRes = strings.TrimRight(renderedRes, "\n")
+
+		lines := strings.Split(renderedRes, "\n")
+		for i, line := range lines {
+			if line != "" {
+				lines[i] = "  " + line
+			} else {
+				lines[i] = ""
+			}
+		}
+		resultBlock = "\n\n  " + headerRes + "\n" + strings.Join(lines, "\n")
+	}
+
+	return promptBlock + activityBlock + resultBlock
 }
 
 func (c *Chat) DetailView(width, height int) string {

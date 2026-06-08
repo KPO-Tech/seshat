@@ -242,14 +242,14 @@ func (c *Chat) AddToolProgress(toolUseID, toolName, status, label string, metada
 
 	// Append as a new toolItem.
 	tool := newToolItem(toolUseID, toolName, status, label, metadata)
-	if tool.isDone() && isAutoExpandTool(toolName) {
+	if (tool.isDone() || toolName == "agent" || toolName == "spawn_agent") && isAutoExpandTool(toolName) {
 		tool.expanded = true
 	}
 	c.messages = append(c.messages, tool)
 
 	// If this new tool starts, automatically select it.
 	c.selectedTool = len(c.messages) - 1
-	if isAutoExpandTool(toolName) {
+	if isAutoExpandTool(toolName) && toolName != "agent" && toolName != "spawn_agent" {
 		c.detailOpen = true
 	}
 

@@ -210,10 +210,10 @@ func migrateSQLiteTranscriptFTS5(ctx context.Context, db *DB) error {
 		     VALUES (new.rowid, new.session_id, new.entry_json);
 		 END`,
 		// Trigger: keep FTS5 in sync on delete (also fires for ON DELETE CASCADE rows).
+		`DROP TRIGGER IF EXISTS trg_transcript_fts_delete`,
 		`CREATE TRIGGER IF NOT EXISTS trg_transcript_fts_delete
 		 AFTER DELETE ON session_transcript_entries BEGIN
-		     INSERT INTO session_transcript_fts(session_transcript_fts, rowid)
-		     VALUES ('delete', old.rowid);
+		     DELETE FROM session_transcript_fts WHERE rowid = old.rowid;
 		 END`,
 	}
 	for _, stmt := range statements {
