@@ -178,7 +178,7 @@ func (p *ConfigPanel) View() string {
 
 func (p *ConfigPanel) viewList(w, innerW int) string {
 	title := p.styles.BrowserTitle.Render("  Provider Configuration")
-	filterLine := p.styles.BrowserFilter.Width(innerW).Render("  / " + p.list.Filter() + "█")
+	filterLine := p.styles.BrowserFilter.Width(innerW).Render("  > " + p.list.Filter() + "█")
 	sep := p.styles.MsgTimestamp.Render(strings.Repeat("─", innerW))
 
 	filtered := p.list.FilteredItems()
@@ -363,3 +363,41 @@ func (p *ConfigPanel) Centered() string {
 
 func (p *ConfigPanel) IsEditing() bool          { return p.editing }
 func (p *ConfigPanel) EditedProviderID() string { return p.editProvider.ID }
+
+func (p *ConfigPanel) SetCursor(idx int) {
+	p.list.SetCursor(idx)
+}
+
+func (p *ConfigPanel) ClickRow(localY int) (selected bool, activated bool) {
+	if p.editing {
+		if len(p.inputs) == 0 {
+			return false, false
+		}
+		// Fields start at line 4 (title, sep, blank).
+		// Each field has a label (1 line), a value input (1 line), and an optional blank separator (1 line).
+		offsetY := localY - 4
+		if offsetY >= 0 {
+			fieldIdx := offsetY / 3
+			if fieldIdx >= 0 && fieldIdx < len(p.inputs) {
+				p.fieldCursor = fieldIdx
+				p.statusMsg = ""
+				return true, false
+			}
+		}
+		return false, false
+	}
+
+	filtered := p.list.FilteredItems()
+	// Rows start at line 5 (title, filterLine, sep, blank)
+	if localY >= 5 && localY < 5+len(filtered) {
+		clickIdx := localY - 5
+		if clickIdx >= 0 && clickIdx < len(filtered) {
+			if clickIdx == p.list.Cursor() {
+				return true, true
+			}
+			p.list.SetCursor(clickIdx)
+			return true, false
+		}
+	}
+	return false, false
+}

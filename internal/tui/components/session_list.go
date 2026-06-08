@@ -90,7 +90,7 @@ func (s *SessionList) View() string {
 	if s.editing {
 		filterContent += "█" // cursor
 	}
-	filterLine := s.styles.BrowserFilter.Width(w - 4).Render("/ " + filterContent)
+	filterLine := s.styles.BrowserFilter.Width(w - 4).Render("> " + filterContent)
 
 	// Separator — use w-4 to guarantee no overflow regardless of lipgloss v2 Width semantics.
 	sep := strings.Repeat("─", w-4)
@@ -180,3 +180,27 @@ func formatAge(t time.Time) string {
 }
 
 func (s *SessionList) Size() (int, int) { return s.width, s.height }
+
+func (s *SessionList) SetCursor(idx int) {
+	s.list.SetCursor(idx)
+}
+
+func (s *SessionList) ClickRow(localY int) (selected bool, activated bool) {
+	filtered := s.list.FilteredItems()
+	start := max(0, s.list.Cursor()-10+1) // maxItems = 10
+	end := min(len(filtered), start+10)
+
+	// Items start at line 4 (after title, filter line, sep and blank/border space)
+	if localY >= 4 && localY < 4+(end-start)*2 {
+		visibleIdx := (localY - 4) / 2
+		clickIdx := start + visibleIdx
+		if clickIdx >= 0 && clickIdx < len(filtered) {
+			if clickIdx == s.list.Cursor() {
+				return true, true
+			}
+			s.list.SetCursor(clickIdx)
+			return true, false
+		}
+	}
+	return false, false
+}

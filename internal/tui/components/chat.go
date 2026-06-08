@@ -91,7 +91,7 @@ func (c *Chat) SetSize(width, height int) {
 	c.height = height
 	c.viewport.SetWidth(width)
 	c.viewport.SetHeight(height)
-	if r := common.MarkdownRenderer(width); r != nil {
+	if r := common.MarkdownRenderer(max(10, width-2)); r != nil {
 		c.renderer = r
 	}
 	for _, m := range c.messages {
@@ -139,7 +139,21 @@ func (c *Chat) AddUserMessage(text string) {
 func (c *Chat) StartAssistantMessage() {
 	c.sealActiveAssistant()
 	c.selection.clear()
-	c.messages = append(c.messages, newAssistantItem())
+
+	showLabel := true
+	for i := len(c.messages) - 1; i >= 0; i-- {
+		if _, ok := c.messages[i].(*userItem); ok {
+			break
+		}
+		if _, ok := c.messages[i].(*assistantItem); ok {
+			showLabel = false
+			break
+		}
+	}
+
+	item := newAssistantItem()
+	item.showLabel = showLabel
+	c.messages = append(c.messages, item)
 	c.refresh()
 }
 
@@ -203,7 +217,9 @@ func (c *Chat) AddToolProgress(toolUseID, toolName, status, label string, metada
 	// Update existing tool item if we find it.
 	for _, m := range c.messages {
 		if t, ok := m.(*toolItem); ok && t.id == toolUseID {
-			t.status = status
+			if !(t.isDone() && (status == "running" || status == "pending")) {
+				t.status = status
+			}
 			t.label = label
 			for k, v := range metadata {
 				t.metadata[k] = v
@@ -623,6 +639,10 @@ func (c *Chat) selectedText() string {
 
 func normalizeCopiedLine(line string) string {
 	switch {
+	case strings.HasPrefix(line, "  │ "):
+		return strings.TrimPrefix(line, "  │ ")
+	case strings.HasPrefix(line, "  "):
+		return strings.TrimPrefix(line, "  ")
 	case strings.HasPrefix(line, "● > "):
 		return strings.TrimPrefix(line, "● > ")
 	case strings.HasPrefix(line, "● "):
@@ -649,7 +669,7 @@ const previewTruncFmt = "… (%d lines hidden) [enter for full view]"
 
 func isAutoExpandTool(name string) bool {
 	switch name {
-	case "write_file", "edit_file", "apply_patch", "bash", "spawn_agent":
+	case "write_file", "edit_file", "apply_patch", "bash", "spawn_agent", "agent":
 		return true
 	}
 	return false

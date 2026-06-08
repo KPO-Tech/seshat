@@ -201,7 +201,7 @@ func (d *ModelPicker) View() string {
 	innerW := w - 4 // account for border + padding
 
 	title := d.styles.BrowserTitle.Render("  Switch Model")
-	filterLine := d.styles.BrowserFilter.Width(innerW).Render("  / " + d.list.Filter() + "█")
+	filterLine := d.styles.BrowserFilter.Width(innerW).Render("  > " + d.list.Filter() + "█")
 	sep := d.styles.MsgTimestamp.Render(strings.Repeat("─", innerW))
 
 	// Build all visual rows.
@@ -268,4 +268,46 @@ func (d *ModelPicker) View() string {
 // Vertical centering is handled by overlayOn().
 func (d *ModelPicker) Centered() string {
 	return common.CenterHorizontally(d.View(), d.width)
+}
+
+func (d *ModelPicker) SetCursor(idx int) {
+	d.list.SetCursor(idx)
+}
+
+func (d *ModelPicker) ClickRow(localY int) (selected bool, activated bool) {
+	w := common.Clamp(d.width*4/5, 54, 90)
+	innerW := w - 4
+	allRows := d.buildVisualRows(innerW)
+
+	// Find the visual position of the selected cursor row.
+	selectedVR := 0
+	for i, row := range allRows {
+		if row.cursorIdx == d.list.Cursor() {
+			selectedVR = i
+			break
+		}
+	}
+
+	maxVisible := common.Clamp(d.height-10, 6, 18)
+	start := 0
+	if selectedVR >= maxVisible {
+		start = selectedVR - maxVisible + 1
+	}
+
+	// Items start at line 4 (after title, filter line, sep)
+	visibleRowsCount := min(len(allRows), start+maxVisible) - start
+	if localY >= 4 && localY < 4+visibleRowsCount {
+		allRowsIdx := start + localY - 4
+		if allRowsIdx >= 0 && allRowsIdx < len(allRows) {
+			vr := allRows[allRowsIdx]
+			if vr.cursorIdx >= 0 {
+				if vr.cursorIdx == d.list.Cursor() {
+					return true, true
+				}
+				d.list.SetCursor(vr.cursorIdx)
+				return true, false
+			}
+		}
+	}
+	return false, false
 }

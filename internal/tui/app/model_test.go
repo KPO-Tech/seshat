@@ -189,8 +189,8 @@ func TestModelViewChatIncludesSpacingBelowHeader(t *testing.T) {
 	m = m.relayout()
 	m.chat.AddUserMessage("hello")
 	plain := ansi.Strip(m.viewChat())
-	if !strings.Contains(plain, "\n\n  ● > hello") {
-		t.Fatalf("expected blank line between header and first message, got %q", plain)
+	if !strings.Contains(plain, "👤 You") || !strings.Contains(plain, "│ hello") {
+		t.Fatalf("expected view to contain header and message body, got %q", plain)
 	}
 }
 

@@ -60,6 +60,7 @@ func runOnce(ctx context.Context, args []string, stdin io.Reader, stdout, stderr
 		},
 		printer.handleProgress,
 		printer.handleChunk,
+		nil,
 	)
 	if err != nil {
 		return err
@@ -127,6 +128,7 @@ func runChat(ctx context.Context, args []string, stdin io.Reader, stdout, stderr
 		},
 		printer.handleProgress,
 		printer.handleChunk,
+		nil,
 	)
 	if err != nil {
 		return err

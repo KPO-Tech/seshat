@@ -28,18 +28,42 @@ func (u *userItem) render(c *Chat, width int) string {
 	if u.cacheW == width && u.cacheR != "" {
 		return u.cacheR
 	}
-	_ = u.timestamp
-	prefix := "● > "
-	bodyWidth := max(12, width-lipgloss.Width(prefix))
+
+	timeStr := ""
+	if !u.timestamp.IsZero() {
+		timeStr = u.timestamp.Format("15:04:05")
+	}
+	left := "👤 You"
+	leftStyled := c.styles.UserLabel.Render(left)
+	rightStyled := ""
+	if timeStr != "" {
+		rightStyled = c.styles.MsgTimestamp.Render(timeStr)
+	}
+
+	header := leftStyled
+	if rightStyled != "" {
+		padding := width - lipgloss.Width(leftStyled) - lipgloss.Width(rightStyled)
+		if padding > 0 {
+			header += strings.Repeat(" ", padding) + rightStyled
+		} else {
+			header += " " + rightStyled
+		}
+	}
+
+	bar := c.styles.UserMarker.Render("│")
+	prefix := "  " + bar + " "
+
+	bodyWidth := max(12, width-4)
 	wrapped := strings.Split(wrap.String(u.content, bodyWidth), "\n")
 	if len(wrapped) == 0 {
 		wrapped = []string{""}
 	}
-	wrapped[0] = c.styles.UserMarker.Render(prefix) + c.styles.UserMsg.Render(wrapped[0])
-	for i := 1; i < len(wrapped); i++ {
-		wrapped[i] = strings.Repeat(" ", lipgloss.Width(prefix)) + c.styles.UserMsg.Render(wrapped[i])
+	for i := 0; i < len(wrapped); i++ {
+		wrapped[i] = prefix + c.styles.UserMsg.Render(wrapped[i])
 	}
-	r := strings.Join(wrapped, "\n")
+	body := strings.Join(wrapped, "\n")
+
+	r := header + "\n" + body
 	u.cacheW = width
 	u.cacheR = r
 	return r

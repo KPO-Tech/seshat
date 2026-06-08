@@ -139,8 +139,8 @@ func (t *toolItem) detailBody(c *Chat, width int) string {
 		res = renderWebSearchDetails(c.styles, t.summaryText(), t.resultContent(), width)
 	case "web_fetch":
 		res = renderWebFetchDetails(c.styles, t.summaryText(), t.resultContent(), width)
-	case "spawn_agent", "wait_agent", "close_agent", "send_agent_message":
-		res = renderContentBody(c.styles, t.agentDetails(), width, contentFlavorPlain)
+	case "agent", "spawn_agent", "wait_agent", "close_agent", "send_agent_message":
+		res = renderContentBody(c.styles, t.agentDetails(), width, contentFlavorMarkdown)
 	default:
 		res = renderContentBody(c.styles, t.resultContent(), width, contentFlavorPlain)
 	}
@@ -375,15 +375,25 @@ func (t *toolItem) commandOutput() string {
 func (t *toolItem) agentDetails() string {
 	input := t.toolInput()
 	var sb strings.Builder
-	if prompt := stringFromMap(input, "prompt"); prompt != "" {
-		sb.WriteString("Prompt:\n" + prompt)
+	prompt := stringFromMap(input, "prompt")
+	if prompt == "" {
+		prompt = stringFromMap(input, "task")
+	}
+	if prompt != "" {
+		sb.WriteString("### Prompt\n" + prompt)
+	}
+	if log := stringFromMap(t.metadata, "subagent_log"); log != "" {
+		if sb.Len() > 0 {
+			sb.WriteString("\n\n")
+		}
+		sb.WriteString("### Activity\n" + log)
 	}
 	res := t.resultContent()
 	if res != "" {
 		if sb.Len() > 0 {
 			sb.WriteString("\n\n")
 		}
-		sb.WriteString("Result:\n" + res)
+		sb.WriteString("### Result\n" + res)
 	}
 	return sb.String()
 }

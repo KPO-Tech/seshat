@@ -289,11 +289,17 @@ func TestChatToolBodyClickSelectsWithoutToggling(t *testing.T) {
 
 func TestUserItemRenderKeepsMessageInlineWithMarker(t *testing.T) {
 	c := NewChat(common.DefaultStyles(), 80, 20)
-	u := &userItem{content: "hello world"}
+	u := &userItem{content: "hello world", timestamp: time.Now()}
 	rendered := u.render(c, 80)
 	lines := strings.Split(rendered, "\n")
-	if len(lines) == 0 || !strings.Contains(lines[0], "hello world") {
-		t.Fatalf("expected first rendered line to include user content, got %q", rendered)
+	if len(lines) < 2 {
+		t.Fatalf("expected at least 2 rendered lines, got %d", len(lines))
+	}
+	if !strings.Contains(lines[0], "You") {
+		t.Errorf("expected first line to contain 'You', got %q", lines[0])
+	}
+	if !strings.Contains(lines[1], "│") || !strings.Contains(lines[1], "hello world") {
+		t.Errorf("expected second line to contain '│' and 'hello world', got %q", lines[1])
 	}
 }
 
@@ -327,11 +333,11 @@ func TestApplySelectionStyleReappliesBackgroundAfterReset(t *testing.T) {
 func TestChatMouseDoubleClickSelectsWord(t *testing.T) {
 	c := NewChat(common.DefaultStyles(), 80, 20)
 	c.AddUserMessage("hello brave world")
-	if !c.HandleMouseDown(10, 0) {
+	if !c.HandleMouseDown(10, 1) {
 		t.Fatalf("expected first mouse down")
 	}
-	_ = c.HandleMouseUp(10, 0)
-	if !c.HandleMouseDown(10, 0) {
+	_ = c.HandleMouseUp(10, 1)
+	if !c.HandleMouseDown(10, 1) {
 		t.Fatalf("expected second mouse down")
 	}
 	if got := c.selectedText(); got != "brave" {
@@ -343,12 +349,12 @@ func TestChatMouseTripleClickSelectsLine(t *testing.T) {
 	c := NewChat(common.DefaultStyles(), 80, 20)
 	c.AddUserMessage("hello brave world")
 	for i := 0; i < 2; i++ {
-		if !c.HandleMouseDown(10, 0) {
+		if !c.HandleMouseDown(10, 1) {
 			t.Fatalf("expected mouse down %d", i+1)
 		}
-		_ = c.HandleMouseUp(10, 0)
+		_ = c.HandleMouseUp(10, 1)
 	}
-	if !c.HandleMouseDown(10, 0) {
+	if !c.HandleMouseDown(10, 1) {
 		t.Fatalf("expected third mouse down")
 	}
 	if got := c.selectedText(); got != "hello brave world" {

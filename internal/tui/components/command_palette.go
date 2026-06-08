@@ -159,7 +159,7 @@ func (p *CommandPalette) View() string {
 	innerW := w - 4
 	h := p.panelHeight()
 	title := p.styles.BrowserTitle.Render("  " + p.title())
-	filterContent := "  search " + p.list.Filter() + "█"
+	filterContent := "  > " + p.list.Filter() + "█"
 	filterLine := p.styles.BrowserFilter.Width(innerW).Render(filterContent)
 	sep := p.styles.MsgTimestamp.Render(strings.Repeat("─", innerW))
 
@@ -367,4 +367,80 @@ func (p *CommandPalette) renderItem(item PaletteItem, selected bool, innerW int)
 
 func (p *CommandPalette) Centered() string {
 	return common.CenterHorizontally(p.View(), p.width)
+}
+
+func (p *CommandPalette) SetCursor(idx int) {
+	p.list.SetCursor(idx)
+}
+
+func (p *CommandPalette) ClickRow(localX, localY int) (selected bool, activated bool) {
+	w := p.panelWidth()
+	innerW := w - 4
+	h := p.panelHeight()
+
+	filtered := p.list.FilteredItems()
+	rows := make([]string, 0, len(filtered)*2)
+	for i, item := range filtered {
+		rows = append(rows, p.renderItem(item, i == p.list.Cursor(), innerW))
+		if i < len(filtered)-1 {
+			rows = append(rows, "")
+		}
+	}
+
+	maxRows := h - 9
+	if maxRows < 1 {
+		maxRows = 1
+	}
+	cursorRow := p.list.Cursor() * 2
+	start := cursorRow - maxRows/2
+	if start < 0 {
+		start = 0
+	}
+	if maxStart := len(rows) - maxRows; start > maxStart {
+		start = maxStart
+	}
+	if start%2 != 0 {
+		start--
+		if start < 0 {
+			start = 0
+		}
+	}
+	end := start + maxRows
+	if end > len(rows) {
+		end = len(rows)
+		start = end - maxRows
+		if start < 0 {
+			start = 0
+		}
+	}
+
+	visibleLen := end - start
+
+	// Rows start at line 7 (title, filterLine, sep, blank, subtitle, blank)
+	if localY >= 7 && localY < 7+visibleLen {
+		visIdx := localY - 7
+		rowsIdx := start + visIdx
+
+		// Check pagination indicator clicks:
+		if visIdx == 0 && start > 0 {
+			p.Up()
+			return true, false
+		}
+		if visIdx == visibleLen-1 && end < len(rows) {
+			p.Down()
+			return true, false
+		}
+
+		if rowsIdx >= 0 && rowsIdx < len(rows) && rowsIdx%2 == 0 {
+			clickIdx := rowsIdx / 2
+			if clickIdx >= 0 && clickIdx < len(filtered) {
+				if clickIdx == p.list.Cursor() {
+					return true, true
+				}
+				p.list.SetCursor(clickIdx)
+				return true, false
+			}
+		}
+	}
+	return false, false
 }

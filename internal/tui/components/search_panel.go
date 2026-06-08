@@ -430,3 +430,49 @@ func (p *SearchPanel) statusLine() string {
 func (p *SearchPanel) Centered() string {
 	return common.CenterHorizontally(p.View(), p.width)
 }
+
+func (p *SearchPanel) SetCursor(idx int) {
+	if p.editingMode {
+		if idx >= 0 && idx < len(searchModes) {
+			p.modeCursor = idx
+		}
+	} else if !p.editingKey {
+		if idx >= 0 && idx <= len(p.config.Providers) {
+			p.cursor = idx
+		}
+	}
+}
+
+func (p *SearchPanel) ClickRow(localY int) (selected bool, activated bool) {
+	if p.editingKey {
+		return false, false
+	}
+	if p.editingMode {
+		// Mode select mode: rows start at line 4 (title, sep, blank)
+		if localY >= 4 && localY < 4+len(searchModes) {
+			clickIdx := localY - 4
+			if clickIdx >= 0 && clickIdx < len(searchModes) {
+				if clickIdx == p.modeCursor {
+					return true, true
+				}
+				p.modeCursor = clickIdx
+				return true, false
+			}
+		}
+		return false, false
+	}
+
+	// List mode: rows start at line 4 (after title, sep, blank - contains 1 Mode row + Providers)
+	totalRows := 1 + len(p.config.Providers)
+	if localY >= 4 && localY < 4+totalRows {
+		clickIdx := localY - 4
+		if clickIdx >= 0 && clickIdx < totalRows {
+			if clickIdx == p.cursor {
+				return true, true
+			}
+			p.cursor = clickIdx
+			return true, false
+		}
+	}
+	return false, false
+}

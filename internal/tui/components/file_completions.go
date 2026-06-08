@@ -208,3 +208,40 @@ func (c *FileCompletions) View(inputWidth int) string {
 		Width(w).
 		Render(content)
 }
+
+func (c *FileCompletions) Width(inputWidth int) int {
+	return min(inputWidth, 60)
+}
+
+func (c *FileCompletions) Height(inputWidth int) int {
+	if !c.open {
+		return 0
+	}
+	if len(c.filtered) == 0 {
+		return 3
+	}
+	visible := min(len(c.filtered), 8)
+	return visible + 4 // border (2) + title (1) + sep (1)
+}
+
+func (c *FileCompletions) Scroll(delta int) {
+	if delta < 0 {
+		c.Up()
+	} else if delta > 0 {
+		c.Down()
+	}
+}
+
+func (c *FileCompletions) ClickRow(row int) string {
+	if len(c.filtered) == 0 {
+		return ""
+	}
+	const maxVisible = 8
+	start := max(0, c.cursor-maxVisible+1)
+	idx := start + row
+	if idx < start || idx >= start+maxVisible || idx >= len(c.filtered) {
+		return ""
+	}
+	c.cursor = idx
+	return c.filtered[idx]
+}

@@ -5,6 +5,7 @@ package app
 
 import (
 	"context"
+	"strings"
 
 	"charm.land/bubbles/v2/spinner"
 	"charm.land/bubbles/v2/textarea"
@@ -13,6 +14,7 @@ import (
 	"github.com/EngineerProjects/nexus-engine/internal/tui"
 	"github.com/EngineerProjects/nexus-engine/internal/tui/common"
 	"github.com/EngineerProjects/nexus-engine/internal/tui/components"
+	"github.com/charmbracelet/x/ansi"
 )
 
 type uiState uint8
@@ -393,6 +395,118 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 	case tea.MouseWheelMsg:
 		layout := m.currentChatLayout()
+
+		getCenteredBounds := func(centered string) (rx, ry, rw, rh int) {
+			lines := strings.Split(centered, "\n")
+			firstNonEmpty := -1
+			lastNonEmpty := -1
+			minLeftPad := -1
+			maxW := 0
+			for i, line := range lines {
+				trimmed := strings.TrimSpace(line)
+				if trimmed != "" {
+					if firstNonEmpty == -1 {
+						firstNonEmpty = i
+					}
+					lastNonEmpty = i
+					leftPad := len(line) - len(strings.TrimLeft(line, " "))
+					if minLeftPad == -1 || leftPad < minLeftPad {
+						minLeftPad = leftPad
+					}
+					w := ansi.StringWidth(trimmed)
+					if w > maxW {
+						maxW = w
+					}
+				}
+			}
+			if firstNonEmpty == -1 {
+				return 0, 0, 0, 0
+			}
+			rx = minLeftPad
+			ry = firstNonEmpty
+			rw = maxW
+			rh = lastNonEmpty - firstNonEmpty + 1
+			return
+		}
+
+		// Check active overlay states first:
+		switch m.state {
+		case stateSessions:
+			centered := m.sessions.Centered()
+			rx, ry, rw, rh := getCenteredBounds(centered)
+			if pointInRect(msg.X, msg.Y, rx, ry, rw, rh) {
+				switch msg.Button {
+				case tea.MouseWheelUp:
+					m.sessions.Up()
+				case tea.MouseWheelDown:
+					m.sessions.Down()
+				}
+				return m, tea.Batch(cmds...)
+			}
+		case stateModelSelect:
+			centered := m.modelSelect.Centered()
+			rx, ry, rw, rh := getCenteredBounds(centered)
+			if pointInRect(msg.X, msg.Y, rx, ry, rw, rh) {
+				switch msg.Button {
+				case tea.MouseWheelUp:
+					m.modelSelect.Up()
+				case tea.MouseWheelDown:
+					m.modelSelect.Down()
+				}
+				return m, tea.Batch(cmds...)
+			}
+		case stateCommands:
+			centered := m.commands.Centered()
+			rx, ry, rw, rh := getCenteredBounds(centered)
+			if pointInRect(msg.X, msg.Y, rx, ry, rw, rh) {
+				switch msg.Button {
+				case tea.MouseWheelUp:
+					m.commands.Up()
+				case tea.MouseWheelDown:
+					m.commands.Down()
+				}
+				return m, tea.Batch(cmds...)
+			}
+		case stateProviderConfig:
+			centered := m.configPanel.Centered()
+			rx, ry, rw, rh := getCenteredBounds(centered)
+			if pointInRect(msg.X, msg.Y, rx, ry, rw, rh) {
+				switch msg.Button {
+				case tea.MouseWheelUp:
+					m.configPanel.Up()
+				case tea.MouseWheelDown:
+					m.configPanel.Down()
+				}
+				return m, tea.Batch(cmds...)
+			}
+		case stateSearchConfig:
+			centered := m.searchPanel.Centered()
+			rx, ry, rw, rh := getCenteredBounds(centered)
+			if pointInRect(msg.X, msg.Y, rx, ry, rw, rh) {
+				switch msg.Button {
+				case tea.MouseWheelUp:
+					m.searchPanel.Up()
+				case tea.MouseWheelDown:
+					m.searchPanel.Down()
+				}
+				return m, tea.Batch(cmds...)
+			}
+		case statePermission:
+			if m.permission.HasPending() {
+				centered := m.permission.View()
+				rx, ry, rw, rh := getCenteredBounds(centered)
+				if pointInRect(msg.X, msg.Y, rx, ry, rw, rh) {
+					switch msg.Button {
+					case tea.MouseWheelUp:
+						m.permission.HandleKey("up")
+					case tea.MouseWheelDown:
+						m.permission.HandleKey("down")
+					}
+					return m, tea.Batch(cmds...)
+				}
+			}
+		}
+
 		if (m.state == stateChat || m.state == stateWelcome) && m.skillCompletions.IsOpen() {
 			if pointInRect(msg.X, msg.Y, layout.popupX, layout.popupY, layout.popupW, layout.popupH) {
 				switch msg.Button {
@@ -400,6 +514,17 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					m.skillCompletions.Scroll(-1)
 				case tea.MouseWheelDown:
 					m.skillCompletions.Scroll(1)
+				}
+				return m, tea.Batch(cmds...)
+			}
+		}
+		if (m.state == stateChat || m.state == stateWelcome) && m.completions.IsOpen() {
+			if pointInRect(msg.X, msg.Y, layout.popupX, layout.popupY, layout.popupW, layout.popupH) {
+				switch msg.Button {
+				case tea.MouseWheelUp:
+					m.completions.Scroll(-1)
+				case tea.MouseWheelDown:
+					m.completions.Scroll(1)
 				}
 				return m, tea.Batch(cmds...)
 			}

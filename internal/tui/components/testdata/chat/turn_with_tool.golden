@@ -1,8 +1,11 @@
-● > Run the tool                                            
+👤 You                                              14:05:00
+  │ Run the tool                                            
                                                             
-●                                                           
-I will inspect the workspace.                               
+────────────────────────────────────────────────────────────
+                                                            
+✦ Nexus                                                     
+  I will inspect the workspace.                             
                                                             
 ▸ ✓ Bash ls -la (500ms)                                     
                                                             
-The workspace contains 3 files.
+  The workspace contains 3 files.

@@ -75,6 +75,9 @@ func (m Model) currentChatLayout() chatLayout {
 	if m.skillCompletions.IsOpen() {
 		popupW = m.skillCompletions.Width(max(24, contentW-4))
 		popupH = m.skillCompletions.Height(max(24, contentW-4))
+	} else if m.completions.IsOpen() {
+		popupW = m.completions.Width(max(20, contentW-4))
+		popupH = m.completions.Height(max(20, contentW-4))
 	}
 
 	return chatLayout{

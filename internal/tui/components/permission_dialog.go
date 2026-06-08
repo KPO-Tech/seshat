@@ -538,3 +538,103 @@ func wordWrap(text string, width int) string {
 	}
 	return sb.String()
 }
+
+func (p *PermissionDialog) GetPending() *tui.PromptRequestMsg {
+	return p.pending
+}
+
+func (p *PermissionDialog) HandleClick(localX, localY int) (action string, ok bool) {
+	if p.pending == nil {
+		return "", false
+	}
+	w := max(60, min(p.width-4, 110))
+	innerW := w - 4
+
+	msg := p.pending
+	meta := msg.Metadata
+	toolName := stringMeta(meta, "tool_name")
+	toolInput := normalizeMetaMap(meta["tool_input"])
+	workDir := stringMeta(meta, "working_directory")
+
+	var sections []string
+	sections = append(sections, p.styles.PermTitle.Render("  Permission Required"))
+	if toolName != "" {
+		sections = append(sections, p.renderToolContext(toolName, toolInput, workDir, innerW))
+	} else if msg.Message != "" {
+		sections = append(sections, p.styles.PermBody.Render(wordWrap(msg.Message, innerW)))
+	}
+	previewLines := p.computePreviewLines(innerW)
+	if len(previewLines) > 0 {
+		start := min(p.previewScroll, max(0, len(previewLines)-permPreviewH))
+		end := min(start+permPreviewH, len(previewLines))
+		previewStr := strings.Join(previewLines[start:end], "\n")
+		if len(previewLines) > permPreviewH {
+			hint := fmt.Sprintf("  %d / %d lines  ↑↓ to scroll", end, len(previewLines))
+			previewStr += "\n" + p.styles.MsgTimestamp.Render(hint)
+		}
+		sections = append(sections, previewStr)
+	}
+	if msg.Type == "choice" && len(msg.Options) > 0 {
+		var opts []string
+		for i, opt := range msg.Options {
+			opts = append(opts, p.styles.PermBody.Render(fmt.Sprintf("[%d] %s", i+1, opt.Label)))
+		}
+		sections = append(sections, strings.Join(opts, "  "))
+	}
+	sections = append(sections, p.renderActions(msg.Type))
+
+	content := strings.Join(sections, "\n\n")
+	contentLines := strings.Split(content, "\n")
+
+	// Padded box top/bottom padding=1, border=1. Inner content starts at Y=2.
+	// Padded box left/right padding=2, border=1. Inner content starts at X=3.
+	actionBarY := 2 + len(contentLines) - 1
+	if localY != actionBarY {
+		// Check choice option clicks
+		if msg.Type == "choice" && len(msg.Options) > 0 {
+			optStartSectionY := 2
+			for sIdx := 0; sIdx < len(sections)-2; sIdx++ {
+				optStartSectionY += len(strings.Split(sections[sIdx], "\n")) + 2
+			}
+			optLines := strings.Split(sections[len(sections)-2], "\n")
+			if localY >= optStartSectionY && localY < optStartSectionY+len(optLines) {
+				optLineX := 3
+				for oIdx, opt := range msg.Options {
+					optText := fmt.Sprintf("[%d] %s", oIdx+1, opt.Label)
+					optLen := len(optText)
+					if localX >= optLineX && localX < optLineX+optLen {
+						return fmt.Sprintf("choice:%d", oIdx), true
+					}
+					optLineX += optLen + 2
+				}
+			}
+		}
+		return "", false
+	}
+
+	if msg.Type == "confirm" {
+		yesText := "[y] Allow"
+		alwaysText := "[a] Allow for session"
+		noText := "[n] Deny"
+		sepText := "   ·   "
+
+		yesLen := len(yesText)
+		alwaysLen := len(alwaysText)
+		noLen := len(noText)
+		sepLen := len(sepText)
+
+		buttonsW := yesLen + sepLen + alwaysLen + sepLen + noLen
+		buttonsLeft := 3 + (innerW - buttonsW)
+
+		if localX >= buttonsLeft && localX < buttonsLeft+yesLen {
+			return "y", true
+		}
+		if localX >= buttonsLeft+yesLen+sepLen && localX < buttonsLeft+yesLen+sepLen+alwaysLen {
+			return "a", true
+		}
+		if localX >= buttonsLeft+yesLen+sepLen+alwaysLen+sepLen && localX < buttonsLeft+yesLen+sepLen+alwaysLen+sepLen+noLen {
+			return "n", true
+		}
+	}
+	return "", false
+}

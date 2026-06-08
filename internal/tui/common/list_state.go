@@ -74,6 +74,17 @@ func (s *ListState[T]) Down() {
 	}
 }
 
+// SetCursor sets the cursor to a specific index, clamping it if necessary.
+func (s *ListState[T]) SetCursor(idx int) {
+	if idx < 0 {
+		idx = 0
+	}
+	if idx >= len(s.filtered) {
+		idx = max(0, len(s.filtered)-1)
+	}
+	s.cursor = idx
+}
+
 // Selected returns the currently selected filtered item.
 func (s *ListState[T]) Selected() (T, bool) {
 	var zero T

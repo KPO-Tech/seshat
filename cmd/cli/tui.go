@@ -104,6 +104,9 @@ type nexusWorkspace struct {
 	// submitMu guards submitCancel, which is non-nil while a Submit goroutine runs.
 	submitMu     sync.Mutex
 	submitCancel context.CancelFunc
+
+	subagentMu   sync.Mutex
+	subagentLogs map[string]string // keyed by AgentToolUseID
 }
 
 // credKeyOllamaModels is the DB key for the cached Ollama model list.
@@ -174,11 +177,12 @@ func newNexusWorkspace(options runtimeOptions) (*nexusWorkspace, error) {
 		modelStr = options.Model.String()
 	}
 	w := &nexusWorkspace{
-		model:      modelStr,
-		workDir:    options.WorkingDir,
-		permMode:   string(options.PermissionMode),
-		sqlitePath: options.SQLitePath,
-		clientOpts: options,
+		model:        modelStr,
+		workDir:      options.WorkingDir,
+		permMode:     string(options.PermissionMode),
+		sqlitePath:   options.SQLitePath,
+		clientOpts:   options,
+		subagentLogs: make(map[string]string),
 	}
 	w.debounce = newChunkDebounce(33*time.Millisecond, func(text string) {
 		w.send(tui.ChunkMsg{Text: text})
@@ -196,6 +200,7 @@ func newNexusWorkspace(options runtimeOptions) (*nexusWorkspace, error) {
 		w.promptFn,
 		w.onProgress,
 		w.onChunk,
+		w.onRuntimeEvent,
 	)
 	if err != nil {
 		return nil, err
@@ -256,7 +261,7 @@ func (w *nexusWorkspace) reloadClient(ctx context.Context, modelOverride string)
 		clientOpts.Model = sdk.DefaultClientConfig().Model
 	}
 
-	client, err := newClient(clientOpts, w.promptFn, w.onProgress, w.onChunk)
+	client, err := newClient(clientOpts, w.promptFn, w.onProgress, w.onChunk, w.onRuntimeEvent)
 	if err != nil {
 		return err
 	}
@@ -340,6 +345,9 @@ func (w *nexusWorkspace) CreateSession(ctx context.Context) {
 			return
 		}
 		_ = appdir.EnsureSessionDir(string(sess.GetID()))
+		w.subagentMu.Lock()
+		w.subagentLogs = make(map[string]string)
+		w.subagentMu.Unlock()
 		w.sessionMu.Lock()
 		w.session = sess
 		w.sessionMu.Unlock()
@@ -361,6 +369,9 @@ func (w *nexusWorkspace) LoadSession(ctx context.Context, id string) {
 			return
 		}
 		_ = appdir.EnsureSessionDir(id)
+		w.subagentMu.Lock()
+		w.subagentLogs = make(map[string]string)
+		w.subagentMu.Unlock()
 		w.sessionMu.Lock()
 		w.session = sess
 		w.sessionMu.Unlock()
@@ -1067,6 +1078,73 @@ func (w *nexusWorkspace) onProgress(progress sdk.ToolProgress) {
 		case "write_file", "edit_file", "apply_patch":
 			w.recordSessionFile(progress)
 		}
+	}
+}
+
+func (w *nexusWorkspace) onRuntimeEvent(event sdk.RuntimeEvent) {
+	if event.AgentToolUseID == "" {
+		return
+	}
+
+	w.subagentMu.Lock()
+	logText := w.subagentLogs[event.AgentToolUseID]
+	var updated bool
+
+	switch event.Type {
+	case sdk.RuntimeEventTypeTurnStarted:
+		logText += "\n### Sub-Agent Turn Started\n"
+		updated = true
+
+	case sdk.RuntimeEventTypeResponseChunk:
+		if event.Chunk != nil && event.Chunk.Delta != "" {
+			if event.Chunk.DeltaType == "thinking_delta" {
+				// We can prepend a blockquote symbol if it's the start of thinking
+				if !strings.HasSuffix(logText, "\n> ") && (logText == "" || strings.HasSuffix(logText, "\n")) {
+					logText += "> "
+				}
+				// Replace newline with newline + blockquote symbol for markdown blockquote rendering
+				delta := strings.ReplaceAll(event.Chunk.Delta, "\n", "\n> ")
+				logText += delta
+			} else {
+				logText += event.Chunk.Delta
+			}
+			updated = true
+		}
+
+	case sdk.RuntimeEventTypeToolProgress:
+		if event.ToolProgress != nil {
+			status := string(event.ToolProgress.Stage)
+			switch status {
+			case "running":
+				logText += fmt.Sprintf("\n* ▸ **Tool Call:** `%s` ...\n", event.ToolProgress.ToolName)
+			case "completed":
+				logText += fmt.Sprintf("* ✓ **Tool Completed:** `%s`\n", event.ToolProgress.ToolName)
+			case "failed":
+				logText += fmt.Sprintf("* ✗ **Tool Failed:** `%s` (%s)\n", event.ToolProgress.ToolName, event.ToolProgress.Message)
+			}
+			updated = true
+		}
+
+	case sdk.RuntimeEventTypeTurnCompleted:
+		logText += "\n### Sub-Agent Turn Completed\n"
+		updated = true
+	}
+
+	if updated {
+		w.subagentLogs[event.AgentToolUseID] = logText
+		w.subagentMu.Unlock()
+
+		w.send(tui.ToolProgressMsg{
+			ToolUseID: event.AgentToolUseID,
+			ToolName:  "subagent_event",
+			Status:    "running",
+			Label:     "Sub-agent active",
+			Metadata: map[string]any{
+				"subagent_log": logText,
+			},
+		})
+	} else {
+		w.subagentMu.Unlock()
 	}
 }
 

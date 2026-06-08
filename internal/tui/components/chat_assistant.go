@@ -177,11 +177,34 @@ func (a *assistantItem) invalidate()      { a.contentCacheWidth = 0 }
 func (a *assistantItem) render(c *Chat, width int) string {
 	var sb strings.Builder
 	if a.showLabel {
-		sb.WriteString(c.styles.AssistantMarker.Render("●"))
+		leftStyled := c.styles.AssistantMarker.Render("✦") + " " + c.styles.AssistantLabel.Render("Nexus")
+		rightStyled := ""
+		if !a.startedAt.IsZero() {
+			rightStyled = c.styles.MsgTimestamp.Render(a.startedAt.Format("15:04:05"))
+		}
+		header := leftStyled
+		if rightStyled != "" {
+			padding := width - lipgloss.Width(leftStyled) - lipgloss.Width(rightStyled)
+			if padding > 0 {
+				header += strings.Repeat(" ", padding) + rightStyled
+			} else {
+				header += " " + rightStyled
+			}
+		}
+		sb.WriteString(header)
 		sb.WriteString("\n")
 	}
 	if a.thinking != nil && strings.TrimSpace(a.thinking.content) != "" {
-		sb.WriteString(a.thinking.render(c.styles, width))
+		tbRendered := a.thinking.render(c.styles, width-2)
+		lines := strings.Split(tbRendered, "\n")
+		for i, line := range lines {
+			if line != "" {
+				lines[i] = "  " + line
+			} else {
+				lines[i] = ""
+			}
+		}
+		sb.WriteString(strings.Join(lines, "\n"))
 		if a.content != "" {
 			sb.WriteString("\n\n")
 		} else {
@@ -194,7 +217,7 @@ func (a *assistantItem) render(c *Chat, width int) string {
 			rendered = a.contentCacheRender
 		} else {
 			if !a.streaming && !a.showMeta && !c.verboseInterim {
-				rendered = renderCompactAssistantNarration(c.styles, a.content, width)
+				rendered = renderCompactAssistantNarration(c.styles, a.content, width-2)
 			} else {
 				var err error
 				mu := common.LockMarkdownRenderer(c.renderer)
@@ -211,15 +234,23 @@ func (a *assistantItem) render(c *Chat, width int) string {
 				a.contentCacheRender = rendered
 			}
 		}
-		sb.WriteString(rendered)
+		lines := strings.Split(rendered, "\n")
+		for i, line := range lines {
+			if line != "" {
+				lines[i] = "  " + line
+			} else {
+				lines[i] = ""
+			}
+		}
+		sb.WriteString(strings.Join(lines, "\n"))
 	} else if a.streaming {
-		sb.WriteString(c.styles.MsgTimestamp.Render("…"))
+		sb.WriteString("  " + c.styles.MsgTimestamp.Render("…"))
 	}
-	if meta := a.metaLine(c.styles, width); meta != "" {
+	if meta := a.metaLine(c.styles, width-2); meta != "" {
 		if sb.Len() > 0 {
 			sb.WriteString("\n\n")
 		}
-		sb.WriteString(meta)
+		sb.WriteString("  " + meta)
 	}
 	return sb.String()
 }

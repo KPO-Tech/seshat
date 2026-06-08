@@ -105,6 +105,7 @@ func (c *Chat) refresh() {
 	var sb strings.Builder
 	var plainSB strings.Builder
 	lastWasTool := false
+	lastWasUser := false
 	wroteAny := false
 	line := 0
 	toolRegions := make([]toolRegion, 0)
@@ -162,8 +163,18 @@ func (c *Chat) refresh() {
 			continue
 		}
 		plainRendered := ansi.Strip(rendered)
+		isAssistantHeader := false
+		if a, ok := item.(*assistantItem); ok && a.showLabel {
+			isAssistantHeader = true
+		}
+
 		if wroteAny {
-			if lastWasTool && isTool {
+			if lastWasUser && isAssistantHeader {
+				divider := c.styles.HeaderSep.Render(strings.Repeat("─", c.width))
+				sb.WriteString("\n\n" + divider + "\n\n")
+				plainSB.WriteString("\n\n" + strings.Repeat("─", c.width) + "\n\n")
+				line += 4
+			} else if lastWasTool && isTool {
 				sb.WriteString("\n")
 				plainSB.WriteString("\n")
 				line++
@@ -195,12 +206,13 @@ func (c *Chat) refresh() {
 			if assistant.showLabel {
 				thinkingStart++
 			}
-			thinkingRendered := assistant.thinking.render(c.styles, c.width)
+			thinkingRendered := assistant.thinking.render(c.styles, c.width-2)
 			thinkingHeight := max(1, lipgloss.Height(ansi.Strip(thinkingRendered)))
 			thinkingRegions = append(thinkingRegions, thinkingRegion{startLine: thinkingStart, endLine: thinkingStart + thinkingHeight - 1, msgIndex: regionMsgIndex})
 		}
 		line += height
 		lastWasTool = isTool
+		_, lastWasUser = item.(*userItem)
 		wroteAny = true
 	}
 	content := sb.String()

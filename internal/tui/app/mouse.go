@@ -19,24 +19,10 @@ func clampMouse(v, lo, hi int) int {
 }
 
 func (m *Model) handleMouseClick(msg tea.MouseClickMsg) tea.Cmd {
-	if m.state != stateChat {
+	if m.state != stateChat && m.state != stateWelcome {
 		return nil
 	}
 	layout := m.currentChatLayout()
-	if m.skillCompletions.IsOpen() && pointInRect(msg.X, msg.Y, layout.popupX, layout.popupY, layout.popupW, layout.popupH) {
-		if msg.Button == tea.MouseLeft {
-			row := msg.Y - layout.popupY - 1
-			if sel := m.skillCompletions.ClickRow(row); sel != "" {
-				m.input.SetValue(sel + " ")
-				m.input.CursorEnd()
-				m.skillCompletions.Close()
-				m.focus = uiFocusEditor
-				*m = m.resizeInput()
-				return m.input.Focus()
-			}
-		}
-		return nil
-	}
 	if pointInRect(msg.X, msg.Y, layout.inputX, layout.inputY+layout.popupH, layout.inputW, layout.inputH-layout.popupH) {
 		m.focus = uiFocusEditor
 		return m.input.Focus()
