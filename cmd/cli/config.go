@@ -17,12 +17,12 @@ import (
 
 // credentialKey constants — these are the keys used in the credentials table.
 const (
-	credKeyModel     = "model"
-	credKeyAPIKey    = "api_key"
-	credKeyBaseURL   = "provider_base_url"
-	credKeyRegion    = "provider_region"
-	credKeyProjectID = "provider_project_id"
-	credKeyResource  = "provider_resource"
+	credKeyModel      = "model"
+	credKeyAPIKey     = "api_key"
+	credKeyBaseURL    = "provider_base_url"
+	credKeyRegion     = "provider_region"
+	credKeyProjectID  = "provider_project_id"
+	credKeyResource   = "provider_resource"
 	credKeyTavily     = "TAVILY_API_KEY"
 	credKeyExa        = "EXA_API_KEY"
 	credKeyJina       = "JINA_API_KEY"
@@ -424,7 +424,12 @@ func loadCredsIntoConfig(database *db.DB, config *engineconfig.Config) {
 	// TUI config panel), then falls back to the global key (written by `nexus config`).
 	loadCredScoped := func(fieldKey, providerID string) string {
 		if providerID != "" {
-			if v := loadCred(fieldKey + ":" + strings.ToLower(providerID)); v != "" {
+			// Normalize providerID to ensure consistent lookups (e.g. "zai" -> "z-ai").
+			normalized := string(engineconfig.ResolveProvider(providerID))
+			if normalized == "" {
+				normalized = strings.ToLower(providerID)
+			}
+			if v := loadCred(fieldKey + ":" + normalized); v != "" {
 				return v
 			}
 		}
@@ -432,6 +437,7 @@ func loadCredsIntoConfig(database *db.DB, config *engineconfig.Config) {
 	}
 
 	// Load persisted model selection from DB when YAML has none.
+	// This is the primary source of truth for which provider is "active".
 	if strings.TrimSpace(config.Model) == "" {
 		if v := loadCred(credKeyModel); v != "" {
 			config.Model = v
@@ -439,9 +445,13 @@ func loadCredsIntoConfig(database *db.DB, config *engineconfig.Config) {
 	}
 
 	// Determine the active provider from the config model string.
+	// We use the raw model string to avoid circularity in resolveModel.
 	activeProvider := ""
-	if m := resolveModel(*config); m.Provider != "" {
+	if m := engineconfig.ParseModelIdentifier(config.Model); m.Provider != "" {
 		activeProvider = string(m.Provider)
+	}
+	if activeProvider == "" {
+		activeProvider = string(engineconfig.DetectProviderFromModel(config.Model))
 	}
 
 	if v := loadCredScoped(credKeyAPIKey, activeProvider); v != "" {
@@ -462,6 +472,10 @@ func loadCredsIntoConfig(database *db.DB, config *engineconfig.Config) {
 	config.TavilyAPIKey = loadCred(credKeyTavily)
 	config.ExaAPIKey = loadCred(credKeyExa)
 	config.JinaAPIKey = loadCred(credKeyJina)
+
+	if config.WebSearchProvider == "" {
+		config.WebSearchProvider = loadCred("WEB_SEARCH_PROVIDER")
+	}
 
 	// LangSearch and SearXNG have no Config struct field — apply directly as env vars.
 	if v := loadCred(credKeyLangSearch); v != "" && os.Getenv("LANGSEARCH_API_KEY") == "" {

@@ -49,7 +49,7 @@ type providerAdapter interface {
 // mirrors exactly the branches of the former switch statements in client.go.
 func adapterForProvider(p types.APIProvider) providerAdapter {
 	switch p {
-	case types.APIProviderZAi:
+	case types.APIProviderZAi, "zai", "z.ai":
 		return zAiAdapter{}
 	case types.APIProviderOpenAI, types.APIProviderMiniMax, types.APIProviderOpenRouter, types.APIProviderMistral, types.APIProviderDeepSeek, types.APIProviderOpenCode:
 		return openAICompatAdapter{}

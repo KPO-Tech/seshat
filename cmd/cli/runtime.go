@@ -8,6 +8,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/EngineerProjects/nexus-engine/internal/providers"
 	internalrag "github.com/EngineerProjects/nexus-engine/internal/rag"
 	"github.com/EngineerProjects/nexus-engine/internal/rag/embedder"
 	"github.com/EngineerProjects/nexus-engine/internal/vector"
@@ -22,6 +23,10 @@ type runtimeOptions struct {
 	WorkingDir              string
 	SQLitePath              string
 	APIKey                  string
+	ProviderBaseURL         string
+	ProviderRegion          string
+	ProviderProjectID       string
+	ProviderResource        string
 	BrowserRemoteControlURL string
 	BrowserExecutablePath   string
 	DoclingURL              string
@@ -109,6 +114,10 @@ func loadRuntimeOptions(overrides runtimeOverrides) (runtimeOptions, error) {
 		WorkingDir:              workingDir,
 		SQLitePath:              engineconfig.EffectiveSessionDBPath(config),
 		APIKey:                  apiKey,
+		ProviderBaseURL:         config.ProviderBaseURL,
+		ProviderRegion:          config.ProviderRegion,
+		ProviderProjectID:       config.ProviderProjectID,
+		ProviderResource:        config.ProviderResource,
 		BrowserRemoteControlURL: strings.TrimSpace(config.BrowserRemoteControlURL),
 		BrowserExecutablePath:   strings.TrimSpace(config.BrowserExecutablePath),
 		DoclingURL:              strings.TrimSpace(config.DoclingURL),
@@ -139,6 +148,25 @@ func newClient(
 		}
 	}
 
+	// Build the provider configuration.
+	providerConfig := providers.GetProviderConfig(options.Model.Provider)
+	if providerConfig == nil {
+		providerConfig = &providers.Config{Provider: options.Model.Provider}
+	}
+	providerConfig.APIKey = options.APIKey
+	if options.ProviderBaseURL != "" {
+		providerConfig.BaseURL = options.ProviderBaseURL
+	}
+	if options.ProviderRegion != "" {
+		providerConfig.Region = options.ProviderRegion
+	}
+	if options.ProviderProjectID != "" {
+		providerConfig.ProjectID = options.ProviderProjectID
+	}
+	if options.ProviderResource != "" && options.Model.Provider == sdk.APIProviderFoundry {
+		providerConfig.Region = options.ProviderResource
+	}
+
 	// EnableMonitoring must be true so initMonitoringSystem honours
 	// options.Monitoring (the TUI file logger) instead of short-circuiting.
 	enableMonitoring := options.Monitoring != nil
@@ -164,6 +192,7 @@ func newClient(
 		EnableMonitoring:        enableMonitoring,
 		Monitoring:              options.Monitoring,
 		RAGService:              options.RAGService,
+		ProviderConfig:          providerConfig,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("create SDK client: %w", err)

@@ -827,18 +827,18 @@ func (w *nexusWorkspace) SaveProviderField(ctx context.Context, providerID, fiel
 	if strings.ToLower(providerID) == "ollama" && fieldKey == "provider_base_url" {
 		w.probeOllamaInBackground()
 	}
-	// Only reload when saving a credential for the currently active provider.
-	// If no model is selected yet, or the saved credential belongs to a different
-	// provider, skip the reload — SetModel will trigger the correct one when the
-	// user picks a model. Reloading with the wrong active provider would build a
-	// client with an empty API key (the key is stored scoped to providerID but
-	// looked up via the current model's provider), which then races with SetModel's
-	// goroutine and can permanently attach a keyless client to the new session.
+
+	// Always reload when saving a credential. If no model is selected yet (w.model == ""),
+	// reloadClient will still build a keyed client using the default provider
+	// (anthropic) or whatever provider was just configured, ensuring that the
+	// first session creation has valid credentials.
 	currentModel := strings.TrimSpace(w.model)
-	if currentModel != "" {
-		if parts := strings.SplitN(currentModel, ":", 2); strings.EqualFold(parts[0], providerID) {
-			return w.reloadClient(ctx, "")
-		}
+	if currentModel == "" {
+		return w.reloadClient(ctx, "")
+	}
+
+	if parts := strings.SplitN(currentModel, ":", 2); strings.EqualFold(parts[0], providerID) {
+		return w.reloadClient(ctx, "")
 	}
 	return nil
 }
@@ -924,7 +924,7 @@ func (w *nexusWorkspace) SaveSearchKey(ctx context.Context, dbKey, value string)
 	}
 	// Apply immediately so the current process uses the new key.
 	os.Setenv(strings.TrimPrefix(dbKey, "search:"), value)
-	return nil
+	return w.reloadClient(ctx, "")
 }
 
 func (w *nexusWorkspace) SaveSearchMode(ctx context.Context, mode string) error {
@@ -938,7 +938,7 @@ func (w *nexusWorkspace) SaveSearchMode(ctx context.Context, mode string) error 
 		return err
 	}
 	os.Setenv("WEB_SEARCH_PROVIDER", mode)
-	return nil
+	return w.reloadClient(ctx, "")
 }
 
 func (w *nexusWorkspace) LoadToolCatalog(ctx context.Context) []tui.ToolInfo {

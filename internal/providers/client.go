@@ -159,16 +159,7 @@ func NewFallbackClient(ctx context.Context, provider types.APIProvider) (*Client
 func newClientWithConfig(apiKey string, config *Config) *Client {
 	baseURL := config.GetBaseURL()
 	if baseURL == "" {
-		switch config.Provider {
-		case types.APIProviderOpenAI:
-			baseURL = "https://api.openai.com/v1"
-		case types.APIProviderCodex:
-			baseURL = "https://chatgpt.com/backend-api/codex"
-		case types.APIProviderOllama:
-			baseURL = "http://localhost:11434"
-		default:
-			baseURL = "https://api.anthropic.com"
-		}
+		baseURL = "https://api.anthropic.com"
 	}
 
 	var httpClient *http.Client
