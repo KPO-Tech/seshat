@@ -21,6 +21,9 @@ type toolItem struct {
 
 	cacheW int
 	cacheR string
+
+	detailCacheW int
+	detailCacheR string
 }
 
 func newToolItem(id, name, status, label string, metadata map[string]any) *toolItem {
@@ -39,7 +42,7 @@ func (t *toolItem) isDone() bool {
 }
 
 func (t *toolItem) isFinished() bool { return t.isDone() }
-func (t *toolItem) invalidate()      { t.cacheW = 0; t.cacheR = "" }
+func (t *toolItem) invalidate()      { t.cacheW = 0; t.cacheR = ""; t.detailCacheW = 0; t.detailCacheR = "" }
 
 func (t *toolItem) render(c *Chat, width int) string {
 	return t.renderSelected(c, width, false)

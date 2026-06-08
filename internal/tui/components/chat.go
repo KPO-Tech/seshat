@@ -84,6 +84,9 @@ func NewChat(styles common.Styles, width, height int) *Chat {
 }
 
 func (c *Chat) SetSize(width, height int) {
+	if c.width == width && c.height == height {
+		return
+	}
 	c.width = width
 	c.height = height
 	c.viewport.SetWidth(width)

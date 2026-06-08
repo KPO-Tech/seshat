@@ -100,23 +100,29 @@ func (t *toolItem) metaSummary() string {
 }
 
 func (t *toolItem) detailBody(c *Chat, width int) string {
+	if t.isDone() && t.detailCacheW == width && t.detailCacheR != "" {
+		return t.detailCacheR
+	}
+	var res string
 	switch t.name {
 	case "list_directory", "glob":
-		return renderDirListing(c.styles, t.resultContent(), width, 0)
+		res = renderDirListing(c.styles, t.resultContent(), width, 0)
 	case "read_file":
 		path := stringFromMap(t.toolInput(), "file_path")
 		startLine, cleanBody := parseReadContent(t.resultContent())
 		if flavorForPath(path) == contentFlavorCode {
-			return renderCodeBody(c.styles, path, cleanBody, width, 0, startLine)
+			res = renderCodeBody(c.styles, path, cleanBody, width, 0, startLine)
+		} else {
+			res = renderContentBody(c.styles, cleanBody, width, flavorForPath(path))
 		}
-		return renderContentBody(c.styles, cleanBody, width, flavorForPath(path))
 	case "write_file":
 		path := stringFromMap(t.toolInput(), "file_path")
 		content := t.writeContent()
 		if flavorForPath(path) == contentFlavorCode {
-			return renderCodeBody(c.styles, path, content, width, 0, 0)
+			res = renderCodeBody(c.styles, path, content, width, 0, 0)
+		} else {
+			res = renderContentBody(c.styles, content, width, flavorForPath(path))
 		}
-		return renderContentBody(c.styles, content, width, flavorForPath(path))
 	case "edit_file", "apply_patch":
 		path := stringFromMap(t.toolInput(), "file_path")
 		if diff := t.unifiedDiff(); diff != "" {
@@ -125,20 +131,24 @@ func (t *toolItem) detailBody(c *Chat, width int) string {
 				label = prettyPath(path)
 			}
 			label = ansi.Truncate(label, width, "…")
-			return c.styles.Key.Render(label) + "\n\n" + renderColoredDiff(c.styles, diff, width, 0)
+			res = c.styles.Key.Render(label) + "\n\n" + renderColoredDiff(c.styles, diff, width, 0)
 		}
-		return ""
 	case "bash":
-		return renderBashDetails(c.styles, stringFromMap(t.toolInput(), "command"), t.commandOutput(), width)
+		res = renderBashDetails(c.styles, stringFromMap(t.toolInput(), "command"), t.commandOutput(), width)
 	case "web_search":
-		return renderWebSearchDetails(c.styles, t.summaryText(), t.resultContent(), width)
+		res = renderWebSearchDetails(c.styles, t.summaryText(), t.resultContent(), width)
 	case "web_fetch":
-		return renderWebFetchDetails(c.styles, t.summaryText(), t.resultContent(), width)
+		res = renderWebFetchDetails(c.styles, t.summaryText(), t.resultContent(), width)
 	case "spawn_agent", "wait_agent", "close_agent", "send_agent_message":
-		return renderContentBody(c.styles, t.agentDetails(), width, contentFlavorPlain)
+		res = renderContentBody(c.styles, t.agentDetails(), width, contentFlavorPlain)
 	default:
-		return renderContentBody(c.styles, t.resultContent(), width, contentFlavorPlain)
+		res = renderContentBody(c.styles, t.resultContent(), width, contentFlavorPlain)
 	}
+	if t.isDone() {
+		t.detailCacheW = width
+		t.detailCacheR = res
+	}
+	return res
 }
 
 func flavorForPath(path string) contentFlavor {
