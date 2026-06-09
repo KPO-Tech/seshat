@@ -455,7 +455,7 @@ func (c *Chat) HandleMouseDown(x, y int) bool {
 	case 3:
 		c.selectLineAt(line)
 	}
-	c.refresh()
+	c.refreshSelection()
 	return true
 }
 
@@ -476,7 +476,7 @@ func (c *Chat) HandleMouseDrag(x, y int) bool {
 	line := c.viewport.YOffset() + clampInt(y, 0, max(0, c.height-1))
 	line = clampInt(line, 0, len(c.plainLines)-1)
 	c.selection.update(line, max(0, x))
-	c.refresh()
+	c.refreshSelection()
 	return true
 }
 
@@ -489,7 +489,7 @@ func (c *Chat) HandleMouseUp(x, y int) string {
 	text := ""
 	if wasMoved {
 		text = c.selectedText()
-		c.refresh()
+		c.refreshSelection()
 	} else {
 		line := c.selection.startLine
 		c.selection.clear()
@@ -498,7 +498,7 @@ func (c *Chat) HandleMouseUp(x, y int) string {
 		} else if idx := c.toolIndexAtLine(line); idx >= 0 {
 			c.handleToolLineClick(idx, max(0, x), line)
 		} else {
-			c.refresh()
+			c.refreshSelection()
 		}
 	}
 	return text

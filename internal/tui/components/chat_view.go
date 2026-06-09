@@ -241,6 +241,14 @@ func (c *Chat) refresh() {
 	}
 }
 
+func (c *Chat) refreshSelection() {
+	if c.selection.hasSelection() {
+		c.viewport.SetContent(c.highlightedSelectionContent())
+	} else {
+		c.viewport.SetContent(c.renderedContent)
+	}
+}
+
 func (c *Chat) highlightedSelectionContent() string {
 	if len(c.renderedLines) == 0 {
 		return c.renderedContent
@@ -249,10 +257,17 @@ func (c *Chat) highlightedSelectionContent() string {
 	if startLn < 0 || endLn < 0 {
 		return c.renderedContent
 	}
-	lines := make([]string, len(c.renderedLines))
-	copy(lines, c.renderedLines)
+
+	var sb strings.Builder
+	// Write all lines before startLn
+	if startLn > 0 {
+		sb.WriteString(strings.Join(c.renderedLines[:startLn], "\n"))
+		sb.WriteByte('\n')
+	}
+
+	// Process and write only the selected lines
 	for line := startLn; line <= endLn; line++ {
-		renderedLine := lines[line]
+		renderedLine := c.renderedLines[line]
 		lineWidth := ansi.StringWidth(renderedLine)
 		lineStart := 0
 		lineEnd := lineWidth
@@ -275,7 +290,18 @@ func (c *Chat) highlightedSelectionContent() string {
 			middle = ansi.Cut(renderedLine, lineStart, lineStart+1)
 			after = ansi.Cut(renderedLine, lineStart+1, lineWidth)
 		}
-		lines[line] = before + applySelectionStyle(middle, c.styles.Selection) + after
+		sb.WriteString(before)
+		sb.WriteString(applySelectionStyle(middle, c.styles.Selection))
+		sb.WriteString(after)
+		if line < len(c.renderedLines)-1 {
+			sb.WriteByte('\n')
+		}
 	}
-	return strings.Join(lines, "\n")
+
+	// Write all lines after endLn
+	if endLn < len(c.renderedLines)-1 {
+		sb.WriteString(strings.Join(c.renderedLines[endLn+1:], "\n"))
+	}
+
+	return sb.String()
 }

@@ -139,9 +139,18 @@ func (t *toolItem) renderNameStyle(styles common.Styles) lipgloss.Style {
 }
 
 func (t *toolItem) durationText() string {
-	if !t.isDone() || t.finishedAt.IsZero() {
+	if !t.isDone() {
+		if !t.startedAt.IsZero() {
+			return formatDuration(time.Since(t.startedAt))
+		}
 		if ms, ok := intFromMap(t.metadata, "execution_duration_ms"); ok && ms > 0 {
 			return formatDuration(time.Duration(ms) * time.Millisecond)
+		}
+		return ""
+	}
+	if t.finishedAt.IsZero() {
+		if !t.startedAt.IsZero() {
+			return formatDuration(time.Since(t.startedAt))
 		}
 		return ""
 	}
