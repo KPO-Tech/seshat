@@ -488,14 +488,30 @@ func (t *toolItem) renderSubagentInline(c *Chat, width int) string {
 		}
 
 		lines := strings.Split(renderedLog, "\n")
-		for i, line := range lines {
+		// Remove trailing empty lines to get clean last lines
+		for len(lines) > 0 && lines[len(lines)-1] == "" {
+			lines = lines[:len(lines)-1]
+		}
+
+		showLines := lines
+		truncated := false
+		if len(lines) > 5 {
+			showLines = lines[len(lines)-5:]
+			truncated = true
+		}
+
+		formattedLines := make([]string, 0, len(showLines)+1)
+		if truncated {
+			formattedLines = append(formattedLines, "  "+c.styles.MsgTimestamp.Render("[... open details (ctrl+o) for full activity ...]"))
+		}
+		for _, line := range showLines {
 			if line != "" {
-				lines[i] = "  " + line
+				formattedLines = append(formattedLines, "  "+line)
 			} else {
-				lines[i] = ""
+				formattedLines = append(formattedLines, "")
 			}
 		}
-		activityBlock = "\n\n" + strings.Join(lines, "\n")
+		activityBlock = "\n\n" + strings.Join(formattedLines, "\n")
 	} else if !t.isDone() {
 		activityBlock = "\n\n  " + c.styles.MsgTimestamp.Render("… initializing subagent …")
 	}
