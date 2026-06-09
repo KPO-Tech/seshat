@@ -21,11 +21,13 @@ func (o *Orchestrator) executePreparedTool(
 	req ExecuteRequest,
 	toolCtx tool.ToolUseContext,
 ) toolExecutionOutcome {
-	progressUpdates := []types.ToolProgress{progressForStage(prepared.toolUse, "resolving tool", 0)}
+	initialProgress := progressForStage(prepared.toolUse, "resolving tool", 0)
+	progressUpdates := []types.ToolProgress{initialProgress}
+	o.emitProgress(req, initialProgress)
 	extraMessages := []types.Message{}
 
 	if prepared.failure != nil {
-		return o.failPreparedToolUse(prepared, progressUpdates, extraMessages)
+		return o.failPreparedToolUse(prepared, progressUpdates, extraMessages, req)
 	}
 
 	state := o.newRuntimeStateFromPrepared(prepared, req, toolCtx)
@@ -65,7 +67,10 @@ func (o *Orchestrator) executePreparedToolPipeline(
 	defer span.End()
 	ctx = spanCtx
 
-	progressUpdates = append(progressUpdates, progressForStage(toolUse, "running pre-hooks", 20))
+	progPreHook := progressForStage(toolUse, "running pre-hooks", 20)
+	progressUpdates = append(progressUpdates, progPreHook)
+	o.emitProgress(req, progPreHook)
+
 	currentInput := cloneToolInput(prepared.backfilledInput)
 	preHookResult := runtimehooks.ExecutePre(ctx, o.hooks.Pre(), runtimehooks.ToolHookInput{
 		ToolName:  toolUse.Name,
@@ -74,10 +79,10 @@ func (o *Orchestrator) executePreparedToolPipeline(
 		ToolCtx:   state.toolCtx,
 	})
 	if ctx.Err() != nil {
-		return o.cancelledOutcome(toolUse, index, progressUpdates, state, extraMessages)
+		return o.cancelledOutcome(toolUse, index, progressUpdates, state, extraMessages, req)
 	}
 	if preHookResult.Stop != nil {
-		return o.hookStopOutcome(toolUse, index, progressUpdates, state, preHookResult.Stop, extraMessages)
+		return o.hookStopOutcome(toolUse, index, progressUpdates, state, preHookResult.Stop, extraMessages, req)
 	}
 	if preHookResult.UpdatedInput != nil && !mapsEqual(currentInput, preHookResult.UpdatedInput) {
 		currentInput = preHookResult.UpdatedInput
@@ -85,7 +90,10 @@ func (o *Orchestrator) executePreparedToolPipeline(
 	}
 	extraMessages = append(extraMessages, preHookResult.ExtraMessages...)
 
-	progressUpdates = append(progressUpdates, progressForStage(toolUse, "running safety checks", 25))
+	progSafety := progressForStage(toolUse, "running safety checks", 25)
+	progressUpdates = append(progressUpdates, progSafety)
+	o.emitProgress(req, progSafety)
+
 	if o.safetyChecker != nil {
 		safetyResult := o.safetyChecker.CheckSafety(toolUse.Name, currentInput)
 		if safetyResult.IsDangerous {
@@ -98,15 +106,18 @@ func (o *Orchestrator) executePreparedToolPipeline(
 					Source: safetyResult.CheckType,
 					Reason: safetyResult.Reason,
 				},
-			}, state.trace, err, extraMessages)
+			}, state.trace, err, extraMessages, req)
 		}
 	}
 
-	progressUpdates = append(progressUpdates, progressForStage(toolUse, "checking permissions", 33))
+	progPerm := progressForStage(toolUse, "checking permissions", 33)
+	progressUpdates = append(progressUpdates, progPerm)
+	o.emitProgress(req, progPerm)
+
 	permResult, failure := o.resolveToolPermissions(ctx, state, currentInput, req)
 	if failure != nil {
 		state = state.withPermissionResults(permResult.LocalPermission, permResult.GlobalPermission, permResult.FinalInput)
-		return o.failedOutcome(toolUse, index, progressUpdates, failure.stage, failure.permissionResult, state.trace, failure.err, extraMessages)
+		return o.failedOutcome(toolUse, index, progressUpdates, failure.stage, failure.permissionResult, state.trace, failure.err, extraMessages, req)
 	}
 	state = state.withPermissionResults(permResult.LocalPermission, permResult.GlobalPermission, permResult.FinalInput)
 	if !observableInputModified && mapsEqual(prepared.backfilledInput, permResult.FinalInput) {
@@ -123,13 +134,19 @@ func (o *Orchestrator) executePreparedToolPipeline(
 		req.DenialTracking.RecordSuccess()
 	}
 
-	progressUpdates = append(progressUpdates, progressForStage(toolUse, "calling tool", 66))
+	progCall := progressForStage(toolUse, "calling tool", 66)
+	progressUpdates = append(progressUpdates, progCall)
+	o.emitProgress(req, progCall)
+
 	callResult := o.callToolSafe(ctx, state, req.PermissionCheck)
 	if callResult.IsError() {
 		span.SetStatus(codes.Error, callResult.GetContent())
 	}
 
-	progressUpdates = append(progressUpdates, progressForStage(toolUse, "running post-hooks", 90))
+	progPostHook := progressForStage(toolUse, "running post-hooks", 90)
+	progressUpdates = append(progressUpdates, progPostHook)
+	o.emitProgress(req, progPostHook)
+
 	extraMessages = append(extraMessages, runtimehooks.ExecutePost(ctx, o.hooks.Post(), runtimehooks.ToolHookInput{
 		ToolName:  toolUse.Name,
 		ToolUseID: toolUse.ID,
@@ -140,9 +157,13 @@ func (o *Orchestrator) executePreparedToolPipeline(
 	callResult = o.formatAndTruncateResult(t, callResult)
 	if browserProgress := browserProgressForResult(toolUse, callResult); browserProgress != nil {
 		progressUpdates = append(progressUpdates, *browserProgress)
+		o.emitProgress(req, *browserProgress)
 	}
 
-	progressUpdates = append(progressUpdates, completeProgress(toolUse, callResult))
+	progComp := completeProgress(toolUse, callResult)
+	progressUpdates = append(progressUpdates, progComp)
+	o.emitProgress(req, progComp)
+
 	return toolExecutionOutcome{
 		ToolUse:  toolUse,
 		Index:    index,

@@ -116,7 +116,7 @@ func (t *toolItem) renderIcon(c *Chat) string {
 		return c.styles.MsgTimestamp.Render("✓")
 	case t.status == "failed" || t.status == "error":
 		return c.styles.ToolError.Render("✗")
-	case t.status == "running" || t.status == "started":
+	case !t.isDone():
 		frame := strings.TrimSpace(c.SpinnerFrame)
 		if frame == "" {
 			frame = "⠋"

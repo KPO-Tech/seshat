@@ -126,6 +126,8 @@ type assistantItem struct {
 
 	contentCacheWidth  int
 	contentCacheRender string
+
+	streamingContent streamingMarkdown
 }
 
 func newAssistantItem() *assistantItem {
@@ -172,7 +174,7 @@ func (a *assistantItem) finish(inputTokens, outputTokens int, stopReason string,
 }
 
 func (a *assistantItem) isFinished() bool { return !a.streaming }
-func (a *assistantItem) invalidate()      { a.contentCacheWidth = 0 }
+func (a *assistantItem) invalidate()      { a.contentCacheWidth = 0; a.streamingContent.Reset() }
 
 func (a *assistantItem) render(c *Chat, width int) string {
 	var sb strings.Builder
@@ -219,10 +221,11 @@ func (a *assistantItem) render(c *Chat, width int) string {
 			if !a.streaming && !a.showMeta && !c.verboseInterim {
 				rendered = renderCompactAssistantNarration(c.styles, a.content, width-2)
 			} else {
-				var err error
-				rendered, err = common.RenderMarkdown(max(10, width-2), a.content)
-				if err != nil {
+				renderer := common.MarkdownRenderer(max(10, width-2))
+				if renderer == nil {
 					rendered = a.content
+				} else {
+					rendered = a.streamingContent.Render(a.content, max(10, width-2), renderer)
 				}
 			}
 			if !a.streaming {

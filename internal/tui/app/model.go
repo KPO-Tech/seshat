@@ -190,7 +190,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if !wasOpen && m.chat.DetailsOpen() {
 			m = m.relayout()
 		}
-		if msg.Status == "running" {
+		if msg.Status == "running" || m.chat.HasRunningTools() {
 			cmds = append(cmds, m.spinner.Tick)
 		}
 

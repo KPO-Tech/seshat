@@ -87,8 +87,11 @@ func (o *Orchestrator) failedOutcome(
 	trace ToolExecutionTrace,
 	err error,
 	extraMessages []types.Message,
+	req ExecuteRequest,
 ) toolExecutionOutcome {
-	progress = append(progress, failedProgress(toolUse, err))
+	prog := failedProgress(toolUse, err)
+	progress = append(progress, prog)
+	o.emitProgress(req, prog)
 	return toolExecutionOutcome{
 		ToolUse:    toolUse,
 		Index:      index,
@@ -107,9 +110,12 @@ func (o *Orchestrator) cancelledOutcome(
 	progress []types.ToolProgress,
 	state toolRuntimeState,
 	extraMessages []types.Message,
+	req ExecuteRequest,
 ) toolExecutionOutcome {
 	err := fmt.Errorf("cancelled")
-	progress = append(progress, failedProgress(toolUse, err))
+	prog := failedProgress(toolUse, err)
+	progress = append(progress, prog)
+	o.emitProgress(req, prog)
 	return toolExecutionOutcome{
 		ToolUse:    toolUse,
 		Index:      index,
@@ -129,9 +135,12 @@ func (o *Orchestrator) hookStopOutcome(
 	state toolRuntimeState,
 	stop *ToolHookStop,
 	extraMessages []types.Message,
+	req ExecuteRequest,
 ) toolExecutionOutcome {
 	err := fmt.Errorf("stopped by hook")
-	progress = append(progress, failedProgress(toolUse, err))
+	prog := failedProgress(toolUse, err)
+	progress = append(progress, prog)
+	o.emitProgress(req, prog)
 	result := tool.NewErrorResult(err)
 	if stop.Content != "" {
 		result.Content = stop.Content

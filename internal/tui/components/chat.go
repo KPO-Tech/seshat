@@ -194,14 +194,22 @@ func (c *Chat) FinishAssistantMessage(inputTokens, outputTokens int, stopReason 
 	for i := len(c.messages) - 1; i >= 0; i-- {
 		if a, ok := c.messages[i].(*assistantItem); ok && a.streaming {
 			a.finish(inputTokens, outputTokens, stopReason, true)
-			c.refresh()
-			return
+			break
 		}
 	}
+	// Automatically mark any running/started tool items as completed so their spinners stop.
+	for _, m := range c.messages {
+		if t, ok := m.(*toolItem); ok && (t.status == "running" || t.status == "started") {
+			t.status = "completed"
+			t.finishedAt = time.Now()
+			t.invalidate()
+		}
+	}
+	c.refresh()
 }
 
 func (c *Chat) AddToolProgress(toolUseID, toolName, status, label string, metadata map[string]any) {
-	if toolName == "spawn_agent" && (status == "completed" || status == "done") {
+	if (toolName == "spawn_agent" || toolName == "agent") && (status == "completed" || status == "done") {
 		if isFinished, _ := metadata["subagent_finished"].(bool); !isFinished {
 			status = "running"
 		}

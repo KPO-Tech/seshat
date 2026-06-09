@@ -50,6 +50,7 @@ Thumbs.db
 .blackboxcli/
 claude-code/
 private/
+helps/
 
 # Temporary files
 *.log

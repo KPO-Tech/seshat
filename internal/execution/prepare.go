@@ -107,7 +107,7 @@ func (o *Orchestrator) partitionPreparedToolUses(preparedToolUses []preparedTool
 	return batches
 }
 
-func (o *Orchestrator) failPreparedToolUse(prepared preparedToolUse, progress []types.ToolProgress, extraMessages []types.Message) toolExecutionOutcome {
+func (o *Orchestrator) failPreparedToolUse(prepared preparedToolUse, progress []types.ToolProgress, extraMessages []types.Message, req ExecuteRequest) toolExecutionOutcome {
 	failure := prepared.failure
 	if failure == nil {
 		err := fmt.Errorf("tool preparation failed")
@@ -126,6 +126,7 @@ func (o *Orchestrator) failPreparedToolUse(prepared preparedToolUse, progress []
 		prepared.trace,
 		failure.err,
 		extraMessages,
+		req,
 	)
 }
 
