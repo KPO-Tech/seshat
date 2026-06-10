@@ -68,27 +68,33 @@ func TestChatAddToolProgressDropsEmptyAssistantPlaceholder(t *testing.T) {
 }
 
 func TestThinkingBlockToggleChangesCollapsedState(t *testing.T) {
-	tb := newThinkingBlock()
+	c := NewChat(common.DefaultStyles(), 80, 20)
+	c.StartAssistantMessage()
 	for i := 0; i < 12; i++ {
-		tb.append("line\n")
+		c.AppendChunk("line\n", true)
 	}
-	tb.finish()
+	c.FinishAssistantMessage(0, 0, "")
 
-	if !tb.collapsed {
-		t.Fatalf("expected thinking block to start collapsed")
+	assistant, ok := c.messages[0].(*assistantItem)
+	if !ok || assistant.thinking == nil {
+		t.Fatalf("expected assistant with thinking block")
 	}
 
-	collapsed := tb.render(common.DefaultStyles(), 50)
+	if assistant.thinkingViewMode != thinkingCollapsed {
+		t.Fatalf("expected thinking to start collapsed")
+	}
+
+	collapsed := assistant.thinking.render(common.DefaultStyles(), 50, thinkingCollapsed)
 	if want := "8 lines hidden"; !strings.Contains(collapsed, want) {
 		t.Fatalf("expected collapsed render to mention %q, got %q", want, collapsed)
 	}
 
-	tb.toggle()
-	if tb.collapsed {
+	assistant.toggleThinking()
+	if assistant.thinkingViewMode == thinkingCollapsed {
 		t.Fatalf("expected toggle to expand thinking block")
 	}
 
-	expanded := tb.render(common.DefaultStyles(), 50)
+	expanded := assistant.thinking.render(common.DefaultStyles(), 50, assistant.thinkingViewMode)
 	if strings.Contains(expanded, "lines hidden") {
 		t.Fatalf("expected expanded render to show all lines, got %q", expanded)
 	}
@@ -215,7 +221,7 @@ func TestChatThinkingLineClickTogglesCollapse(t *testing.T) {
 	if got := c.HandleMouseUp(0, line); got != "" {
 		t.Fatalf("expected click on thinking line not to copy text, got %q", got)
 	}
-	if assistant.thinking.collapsed {
+	if assistant.thinkingViewMode == thinkingCollapsed {
 		t.Fatalf("expected thinking block to expand on click")
 	}
 }
@@ -226,7 +232,7 @@ func TestThinkingBlockRenderShowsKeyHint(t *testing.T) {
 		tb.append("line\n")
 	}
 	tb.finish()
-	rendered := tb.render(common.DefaultStyles(), 50)
+	rendered := tb.render(common.DefaultStyles(), 50, thinkingCollapsed)
 	if !strings.Contains(rendered, "ctrl+t to expand") {
 		t.Fatalf("expected keyboard hint in thinking footer, got %q", rendered)
 	}

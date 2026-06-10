@@ -38,7 +38,6 @@ func TestChatGoldenCollapsedThinking(t *testing.T) {
 		streaming:  false,
 		startedAt:  fixed,
 		finishedAt: fixed.Add(1500 * time.Millisecond),
-		collapsed:  true,
 	}
 	c.messages = []msgItem{
 		&assistantItem{c: c, thinking: thinking, content: "Final answer.", showLabel: true},

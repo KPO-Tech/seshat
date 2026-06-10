@@ -180,13 +180,12 @@ func (c *Chat) recomputePlainAndRegions() {
 				detailEnd:     0,
 			})
 		}
-		if assistant, ok := item.(*assistantItem); ok && assistant.thinking != nil && strings.TrimSpace(assistant.thinking.content) != "" {
+		if assistant, ok := item.(*assistantItem); ok && assistant.thinkingBoxHeight > 0 {
 			thinkingStart := startLine
 			if assistant.showLabel {
 				thinkingStart++
 			}
-			thinkingRendered := assistant.thinking.render(c.styles, c.width-2)
-			thinkingHeight := max(1, lipgloss.Height(ansi.Strip(thinkingRendered)))
+			thinkingHeight := max(1, assistant.thinkingBoxHeight)
 			thinkingRegions = append(thinkingRegions, thinkingRegion{startLine: thinkingStart, endLine: thinkingStart + thinkingHeight - 1, msgIndex: mi})
 		}
 		itemRegions = append(itemRegions, itemRegion{

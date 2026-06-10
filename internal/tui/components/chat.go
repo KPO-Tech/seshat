@@ -356,8 +356,7 @@ func (c *Chat) ToggleThinking() {
 	for i := len(c.messages) - 1; i >= 0; i-- {
 		if assistant, ok := c.messages[i].(*assistantItem); ok {
 			if assistant.thinking != nil {
-				assistant.thinking.toggle()
-				assistant.invalidate()
+				assistant.toggleThinking()
 				c.refresh()
 			}
 			break
@@ -555,8 +554,7 @@ func (c *Chat) handleThinkingLineClick(msgIndex int) {
 	if !ok || assistant.thinking == nil {
 		return
 	}
-	assistant.thinking.toggle()
-	assistant.invalidate()
+	assistant.toggleThinking()
 	c.refresh()
 }
 
