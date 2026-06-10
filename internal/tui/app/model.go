@@ -221,6 +221,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.permission.SetPending(&msg)
 		m.permInput = ""
 		m.state = statePermission
+		if toolUseID, _ := msg.Metadata["tool_use_id"].(string); toolUseID != "" {
+			m.chat.SetToolAwaitingPermission(toolUseID, true)
+		}
 
 	case tui.SessionListMsg:
 		if msg.Err == nil {

@@ -76,6 +76,9 @@ type toolItem struct {
 	startedAt  time.Time
 	finishedAt time.Time
 
+	// awaitingPermission: isDone() stays false so the render cache never freezes the item.
+	awaitingPermission bool
+
 	nestedTools []*toolItem
 
 	// cache is the two-level render cache for chat-list rendering.
@@ -131,6 +134,9 @@ func (t *toolItem) rawRender(c *Chat, width int) string {
 	parts := []string{expander, icon, nameStyle.Render(toolDisplayName(t.name))}
 	if summary != "" {
 		parts = append(parts, c.styles.MsgTimestamp.Render(summary))
+	}
+	if t.awaitingPermission && !t.isDone() {
+		parts = append(parts, c.styles.ToolProgress.Render("Awaiting permission…"))
 	}
 	if dur := t.durationText(); dur != "" {
 		parts = append(parts, c.styles.MsgTimestamp.Render("("+dur+")"))
@@ -236,6 +242,8 @@ func (t *toolItem) renderIcon(c *Chat) string {
 		return c.styles.MsgTimestamp.Render("✓")
 	case t.status == "failed" || t.status == "error":
 		return c.styles.ToolError.Render("✗")
+	case t.awaitingPermission && !t.isDone():
+		return c.styles.ToolProgress.Render("?")
 	case !t.isDone():
 		frame := strings.TrimSpace(c.SpinnerFrame)
 		if frame == "" {

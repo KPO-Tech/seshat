@@ -79,16 +79,25 @@ func (m *Model) handleKey(msg tea.KeyPressMsg) (bool, tea.Cmd) {
 		if m.permission.HandleKey(k) {
 			return true, nil
 		}
+		// Capture the pending tool ID before Resolve() clears it.
+		var pendingToolUseID string
+		if p := m.permission.GetPending(); p != nil {
+			pendingToolUseID, _ = p.Metadata["tool_use_id"].(string)
+		}
+		resolveAndClear := func(v any, cancelled bool) {
+			m.permission.Resolve(v, cancelled)
+			m.state = stateChat
+			if pendingToolUseID != "" {
+				m.chat.SetToolAwaitingPermission(pendingToolUseID, false)
+			}
+		}
 		switch {
 		case k == "y" || k == "Y":
-			m.permission.Resolve(true, false)
-			m.state = stateChat
+			resolveAndClear(true, false)
 		case k == "n" || k == "N" || k == "esc":
-			m.permission.Resolve(false, true)
-			m.state = stateChat
+			resolveAndClear(false, true)
 		case k == "a" || k == "A":
-			m.permission.Resolve("always", false)
-			m.state = stateChat
+			resolveAndClear("always", false)
 		default:
 			m.permInput += k
 		}

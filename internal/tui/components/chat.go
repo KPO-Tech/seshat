@@ -382,6 +382,20 @@ func (c *Chat) HasTools() bool {
 	return false
 }
 
+func (c *Chat) SetToolAwaitingPermission(toolUseID string, waiting bool) {
+	for _, m := range c.messages {
+		if t, ok := m.(*toolItem); ok && t.id == toolUseID {
+			if t.awaitingPermission == waiting {
+				return
+			}
+			t.awaitingPermission = waiting
+			t.invalidate()
+			c.refresh()
+			return
+		}
+	}
+}
+
 func (c *Chat) HasSelectedTool() bool {
 	return c.selectedToolIndex() >= 0
 }
