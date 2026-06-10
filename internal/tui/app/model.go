@@ -93,9 +93,23 @@ type Model struct {
 	lastTurnErr         string
 	skillCatalog        []tui.SkillInfo
 	skillCatalogLoaded  bool
+
+	// initialSessionID, when non-empty, triggers an automatic LoadSession call
+	// in Init(). Set via --resume ID on the CLI. Mirrors Crush's initialSessionID.
+	initialSessionID string
+	// continueLast, when true, resumes the most recently updated session once the
+	// first SessionListMsg arrives. Set via --continue on the CLI. Mirrors Crush's
+	// continueLastSession. Cleared to false after the first auto-resume fires so
+	// subsequent SessionListMsg ticks (from the session browser) don't re-trigger.
+	continueLast bool
 }
 
-func New(ws tui.Workspace, ctx context.Context) Model {
+// New creates a fresh Model. initialSessionID and continueLast mirror Crush's
+// ui.New(com, initialSessionID, continueLast) contract:
+//   - initialSessionID != "" → load that session immediately in Init()
+//   - continueLast == true   → load the most-recently-updated session once the
+//     first SessionListMsg arrives (async equivalent of Crush's sync path)
+func New(ws tui.Workspace, ctx context.Context, initialSessionID string, continueLast bool) Model {
 	ctx, cancel := context.WithCancel(ctx)
 
 	styles := common.DefaultStyles()
@@ -139,6 +153,8 @@ func New(ws tui.Workspace, ctx context.Context) Model {
 		attachments:      components.NewAttachments(styles),
 		input:            ta,
 		spinner:          sp,
+		initialSessionID: initialSessionID,
+		continueLast:     continueLast,
 	}
 }
 
@@ -146,11 +162,20 @@ func New(ws tui.Workspace, ctx context.Context) Model {
 
 func (m Model) Init() tea.Cmd {
 	// Focus() in bubbles/v2 returns a Cmd that sets up the cursor — must run.
-	return tea.Batch(
+	// loadSessions() is always issued: the session browser needs it, and the
+	// continueLast path listens for the resulting SessionListMsg.
+	cmds := []tea.Cmd{
 		m.input.Focus(),
 		m.spinner.Tick,
 		m.loadSessions(),
-	)
+	}
+	// --resume: start loading the target session in parallel with the session
+	// list so the UI transitions to chat as fast as possible (no extra round
+	// trip). Mirrors Crush's loadInitialSession() direct path.
+	if m.initialSessionID != "" {
+		cmds = append(cmds, m.loadSession(m.initialSessionID))
+	}
+	return tea.Batch(cmds...)
 }
 
 func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
@@ -236,6 +261,23 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case tui.SessionListMsg:
 		if msg.Err == nil {
 			m.sessions.SetSessions(msg.Sessions)
+			// --continue: auto-resume the most recently updated session.
+			// We scan for the max UpdatedAt rather than assuming a sort order
+			// because the workspace sends sessions in insertion order.
+			// continueLast is cleared immediately to prevent re-triggering on
+			// subsequent SessionListMsg ticks (e.g., from the session browser).
+			// Mirrors Crush's loadInitialSession() continueLast branch but
+			// adapted for our async ListSessions model.
+			if m.continueLast && m.activeSession == "" && len(msg.Sessions) > 0 {
+				m.continueLast = false
+				latest := msg.Sessions[0]
+				for _, s := range msg.Sessions[1:] {
+					if s.UpdatedAt.After(latest.UpdatedAt) {
+						latest = s
+					}
+				}
+				cmds = append(cmds, m.loadSession(latest.ID))
+			}
 		}
 
 	case tui.SessionRenamedMsg:
@@ -608,8 +650,10 @@ func clamp(v, lo, hi int) int {
 }
 
 // Run starts the BubbleTea program and blocks until it exits.
-func Run(ws tui.Workspace, ctx context.Context) error {
-	m := New(ws, ctx)
+// initialSessionID and continueLast are forwarded to New(); see its doc for
+// semantics. Pass empty string / false for the default "start fresh" behaviour.
+func Run(ws tui.Workspace, ctx context.Context, initialSessionID string, continueLast bool) error {
+	m := New(ws, ctx, initialSessionID, continueLast)
 	p := tea.NewProgram(m, tea.WithContext(ctx))
 	ws.Subscribe(p)
 	_, err := p.Run()

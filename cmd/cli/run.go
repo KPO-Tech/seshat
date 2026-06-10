@@ -90,7 +90,8 @@ func runChat(ctx context.Context, args []string, stdin io.Reader, stdout, stderr
 	permissionMode := flags.String("permission-mode", "", "")
 	cwd := flags.String("cwd", "", "")
 	dbPath := flags.String("db", "", "")
-	resumeSessionID := flags.String("resume", "", "")
+	resumeSessionID := flags.String("resume", "", "Resume a previous session by ID")
+	continueLast := flags.Bool("continue", false, "Resume the most recent session")
 	showThinking := flags.Bool("show-thinking", false, "")
 	debug := flags.Bool("debug", false, "")
 	if err := flags.Parse(args); err != nil {
@@ -111,8 +112,7 @@ func runChat(ctx context.Context, args []string, stdin io.Reader, stdout, stderr
 	// Launch the TUI when running interactively. Fall back to the text-mode
 	// chat loop when stdout is not a terminal or --no-tui is passed.
 	if !*noTUI && isatty.IsTerminal(os.Stdout.Fd()) {
-		_ = resumeSessionID // future: pass to workspace for auto-resume
-		return runInteractive(ctx, options)
+		return runInteractive(ctx, options, *resumeSessionID, *continueLast)
 	}
 
 	if err := validateProviderSetup(options); err != nil {

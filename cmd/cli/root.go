@@ -35,9 +35,12 @@ func execute(ctx context.Context, args []string, stdin io.Reader, stdout, stderr
 
 func printUsage(out io.Writer) {
 	fmt.Fprintln(out, "Usage:")
-	fmt.Fprintln(out, "  nexus chat    [--resume ID] [--show-thinking] [--model PROVIDER:MODEL]")
-	fmt.Fprintln(out, "                [--permission-mode MODE] [--cwd DIR] [--db PATH]")
+	fmt.Fprintln(out, "  nexus chat    [--resume ID] [--continue] [--show-thinking]")
+	fmt.Fprintln(out, "                [--model PROVIDER:MODEL] [--permission-mode MODE]")
+	fmt.Fprintln(out, "                [--cwd DIR] [--db PATH]")
 	fmt.Fprintln(out, "                [--no-tui]   force text mode (skip interactive TUI)")
+	fmt.Fprintln(out, "                --resume ID  resume a specific session by ID")
+	fmt.Fprintln(out, "                --continue   resume the most recently updated session")
 	fmt.Fprintln(out, "")
 	fmt.Fprintln(out, "  nexus config  [--provider NAME] [--model MODEL] [--api-key KEY]")
 	fmt.Fprintln(out, "                [--region REGION] [--project-id ID] [--base-url URL]")

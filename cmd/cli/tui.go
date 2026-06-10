@@ -23,6 +23,7 @@ import (
 	"github.com/EngineerProjects/nexus-engine/internal/tui"
 	tuiapp "github.com/EngineerProjects/nexus-engine/internal/tui/app"
 	"github.com/EngineerProjects/nexus-engine/internal/tui/common"
+	"github.com/EngineerProjects/nexus-engine/internal/tui/pubsub"
 	engineconfig "github.com/EngineerProjects/nexus-engine/pkg/config"
 	"github.com/EngineerProjects/nexus-engine/pkg/sdk"
 	skillspkg "github.com/EngineerProjects/nexus-engine/pkg/skills"
@@ -91,6 +92,7 @@ type nexusWorkspace struct {
 
 	mu      sync.RWMutex
 	program *tea.Program
+	broker  *pubsub.Broker[tea.Msg]
 
 	sessionMu sync.Mutex
 	session   *sdk.Session
@@ -186,6 +188,7 @@ func newNexusWorkspace(options runtimeOptions) (*nexusWorkspace, error) {
 		clientOpts:    options,
 		subagentLogs:  make(map[string]string),
 		subagentTools: make(map[string][]common.SubagentToolState),
+		broker:        pubsub.NewBroker[tea.Msg](),
 	}
 	w.debounce = newChunkDebounce(33*time.Millisecond, func(text string) {
 		w.send(tui.ChunkMsg{Text: text})
@@ -221,15 +224,26 @@ func (w *nexusWorkspace) Subscribe(p *tea.Program) {
 	w.mu.Lock()
 	w.program = p
 	w.mu.Unlock()
+
+	// Forward events from the broker to the BubbleTea program.
+	ctx := context.Background()
+	evc := w.broker.Subscribe(ctx)
+	go func() {
+		for msg := range evc {
+			p.Send(msg.Payload)
+		}
+	}()
 }
 
 func (w *nexusWorkspace) send(msg tea.Msg) {
-	w.mu.RLock()
-	p := w.program
-	w.mu.RUnlock()
-	if p != nil {
-		p.Send(msg)
+	// Lossy delivery for high-frequency streaming deltas.
+	if _, ok := msg.(tui.ChunkMsg); ok {
+		w.broker.Publish(pubsub.UpdatedEvent, msg)
+		return
 	}
+
+	// Reliable delivery for terminal events and status updates.
+	w.broker.PublishMustDeliver(context.Background(), pubsub.UpdatedEvent, msg)
 }
 
 func (w *nexusWorkspace) reloadClient(ctx context.Context, modelOverride string) error {
@@ -1037,6 +1051,8 @@ func (w *nexusWorkspace) LoadSkills(_ context.Context) []tui.SkillInfo {
 }
 
 func (w *nexusWorkspace) Close() {
+	w.broker.Shutdown()
+
 	if closed := w.cancelAsyncAgents(); closed > 0 {
 		log.Printf("[tui] closed %d async sub-agent(s) during shutdown", closed)
 	}
@@ -1047,6 +1063,7 @@ func (w *nexusWorkspace) Close() {
 		_ = client.Close()
 	}
 }
+
 
 // ─── SDK callback bridges ──────────────────────────────────────────────────────
 
@@ -1358,7 +1375,9 @@ func (w *nexusWorkspace) promptFn(ctx context.Context, req sdk.PromptRequest) (s
 // ─── TUI entry point ──────────────────────────────────────────────────────────
 
 // runInteractive starts the BubbleTea TUI. Called by runChat when a TTY is detected.
-func runInteractive(ctx context.Context, options runtimeOptions) error {
+// initialSessionID and continueLast are forwarded verbatim to tuiapp.Run(); see
+// tuiapp.New() for their exact semantics.
+func runInteractive(ctx context.Context, options runtimeOptions, initialSessionID string, continueLast bool) error {
 	if err := validateProviderSetup(options); err != nil {
 		return err
 	}
@@ -1378,7 +1397,7 @@ func runInteractive(ctx context.Context, options runtimeOptions) error {
 	}
 	defer ws.Close()
 
-	return tuiapp.Run(ws, ctx)
+	return tuiapp.Run(ws, ctx, initialSessionID, continueLast)
 }
 
 // buildTUIMonitoring creates a monitoring system that writes to a log file
