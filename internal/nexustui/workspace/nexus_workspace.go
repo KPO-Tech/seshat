@@ -32,6 +32,8 @@ import (
 	"github.com/EngineerProjects/nexus-engine/internal/nexustui/pubsub"
 	"github.com/EngineerProjects/nexus-engine/internal/nexustui/session"
 	"github.com/EngineerProjects/nexus-engine/internal/nexustui/skills"
+	internalproviders "github.com/EngineerProjects/nexus-engine/internal/providers"
+	"github.com/EngineerProjects/nexus-engine/internal/types"
 	"github.com/EngineerProjects/nexus-engine/pkg/sdk"
 	"github.com/google/uuid"
 )
@@ -91,6 +93,16 @@ type NexusWorkspace struct {
 	// pendingPerms maps PermissionRequest.ID → resolution channel.
 	// PromptFn blocks on the channel; Grant/Deny send the response.
 	pendingPerms sync.Map // map[string]chan sdk.PromptResponse
+
+	// Provider registry — populated by DetectProviders() at startup.
+	providerKeys sync.Map      // providerID → apiKey string (empty string = no key needed)
+	ollamaMu     sync.RWMutex
+	ollamaModels []catwalk.Model
+
+	// Options stored for client rebuilds on model/provider switch.
+	sqlitePath string
+	permMode   sdk.PermissionMode
+	monitoring *sdk.MonitoringSystem
 }
 
 // ─── Constructor ──────────────────────────────────────────────────────────────
@@ -483,8 +495,48 @@ func (w *NexusWorkspace) AgentQueuedPrompts(_ string) int                 { retu
 func (w *NexusWorkspace) AgentQueuedPromptsList(_ string) []string        { return nil }
 func (w *NexusWorkspace) AgentClearQueue(_ string)                        {}
 func (w *NexusWorkspace) AgentSummarize(_ context.Context, _ string) error { return nil }
-func (w *NexusWorkspace) UpdateAgentModel(_ context.Context) error        { return nil }
 func (w *NexusWorkspace) InitCoderAgent(_ context.Context) error          { return nil }
+
+// UpdateAgentModel rebuilds the SDK client with the current w.model string.
+// Called by the TUI after the user selects a new model.
+func (w *NexusWorkspace) UpdateAgentModel(ctx context.Context) error {
+	provider, modelID := w.splitModel()
+	apiKey := w.resolveAPIKey(provider)
+
+	provCfg := internalproviders.GetProviderConfig(types.APIProvider(provider))
+	if provCfg == nil {
+		provCfg = &internalproviders.Config{Provider: types.APIProvider(provider)}
+	}
+	provCfg.APIKey = apiKey
+
+	enableMonitoring := w.monitoring != nil
+	newClient, err := sdk.NewClient(&sdk.ClientConfig{
+		APIKey:            apiKey,
+		Model:             sdk.ModelIdentifier{Provider: sdk.APIProvider(provider), Model: modelID},
+		PermissionMode:    w.permMode,
+		AutoCompact:       true,
+		PersistSessions:   true,
+		SessionSQLitePath: w.sqlitePath,
+		PromptFn:          w.PromptFn,
+		ProgressFn:        w.OnProgress,
+		ResponseChunkFn:   w.OnChunk,
+		RuntimeEventFn:    w.OnRuntimeEvent,
+		OnSessionTitled:   w.OnSessionTitled,
+		WorkingDir:        w.workDir,
+		ProviderConfig:    provCfg,
+		EnableMonitoring:  enableMonitoring,
+		Monitoring:        w.monitoring,
+	})
+	if err != nil {
+		return fmt.Errorf("rebuild SDK client: %w", err)
+	}
+
+	if w.client != nil {
+		w.client.Close()
+	}
+	w.SetSDKClient(newClient)
+	return nil
+}
 
 func (w *NexusWorkspace) AgentModel() AgentModel {
 	provider, modelID := w.splitModel()
@@ -579,15 +631,42 @@ func (w *NexusWorkspace) Config() *config.Config {
 	}
 
 	provider, modelID := w.splitModel()
-	providerCfg := config.ProviderConfig{
-		ID:   provider,
-		Name: provider,
-		Models: []catwalk.Model{
-			{ID: modelID, Name: modelID, ContextWindow: 200000},
-		},
-	}
 	providers := csync.NewMap[string, config.ProviderConfig]()
-	providers.Set(provider, providerCfg)
+
+	// Populate a ProviderConfig entry for every key stored by DetectProviders
+	// or SetProviderAPIKey. This is what isConfigured() checks in handleSelectModel.
+	w.providerKeys.Range(func(k, v any) bool {
+		pid := k.(string)
+		apiKey, _ := v.(string)
+
+		var models []catwalk.Model
+		if pid == "ollama" {
+			w.ollamaMu.RLock()
+			models = append([]catwalk.Model(nil), w.ollamaModels...)
+			w.ollamaMu.RUnlock()
+		}
+
+		providers.Set(pid, config.ProviderConfig{
+			ID:     pid,
+			Name:   displayNameFor(pid),
+			APIKey: apiKey,
+			Type:   catwalkTypeFor(pid),
+			Models: models,
+		})
+		return true
+	})
+
+	// Always ensure the current model's provider is present.
+	if _, ok := providers.Get(provider); !ok {
+		providers.Set(provider, config.ProviderConfig{
+			ID:   provider,
+			Name: displayNameFor(provider),
+			Type: catwalkTypeFor(provider),
+			Models: []catwalk.Model{
+				{ID: modelID, Name: modelID, ContextWindow: 200000},
+			},
+		})
+	}
 
 	cfg := &config.Config{
 		Models: map[config.SelectedModelType]config.SelectedModel{
@@ -617,9 +696,34 @@ func (w *NexusWorkspace) UpdatePreferredModel(_ config.Scope, _ config.SelectedM
 	return nil
 }
 
-func (w *NexusWorkspace) SetCompactMode(_ config.Scope, _ bool) error      { return nil }
-func (w *NexusWorkspace) SetProviderAPIKey(_ config.Scope, _ string, _ any) error { return nil }
-func (w *NexusWorkspace) SetConfigField(_ config.Scope, _ string, _ any) error    { return nil }
+func (w *NexusWorkspace) SetCompactMode(_ config.Scope, _ bool) error   { return nil }
+func (w *NexusWorkspace) SetConfigField(_ config.Scope, _ string, _ any) error { return nil }
+
+// SetProviderAPIKey persists the API key for a provider and marks it as
+// configured in the TUI's in-memory config (so isConfigured() returns true).
+func (w *NexusWorkspace) SetProviderAPIKey(_ config.Scope, providerID string, value any) error {
+	apiKey, _ := value.(string)
+
+	// Store in workspace registry for resolveAPIKey / UpdateAgentModel.
+	w.providerKeys.Store(providerID, apiKey)
+
+	// Update the cached TUI config immediately so isConfigured() sees it
+	// without waiting for the next Config() cache invalidation.
+	cfg := w.Config()
+	existing, _ := cfg.Providers.Get(providerID)
+	existing.ID = providerID
+	existing.Name = displayNameFor(providerID)
+	existing.APIKey = apiKey
+	existing.Type = catwalkTypeFor(providerID)
+	cfg.Providers.Set(providerID, existing)
+
+	// Persist asynchronously — non-blocking for the UI.
+	if apiKey != "" {
+		go w.persistProviderAPIKey(providerID, apiKey)
+	}
+
+	return nil
+}
 func (w *NexusWorkspace) RemoveConfigField(_ config.Scope, _ string) error         { return nil }
 func (w *NexusWorkspace) ImportCopilot() (*oauth.Token, bool)                      { return nil, false }
 func (w *NexusWorkspace) RefreshOAuthToken(_ context.Context, _ config.Scope, _ string) error {

@@ -38,6 +38,7 @@ func runNexusTUI(ctx context.Context, options runtimeOptions, initialSessionID s
 	}
 
 	ws := crushws.NewNexusWorkspace(nil, options.WorkingDir, modelStr)
+	ws.SetStartupConfig(options.SQLitePath, options.PermissionMode, options.Monitoring)
 
 	client, err := newClient(
 		options,
@@ -51,6 +52,10 @@ func runNexusTUI(ctx context.Context, options runtimeOptions, initialSessionID s
 		return err
 	}
 	ws.SetSDKClient(client)
+
+	// Probe env vars, credentials DB, and Ollama in the background so the
+	// TUI starts immediately while provider detection completes concurrently.
+	go ws.DetectProviders()
 
 	com := crushcommon.DefaultCommon(ws)
 	uiModel := uimodel.New(com, initialSessionID, continueLast)
