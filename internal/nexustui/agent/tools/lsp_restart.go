@@ -9,7 +9,7 @@ import (
 	"strings"
 	"sync"
 
-	"charm.land/fantasy"
+	tool "github.com/EngineerProjects/nexus-engine/internal/tools/registry"
 	"github.com/EngineerProjects/nexus-engine/internal/nexustui/lsp"
 )
 
@@ -24,45 +24,44 @@ type LSPRestartParams struct {
 	Name string `json:"name,omitempty"`
 }
 
-func NewLSPRestartTool(lspManager *lsp.Manager) fantasy.AgentTool {
-	return fantasy.NewAgentTool(
-		LSPRestartToolName,
-		lspRestartDescription,
-		func(ctx context.Context, params LSPRestartParams, call fantasy.ToolCall) (fantasy.ToolResponse, error) {
-			if lspManager.Clients().Len() == 0 {
-				return fantasy.NewTextErrorResponse("no LSP clients available to restart"), nil
+func NewLSPRestartTool(lspManager *lsp.Manager) tool.Tool {
+	t, _ := tool.NewBuilder(LSPRestartToolName).
+		WithDescription(lspRestartDescription).
+		NoPermission().
+		WithHandler(func(ctx context.Context, input tool.CallInput, _ tool.ToolUseContext) (tool.CallResult, error) {
+			name, _ := input.Parsed["name"].(string)
+			if lspManager == nil || lspManager.Clients().Len() == 0 {
+				return tool.NewTextResult("no LSP clients available to restart"), nil
 			}
 
 			clientsToRestart := make(map[string]*lsp.Client)
-			if params.Name == "" {
+			if name == "" {
 				maps.Insert(clientsToRestart, lspManager.Clients().Seq2())
 			} else {
-				client, exists := lspManager.Clients().Get(params.Name)
+				client, exists := lspManager.Clients().Get(name)
 				if !exists {
-					return fantasy.NewTextErrorResponse(fmt.Sprintf("LSP client '%s' not found", params.Name)), nil
+					return tool.NewTextResult(fmt.Sprintf("LSP client '%s' not found", name)), nil
 				}
-				clientsToRestart[params.Name] = client
+				clientsToRestart[name] = client
 			}
 
-			var restarted []string
-			var failed []string
+			var restarted, failed []string
 			var mu sync.Mutex
 			var wg sync.WaitGroup
-			for name, client := range clientsToRestart {
+			for clientName, client := range clientsToRestart {
 				wg.Go(func() {
 					if err := client.Restart(); err != nil {
-						slog.Error("Failed to restart LSP client", "name", name, "error", err)
+						slog.Error("Failed to restart LSP client", "name", clientName, "error", err)
 						mu.Lock()
-						failed = append(failed, name)
+						failed = append(failed, clientName)
 						mu.Unlock()
 						return
 					}
 					mu.Lock()
-					restarted = append(restarted, name)
+					restarted = append(restarted, clientName)
 					mu.Unlock()
 				})
 			}
-
 			wg.Wait()
 
 			var output string
@@ -71,10 +70,9 @@ func NewLSPRestartTool(lspManager *lsp.Manager) fantasy.AgentTool {
 			}
 			if len(failed) > 0 {
 				output += fmt.Sprintf("Failed to restart %d LSP client(s): %s\n", len(failed), strings.Join(failed, ", "))
-				return fantasy.NewTextErrorResponse(output), nil
 			}
-
-			return fantasy.NewTextResponse(output), nil
-		},
-	)
+			return tool.NewTextResult(output), nil
+		}).
+		Build()
+	return t
 }

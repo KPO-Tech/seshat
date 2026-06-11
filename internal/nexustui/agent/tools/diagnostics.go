@@ -10,7 +10,7 @@ import (
 	"sync"
 	"time"
 
-	"charm.land/fantasy"
+	tool "github.com/EngineerProjects/nexus-engine/internal/tools/registry"
 	"github.com/EngineerProjects/nexus-engine/internal/nexustui/lsp"
 	"github.com/charmbracelet/x/powernap/pkg/lsp/protocol"
 )
@@ -24,19 +24,22 @@ const DiagnosticsToolName = "lsp_diagnostics"
 //go:embed diagnostics.md
 var diagnosticsDescription string
 
-func NewDiagnosticsTool(lspManager *lsp.Manager) fantasy.AgentTool {
-	return fantasy.NewAgentTool(
-		DiagnosticsToolName,
-		diagnosticsDescription,
-		func(ctx context.Context, params DiagnosticsParams, call fantasy.ToolCall) (fantasy.ToolResponse, error) {
-			if lspManager.Clients().Len() == 0 {
-				return fantasy.NewTextErrorResponse("no LSP clients available"), nil
+func NewDiagnosticsTool(lspManager *lsp.Manager) tool.Tool {
+	t, _ := tool.NewBuilder(DiagnosticsToolName).
+		WithDescription(diagnosticsDescription).
+		ReadOnly().
+		ConcurrencySafe().
+		NoPermission().
+		WithHandler(func(ctx context.Context, input tool.CallInput, _ tool.ToolUseContext) (tool.CallResult, error) {
+			filePath, _ := input.Parsed["file_path"].(string)
+			if lspManager == nil || lspManager.Clients().Len() == 0 {
+				return tool.NewTextResult("no LSP clients available"), nil
 			}
-			notifyLSPs(ctx, lspManager, params.FilePath)
-			output := getDiagnostics(params.FilePath, lspManager)
-			return fantasy.NewTextResponse(output), nil
-		},
-	)
+			notifyLSPs(ctx, lspManager, filePath)
+			return tool.NewTextResult(getDiagnostics(filePath, lspManager)), nil
+		}).
+		Build()
+	return t
 }
 
 // openInLSPs ensures LSP servers are running and aware of the file, but does

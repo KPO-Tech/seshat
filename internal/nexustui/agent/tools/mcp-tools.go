@@ -2,13 +2,17 @@ package tools
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"slices"
 
-	"charm.land/fantasy"
 	"github.com/EngineerProjects/nexus-engine/internal/nexustui/agent/tools/mcp"
 	"github.com/EngineerProjects/nexus-engine/internal/nexustui/config"
 	"github.com/EngineerProjects/nexus-engine/internal/nexustui/permission"
+	"github.com/EngineerProjects/nexus-engine/internal/tools/contract"
+	tool "github.com/EngineerProjects/nexus-engine/internal/tools/registry"
+	"github.com/EngineerProjects/nexus-engine/internal/tools/schema"
+	"github.com/EngineerProjects/nexus-engine/internal/types"
 )
 
 // whitelistDockerTools contains Docker MCP tools that don't require permission.
@@ -20,14 +24,14 @@ var whitelistDockerTools = []string{
 	"mcp_docker_code-mode",
 }
 
-// GetMCPTools gets all the currently available MCP tools.
-func GetMCPTools(permissions permission.Service, cfg *config.ConfigStore, wd string) []*Tool {
-	var result []*Tool
-	for mcpName, tools := range mcp.Tools() {
-		for _, tool := range tools {
-			result = append(result, &Tool{
+// GetMCPTools returns all currently available nexustui MCP tools as SDK tools.
+func GetMCPTools(permissions permission.Service, cfg *config.ConfigStore, wd string) []tool.Tool {
+	var result []tool.Tool
+	for mcpName, mcpTools := range mcp.Tools() {
+		for _, t := range mcpTools {
+			result = append(result, &MCPTool{
 				mcpName:     mcpName,
-				tool:        tool,
+				mcpTool:     t,
 				permissions: permissions,
 				workingDir:  wd,
 				cfg:         cfg,
@@ -37,115 +41,77 @@ func GetMCPTools(permissions permission.Service, cfg *config.ConfigStore, wd str
 	return result
 }
 
-// Tool is a tool from a MCP.
-type Tool struct {
-	mcpName         string
-	tool            *mcp.Tool
-	cfg             *config.ConfigStore
-	permissions     permission.Service
-	workingDir      string
-	providerOptions fantasy.ProviderOptions
+// MCPTool wraps a nexustui MCP tool as a contract.Tool so it can be
+// registered with the SDK and called through the standard tool pipeline.
+type MCPTool struct {
+	mcpName     string
+	mcpTool     *mcp.Tool
+	cfg         *config.ConfigStore
+	permissions permission.Service
+	workingDir  string
 }
 
-func (m *Tool) SetProviderOptions(opts fantasy.ProviderOptions) {
-	m.providerOptions = opts
+func (m *MCPTool) toolName() string {
+	return fmt.Sprintf("mcp_%s_%s", m.mcpName, m.mcpTool.Name)
 }
 
-func (m *Tool) ProviderOptions() fantasy.ProviderOptions {
-	return m.providerOptions
-}
-
-func (m *Tool) Name() string {
-	return fmt.Sprintf("mcp_%s_%s", m.mcpName, m.tool.Name)
-}
-
-func (m *Tool) MCP() string {
-	return m.mcpName
-}
-
-func (m *Tool) MCPToolName() string {
-	return m.tool.Name
-}
-
-func (m *Tool) Info() fantasy.ToolInfo {
-	parameters := make(map[string]any)
-	required := make([]string, 0)
-
-	if input, ok := m.tool.InputSchema.(map[string]any); ok {
-		if props, ok := input["properties"].(map[string]any); ok {
-			parameters = props
-		}
-		if req, ok := input["required"].([]any); ok {
-			// Convert []any -> []string when elements are strings
-			for _, v := range req {
-				if s, ok := v.(string); ok {
-					required = append(required, s)
-				}
-			}
-		} else if reqStr, ok := input["required"].([]string); ok {
-			// Handle case where it's already []string
-			required = reqStr
+func (m *MCPTool) Definition() tool.Definition {
+	var inputSchema schema.JSONSchema
+	if m.mcpTool.InputSchema != nil {
+		if raw, err := json.Marshal(m.mcpTool.InputSchema); err == nil {
+			_ = json.Unmarshal(raw, &inputSchema)
 		}
 	}
-
-	return fantasy.ToolInfo{
-		Name:        m.Name(),
-		Description: m.tool.Description,
-		Parameters:  parameters,
-		Required:    required,
+	return tool.Definition{
+		Name:               m.toolName(),
+		DisplayName:        m.mcpTool.Name,
+		Description:        m.mcpTool.Description,
+		InputSchema:        inputSchema,
+		RequiresPermission: !slices.Contains(whitelistDockerTools, m.toolName()),
+		IsMCP:              true,
 	}
 }
 
-func (m *Tool) Run(ctx context.Context, params fantasy.ToolCall) (fantasy.ToolResponse, error) {
-	sessionID := GetSessionFromContext(ctx)
-	if sessionID == "" {
-		return fantasy.ToolResponse{}, fmt.Errorf("session ID is required for creating a new file")
-	}
-
-	// Skip permission for whitelisted Docker MCP tools.
-	if !slices.Contains(whitelistDockerTools, params.Name) {
-		permissionDescription := fmt.Sprintf("execute %s with the following parameters:", m.Info().Name)
-		p, err := m.permissions.Request(
-			ctx,
-			permission.CreatePermissionRequest{
-				SessionID:   sessionID,
-				ToolCallID:  params.ID,
-				Path:        m.workingDir,
-				ToolName:    m.Info().Name,
-				Action:      "execute",
-				Description: permissionDescription,
-				Params:      params.Input,
-			},
-		)
-		if err != nil {
-			return fantasy.ToolResponse{}, err
-		}
-		if !p {
-			return NewPermissionDeniedResponse(), nil
-		}
-	}
-
-	result, err := mcp.RunTool(ctx, m.cfg, m.mcpName, m.tool.Name, params.Input)
+func (m *MCPTool) Call(ctx context.Context, input tool.CallInput, _ types.CanUseToolFn) (tool.CallResult, error) {
+	inputJSON, err := json.Marshal(input.Parsed)
 	if err != nil {
-		return fantasy.NewTextErrorResponse(err.Error()), nil
+		return tool.NewErrorResult(err), nil
 	}
 
-	switch result.Type {
-	case "image", "media":
-		if !GetSupportsImagesFromContext(ctx) {
-			modelName := GetModelNameFromContext(ctx)
-			return fantasy.NewTextErrorResponse(fmt.Sprintf("This model (%s) does not support image data.", modelName)), nil
-		}
-
-		var response fantasy.ToolResponse
-		if result.Type == "image" {
-			response = fantasy.NewImageResponse(result.Data, result.MediaType)
-		} else {
-			response = fantasy.NewMediaResponse(result.Data, result.MediaType)
-		}
-		response.Content = result.Content
-		return response, nil
-	default:
-		return fantasy.NewTextResponse(result.Content), nil
+	result, err := mcp.RunTool(ctx, m.cfg, m.mcpName, m.mcpTool.Name, string(inputJSON))
+	if err != nil {
+		return tool.NewTextResult(fmt.Sprintf("error: %s", err)), nil
 	}
+
+	return tool.NewTextResult(result.Content), nil
 }
+
+func (m *MCPTool) Description(_ context.Context) (string, error) {
+	return m.mcpTool.Description, nil
+}
+
+func (m *MCPTool) ValidateInput(_ context.Context, input map[string]any) (map[string]any, error) {
+	return input, nil
+}
+
+func (m *MCPTool) CheckPermissions(_ context.Context, input map[string]any, _ tool.ToolUseContext) types.PermissionResult {
+	if slices.Contains(whitelistDockerTools, m.toolName()) {
+		return types.AllowWithInput("", input)
+	}
+	return types.Passthrough(input)
+}
+
+func (m *MCPTool) IsConcurrencySafe(_ map[string]any) bool { return false }
+func (m *MCPTool) IsReadOnly(_ map[string]any) bool         { return false }
+func (m *MCPTool) IsEnabled() bool                          { return true }
+
+func (m *MCPTool) FormatResult(data any) string {
+	return fmt.Sprintf("%v", data)
+}
+
+func (m *MCPTool) BackfillInput(_ context.Context, input map[string]any) map[string]any {
+	return input
+}
+
+// compile-time check
+var _ contract.Tool = (*MCPTool)(nil)

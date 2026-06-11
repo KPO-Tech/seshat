@@ -1,1 +1,0 @@
-List available resource URIs from an MCP server by name; use before read_mcp_resource.

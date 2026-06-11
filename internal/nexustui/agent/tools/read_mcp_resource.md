@@ -1,1 +1,0 @@
-Read a resource by URI from an MCP server; returns text content.

@@ -7,7 +7,7 @@ import (
 	"slices"
 	"strings"
 
-	"charm.land/fantasy"
+	tool "github.com/EngineerProjects/nexus-engine/internal/tools/registry"
 	"github.com/EngineerProjects/nexus-engine/internal/nexustui/agent/tools/mcp"
 	"github.com/EngineerProjects/nexus-engine/internal/nexustui/config"
 	"github.com/EngineerProjects/nexus-engine/internal/nexustui/lsp"
@@ -27,14 +27,17 @@ func NewNexusInfoTool(
 	allSkills []*skills.Skill,
 	activeSkills []*skills.Skill,
 	skillTracker *skills.Tracker,
-) fantasy.AgentTool {
-	return fantasy.NewAgentTool(
-		NexusInfoToolName,
-		nexusInfoDescription,
-		func(ctx context.Context, _ NexusInfoParams, _ fantasy.ToolCall) (fantasy.ToolResponse, error) {
-			return fantasy.NewTextResponse(buildNexusInfo(cfg, lspManager, allSkills, activeSkills, skillTracker)), nil
-		},
-	)
+) tool.Tool {
+	t, _ := tool.NewBuilder(NexusInfoToolName).
+		WithDescription(nexusInfoDescription).
+		ReadOnly().
+		ConcurrencySafe().
+		NoPermission().
+		WithHandler(func(_ context.Context, _ tool.CallInput, _ tool.ToolUseContext) (tool.CallResult, error) {
+			return tool.NewTextResult(buildNexusInfo(cfg, lspManager, allSkills, activeSkills, skillTracker)), nil
+		}).
+		Build()
+	return t
 }
 
 func buildNexusInfo(cfg *config.ConfigStore, lspManager *lsp.Manager, allSkills []*skills.Skill, activeSkills []*skills.Skill, skillTracker *skills.Tracker) string {

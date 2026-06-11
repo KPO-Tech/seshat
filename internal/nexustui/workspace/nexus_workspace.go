@@ -14,8 +14,13 @@ import (
 	"sync/atomic"
 	"time"
 
+	"log/slog"
+	"os"
+	"path/filepath"
+
 	tea "charm.land/bubbletea/v2"
 	"charm.land/catwalk/pkg/catwalk"
+	tuiTools "github.com/EngineerProjects/nexus-engine/internal/nexustui/agent/tools"
 	mcptools "github.com/EngineerProjects/nexus-engine/internal/nexustui/agent/tools/mcp"
 	"github.com/EngineerProjects/nexus-engine/internal/nexustui/config"
 	"github.com/EngineerProjects/nexus-engine/internal/nexustui/csync"
@@ -612,7 +617,23 @@ func (w *NexusWorkspace) ProjectNeedsInitialization() (bool, error)    { return 
 func (w *NexusWorkspace) MarkProjectInitialized() error                { return nil }
 func (w *NexusWorkspace) InitializePrompt() (string, error)            { return "", nil }
 func (w *NexusWorkspace) ListSkills(_ context.Context) ([]skills.CatalogEntry, error) {
-	return nil, nil
+	cfg := w.Config()
+	var skillsPaths []string
+	var disabledSkills []string
+	if cfg.Options != nil {
+		skillsPaths = cfg.Options.SkillsPaths
+		disabledSkills = cfg.Options.DisabledSkills
+	}
+	resolver := w.Resolver()
+	discCfg := skills.DiscoveryConfig{
+		SkillsPaths:    skillsPaths,
+		DisabledSkills: disabledSkills,
+		WorkingDir:     w.workDir,
+		Resolver:       resolver.ResolveValue,
+	}
+	_, active, _ := skills.DiscoverFromConfig(discCfg)
+	resolvedPaths := discCfg.ResolvePaths()
+	return skills.Catalog(active, resolvedPaths, w.workDir), nil
 }
 func (w *NexusWorkspace) ReadSkill(_ context.Context, _ string) ([]byte, skills.SkillReadResult, error) {
 	return nil, skills.SkillReadResult{}, nil
@@ -620,7 +641,7 @@ func (w *NexusWorkspace) ReadSkill(_ context.Context, _ string) ([]byte, skills.
 
 // ─── MCP (stubs) ──────────────────────────────────────────────────────────────
 
-func (w *NexusWorkspace) MCPGetStates() map[string]mcptools.ClientInfo                          { return nil }
+func (w *NexusWorkspace) MCPGetStates() map[string]mcptools.ClientInfo { return mcptools.GetStates() }
 func (w *NexusWorkspace) MCPRefreshPrompts(_ context.Context, _ string)                         {}
 func (w *NexusWorkspace) MCPRefreshResources(_ context.Context, _ string)                       {}
 func (w *NexusWorkspace) RefreshMCPTools(_ context.Context, _ string)                           {}
@@ -728,9 +749,53 @@ func (w *NexusWorkspace) LoadSessionMessages(sessionID string, sdkMsgs []sdk.Mes
 
 // ─── SDK glue — called from newClient() callbacks ────────────────────────────
 
-// SetSDKClient wires the SDK client after it was created (post-construction).
+// SetSDKClient wires the SDK client and registers unique TUI tools.
 func (w *NexusWorkspace) SetSDKClient(client *sdk.Client) {
 	w.client = client
+	w.registerTUITools(nil)
+}
+
+// RegisterLSPTools registers the LSP-backed unique TUI tools with the live LSP manager.
+// Call this once the LSP manager is available (after startup).
+func (w *NexusWorkspace) RegisterLSPTools(lspManager *lsp.Manager) {
+	w.registerTUITools(lspManager)
+}
+
+// registerTUITools registers unique nexustui tools (not covered by SDK builtins).
+// lspManager may be nil; LSP tools will report "no LSP available" until one is set.
+func (w *NexusWorkspace) registerTUITools(lspManager *lsp.Manager) {
+	if w.client == nil {
+		return
+	}
+	logFile := w.logFilePath()
+	uniqueTools := []sdk.Tool{
+		tuiTools.NewNexusLogsTool(logFile),
+		tuiTools.NewDiagnosticsTool(lspManager),
+		tuiTools.NewLSPRestartTool(lspManager),
+		tuiTools.NewReferencesTool(lspManager),
+	}
+	for _, t := range uniqueTools {
+		if err := w.client.RegisterTool(t); err != nil {
+			slog.Debug("Failed to register TUI tool", "tool", t.Definition().Name, "error", err)
+		}
+	}
+}
+
+// logFilePath returns the path to the nexus log file, derived from config.
+func (w *NexusWorkspace) logFilePath() string {
+	cfg := w.Config()
+	dataDir := ""
+	if cfg.Options != nil {
+		dataDir = cfg.Options.DataDirectory
+	}
+	if dataDir == "" {
+		if cacheDir, err := os.UserCacheDir(); err == nil {
+			dataDir = filepath.Join(cacheDir, "nexus-engine")
+		} else {
+			dataDir = os.TempDir()
+		}
+	}
+	return filepath.Join(dataDir, "logs", "nexus.log")
 }
 
 // OnChunk is the sdk.ResponseChunk callback — translates to HandleChunk.
