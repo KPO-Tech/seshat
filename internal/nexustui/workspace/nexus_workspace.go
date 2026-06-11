@@ -87,6 +87,10 @@ type NexusWorkspace struct {
 
 	// Permission: allow-all skip flag
 	permSkip atomic.Bool
+
+	// pendingPerms maps PermissionRequest.ID → resolution channel.
+	// PromptFn blocks on the channel; Grant/Deny send the response.
+	pendingPerms sync.Map // map[string]chan sdk.PromptResponse
 }
 
 // ─── Constructor ──────────────────────────────────────────────────────────────
@@ -514,16 +518,27 @@ func (w *NexusWorkspace) splitModel() (provider, model string) {
 
 func (w *NexusWorkspace) PermissionGrant(perm permission.PermissionRequest) bool {
 	w.permBroker.Publish(pubsub.UpdatedEvent, perm)
-	return true
+	return w.resolvePermission(perm.ID, sdk.PromptResponse{Value: true})
 }
 
 func (w *NexusWorkspace) PermissionGrantPersistent(perm permission.PermissionRequest) bool {
-	return w.PermissionGrant(perm)
+	w.permBroker.Publish(pubsub.UpdatedEvent, perm)
+	return w.resolvePermission(perm.ID, sdk.PromptResponse{Value: "always"})
 }
 
 func (w *NexusWorkspace) PermissionDeny(perm permission.PermissionRequest) bool {
 	w.permBroker.Publish(pubsub.UpdatedEvent, perm)
-	return true
+	return w.resolvePermission(perm.ID, sdk.PromptResponse{Cancelled: true})
+}
+
+// resolvePermission sends a response on the pending channel for the given ID.
+// Returns false if no pending request was found (already resolved or unknown).
+func (w *NexusWorkspace) resolvePermission(id string, resp sdk.PromptResponse) bool {
+	if ch, ok := w.pendingPerms.LoadAndDelete(id); ok {
+		ch.(chan sdk.PromptResponse) <- resp
+		return true
+	}
+	return false
 }
 
 func (w *NexusWorkspace) PermissionSkipRequests() bool       { return w.permSkip.Load() }
@@ -838,20 +853,46 @@ func (w *NexusWorkspace) OnSessionTitled(id sdk.SessionID, title string) {
 	w.sessionsMu.Unlock()
 }
 
-// PromptFn blocks the agent goroutine waiting for the UI to resolve a permission request.
-// For now, we auto-allow all requests since the permission dialog works differently.
-func (w *NexusWorkspace) PromptFn(_ context.Context, req sdk.PromptRequest) (sdk.PromptResponse, error) {
+// PromptFn blocks the SDK agent goroutine until the UI resolves the permission dialog.
+// The UI calls PermissionGrant/PermissionDeny which unblock this via pendingPerms.
+func (w *NexusWorkspace) PromptFn(ctx context.Context, req sdk.PromptRequest) (sdk.PromptResponse, error) {
+	// Yolo mode: auto-allow without showing the dialog.
+	if w.permSkip.Load() {
+		return sdk.PromptResponse{Value: true}, nil
+	}
+
 	toolName, _ := req.Metadata["tool_name"].(string)
+	toolUseID, _ := req.Metadata["tool_use_id"].(string)
+	workDir, _ := req.Metadata["working_directory"].(string)
+	if workDir == "" {
+		workDir = w.workDir
+	}
+
+	permID := uuid.New().String()
 	permReq := permission.PermissionRequest{
-		ID:          uuid.New().String(),
+		ID:          permID,
+		ToolCallID:  toolUseID,
 		ToolName:    toolName,
 		Description: req.Message,
 		Action:      string(req.Type),
+		Path:        workDir,
 	}
+
+	// Register the resolution channel before publishing (avoids race with fast UI).
+	ch := make(chan sdk.PromptResponse, 1)
+	w.pendingPerms.Store(permID, ch)
+
+	// Show the permission dialog.
 	w.permBroker.Publish(pubsub.CreatedEvent, permReq)
 
-	// For now, auto-allow. A proper implementation would block here until the UI resolves.
-	return sdk.PromptResponse{Value: true}, nil
+	// Block until the UI resolves or the context is cancelled.
+	select {
+	case resp := <-ch:
+		return resp, nil
+	case <-ctx.Done():
+		w.pendingPerms.Delete(permID)
+		return sdk.PromptResponse{Cancelled: true}, ctx.Err()
+	}
 }
 
 // ─── Internal helpers ─────────────────────────────────────────────────────────
