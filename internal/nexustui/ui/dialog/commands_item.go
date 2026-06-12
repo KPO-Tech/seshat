@@ -111,6 +111,8 @@ func (c *CommandItem) Shortcut() string {
 
 // Render implements ListItem.
 func (c *CommandItem) Render(width int) string {
+	const prefix = "   " // 3-space indent
+	const prefixW = 3
 	styles := ListItemStyles{
 		ItemBlurred: c.t.Dialog.NormalItem,
 		ItemFocused: c.t.Dialog.SelectedItem.
@@ -119,20 +121,20 @@ func (c *CommandItem) Render(width int) string {
 		InfoTextBlurred: c.t.Dialog.ListItem.InfoBlurred,
 		InfoTextFocused: c.t.Dialog.ListItem.InfoFocused,
 	}
-	rendered := renderItem(styles, c.title, c.shortcut, c.focused, width, c.cache, &c.m)
+	rendered := renderItem(styles, c.title, c.shortcut, c.focused, width, c.cache, &c.m, prefix)
 	if c.description != "" {
 		descStyle := c.t.Dialog.SecondaryText
 		if c.focused {
 			descStyle = c.t.Dialog.SelectedItem
 		}
-		contentWidth := max(0, width-descStyle.GetHorizontalFrameSize()+1)
+		contentWidth := max(0, width-prefixW-descStyle.GetHorizontalFrameSize()+1)
 		description := ansi.Truncate(strings.TrimSpace(c.description), contentWidth, "...")
 		descVisWidth := lipgloss.Width(description)
 		gap := strings.Repeat(" ", max(0, contentWidth-descVisWidth))
 		if description == "" {
 			description = " "
 		}
-		rendered = lipgloss.JoinVertical(lipgloss.Left, rendered, descStyle.Render(description+gap))
+		rendered = lipgloss.JoinVertical(lipgloss.Left, rendered, descStyle.Render(prefix+description+gap))
 	}
 	return rendered
 }

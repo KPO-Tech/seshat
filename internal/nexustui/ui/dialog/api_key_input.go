@@ -31,7 +31,7 @@ const (
 // APIKeyInputID is the identifier for the model selection dialog.
 const APIKeyInputID = "api_key_input"
 
-// APIKeyInput represents a model selection dialog.
+// APIKeyInput represents a provider configuration dialog.
 type APIKeyInput struct {
 	com          *common.Common
 	isOnboarding bool
@@ -42,19 +42,28 @@ type APIKeyInput struct {
 
 	width int
 	state APIKeyInputState
+	err   error
+
+	hasAPIKey      bool
+	existingAPIKey string
+	defaultBaseURL string
+	focused        int
 
 	keyMap struct {
-		Submit key.Binding
-		Close  key.Binding
+		Submit   key.Binding
+		Next     key.Binding
+		Previous key.Binding
+		Close    key.Binding
 	}
-	input   textinput.Model
-	spinner spinner.Model
-	help    help.Model
+	apiKeyInput  textinput.Model
+	baseURLInput textinput.Model
+	spinner      spinner.Model
+	help         help.Model
 }
 
 var _ Dialog = (*APIKeyInput)(nil)
 
-// NewAPIKeyInput creates a new Models dialog.
+// NewAPIKeyInput creates a new provider configuration dialog.
 func NewAPIKeyInput(
 	com *common.Common,
 	isOnboarding bool,
@@ -70,16 +79,45 @@ func NewAPIKeyInput(
 	m.provider = provider
 	m.model = model
 	m.modelType = modelType
-	m.width = 60
+	m.width = 72
+	m.hasAPIKey = providerNeedsAPIKey(string(provider.ID))
+
+	cfg := com.Config()
+	if cfg != nil {
+		if providerCfg, ok := cfg.Providers.Get(string(provider.ID)); ok {
+			m.existingAPIKey = strings.TrimSpace(providerCfg.APIKey)
+			if v := strings.TrimSpace(providerCfg.BaseURL); v != "" {
+				m.defaultBaseURL = v
+			}
+		}
+	}
+	if m.defaultBaseURL == "" {
+		m.defaultBaseURL = strings.TrimSpace(provider.APIEndpoint)
+	}
+	if m.defaultBaseURL == "" && strings.EqualFold(string(provider.ID), "ollama") {
+		m.defaultBaseURL = "http://localhost:11434"
+	}
 
 	innerWidth := m.width - t.Dialog.View.GetHorizontalFrameSize() - 2
+	inputWidth := max(0, innerWidth-t.Dialog.InputPrompt.GetHorizontalFrameSize()-1)
 
-	m.input = textinput.New()
-	m.input.SetVirtualCursor(false)
-	m.input.Placeholder = "Enter your API key..."
-	m.input.SetStyles(com.Styles.TextInput)
-	m.input.Focus()
-	m.input.SetWidth(max(0, innerWidth-t.Dialog.InputPrompt.GetHorizontalFrameSize()-1)) // (1) cursor padding
+	m.apiKeyInput = textinput.New()
+	m.apiKeyInput.SetVirtualCursor(false)
+	m.apiKeyInput.Placeholder = "Enter your API key..."
+	if m.existingAPIKey != "" {
+		m.apiKeyInput.Placeholder = "Leave blank to keep your saved API key"
+	}
+	m.apiKeyInput.SetStyles(com.Styles.TextInput)
+	m.apiKeyInput.SetWidth(inputWidth)
+
+	m.baseURLInput = textinput.New()
+	m.baseURLInput.SetVirtualCursor(false)
+	m.baseURLInput.Placeholder = "Provider base URL"
+	m.baseURLInput.SetStyles(com.Styles.TextInput)
+	m.baseURLInput.SetWidth(inputWidth)
+	m.baseURLInput.SetValue(m.defaultBaseURL)
+
+	m.focusField(0)
 
 	m.spinner = spinner.New(
 		spinner.WithSpinner(spinner.Dot),
@@ -93,9 +131,75 @@ func NewAPIKeyInput(
 		key.WithKeys("enter", "ctrl+y"),
 		key.WithHelp("enter", "submit"),
 	)
+	m.keyMap.Next = key.NewBinding(
+		key.WithKeys("tab", "down"),
+		key.WithHelp("tab", "next"),
+	)
+	m.keyMap.Previous = key.NewBinding(
+		key.WithKeys("shift+tab", "up"),
+		key.WithHelp("shift+tab", "prev"),
+	)
 	m.keyMap.Close = CloseKey
 
 	return &m, nil
+}
+
+func providerNeedsAPIKey(providerID string) bool {
+	switch strings.ToLower(strings.TrimSpace(providerID)) {
+	case "ollama", "bedrock", "vertex":
+		return false
+	default:
+		return true
+	}
+}
+
+func (m *APIKeyInput) focusField(index int) {
+	if m.hasAPIKey {
+		m.apiKeyInput.Blur()
+	}
+	m.baseURLInput.Blur()
+
+	count := m.fieldCount()
+	if count <= 0 {
+		m.focused = 0
+		return
+	}
+	m.focused = ((index % count) + count) % count
+	if m.hasAPIKey && m.focused == 0 {
+		m.apiKeyInput.Focus()
+		return
+	}
+	m.baseURLInput.Focus()
+}
+
+func (m *APIKeyInput) fieldCount() int {
+	if m.hasAPIKey {
+		return 2
+	}
+	return 1
+}
+
+func (m *APIKeyInput) focusedInput() *textinput.Model {
+	if m.hasAPIKey && m.focused == 0 {
+		return &m.apiKeyInput
+	}
+	return &m.baseURLInput
+}
+
+func (m *APIKeyInput) apiKeyValue() string {
+	value := strings.TrimSpace(m.apiKeyInput.Value())
+	if value == "" {
+		value = strings.TrimSpace(m.existingAPIKey)
+	}
+	return value
+}
+
+func (m *APIKeyInput) baseURLValue() string {
+	value := strings.TrimSpace(m.baseURLInput.Value())
+	if value == "" {
+		value = strings.TrimSpace(m.defaultBaseURL)
+	}
+	return value
 }
 
 // ID implements Dialog.
@@ -108,14 +212,23 @@ func (m *APIKeyInput) HandleMsg(msg tea.Msg) Action {
 	switch msg := msg.(type) {
 	case ActionChangeAPIKeyState:
 		m.state = msg.State
+		m.err = msg.Error
 		switch m.state {
+		case APIKeyInputStateInitial:
+			m.focusField(m.focused)
 		case APIKeyInputStateVerifying:
-			cmd := tea.Batch(m.spinner.Tick, m.verifyAPIKey)
+			cmd := tea.Batch(m.spinner.Tick, m.verifyProviderConfig)
 			return ActionCmd{cmd}
+		case APIKeyInputStateVerified:
+			if m.hasAPIKey {
+				m.apiKeyInput.Blur()
+			}
+			m.baseURLInput.Blur()
+		case APIKeyInputStateError:
+			m.focusField(m.focused)
 		}
 	case spinner.TickMsg:
-		switch m.state {
-		case APIKeyInputStateVerifying:
+		if m.state == APIKeyInputStateVerifying {
 			var cmd tea.Cmd
 			m.spinner, cmd = m.spinner.Update(msg)
 			if cmd != nil {
@@ -125,7 +238,7 @@ func (m *APIKeyInput) HandleMsg(msg tea.Msg) Action {
 	case tea.KeyPressMsg:
 		switch {
 		case m.state == APIKeyInputStateVerifying:
-			// do nothing
+			return nil
 		case key.Matches(msg, m.keyMap.Close):
 			switch m.state {
 			case APIKeyInputStateVerified:
@@ -133,6 +246,12 @@ func (m *APIKeyInput) HandleMsg(msg tea.Msg) Action {
 			default:
 				return ActionClose{}
 			}
+		case key.Matches(msg, m.keyMap.Next) && m.fieldCount() > 1:
+			m.state = APIKeyInputStateInitial
+			m.focusField(m.focused + 1)
+		case key.Matches(msg, m.keyMap.Previous) && m.fieldCount() > 1:
+			m.state = APIKeyInputStateInitial
+			m.focusField(m.focused - 1)
 		case key.Matches(msg, m.keyMap.Submit):
 			switch m.state {
 			case APIKeyInputStateInitial, APIKeyInputStateError:
@@ -141,15 +260,21 @@ func (m *APIKeyInput) HandleMsg(msg tea.Msg) Action {
 				return m.saveKeyAndContinue()
 			}
 		default:
+			m.state = APIKeyInputStateInitial
+			m.err = nil
 			var cmd tea.Cmd
-			m.input, cmd = m.input.Update(msg)
+			focused := m.focusedInput()
+			*focused, cmd = focused.Update(msg)
 			if cmd != nil {
 				return ActionCmd{cmd}
 			}
 		}
 	case tea.PasteMsg:
+		m.state = APIKeyInputStateInitial
+		m.err = nil
 		var cmd tea.Cmd
-		m.input, cmd = m.input.Update(msg)
+		focused := m.focusedInput()
+		*focused, cmd = focused.Update(msg)
 		if cmd != nil {
 			return ActionCmd{cmd}
 		}
@@ -167,19 +292,36 @@ func (m *APIKeyInput) Draw(scr uv.Screen, area uv.Rectangle) *tea.Cursor {
 	inputStyle := t.Dialog.InputPrompt
 	helpStyle = helpStyle.Width(m.width - dialogStyle.GetHorizontalFrameSize())
 
-	m.input.Prompt = m.spinner.View()
-
-	content := strings.Join([]string{
-		m.headerView(),
-		inputStyle.Render(m.inputView()),
-		textStyle.Render("This will be written in your global configuration:"),
-		textStyle.Render(config.GlobalConfigData()),
+	contentParts := []string{m.headerView()}
+	if m.hasAPIKey {
+		contentParts = append(contentParts,
+			textStyle.Render("  API key"),
+			inputStyle.Render(m.inputView(&m.apiKeyInput, m.hasAPIKey && m.focused == 0)),
+		)
+		if m.existingAPIKey != "" {
+			contentParts = append(contentParts, textStyle.Render("  Leave the API key blank to keep the saved credential."))
+		}
+		contentParts = append(contentParts, "")
+	}
+	contentParts = append(contentParts,
+		textStyle.Render("  Base URL"),
+		inputStyle.Render(m.inputView(&m.baseURLInput, !m.hasAPIKey || m.focused == 1)),
+	)
+	if m.defaultBaseURL != "" {
+		contentParts = append(contentParts, textStyle.Render("  Default endpoint: "+m.defaultBaseURL))
+	}
+	if m.state == APIKeyInputStateError && m.err != nil {
+		contentParts = append(contentParts, t.Dialog.TitleError.Render(m.err.Error()))
+	}
+	contentParts = append(contentParts,
+		"",
+		textStyle.Render("  Configuration is saved for future sessions."),
 		"",
 		helpStyle.Render(m.help.View(m)),
-	}, "\n")
+	)
+	content := strings.Join(contentParts, "\n")
 
 	cur := m.Cursor()
-
 	if m.isOnboarding {
 		view := content
 		cur = adjustOnboardingInputCursor(t, cur)
@@ -214,86 +356,127 @@ func (m *APIKeyInput) dialogTitle() string {
 	)
 	switch m.state {
 	case APIKeyInputStateInitial:
-		return textStyle.Render("Enter your ") + accentStyle.Render(fmt.Sprintf("%s Key", m.provider.Name)) + textStyle.Render(".")
+		return textStyle.Render("Configure ") + accentStyle.Render(string(m.provider.Name)) + textStyle.Render(".")
 	case APIKeyInputStateVerifying:
-		return textStyle.Render("Verifying your ") + accentStyle.Render(fmt.Sprintf("%s Key", m.provider.Name)) + textStyle.Render("...")
+		return textStyle.Render("Validating ") + accentStyle.Render(string(m.provider.Name)) + textStyle.Render(" configuration...")
 	case APIKeyInputStateVerified:
-		return accentStyle.Render(fmt.Sprintf("%s Key", m.provider.Name)) + textStyle.Render(" validated.")
+		return accentStyle.Render(string(m.provider.Name)) + textStyle.Render(" configuration validated.")
 	case APIKeyInputStateError:
-		return errorStyle.Render("Invalid ") + accentStyle.Render(fmt.Sprintf("%s Key", m.provider.Name)) + errorStyle.Render(". Try again?")
+		return errorStyle.Render("Invalid ") + accentStyle.Render(string(m.provider.Name)) + errorStyle.Render(" configuration.")
 	}
 	return ""
 }
 
-func (m *APIKeyInput) inputView() string {
+func (m *APIKeyInput) inputView(input *textinput.Model, focused bool) string {
 	t := m.com.Styles
 
 	switch m.state {
 	case APIKeyInputStateInitial:
-		m.input.Prompt = "> "
-		m.input.SetStyles(t.TextInput)
-		m.input.Focus()
+		input.Prompt = "> "
+		input.SetStyles(t.TextInput)
+		if focused {
+			input.Focus()
+		} else {
+			input.Blur()
+		}
 	case APIKeyInputStateVerifying:
 		ts := t.TextInput
 		ts.Blurred.Prompt = ts.Focused.Prompt
-
-		m.input.Prompt = m.spinner.View()
-		m.input.SetStyles(ts)
-		m.input.Blur()
+		input.Prompt = m.spinner.View()
+		input.SetStyles(ts)
+		input.Blur()
 	case APIKeyInputStateVerified:
 		ts := t.TextInput
 		ts.Blurred.Prompt = ts.Focused.Prompt
-
-		m.input.Prompt = styles.CheckIcon + " "
-		m.input.SetStyles(ts)
-		m.input.Blur()
+		input.Prompt = styles.CheckIcon + " "
+		input.SetStyles(ts)
+		input.Blur()
 	case APIKeyInputStateError:
 		ts := t.TextInput
 		ts.Focused.Prompt = ts.Focused.Prompt.Foreground(charmtone.Cherry)
-
-		m.input.Prompt = styles.LSPErrorIcon + " "
-		m.input.SetStyles(ts)
-		m.input.Focus()
+		input.Prompt = styles.LSPErrorIcon + " "
+		input.SetStyles(ts)
+		if focused {
+			input.Focus()
+		} else {
+			input.Blur()
+		}
 	}
-	return m.input.View()
+	return input.View()
 }
 
 // Cursor returns the cursor position relative to the dialog.
 func (m *APIKeyInput) Cursor() *tea.Cursor {
-	return InputCursor(m.com.Styles, m.input.Cursor())
+	if m.state == APIKeyInputStateVerifying || m.state == APIKeyInputStateVerified {
+		return nil
+	}
+	cur := InputCursor(m.com.Styles, m.focusedInput().Cursor())
+	if cur == nil {
+		return nil
+	}
+	cur.Y += m.cursorYOffset()
+	return cur
+}
+
+func (m *APIKeyInput) cursorYOffset() int {
+	// InputCursor accounts for the dialog frame and title, but this dialog also
+	// renders a label line above each input plus the optional API key note block.
+	offset := 1
+	if !m.hasAPIKey || m.focused == 0 {
+		return offset
+	}
+	offset += 2
+	if m.existingAPIKey != "" {
+		offset++
+	}
+	offset++
+	return offset
 }
 
 // FullHelp returns the full help view.
 func (m *APIKeyInput) FullHelp() [][]key.Binding {
-	return [][]key.Binding{
-		{
-			m.keyMap.Submit,
-			m.keyMap.Close,
-		},
+	row := []key.Binding{m.keyMap.Submit}
+	if m.fieldCount() > 1 {
+		row = append(row, m.keyMap.Next, m.keyMap.Previous)
 	}
+	row = append(row, m.keyMap.Close)
+	return [][]key.Binding{row}
 }
 
-// ShortHelp returns the full help view.
+// ShortHelp returns the short help view.
 func (m *APIKeyInput) ShortHelp() []key.Binding {
-	return []key.Binding{
-		m.keyMap.Submit,
-		m.keyMap.Close,
+	help := []key.Binding{m.keyMap.Submit}
+	if m.fieldCount() > 1 {
+		help = append(help, m.keyMap.Next)
 	}
+	help = append(help, m.keyMap.Close)
+	return help
 }
 
-func (m *APIKeyInput) verifyAPIKey() tea.Msg {
+func (m *APIKeyInput) verifyProviderConfig() tea.Msg {
 	start := time.Now()
 
-	providerConfig := config.ProviderConfig{
-		ID:      string(m.provider.ID),
-		Name:    m.provider.Name,
-		APIKey:  m.input.Value(),
-		Type:    m.provider.Type,
-		BaseURL: m.provider.APIEndpoint,
-	}
-	err := providerConfig.TestConnection(m.com.Workspace.Resolver())
+	apiKey := m.apiKeyValue()
+	baseURL := m.baseURLValue()
+	providerID := string(m.provider.ID)
 
-	// intentionally wait for at least 750ms to make sure the user sees the spinner
+	var err error
+	switch {
+	case m.hasAPIKey && strings.TrimSpace(apiKey) == "":
+		err = fmt.Errorf("an API key is required for %s", m.provider.Name)
+	case strings.TrimSpace(baseURL) == "":
+		err = fmt.Errorf("a base URL is required for %s", m.provider.Name)
+	default:
+		providerConfig := config.ProviderConfig{
+			ID:      providerID,
+			Name:    m.provider.Name,
+			APIKey:  apiKey,
+			Type:    m.provider.Type,
+			BaseURL: baseURL,
+		}
+		err = providerConfig.TestConnection(m.com.Workspace.Resolver())
+	}
+
 	elapsed := time.Since(start)
 	minimum := 750 * time.Millisecond
 	if elapsed < minimum {
@@ -301,15 +484,26 @@ func (m *APIKeyInput) verifyAPIKey() tea.Msg {
 	}
 
 	if err == nil {
-		return ActionChangeAPIKeyState{APIKeyInputStateVerified}
+		return ActionChangeAPIKeyState{State: APIKeyInputStateVerified}
 	}
-	return ActionChangeAPIKeyState{APIKeyInputStateError}
+	return ActionChangeAPIKeyState{State: APIKeyInputStateError, Error: err}
 }
 
 func (m *APIKeyInput) saveKeyAndContinue() Action {
-	err := m.com.Workspace.SetProviderAPIKey(config.ScopeGlobal, string(m.provider.ID), m.input.Value())
-	if err != nil {
-		return ActionCmd{util.ReportError(fmt.Errorf("failed to save API key: %w", err))}
+	providerID := string(m.provider.ID)
+	baseURL := m.baseURLValue()
+	if err := m.com.Workspace.SetConfigField(config.ScopeGlobal, fmt.Sprintf("providers.%s.base_url", providerID), baseURL); err != nil {
+		return ActionCmd{util.ReportError(fmt.Errorf("failed to save base URL: %w", err))}
+	}
+
+	if enteredKey := strings.TrimSpace(m.apiKeyInput.Value()); m.hasAPIKey && enteredKey != "" {
+		if err := m.com.Workspace.SetProviderAPIKey(config.ScopeGlobal, providerID, enteredKey); err != nil {
+			return ActionCmd{util.ReportError(fmt.Errorf("failed to save API key: %w", err))}
+		}
+	}
+
+	if m.model.Model == "" {
+		return ActionOpenModels{PreferredProviderID: providerID}
 	}
 
 	return ActionSelectModel{

@@ -303,13 +303,9 @@ func (c *Commands) Draw(scr uv.Screen, area uv.Rectangle) *tea.Cursor {
 	const sepAbove = 1
 	overhead := titleH + inputH + subBlock + sepAbove + helpH + viewFrameH + listMarginH
 
-	// Phase 1: measure content at unlimited height.
-	c.list.SetSize(innerWidth, 9999)
-	measuredContentH := c.list.TotalHeight()
-
-	// Phase 2: compute dialog height capped to max and available terminal space.
+	// Fixed height — same as all Settings sub-pages.
 	maxTermH := max(0, area.Dy()-t.Dialog.View.GetVerticalBorderSize())
-	height := max(overhead+1, min(settingsCardMaxHeight, min(maxTermH, overhead+measuredContentH)))
+	height := max(overhead+1, min(settingsDialogMaxHeight, maxTermH))
 	finalContentH := max(1, height-overhead)
 
 	// Phase 3: apply final list height.

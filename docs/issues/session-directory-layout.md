@@ -8,6 +8,7 @@ Le répertoire de travail `~/.config/nexus-cli/` est un patchwork de conventions
 ~/.config/nexus-cli/
 ├── nexus.yaml
 ├── secret.key
+├── nexus.json
 ├── data/
 │   ├── nexus.db          # SQLite : sessions, transcripts, credentials
 │   └── hnsw/             # index vectoriel
@@ -21,6 +22,7 @@ Le répertoire de travail `~/.config/nexus-cli/` est un patchwork de conventions
 ├── logs/
 │   └── cli.log
 ├── cache/
+├── skills/
 └── tmp/
     ├── tasks/
     └── bash-tasks/
@@ -63,6 +65,8 @@ La variable d'environnement `NEXUS_RUNTIME_ROOT` continue de prendre la priorit�
 ├── config.yaml               # configuration utilisateur
 ├── secret.key                # clé AES-256 (mode 0600)
 ├── nexus.db                  # SQLite : metadata sessions, credentials, transcripts
+├── nexus.json                # Configurations mcp
+├── skills/                   # L'ensemble des repos de skills
 ├── logs/
 │   └── app.log               # log applicatif global (démarrage, erreurs critiques)
 └── sessions/

@@ -1,7 +1,10 @@
 package dialog
 
 import (
+	"context"
 	"fmt"
+	"os"
+	"sort"
 	"strings"
 
 	"charm.land/bubbles/v2/help"
@@ -10,13 +13,16 @@ import (
 	tea "charm.land/bubbletea/v2"
 	"charm.land/catwalk/pkg/catwalk"
 	"charm.land/lipgloss/v2"
+	"github.com/EngineerProjects/nexus-engine/internal/nexustui/agent/tools/mcp"
 	"github.com/EngineerProjects/nexus-engine/internal/nexustui/config"
+	"github.com/EngineerProjects/nexus-engine/internal/nexustui/skills"
 	"github.com/EngineerProjects/nexus-engine/internal/nexustui/ui/common"
 	"github.com/EngineerProjects/nexus-engine/internal/nexustui/ui/list"
 	"github.com/EngineerProjects/nexus-engine/internal/nexustui/ui/styles"
+	"github.com/EngineerProjects/nexus-engine/internal/nexustui/workspace"
+	uv "github.com/charmbracelet/ultraviolet"
 	"github.com/charmbracelet/x/ansi"
 	"github.com/sahilm/fuzzy"
-	uv "github.com/charmbracelet/ultraviolet"
 )
 
 // SettingsID is the identifier for the settings dialog.
@@ -28,6 +34,7 @@ type settingsView uint
 const (
 	settingsViewRoot settingsView = iota
 	settingsViewProviders
+	settingsViewProvidersLLM
 	settingsViewTheme
 	settingsViewWebSearch
 	settingsViewTools
@@ -37,7 +44,7 @@ const (
 
 const (
 	settingsDialogMaxWidth  = settingsCardMaxWidth
-	settingsDialogMaxHeight = settingsCardMaxHeight
+	settingsDialogMaxHeight = 24 // matches root view natural height (7 sections, no excess padding)
 )
 
 // settingsSection describes one row in the root hub list.
@@ -61,6 +68,10 @@ type Settings struct {
 	rootList *list.FilterableList
 	sections []settingsSection
 
+	// providers hub state
+	providerSections []settingsSection
+	providerList     *list.FilterableList
+
 	// providers sub-view state
 	providers []catwalk.Provider
 	provList  *list.FilterableList
@@ -69,7 +80,20 @@ type Settings struct {
 	// theme sub-view state
 	themeList *list.FilterableList
 
-	// info sub-views (Web Search / Tools / MCP / Skills) — rendered as text
+	// web-search sub-view state
+	webSearchList *list.FilterableList
+
+	// tools sub-view state
+	toolsList  *ToolsList
+	toolsInput textinput.Model
+	toolsAll   []workspace.ToolInfo
+
+	// skills sub-view state
+	skillsList  *ToolsList
+	skillsInput textinput.Model
+	skillsAll   []skills.CatalogEntry
+
+	// info sub-views (MCP only) — rendered as text
 	infoLines []string
 
 	keyMap struct {
@@ -86,9 +110,10 @@ var _ Dialog = (*Settings)(nil)
 func NewSettings(com *common.Common) (*Settings, error) {
 	t := com.Styles
 	s := &Settings{
-		com:      com,
-		view:     settingsViewRoot,
-		sections: defaultSettingsSections(),
+		com:              com,
+		view:             settingsViewRoot,
+		sections:         defaultSettingsSections(),
+		providerSections: defaultProviderSections(),
 	}
 
 	// Root filter input.
@@ -104,6 +129,12 @@ func NewSettings(com *common.Common) (*Settings, error) {
 	s.rootList.SetGap(1) // one blank line between each section for visual breathing room
 	s.rebuildRootList("")
 
+	s.providerList = list.NewFilterableList()
+	s.providerList.Focus()
+	s.providerList.SetSelected(0)
+	s.providerList.SetGap(1)
+	s.rebuildProviderList()
+
 	// Providers filter input + list.
 	s.provInput = textinput.New()
 	s.provInput.SetVirtualCursor(false)
@@ -118,6 +149,26 @@ func NewSettings(com *common.Common) (*Settings, error) {
 	s.themeList = list.NewFilterableList()
 	s.themeList.Focus()
 	s.themeList.SetGap(1)
+
+	s.webSearchList = list.NewFilterableList()
+	s.webSearchList.Focus()
+	s.webSearchList.SetSelected(0)
+	s.webSearchList.SetGap(1)
+	s.rebuildWebSearchList()
+
+	// Tools filter input + list.
+	s.toolsInput = textinput.New()
+	s.toolsInput.SetVirtualCursor(false)
+	s.toolsInput.Placeholder = "Filter tools..."
+	s.toolsInput.SetStyles(t.TextInput)
+	s.toolsList = newToolsList(t)
+
+	// Skills filter input + list.
+	s.skillsInput = textinput.New()
+	s.skillsInput.SetVirtualCursor(false)
+	s.skillsInput.Placeholder = "Filter skills..."
+	s.skillsInput.SetStyles(t.TextInput)
+	s.skillsList = newToolsList(t)
 
 	providers, _ := config.Providers(com.Config()) // best-effort; nil on error → empty list
 	s.providers = providers
@@ -140,13 +191,19 @@ func NewSettings(com *common.Common) (*Settings, error) {
 func defaultSettingsSections() []settingsSection {
 	return []settingsSection{
 		{id: "commands", name: "Commands", desc: "shortcuts, sessions, copy actions, app controls", dialogID: CommandsID},
-		{id: "providers", name: "Providers", desc: "configure API keys and provider credentials", shortcut: "ctrl+,", subView: settingsViewProviders},
+		{id: "providers", name: "Providers", desc: "llm, web search, and future provider families", shortcut: "ctrl+,", subView: settingsViewProviders},
 		{id: "models", name: "Models", desc: "switch the active AI model", shortcut: "ctrl+m", dialogID: ModelsID},
 		{id: "theme", name: "Theme", desc: "background style and visual appearance", subView: settingsViewTheme},
-		{id: "web_search", name: "Web Search", desc: "configure web search providers and API keys", subView: settingsViewWebSearch},
 		{id: "tools", name: "Tools", desc: "tool UX options and available tool reference", subView: settingsViewTools},
 		{id: "mcp", name: "MCP", desc: "MCP server status and management notes", subView: settingsViewMCP},
 		{id: "skills", name: "Skills", desc: "slash-skill workflow and skill path discovery", subView: settingsViewSkills},
+	}
+}
+
+func defaultProviderSections() []settingsSection {
+	return []settingsSection{
+		{id: "providers_llm", name: "LLM", desc: "configure model providers and credentials", subView: settingsViewProvidersLLM},
+		{id: "providers_web_search", name: "Web Search", desc: "configure web search providers and defaults", subView: settingsViewWebSearch},
 	}
 }
 
@@ -158,8 +215,12 @@ func (s *Settings) Cursor() *tea.Cursor {
 	switch s.view {
 	case settingsViewRoot:
 		return InputCursor(s.com.Styles, s.input.Cursor())
-	case settingsViewProviders:
+	case settingsViewProvidersLLM:
 		return InputCursor(s.com.Styles, s.provInput.Cursor())
+	case settingsViewTools:
+		return InputCursor(s.com.Styles, s.toolsInput.Cursor())
+	case settingsViewSkills:
+		return InputCursor(s.com.Styles, s.skillsInput.Cursor())
 	}
 	return nil
 }
@@ -215,17 +276,25 @@ func (s *Settings) handleRootKey(msg tea.KeyPressMsg) Action {
 
 func (s *Settings) handleSubKey(msg tea.KeyPressMsg) Action {
 	if key.Matches(msg, s.keyMap.Back) {
-		s.gotoRoot()
+		s.gotoParent()
 		return nil
 	}
 	switch s.view {
 	case settingsViewProviders:
+		return s.handleProviderKey(msg)
+	case settingsViewProvidersLLM:
 		return s.handleProvKey(msg)
 	case settingsViewTheme:
 		return s.handleThemeKey(msg)
+	case settingsViewWebSearch:
+		return s.handleWebSearchKey(msg)
+	case settingsViewTools:
+		return s.handleToolsKey(msg)
+	case settingsViewSkills:
+		return s.handleSkillsKey(msg)
 	default:
-		// Info views: any unhandled key navigates back.
-		s.gotoRoot()
+		// Info views (MCP): any unhandled key navigates back.
+		s.gotoParent()
 		return nil
 	}
 }
@@ -261,6 +330,61 @@ func (s *Settings) handleProvKey(msg tea.KeyPressMsg) Action {
 	return nil
 }
 
+func (s *Settings) handleProviderKey(msg tea.KeyPressMsg) Action {
+	switch {
+	case key.Matches(msg, s.keyMap.Previous):
+		if s.providerList.IsSelectedFirst() {
+			s.providerList.SelectLast()
+		} else {
+			s.providerList.SelectPrev()
+		}
+		s.providerList.ScrollToSelected()
+	case key.Matches(msg, s.keyMap.Next):
+		if s.providerList.IsSelectedLast() {
+			s.providerList.SelectFirst()
+		} else {
+			s.providerList.SelectNext()
+		}
+		s.providerList.ScrollToSelected()
+	case key.Matches(msg, s.keyMap.Select):
+		if item := s.providerList.SelectedItem(); item != nil {
+			if si, ok := item.(*settingsSectionItem); ok {
+				return s.activateSI(si)
+			}
+		}
+	}
+	return nil
+}
+
+func (s *Settings) handleWebSearchKey(msg tea.KeyPressMsg) Action {
+	switch {
+	case key.Matches(msg, s.keyMap.Previous):
+		if s.webSearchList.IsSelectedFirst() {
+			s.webSearchList.SelectLast()
+		} else {
+			s.webSearchList.SelectPrev()
+		}
+		s.webSearchList.ScrollToSelected()
+	case key.Matches(msg, s.keyMap.Next):
+		if s.webSearchList.IsSelectedLast() {
+			s.webSearchList.SelectFirst()
+		} else {
+			s.webSearchList.SelectNext()
+		}
+		s.webSearchList.ScrollToSelected()
+	case key.Matches(msg, s.keyMap.Select):
+		if item := s.webSearchList.SelectedItem(); item != nil {
+			if wi, ok := item.(*settingsWebSearchItem); ok {
+				if wi.providerID == "auto" || wi.providerID == "ddg" {
+					return ActionSelectWebSearchProvider{ProviderID: wi.providerID}
+				}
+				return ActionOpenWebSearchConfig{ProviderID: wi.providerID}
+			}
+		}
+	}
+	return nil
+}
+
 func (s *Settings) handleThemeKey(msg tea.KeyPressMsg) Action {
 	switch {
 	case key.Matches(msg, s.keyMap.Previous):
@@ -292,6 +416,76 @@ func (s *Settings) handleThemeKey(msg tea.KeyPressMsg) Action {
 	return nil
 }
 
+func (s *Settings) handleToolsKey(msg tea.KeyPressMsg) Action {
+	switch {
+	case key.Matches(msg, s.keyMap.Previous):
+		if s.toolsList.IsSelectedFirst() {
+			s.toolsList.SelectLast()
+		} else {
+			s.toolsList.SelectPrev()
+		}
+		s.toolsList.ScrollToSelected()
+	case key.Matches(msg, s.keyMap.Next):
+		if s.toolsList.IsSelectedLast() {
+			s.toolsList.SelectFirst()
+		} else {
+			s.toolsList.SelectNext()
+		}
+		s.toolsList.ScrollToSelected()
+	default:
+		var cmd tea.Cmd
+		s.toolsInput, cmd = s.toolsInput.Update(msg)
+		s.toolsList.SetFilter(s.toolsInput.Value())
+		s.toolsList.SelectFirst()
+		return ActionCmd{cmd}
+	}
+	return nil
+}
+
+func (s *Settings) rebuildToolsList(filter string) {
+	groups := buildToolGroups(s.com.Styles, s.toolsAll)
+	s.toolsList.SetGroups(groups...)
+	s.toolsList.SetFilter(filter)
+	s.toolsList.Focus()
+	s.toolsList.SelectFirst()
+	s.toolsList.ScrollToTop()
+}
+
+func (s *Settings) handleSkillsKey(msg tea.KeyPressMsg) Action {
+	switch {
+	case key.Matches(msg, s.keyMap.Previous):
+		if s.skillsList.IsSelectedFirst() {
+			s.skillsList.SelectLast()
+		} else {
+			s.skillsList.SelectPrev()
+		}
+		s.skillsList.ScrollToSelected()
+	case key.Matches(msg, s.keyMap.Next):
+		if s.skillsList.IsSelectedLast() {
+			s.skillsList.SelectFirst()
+		} else {
+			s.skillsList.SelectNext()
+		}
+		s.skillsList.ScrollToSelected()
+	default:
+		var cmd tea.Cmd
+		s.skillsInput, cmd = s.skillsInput.Update(msg)
+		s.skillsList.SetFilter(s.skillsInput.Value())
+		s.skillsList.SelectFirst()
+		return ActionCmd{cmd}
+	}
+	return nil
+}
+
+func (s *Settings) rebuildSkillsList(filter string) {
+	groups := buildSkillGroups(s.com.Styles, s.skillsAll)
+	s.skillsList.SetGroups(groups...)
+	s.skillsList.SetFilter(filter)
+	s.skillsList.Focus()
+	s.skillsList.SelectFirst()
+	s.skillsList.ScrollToTop()
+}
+
 func (s *Settings) activateSelected() Action {
 	if item := s.rootList.SelectedItem(); item != nil {
 		if si, ok := item.(*settingsSectionItem); ok {
@@ -313,19 +507,38 @@ func (s *Settings) gotoView(v settingsView) {
 	s.view = v
 	switch v {
 	case settingsViewProviders:
+		s.rebuildProviderList()
+	case settingsViewProvidersLLM:
 		s.provInput.SetValue("")
 		s.provInput.Focus()
 		s.rebuildProvList("")
 	case settingsViewTheme:
 		s.rebuildThemeList()
 	case settingsViewWebSearch:
-		s.infoLines = s.infoWebSearch()
+		s.rebuildWebSearchList()
 	case settingsViewTools:
-		s.infoLines = s.infoTools()
+		tools, _ := s.com.Workspace.ListTools(context.Background())
+		s.toolsAll = tools
+		s.toolsInput.SetValue("")
+		s.toolsInput.Focus()
+		s.rebuildToolsList("")
 	case settingsViewMCP:
 		s.infoLines = s.infoMCP()
 	case settingsViewSkills:
-		s.infoLines = s.infoSkills()
+		entries, _ := s.com.Workspace.ListSkills(context.Background())
+		s.skillsAll = entries
+		s.skillsInput.SetValue("")
+		s.skillsInput.Focus()
+		s.rebuildSkillsList("")
+	}
+}
+
+func (s *Settings) gotoParent() {
+	switch s.view {
+	case settingsViewProvidersLLM, settingsViewWebSearch:
+		s.gotoView(settingsViewProviders)
+	default:
+		s.gotoRoot()
 	}
 }
 
@@ -356,6 +569,39 @@ func (s *Settings) rebuildRootList(filter string) {
 	}
 }
 
+func (s *Settings) rebuildProviderList() {
+	items := make([]list.FilterableItem, 0, len(s.providerSections))
+	for _, sec := range s.providerSections {
+		sec := sec
+		items = append(items, &settingsSectionItem{
+			Versioned: list.NewVersioned(),
+			id:        sec.id, name: sec.name, desc: sec.desc,
+			shortcut: sec.shortcut, dialogID: sec.dialogID, subView: sec.subView,
+			t: s.com.Styles,
+		})
+	}
+	s.providerList.SetItems(items...)
+	s.providerList.ScrollToTop()
+	s.providerList.SetSelected(0)
+}
+
+func (s *Settings) rebuildWebSearchList() {
+	items := make([]list.FilterableItem, 0, len(defaultWebSearchProviders()))
+	for _, provider := range defaultWebSearchProviders() {
+		provider := provider
+		items = append(items, &settingsWebSearchItem{
+			Versioned:  list.NewVersioned(),
+			providerID: provider.id,
+			name:       provider.name,
+			desc:       provider.desc,
+			t:          s.com.Styles,
+		})
+	}
+	s.webSearchList.SetItems(items...)
+	s.webSearchList.ScrollToTop()
+	s.webSearchList.SetSelected(0)
+}
+
 func (s *Settings) rebuildProvList(filter string) {
 	cfg := s.com.Config()
 	items := make([]list.FilterableItem, 0, len(s.providers))
@@ -364,12 +610,12 @@ func (s *Settings) rebuildProvList(filter string) {
 		configured := false
 		if cfg != nil {
 			if pc, ok := cfg.Providers.Get(string(p.ID)); ok {
-				configured = pc.APIKey != "" || pc.OAuthToken != nil
+				configured = pc.APIKey != "" || pc.OAuthToken != nil || (!providerNeedsAPIKey(string(p.ID)) && pc.BaseURL != "")
 			}
 		}
 		items = append(items, &settingsProviderItem{
 			Versioned: list.NewVersioned(),
-			provider: p, configured: configured,
+			provider:  p, configured: configured,
 			t: s.com.Styles,
 		})
 	}
@@ -408,9 +654,9 @@ func (s *Settings) Draw(scr uv.Screen, area uv.Rectangle) *tea.Cursor {
 	inputW := max(0, innerW-t.Dialog.InputPrompt.GetHorizontalFrameSize()-1)
 
 	// Fixed height budget components.
-	titleH     := t.Dialog.Title.GetVerticalFrameSize() + titleContentHeight
-	inputH     := t.Dialog.InputPrompt.GetVerticalFrameSize() + inputContentHeight
-	helpH      := t.Dialog.HelpView.GetVerticalFrameSize()
+	titleH := t.Dialog.Title.GetVerticalFrameSize() + titleContentHeight
+	inputH := t.Dialog.InputPrompt.GetVerticalFrameSize() + inputContentHeight
+	helpH := t.Dialog.HelpView.GetVerticalFrameSize()
 	viewFrameH := t.Dialog.View.GetVerticalFrameSize()
 	listMarginH := t.Dialog.List.GetVerticalMargins() // = 1 (bottom margin)
 
@@ -423,40 +669,24 @@ func (s *Settings) Draw(scr uv.Screen, area uv.Rectangle) *tea.Cursor {
 	// Thin horizontal separator (header separator style).
 	sep := t.Header.Separator.Render(strings.Repeat("─", innerW))
 
-	// ── Dynamic height: measure content, size dialog to fit ──────────────────
+	// ── Fixed height: all sub-views use the same max dimensions as the root ──
 
-	// Phase 1 — measure actual content height for the active view.
-	var measuredContentH int
-	switch s.view {
-	case settingsViewRoot:
-		s.rootList.SetSize(innerW, 9999)
-		measuredContentH = s.rootList.TotalHeight()
-	case settingsViewProviders:
-		s.provList.SetSize(innerW, 9999)
-		measuredContentH = s.provList.TotalHeight()
-	case settingsViewTheme:
-		s.themeList.SetSize(innerW, 9999)
-		measuredContentH = s.themeList.TotalHeight()
-	default: // info views
-		measuredContentH = len(s.infoLines)
-	}
-
-	// Phase 2 — compute fixed overhead per view type and final dialog height.
+	// Overhead per view type (determines how much height the list content gets).
 	//   search views (root/providers): title+input+subBlock+sepAbove+help+frame+listMargin
 	//   theme (no input):              title+subBlock+sepAbove+help+frame+listMargin
 	//   info views (no input, no sub): title+sep+sepAbove+help+frame
 	var overhead int
 	switch s.view {
-	case settingsViewRoot, settingsViewProviders:
+	case settingsViewRoot, settingsViewProvidersLLM, settingsViewTools, settingsViewSkills:
 		overhead = titleH + inputH + subBlock + sepAbove + helpH + viewFrameH + listMarginH
-	case settingsViewTheme:
+	case settingsViewProviders, settingsViewTheme, settingsViewWebSearch:
 		overhead = titleH + subBlock + sepAbove + helpH + viewFrameH + listMarginH
 	default:
 		overhead = titleH + 1 + sepAbove + helpH + viewFrameH
 	}
 
 	maxTermH := max(0, area.Dy()-t.Dialog.View.GetVerticalBorderSize())
-	height := max(overhead+1, min(settingsDialogMaxHeight, min(maxTermH, overhead+measuredContentH)))
+	height := max(overhead+1, min(settingsDialogMaxHeight, maxTermH))
 	finalContentH := max(1, height-overhead)
 
 	// Phase 3 — set final list sizes.
@@ -464,9 +694,17 @@ func (s *Settings) Draw(scr uv.Screen, area uv.Rectangle) *tea.Cursor {
 	case settingsViewRoot:
 		s.rootList.SetSize(innerW, finalContentH)
 	case settingsViewProviders:
+		s.providerList.SetSize(innerW, finalContentH)
+	case settingsViewProvidersLLM:
 		s.provList.SetSize(innerW, finalContentH)
 	case settingsViewTheme:
 		s.themeList.SetSize(innerW, finalContentH)
+	case settingsViewWebSearch:
+		s.webSearchList.SetSize(innerW, finalContentH)
+	case settingsViewTools:
+		s.toolsList.SetSize(innerW, finalContentH)
+	case settingsViewSkills:
+		s.skillsList.SetSize(innerW, finalContentH)
 	}
 
 	// ── Build render context ──────────────────────────────────────────────────
@@ -485,10 +723,16 @@ func (s *Settings) Draw(scr uv.Screen, area uv.Rectangle) *tea.Cursor {
 		rc.AddPart(t.Dialog.List.Height(s.rootList.Height()).Render(s.rootList.Render()))
 
 	case settingsViewProviders:
+		rc.AddPart(sep)
+		rc.AddPart(t.Dialog.SecondaryText.Render("  choose a provider family"))
+		rc.Parts = append(rc.Parts, "")
+		rc.AddPart(t.Dialog.List.Height(s.providerList.Height()).Render(s.providerList.Render()))
+
+	case settingsViewProvidersLLM:
 		s.provInput.SetWidth(inputW)
 		rc.AddPart(t.Dialog.InputPrompt.Render(s.provInput.View()))
 		rc.AddPart(sep)
-		rc.AddPart(t.Dialog.SecondaryText.Render("  select a provider — enter to configure its API key"))
+		rc.AddPart(t.Dialog.SecondaryText.Render("  select a provider — configure first, then choose a model"))
 		rc.Parts = append(rc.Parts, "")
 		rc.AddPart(t.Dialog.List.Height(s.provList.Height()).Render(s.provList.Render()))
 
@@ -499,11 +743,41 @@ func (s *Settings) Draw(scr uv.Screen, area uv.Rectangle) *tea.Cursor {
 		rc.Parts = append(rc.Parts, "")
 		rc.AddPart(t.Dialog.List.Height(s.themeList.Height()).Render(s.themeList.Render()))
 
-	default:
+	case settingsViewWebSearch:
 		rc.AddPart(sep)
-		rc.AddPart(lipgloss.NewStyle().Width(innerW).Render(
-			strings.Join(s.infoLines, "\n"),
+		rc.AddPart(t.Dialog.SecondaryText.Render("  choose and configure a web search provider"))
+		rc.Parts = append(rc.Parts, "")
+		rc.AddPart(t.Dialog.List.Height(s.webSearchList.Height()).Render(s.webSearchList.Render()))
+
+	case settingsViewTools:
+		s.toolsInput.SetWidth(inputW)
+		rc.AddPart(t.Dialog.InputPrompt.Render(s.toolsInput.View()))
+		rc.AddPart(sep)
+		rc.AddPart(t.Dialog.SecondaryText.Render(
+			fmt.Sprintf("  %d tools — ↑↓ navigate · type to filter", len(s.toolsAll)),
 		))
+		rc.Parts = append(rc.Parts, "")
+		rc.AddPart(t.Dialog.List.Height(s.toolsList.Height()).Render(s.toolsList.Render()))
+
+	case settingsViewSkills:
+		s.skillsInput.SetWidth(inputW)
+		rc.AddPart(t.Dialog.InputPrompt.Render(s.skillsInput.View()))
+		rc.AddPart(sep)
+		rc.AddPart(t.Dialog.SecondaryText.Render(
+			fmt.Sprintf("  %d skills — ↑↓ navigate · type to filter", len(s.skillsAll)),
+		))
+		rc.Parts = append(rc.Parts, "")
+		rc.AddPart(t.Dialog.List.Height(s.skillsList.Height()).Render(s.skillsList.Render()))
+
+	default: // MCP — fixed-height info block
+		rc.AddPart(sep)
+		infoFixed := make([]string, finalContentH)
+		for i := range infoFixed {
+			if i < len(s.infoLines) {
+				infoFixed[i] = s.infoLines[i]
+			}
+		}
+		rc.AddPart(lipgloss.NewStyle().Width(innerW).Render(strings.Join(infoFixed, "\n")))
 	}
 
 	rc.Parts = append(rc.Parts, sep)
@@ -519,10 +793,12 @@ func (s *Settings) viewTitle() string {
 	switch s.view {
 	case settingsViewProviders:
 		return "Settings  ›  Providers"
+	case settingsViewProvidersLLM:
+		return "Settings  ›  Providers  ›  LLM"
 	case settingsViewTheme:
 		return "Settings  ›  Theme"
 	case settingsViewWebSearch:
-		return "Settings  ›  Web Search"
+		return "Settings  ›  Providers  ›  Web Search"
 	case settingsViewTools:
 		return "Settings  ›  Tools"
 	case settingsViewMCP:
@@ -555,79 +831,116 @@ func (s *Settings) infoWebSearch() []string {
 	}
 }
 
-func (s *Settings) infoTools() []string {
-	t := s.com.Styles
-	accent := lipgloss.NewStyle().Foreground(t.Logo.FieldColor).Bold(true)
-	muted := t.Sidebar.WorkingDir
-	return []string{
-		"",
-		accent.Render("  Inline tool previews:"),
-		muted.Render("    Expand tool calls in chat with space or click the expander."),
-		"",
-		accent.Render("  Tool details pane:"),
-		muted.Render("    Open the right-side details pane with ctrl+d."),
-		"",
-		accent.Render("  Disable specific tools:"),
-		muted.Render("    Set options.disabled_tools in nexus.json to hide tools from the agent."),
-		"",
-		muted.Render("  Press esc or ← to go back."),
-	}
-}
-
 func (s *Settings) infoMCP() []string {
 	t := s.com.Styles
 	accent := lipgloss.NewStyle().Foreground(t.Logo.FieldColor).Bold(true)
 	muted := t.Sidebar.WorkingDir
 	cfg := s.com.Config()
-	mcpCount := 0
-	if cfg != nil {
-		mcpCount = len(cfg.MCP)
+	states := s.com.Workspace.MCPGetStates()
+
+	// Config file locations the user edits to add/remove MCP servers.
+	globalCfg := config.GlobalConfig()
+	globalData := config.GlobalConfigData()
+
+	if cfg == nil || len(cfg.MCP) == 0 {
+		lines := []string{
+			"",
+			accent.Render("  MCP servers"),
+			muted.Render("    No MCP servers configured."),
+			"",
+			muted.Render("  Add servers to one of these files:"),
+			muted.Render("    " + globalCfg),
+			muted.Render("    " + globalData),
+		}
+		lines = append(lines, "", muted.Render("  Press esc or ← to go back."))
+		return lines
 	}
-	return []string{
-		"",
-		accent.Render(fmt.Sprintf("  Active MCP servers: %d", mcpCount)),
-		muted.Render("    Configured servers are available to the agent during execution."),
-		"",
-		accent.Render("  Configuration:"),
-		muted.Render("    Edit the mcp section in nexus.json / NEXUS.md to add servers."),
-		"",
-		accent.Render("  Docker MCP:"),
-		muted.Render("    Use Commands → Enable Docker MCP Catalog to add Docker-hosted tools."),
-		"",
-		muted.Render("  Press esc or ← to go back."),
+	lines := []string{"", accent.Render(fmt.Sprintf("  Configured MCP servers: %d", len(cfg.MCP)))}
+	lines = append(lines,
+		muted.Render("  Config: "+globalCfg),
+		muted.Render("         "+globalData),
+	)
+	lines = append(lines, "", accent.Render("  Current runtime state:"))
+	for _, server := range cfg.MCP.Sorted() {
+		state, ok := states[server.Name]
+		if !ok {
+			lines = append(lines, muted.Render("    "+server.Name+" — offline"))
+			continue
+		}
+		status := "offline"
+		switch state.State {
+		case mcp.StateStarting:
+			status = "starting"
+		case mcp.StateConnected:
+			status = fmt.Sprintf("connected · %d tools · %d prompts · %d resources", state.Counts.Tools, state.Counts.Prompts, state.Counts.Resources)
+		case mcp.StateError:
+			status = "error"
+			if state.Error != nil {
+				status += ": " + state.Error.Error()
+			}
+		case mcp.StateDisabled:
+			status = "disabled"
+		}
+		lines = append(lines, muted.Render("    "+server.Name+" — "+status))
 	}
+	lines = append(lines, "", muted.Render("  Press esc or ← to go back."))
+	return lines
 }
 
-func (s *Settings) infoSkills() []string {
-	t := s.com.Styles
-	accent := lipgloss.NewStyle().Foreground(t.Logo.FieldColor).Bold(true)
-	muted := t.Sidebar.WorkingDir
-	cfg := s.com.Config()
-	var paths []string
-	if cfg != nil && cfg.Options != nil {
-		paths = cfg.Options.SkillsPaths
-	}
-	lines := []string{
-		"",
-		accent.Render("  Run a skill:"),
-		muted.Render("    Type /skill_name directly in chat to invoke a skill."),
-		"",
-		accent.Render("  Custom skill paths:"),
-	}
-	if len(paths) == 0 {
-		lines = append(lines, muted.Render("    (none configured)"))
-	} else {
-		for _, p := range paths {
-			lines = append(lines, muted.Render("    • "+p))
+// buildSkillGroups converts a flat CatalogEntry slice into sorted toolGroups
+// keyed by source (Built-in, Project, User).
+func buildSkillGroups(t *styles.Styles, entries []skills.CatalogEntry) []toolGroup {
+	bySource := make(map[string][]*toolItem)
+	for _, entry := range entries {
+		src := string(entry.Source)
+		name := entry.Name
+		if entry.UserInvocable {
+			name = "/" + name
 		}
+		bySource[src] = append(bySource[src], &toolItem{
+			Versioned: list.NewVersioned(),
+			name:      name,
+			desc:      entry.Description,
+			t:         t,
+			cache:     make(map[int]string),
+		})
 	}
-	lines = append(lines,
-		"",
-		muted.Render("    Add paths via options.skills_paths in nexus.json."),
-		"",
-		muted.Render("  Press esc or ← to go back."),
-	)
-	return lines
+	// Emit groups in preferred source order; sort items within each group.
+	preferred := []struct{ key, label string }{
+		{string(skills.SourceSystem), "Built-in"},
+		{string(skills.SourceProject), "Project"},
+		{string(skills.SourceUser), "User"},
+	}
+	groups := make([]toolGroup, 0, len(bySource))
+	seen := make(map[string]bool)
+	for _, p := range preferred {
+		items, ok := bySource[p.key]
+		if !ok {
+			continue
+		}
+		seen[p.key] = true
+		sort.Slice(items, func(i, j int) bool { return items[i].name < items[j].name })
+		groups = append(groups, toolGroup{
+			Versioned: list.NewVersioned(),
+			category:  p.label,
+			items:     items,
+			t:         t,
+		})
+	}
+	// Any unknown source types appended at end.
+	for src, items := range bySource {
+		if seen[src] {
+			continue
+		}
+		sort.Slice(items, func(i, j int) bool { return items[i].name < items[j].name })
+		groups = append(groups, toolGroup{
+			Versioned: list.NewVersioned(),
+			category:  src,
+			items:     items,
+			t:         t,
+		})
+	}
+	return groups
 }
 
 // ─── help.KeyMap ──────────────────────────────────────────────────────────
@@ -836,9 +1149,12 @@ func (i *settingsThemeItem) Filter() string {
 	return "solid background dark theme"
 }
 func (i *settingsThemeItem) ID() string {
-	if i.transparent { return "theme_transparent" }
+	if i.transparent {
+		return "theme_transparent"
+	}
 	return "theme_solid"
 }
+
 // Finished returns false so the list always calls Render and picks up config changes.
 func (i *settingsThemeItem) Finished() bool { return false }
 
@@ -920,3 +1236,129 @@ func (i *settingsThemeItem) Render(width int) string {
 	gap := strings.Repeat(" ", max(0, lineWidth-prefixW-nameWidth-descWidth-infoWidth))
 	return style.Render(prefix + nameStr + descStr + gap + infoText)
 }
+
+type webSearchProviderOption struct {
+	id   string
+	name string
+	desc string
+}
+
+func defaultWebSearchProviders() []webSearchProviderOption {
+	return []webSearchProviderOption{
+		{id: "auto", name: "Auto", desc: "try configured providers in priority order, then DuckDuckGo"},
+		{id: "tavily", name: "Tavily", desc: "API key required"},
+		{id: "exa", name: "Exa", desc: "API key required"},
+		{id: "jina", name: "Jina", desc: "API key required"},
+		{id: "langsearch", name: "LangSearch", desc: "API key required"},
+		{id: "searxng", name: "SearXNG", desc: "Base URL required"},
+		{id: "ddg", name: "DuckDuckGo", desc: "built-in fallback, no API key"},
+	}
+}
+
+func currentWebSearchProviderID() string {
+	providerID := strings.ToLower(strings.TrimSpace(os.Getenv("WEB_SEARCH_PROVIDER")))
+	if providerID == "" {
+		return "auto"
+	}
+	return providerID
+}
+
+func webSearchConfigured(providerID string) bool {
+	switch strings.ToLower(strings.TrimSpace(providerID)) {
+	case "auto", "ddg":
+		return true
+	case "tavily":
+		return strings.TrimSpace(os.Getenv("TAVILY_API_KEY")) != ""
+	case "exa":
+		return strings.TrimSpace(os.Getenv("EXA_API_KEY")) != ""
+	case "jina":
+		return strings.TrimSpace(os.Getenv("JINA_API_KEY")) != ""
+	case "langsearch":
+		return strings.TrimSpace(os.Getenv("LANGSEARCH_API_KEY")) != ""
+	case "searxng":
+		return strings.TrimSpace(os.Getenv("SEARXNG_BASE_URL")) != ""
+	default:
+		return false
+	}
+}
+
+// settingsWebSearchItem represents one web-search provider in settings.
+type settingsWebSearchItem struct {
+	*list.Versioned
+	providerID string
+	name       string
+	desc       string
+	focused    bool
+	match      fuzzy.Match
+	t          *styles.Styles
+}
+
+func (i *settingsWebSearchItem) Filter() string { return i.name + " " + i.desc }
+func (i *settingsWebSearchItem) ID() string     { return i.providerID }
+func (i *settingsWebSearchItem) Finished() bool { return false }
+
+func (i *settingsWebSearchItem) SetFocused(f bool) {
+	if i.focused == f {
+		return
+	}
+	i.focused = f
+	i.Bump()
+}
+
+func (i *settingsWebSearchItem) SetMatch(m fuzzy.Match) {
+	i.match = m
+	i.Bump()
+}
+
+func (i *settingsWebSearchItem) Render(width int) string {
+	t := i.t
+	style := t.Dialog.NormalItem
+	if i.focused {
+		style = t.Dialog.SelectedItem.
+			Background(lipgloss.Color(settingsCardSelectedBg)).
+			Foreground(t.Dialog.NormalItem.GetForeground())
+	}
+	style = style.Width(width)
+	hpad := style.GetHorizontalPadding()
+	lineWidth := width - hpad
+	const prefix = "    "
+	const prefixW = 4
+
+	active := currentWebSearchProviderID() == i.providerID
+	configured := webSearchConfigured(i.providerID)
+	statusStyle := lipgloss.NewStyle().Foreground(t.Sidebar.WorkingDir.GetForeground())
+	statusText := "not configured"
+	if configured {
+		statusStyle = lipgloss.NewStyle().Foreground(t.ToolCallSuccess.GetForeground())
+		statusText = "configured"
+	}
+	if active {
+		statusStyle = lipgloss.NewStyle().Foreground(t.ToolCallSuccess.GetForeground()).Bold(true)
+		statusText = "active"
+	}
+	infoText := statusStyle.Render(" "+statusText) + "  "
+	infoWidth := lipgloss.Width(infoText)
+
+	boldOn := ansi.Style{}.Bold().String()
+	boldOff := ansi.Style{}.Normal().String()
+	nameStr := boldOn + i.name + boldOff
+	nameWidth := lipgloss.Width(i.name)
+
+	var descStr string
+	descWidth := 0
+	if i.desc != "" {
+		greyColor := t.Sidebar.WorkingDir.GetForeground()
+		greyOn := ansi.Style{}.ForegroundColor(greyColor).String()
+		greyOff := ansi.Style{}.DefaultForegroundColor().String()
+		const sep = "  "
+		maxDesc := lineWidth - prefixW - nameWidth - len(sep) - infoWidth - 1
+		if maxDesc > 2 {
+			desc := ansi.Truncate(i.desc, maxDesc, "…")
+			descStr = sep + greyOn + desc + greyOff
+			descWidth = len(sep) + lipgloss.Width(desc)
+		}
+	}
+	gap := strings.Repeat(" ", max(0, lineWidth-prefixW-nameWidth-descWidth-infoWidth))
+	return style.Render(prefix + nameStr + descStr + gap + infoText)
+}
+

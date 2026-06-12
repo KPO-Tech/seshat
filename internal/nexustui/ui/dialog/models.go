@@ -70,12 +70,12 @@ const (
 // ModelsID is the identifier for the model selection dialog.
 const ModelsID = "models"
 
-const defaultModelsDialogMaxWidth = 73
 
 // Models represents a model selection dialog.
 type Models struct {
-	com          *common.Common
-	isOnboarding bool
+	com                 *common.Common
+	isOnboarding        bool
+	preferredProviderID string
 
 	modelType ModelType
 	providers []catwalk.Provider
@@ -98,11 +98,12 @@ type Models struct {
 var _ Dialog = (*Models)(nil)
 
 // NewModels creates a new Models dialog.
-func NewModels(com *common.Common, isOnboarding bool) (*Models, error) {
+func NewModels(com *common.Common, isOnboarding bool, preferredProviderID string) (*Models, error) {
 	t := com.Styles
 	m := &Models{}
 	m.com = com
 	m.isOnboarding = isOnboarding
+	m.preferredProviderID = preferredProviderID
 
 	help := help.New()
 	help.Styles = t.DialogHelpStyles()
@@ -261,13 +262,14 @@ func (m *Models) modelTypeRadioView() string {
 // Draw implements [Dialog].
 func (m *Models) Draw(scr uv.Screen, area uv.Rectangle) *tea.Cursor {
 	t := m.com.Styles
-	width := max(0, min(defaultModelsDialogMaxWidth, area.Dx()-t.Dialog.View.GetHorizontalBorderSize()))
-	height := max(0, min(defaultDialogHeight, area.Dy()-t.Dialog.View.GetVerticalBorderSize()))
+	width := max(0, min(settingsDialogMaxWidth, area.Dx()-t.Dialog.View.GetHorizontalBorderSize()))
+	height := max(0, min(settingsDialogMaxHeight, area.Dy()-t.Dialog.View.GetVerticalBorderSize()))
 	innerWidth := width - t.Dialog.View.GetHorizontalFrameSize()
 	heightOffset := t.Dialog.Title.GetVerticalFrameSize() + titleContentHeight +
 		t.Dialog.InputPrompt.GetVerticalFrameSize() + inputContentHeight +
 		t.Dialog.HelpView.GetVerticalFrameSize() +
-		t.Dialog.View.GetVerticalFrameSize()
+		t.Dialog.View.GetVerticalFrameSize() +
+		t.Dialog.List.GetVerticalMargins()
 
 	m.input.SetWidth(max(0, innerWidth-t.Dialog.InputPrompt.GetHorizontalFrameSize()-1)) // (1) cursor padding
 	m.help.SetWidth(innerWidth)
@@ -282,11 +284,7 @@ func (m *Models) Draw(scr uv.Screen, area uv.Rectangle) *tea.Cursor {
 	// Bypass rc.Title to avoid //// from DialogTitle.
 	if !m.isOnboarding {
 		orange := lipgloss.NewStyle().Bold(true).Foreground(t.Logo.FieldColor)
-		radioInfo := m.modelTypeRadioView()
 		titleContent := orange.Render("Settings  ›  Models")
-		if radioInfo != "" {
-			titleContent += "  " + radioInfo
-		}
 		rc.Parts = []string{rc.TitleStyle.Render(titleContent)}
 	} else {
 		titleText := t.Dialog.PrimaryText.Render("To start, let's choose a provider and model.")
@@ -366,6 +364,7 @@ func (m *Models) setProviderItems() error {
 	cfg := m.com.Config()
 
 	var selectedItemID string
+	var preferredItemID string
 	selectedType := m.modelType.Config()
 	currentModel := cfg.Models[selectedType]
 	recentItems := cfg.RecentModels[selectedType]
@@ -408,6 +407,9 @@ func (m *Models) setProviderItems() error {
 				item := NewModelItem(t, provider, model, m.modelType, false)
 				group.AppendItems(item)
 				itemsMap[item.ID()] = item
+				if preferredItemID == "" && string(provider.ID) == m.preferredProviderID {
+					preferredItemID = item.ID()
+				}
 				if model.ID == currentModel.Model && string(provider.ID) == currentModel.Provider {
 					selectedItemID = item.ID()
 				}
@@ -461,6 +463,9 @@ func (m *Models) setProviderItems() error {
 			item := NewModelItem(t, provider, model, m.modelType, false)
 			group.AppendItems(item)
 			itemsMap[item.ID()] = item
+			if preferredItemID == "" && string(provider.ID) == m.preferredProviderID {
+				preferredItemID = item.ID()
+			}
 			if model.ID == currentModel.Model && string(provider.ID) == currentModel.Provider {
 				selectedItemID = item.ID()
 			}
@@ -501,6 +506,10 @@ func (m *Models) setProviderItems() error {
 		if len(recentGroup.Items) > 0 {
 			groups = append([]ModelGroup{recentGroup}, groups...)
 		}
+	}
+
+	if selectedItemID == "" || (m.preferredProviderID != "" && currentModel.Provider != m.preferredProviderID) {
+		selectedItemID = preferredItemID
 	}
 
 	// Set model groups in the list.

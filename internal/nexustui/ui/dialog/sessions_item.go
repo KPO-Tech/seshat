@@ -140,7 +140,7 @@ type ListItemStyles struct {
 	InfoTextFocused lipgloss.Style
 }
 
-func renderItem(t ListItemStyles, title string, info string, focused bool, width int, cache map[int]string, m *fuzzy.Match) string {
+func renderItem(t ListItemStyles, title string, info string, focused bool, width int, cache map[int]string, m *fuzzy.Match, prefixes ...string) string {
 	if cache == nil {
 		cache = make(map[int]string)
 	}
@@ -148,6 +148,13 @@ func renderItem(t ListItemStyles, title string, info string, focused bool, width
 	cached, ok := cache[width]
 	if ok {
 		return cached
+	}
+
+	var pfx string
+	var pfxW int
+	if len(prefixes) > 0 {
+		pfx = prefixes[0]
+		pfxW = ansi.StringWidth(pfx)
 	}
 
 	style := t.ItemBlurred
@@ -169,9 +176,9 @@ func renderItem(t ListItemStyles, title string, info string, focused bool, width
 		infoWidth = lipgloss.Width(infoText)
 	}
 
-	title = ansi.Truncate(title, max(0, lineWidth-infoWidth), "…")
+	title = ansi.Truncate(title, max(0, lineWidth-infoWidth-pfxW), "…")
 	titleWidth := lipgloss.Width(title)
-	gap := strings.Repeat(" ", max(0, lineWidth-titleWidth-infoWidth))
+	gap := strings.Repeat(" ", max(0, lineWidth-titleWidth-infoWidth-pfxW))
 	content := title
 	if m != nil && len(m.MatchedIndexes) > 0 {
 		var lastPos int
@@ -202,7 +209,7 @@ func renderItem(t ListItemStyles, title string, info string, focused bool, width
 		content = strings.Join(parts, "")
 	}
 
-	content = style.Render(content + gap + infoText)
+	content = style.Render(pfx + content + gap + infoText)
 	cache[width] = content
 	return content
 }

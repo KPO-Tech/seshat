@@ -1,6 +1,9 @@
 package dialog
 
 import (
+	"fmt"
+	"strings"
+
 	"charm.land/catwalk/pkg/catwalk"
 	"charm.land/lipgloss/v2"
 	"github.com/EngineerProjects/nexus-engine/internal/nexustui/config"
@@ -50,7 +53,13 @@ func (m *ModelGroup) Render(width int) string {
 		configured = configuredIcon + " " + configuredText
 	}
 
-	title := " " + m.Title + " "
+	title := m.Title
+	if m.configured {
+		greenOn := ansi.Style{}.ForegroundColor(m.t.ToolCallSuccess.GetForeground()).String()
+		greenOff := ansi.Style{}.DefaultForegroundColor().String()
+		title = greenOn + title + greenOff
+	}
+	title = " " + title + " "
 	title = ansi.Truncate(title, max(0, width-lipgloss.Width(configured)-1), "…")
 
 	return common.Section(m.t, title, width, configured)
@@ -119,19 +128,93 @@ func (m *ModelItem) ID() string {
 
 // Render implements ListItem.
 func (m *ModelItem) Render(width int) string {
-	var providerInfo string
-	if m.showProvider {
-		providerInfo = string(m.prov.Name)
+	if cached, ok := m.cache[width]; ok {
+		return cached
 	}
-	styles := ListItemStyles{
-		ItemBlurred: m.t.Dialog.NormalItem,
-		ItemFocused: m.t.Dialog.SelectedItem.
+
+	t := m.t
+	style := t.Dialog.NormalItem
+	infoStyle := t.Dialog.ListItem.InfoBlurred
+	if m.focused {
+		style = t.Dialog.SelectedItem.
 			Background(lipgloss.Color(settingsCardSelectedBg)).
-			Foreground(m.t.Dialog.NormalItem.GetForeground()),
-		InfoTextBlurred: m.t.Dialog.ListItem.InfoBlurred,
-		InfoTextFocused: m.t.Dialog.ListItem.InfoFocused,
+			Foreground(t.Dialog.NormalItem.GetForeground())
+		infoStyle = t.Dialog.ListItem.InfoFocused
 	}
-	return renderItem(styles, m.model.Name, providerInfo, m.focused, width, m.cache, &m.m)
+
+	// Provider badge at far right (optional).
+	var infoText string
+	var infoWidth int
+	if m.showProvider {
+		infoText = infoStyle.Render(" " + string(m.prov.Name) + " ")
+		infoWidth = lipgloss.Width(infoText)
+	}
+
+	// Context window in muted gray (left of provider badge).
+	var ctxStr string
+	ctxWidth := 0
+	if m.model.ContextWindow > 0 {
+		ctxText := fmtContextWindow(m.model.ContextWindow)
+		greyColor := t.Sidebar.WorkingDir.GetForeground()
+		greyOn := ansi.Style{}.ForegroundColor(greyColor).String()
+		greyOff := ansi.Style{}.DefaultForegroundColor().String()
+		ctxStr = " " + greyOn + ctxText + greyOff
+		ctxWidth = 1 + ansi.StringWidth(ctxText)
+	}
+
+	const prefix = "    "
+	const prefixW = 4
+
+	// Model name truncated to available space.
+	nameAvail := max(0, width-prefixW-ctxWidth-infoWidth)
+	name := ansi.Truncate(m.model.Name, nameAvail, "…")
+	nameWidth := ansi.StringWidth(name)
+
+	// Apply fuzzy match underline.
+	if len(m.m.MatchedIndexes) > 0 {
+		var lastPos int
+		var parts []string
+		for _, rng := range matchedRanges(m.m.MatchedIndexes) {
+			start, stop := bytePosToVisibleCharPos(name, rng)
+			if start > lastPos {
+				parts = append(parts, ansi.Cut(name, lastPos, start))
+			}
+			parts = append(parts,
+				ansi.NewStyle().Underline(true).String(),
+				ansi.Cut(name, start, stop+1),
+				ansi.NewStyle().Underline(false).String(),
+			)
+			lastPos = stop + 1
+		}
+		if lastPos < ansi.StringWidth(name) {
+			parts = append(parts, ansi.Cut(name, lastPos, ansi.StringWidth(name)))
+		}
+		name = strings.Join(parts, "")
+	}
+
+	gap := strings.Repeat(" ", max(0, width-prefixW-nameWidth-ctxWidth-infoWidth))
+	result := style.Render(prefix + name + gap + ctxStr + infoText)
+	if m.cache == nil {
+		m.cache = make(map[int]string)
+	}
+	m.cache[width] = result
+	return result
+}
+
+// fmtContextWindow formats a context window size as a human-readable string.
+func fmtContextWindow(n int64) string {
+	switch {
+	case n >= 1_000_000:
+		v := float64(n) / 1_000_000
+		if v == float64(int64(v)) {
+			return fmt.Sprintf("%dM", int64(v))
+		}
+		return fmt.Sprintf("%.1fM", v)
+	case n >= 1_000:
+		return fmt.Sprintf("%dk", n/1000)
+	default:
+		return fmt.Sprintf("%d", n)
+	}
 }
 
 // SetFocused implements ListItem.
