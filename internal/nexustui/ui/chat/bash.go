@@ -39,7 +39,7 @@ type BashToolRenderContext struct{}
 
 // RenderTool implements the [ToolRenderer] interface.
 func (b *BashToolRenderContext) RenderTool(sty *styles.Styles, width int, opts *ToolRenderOpts) string {
-	cappedWidth := cappedMessageWidth(width)
+	cappedWidth := cappedToolWidth(width)
 	if opts.IsPending() {
 		return pendingTool(sty, "Bash", opts.Anim, opts.Compact)
 	}
@@ -121,14 +121,14 @@ type JobOutputToolRenderContext struct{}
 
 // RenderTool implements the [ToolRenderer] interface.
 func (j *JobOutputToolRenderContext) RenderTool(sty *styles.Styles, width int, opts *ToolRenderOpts) string {
-	cappedWidth := cappedMessageWidth(width)
+	cappedWidth := cappedToolWidth(width)
 	if opts.IsPending() {
-		return pendingTool(sty, "Job", opts.Anim, opts.Compact)
+		return pendingTool(sty, "Job Output", opts.Anim, opts.Compact)
 	}
 
 	var params tools.JobOutputParams
 	if err := json.Unmarshal([]byte(opts.ToolCall.Input), &params); err != nil {
-		return toolErrorContent(sty, &message.ToolResult{Content: "Invalid parameters"}, cappedWidth)
+		return invalidInputContent(sty, opts, "Job Output", cappedWidth)
 	}
 
 	var description string
@@ -172,14 +172,14 @@ type JobKillToolRenderContext struct{}
 
 // RenderTool implements the [ToolRenderer] interface.
 func (j *JobKillToolRenderContext) RenderTool(sty *styles.Styles, width int, opts *ToolRenderOpts) string {
-	cappedWidth := cappedMessageWidth(width)
+	cappedWidth := cappedToolWidth(width)
 	if opts.IsPending() {
-		return pendingTool(sty, "Job", opts.Anim, opts.Compact)
+		return pendingTool(sty, "Job Kill", opts.Anim, opts.Compact)
 	}
 
 	var params tools.JobKillParams
 	if err := json.Unmarshal([]byte(opts.ToolCall.Input), &params); err != nil {
-		return toolErrorContent(sty, &message.ToolResult{Content: "Invalid parameters"}, cappedWidth)
+		return invalidInputContent(sty, opts, "Job Kill", cappedWidth)
 	}
 
 	var description string

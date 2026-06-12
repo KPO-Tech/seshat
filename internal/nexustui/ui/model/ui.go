@@ -1279,6 +1279,12 @@ func (m *UI) updateSessionMessage(msg message.Message) tea.Cmd {
 	var items []chat.MessageItem
 	for _, tc := range msg.ToolCalls() {
 		existingToolItem := m.chat.MessageItem(tc.ID)
+		if !chat.ShouldRenderToolCall(tc) {
+			if existingToolItem != nil {
+				m.chat.RemoveMessage(tc.ID)
+			}
+			continue
+		}
 		if toolItem, ok := existingToolItem.(chat.ToolMessageItem); ok {
 			existingToolCall := toolItem.ToolCall()
 			// only update if finished state changed or input changed
@@ -1313,6 +1319,9 @@ func (m *UI) updateSessionMessage(msg message.Message) tea.Cmd {
 	lastAnchorID := msg.ID
 	for _, part := range msg.Parts {
 		if tc, ok := part.(message.ToolCall); ok {
+			if !chat.ShouldRenderToolCall(tc) {
+				continue
+			}
 			if m.chat.MessageItem(tc.ID) != nil {
 				lastAnchorID = tc.ID
 			}

@@ -37,14 +37,14 @@ type ViewToolRenderContext struct{}
 
 // RenderTool implements the [ToolRenderer] interface.
 func (v *ViewToolRenderContext) RenderTool(sty *styles.Styles, width int, opts *ToolRenderOpts) string {
-	cappedWidth := cappedMessageWidth(width)
+	cappedWidth := cappedToolWidth(width)
 	if opts.IsPending() {
-		return pendingTool(sty, "View", opts.Anim, opts.Compact)
+		return pendingTool(sty, "Read File", opts.Anim, opts.Compact)
 	}
 
 	var params tools.ViewParams
 	if err := json.Unmarshal([]byte(opts.ToolCall.Input), &params); err != nil {
-		return toolErrorContent(sty, &message.ToolResult{Content: "Invalid parameters"}, cappedWidth)
+		return invalidInputContent(sty, opts, "Read File", cappedWidth)
 	}
 
 	file := fsext.PrettyPath(params.FilePath)
@@ -56,7 +56,7 @@ func (v *ViewToolRenderContext) RenderTool(sty *styles.Styles, width int, opts *
 		toolParams = append(toolParams, "offset", fmt.Sprintf("%d", params.Offset))
 	}
 
-	header := toolHeader(sty, opts.Status, "View", cappedWidth, opts.Compact, toolParams...)
+	header := toolHeader(sty, opts.Status, "Read File", cappedWidth, opts.Compact, toolParams...)
 	if opts.Compact {
 		return header
 	}
@@ -75,26 +75,49 @@ func (v *ViewToolRenderContext) RenderTool(sty *styles.Styles, width int, opts *
 		return joinToolParts(header, body)
 	}
 
-	// Try to get content from metadata first (contains actual file content).
 	var meta tools.ViewResponseMetadata
-	content := opts.Result.Content
-	if err := json.Unmarshal([]byte(opts.Result.Metadata), &meta); err == nil && meta.Content != "" {
-		content = meta.Content
-	}
-
-	// Handle skill content.
-	if meta.ResourceType == tools.ViewResourceSkill {
+	if err := json.Unmarshal([]byte(opts.Result.Metadata), &meta); err == nil && meta.ResourceType == tools.ViewResourceSkill {
 		body := toolOutputSkillContent(sty, meta.ResourceName, meta.ResourceDescription)
 		return joinToolParts(header, body)
 	}
 
-	if content == "" {
+	summary := buildViewToolSummary(params, opts.Result.Content)
+	if summary == "" {
 		return header
 	}
 
-	// Render code content with syntax highlighting.
-	body := toolOutputCodeContent(sty, params.FilePath, content, params.Offset, cappedWidth, opts.ExpandedContent)
+	bodyWidth := cappedWidth - toolBodyLeftPaddingTotal
+	body := sty.Tool.Body.Render(toolOutputPlainContent(sty, summary, bodyWidth, opts.ExpandedContent))
 	return joinToolParts(header, body)
+}
+
+func buildViewToolSummary(params tools.ViewParams, content string) string {
+	var lines []string
+
+	if summary := extractReadFileLinesSummary(content); summary != "" {
+		lines = append(lines, summary)
+	} else {
+		if params.Offset > 0 && params.Limit > 0 {
+			lines = append(lines, fmt.Sprintf("Lines requested: %d-%d", params.Offset, params.Offset+params.Limit-1))
+		} else if params.Offset > 0 {
+			lines = append(lines, fmt.Sprintf("Starting from line %d", params.Offset))
+		} else if params.Limit > 0 {
+			lines = append(lines, fmt.Sprintf("Requested up to %d lines", params.Limit))
+		}
+	}
+
+	lines = append(lines, "Content hidden in transcript")
+	return strings.Join(lines, "\n")
+}
+
+func extractReadFileLinesSummary(content string) string {
+	for _, line := range strings.Split(content, "\n") {
+		trimmed := strings.TrimSpace(line)
+		if strings.HasPrefix(trimmed, "Lines:") {
+			return trimmed
+		}
+	}
+	return ""
 }
 
 // -----------------------------------------------------------------------------
@@ -123,18 +146,18 @@ type WriteToolRenderContext struct{}
 
 // RenderTool implements the [ToolRenderer] interface.
 func (w *WriteToolRenderContext) RenderTool(sty *styles.Styles, width int, opts *ToolRenderOpts) string {
-	cappedWidth := cappedMessageWidth(width)
+	cappedWidth := cappedToolWidth(width)
 	if opts.IsPending() {
-		return pendingTool(sty, "Write", opts.Anim, opts.Compact)
+		return pendingTool(sty, "Write File", opts.Anim, opts.Compact)
 	}
 
 	var params tools.WriteParams
 	if err := json.Unmarshal([]byte(opts.ToolCall.Input), &params); err != nil {
-		return toolErrorContent(sty, &message.ToolResult{Content: "Invalid parameters"}, cappedWidth)
+		return invalidInputContent(sty, opts, "Write File", cappedWidth)
 	}
 
 	file := fsext.PrettyPath(params.FilePath)
-	header := toolHeader(sty, opts.Status, "Write", cappedWidth, opts.Compact, file)
+	header := toolHeader(sty, opts.Status, "Write File", cappedWidth, opts.Compact, file)
 	if opts.Compact {
 		return header
 	}
@@ -194,16 +217,16 @@ type EditToolRenderContext struct{}
 func (e *EditToolRenderContext) RenderTool(sty *styles.Styles, width int, opts *ToolRenderOpts) string {
 	// Edit tool uses full width for diffs.
 	if opts.IsPending() {
-		return pendingTool(sty, "Edit", opts.Anim, opts.Compact)
+		return pendingTool(sty, "Edit File", opts.Anim, opts.Compact)
 	}
 
 	var params tools.EditParams
 	if err := json.Unmarshal([]byte(opts.ToolCall.Input), &params); err != nil {
-		return toolErrorContent(sty, &message.ToolResult{Content: "Invalid parameters"}, width)
+		return invalidInputContent(sty, opts, "Edit File", width)
 	}
 
 	file := fsext.PrettyPath(params.FilePath)
-	header := toolHeader(sty, opts.Status, "Edit", width, opts.Compact, file)
+	header := toolHeader(sty, opts.Status, "Edit File", width, opts.Compact, file)
 	if opts.Compact {
 		return header
 	}
@@ -267,7 +290,7 @@ func (m *MultiEditToolRenderContext) RenderTool(sty *styles.Styles, width int, o
 
 	var params tools.MultiEditParams
 	if err := json.Unmarshal([]byte(opts.ToolCall.Input), &params); err != nil {
-		return toolErrorContent(sty, &message.ToolResult{Content: "Invalid parameters"}, width)
+		return invalidInputContent(sty, opts, "Multi-Edit", width)
 	}
 
 	file := fsext.PrettyPath(params.FilePath)
@@ -334,14 +357,14 @@ type DownloadToolRenderContext struct{}
 
 // RenderTool implements the [ToolRenderer] interface.
 func (d *DownloadToolRenderContext) RenderTool(sty *styles.Styles, width int, opts *ToolRenderOpts) string {
-	cappedWidth := cappedMessageWidth(width)
+	cappedWidth := cappedToolWidth(width)
 	if opts.IsPending() {
 		return pendingTool(sty, "Download", opts.Anim, opts.Compact)
 	}
 
 	var params tools.DownloadParams
 	if err := json.Unmarshal([]byte(opts.ToolCall.Input), &params); err != nil {
-		return toolErrorContent(sty, &message.ToolResult{Content: "Invalid parameters"}, cappedWidth)
+		return invalidInputContent(sty, opts, "Download", cappedWidth)
 	}
 
 	toolParams := []string{params.URL}

@@ -4,6 +4,7 @@ import (
 	"strings"
 
 	"charm.land/lipgloss/v2"
+	"github.com/EngineerProjects/nexus-engine/internal/modes"
 	"github.com/EngineerProjects/nexus-engine/internal/nexustui/workspace"
 )
 
@@ -122,8 +123,14 @@ func (m *UI) chatHeaderView(width int) string {
 		left += "  " + muted.Render(modelName)
 	}
 
-	// Default mode is "execute" (orange). Will be wired to real engine mode later.
+	mode := m.com.Workspace.ExecutionMode()
 	modeLabel := orange.Bold(true).Render("execute")
+	switch {
+	case modes.IsPlanModeString(mode):
+		modeLabel = lipgloss.NewStyle().Foreground(t.LSP.InfoDiagnostic.GetForeground()).Bold(true).Render("plan")
+	case modes.IsPairProgrammingModeString(mode):
+		modeLabel = lipgloss.NewStyle().Foreground(t.ToolCallSuccess.GetForeground()).Bold(true).Render("pair")
+	}
 
 	// Show spinner to the left of the mode label while the agent is running.
 	right := modeLabel

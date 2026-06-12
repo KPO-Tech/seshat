@@ -58,20 +58,24 @@ type NexusWorkspace struct {
 	msgMu    sync.RWMutex
 	msgStore map[string][]message.Message // complete message list per session
 
-	sessBroker  *pubsub.Broker[session.Session]
-	msgBroker   *pubsub.Broker[message.Message]
-	permBroker  *pubsub.Broker[permission.PermissionRequest]
-	sessStore   map[string]session.Session
-	sessionsMu  sync.RWMutex
+	sessBroker *pubsub.Broker[session.Session]
+	msgBroker  *pubsub.Broker[message.Message]
+	permBroker *pubsub.Broker[permission.PermissionRequest]
+	sessStore  map[string]session.Session
+	sessionsMu sync.RWMutex
 
 	// tea.Program for Subscribe
 	programMu sync.Mutex
 	program   *tea.Program
 
 	// streaming state (single active assistant message)
-	streamMu   sync.Mutex
-	streamMsg  *message.Message // the in-progress assistant message
-	streamSess string           // session ID of the streaming message
+	streamMu           sync.Mutex
+	streamMsg          *message.Message // the in-progress assistant message for the current model response
+	streamSess         string           // session ID of the streaming message
+	streamResponseDone bool             // set after message_stop; the next model chunk starts a new assistant message
+	streamToolUseID    string           // tool_use block currently being streamed by the LLM
+	streamToolUseName  string
+	streamToolInputBuf string // accumulated input_json_delta for the current block
 
 	// debounce for streaming updates (33 ms)
 	debounce *msgDebounce
@@ -84,8 +88,8 @@ type NexusWorkspace struct {
 	submitCancel context.CancelFunc
 
 	// Config (lazily built, mutex-guarded)
-	cfgMu  sync.Mutex
-	cfg    *config.Config
+	cfgMu sync.Mutex
+	cfg   *config.Config
 
 	// Permission: allow-all skip flag
 	permSkip atomic.Bool
@@ -95,9 +99,10 @@ type NexusWorkspace struct {
 	pendingPerms sync.Map // map[string]chan sdk.PromptResponse
 
 	// Provider registry — populated by DetectProviders() at startup.
-	providerKeys sync.Map      // providerID → apiKey string (empty string = no key needed)
-	ollamaMu     sync.RWMutex
-	ollamaModels []catwalk.Model
+	providerKeys     sync.Map // providerID → apiKey string (empty string = no key needed)
+	providerBaseURLs sync.Map // providerID → editable/test base URL override
+	ollamaMu         sync.RWMutex
+	ollamaModels     []catwalk.Model
 
 	// Options stored for client rebuilds on model/provider switch.
 	sqlitePath string
@@ -111,11 +116,11 @@ type NexusWorkspace struct {
 // modelStr is the "provider:model" string shown in the UI header.
 func NewNexusWorkspace(client *sdk.Client, workDir, modelStr string) *NexusWorkspace {
 	w := &NexusWorkspace{
-		client:    client,
-		workDir:   workDir,
-		model:     modelStr,
-		msgStore:  make(map[string][]message.Message),
-		sessStore: make(map[string]session.Session),
+		client:     client,
+		workDir:    workDir,
+		model:      modelStr,
+		msgStore:   make(map[string][]message.Message),
+		sessStore:  make(map[string]session.Session),
 		sessBroker: pubsub.NewBroker[session.Session](),
 		msgBroker:  pubsub.NewBroker[message.Message](),
 		permBroker: pubsub.NewBroker[permission.PermissionRequest](),
@@ -167,6 +172,15 @@ func (w *NexusWorkspace) Shutdown() {
 	if w.client != nil {
 		_ = w.client.Close()
 	}
+}
+
+func (w *NexusWorkspace) ExecutionMode() string {
+	w.sessMu.Lock()
+	defer w.sessMu.Unlock()
+	if w.session == nil {
+		return string(sdk.ExecutionModeExecute)
+	}
+	return string(w.session.GetExecutionMode())
 }
 
 // ─── Sessions ─────────────────────────────────────────────────────────────────
@@ -379,22 +393,13 @@ func (w *NexusWorkspace) AgentRun(ctx context.Context, sessionID, prompt string,
 	w.appendMsg(sessionID, userMsg)
 	w.msgBroker.Publish(pubsub.CreatedEvent, userMsg)
 
-	// Create the assistant message placeholder.
-	asstID := uuid.New().String()
-	asstMsg := message.Message{
-		ID:        asstID,
-		SessionID: sessionID,
-		Role:      message.Assistant,
-		Parts:     []message.ContentPart{},
-		CreatedAt: time.Now().UnixMilli(),
-		UpdatedAt: time.Now().UnixMilli(),
-	}
-	w.appendMsg(sessionID, asstMsg)
-	w.msgBroker.Publish(pubsub.CreatedEvent, asstMsg)
+	// Create the assistant message placeholder for the first model response.
+	asstMsg := w.newStreamingAssistantMessage(sessionID)
 
 	w.streamMu.Lock()
 	w.streamMsg = &asstMsg
 	w.streamSess = sessionID
+	w.streamResponseDone = false
 	w.streamMu.Unlock()
 
 	submitCtx, cancel := context.WithCancel(ctx)
@@ -480,7 +485,7 @@ func (w *NexusWorkspace) AgentCancel(sessionID string) {
 	w.busy.Store(false)
 }
 
-func (w *NexusWorkspace) AgentIsBusy() bool                        { return w.busy.Load() }
+func (w *NexusWorkspace) AgentIsBusy() bool { return w.busy.Load() }
 func (w *NexusWorkspace) AgentIsSessionBusy(sessionID string) bool {
 	if !w.busy.Load() {
 		return false
@@ -490,12 +495,12 @@ func (w *NexusWorkspace) AgentIsSessionBusy(sessionID string) bool {
 	return w.session != nil && string(w.session.GetID()) == sessionID
 }
 
-func (w *NexusWorkspace) AgentIsReady() bool                              { return w.client != nil }
-func (w *NexusWorkspace) AgentQueuedPrompts(_ string) int                 { return 0 }
-func (w *NexusWorkspace) AgentQueuedPromptsList(_ string) []string        { return nil }
-func (w *NexusWorkspace) AgentClearQueue(_ string)                        {}
+func (w *NexusWorkspace) AgentIsReady() bool                               { return w.client != nil }
+func (w *NexusWorkspace) AgentQueuedPrompts(_ string) int                  { return 0 }
+func (w *NexusWorkspace) AgentQueuedPromptsList(_ string) []string         { return nil }
+func (w *NexusWorkspace) AgentClearQueue(_ string)                         {}
 func (w *NexusWorkspace) AgentSummarize(_ context.Context, _ string) error { return nil }
-func (w *NexusWorkspace) InitCoderAgent(_ context.Context) error          { return nil }
+func (w *NexusWorkspace) InitCoderAgent(_ context.Context) error           { return nil }
 
 // UpdateAgentModel rebuilds the SDK client with the current w.model string.
 // Called by the TUI after the user selects a new model.
@@ -508,6 +513,9 @@ func (w *NexusWorkspace) UpdateAgentModel(ctx context.Context) error {
 		provCfg = &internalproviders.Config{Provider: types.APIProvider(provider)}
 	}
 	provCfg.APIKey = apiKey
+	if baseURL := sdkProviderBaseURL(provider, w.resolveProviderBaseURL(provider)); baseURL != "" {
+		provCfg.BaseURL = baseURL
+	}
 
 	enableMonitoring := w.monitoring != nil
 	newClient, err := sdk.NewClient(&sdk.ClientConfig{
@@ -593,7 +601,7 @@ func (w *NexusWorkspace) resolvePermission(id string, resp sdk.PromptResponse) b
 	return false
 }
 
-func (w *NexusWorkspace) PermissionSkipRequests() bool       { return w.permSkip.Load() }
+func (w *NexusWorkspace) PermissionSkipRequests() bool        { return w.permSkip.Load() }
 func (w *NexusWorkspace) PermissionSetSkipRequests(skip bool) { w.permSkip.Store(skip) }
 
 // ─── File Tracker (no-op) ─────────────────────────────────────────────────────
@@ -614,9 +622,9 @@ func (w *NexusWorkspace) ListSessionHistory(_ context.Context, _ string) ([]hist
 
 // ─── LSP (no-op) ─────────────────────────────────────────────────────────────
 
-func (w *NexusWorkspace) LSPStart(_ context.Context, _ string)          {}
-func (w *NexusWorkspace) LSPStopAll(_ context.Context)                  {}
-func (w *NexusWorkspace) LSPGetStates() map[string]LSPClientInfo        { return nil }
+func (w *NexusWorkspace) LSPStart(_ context.Context, _ string)   {}
+func (w *NexusWorkspace) LSPStopAll(_ context.Context)           {}
+func (w *NexusWorkspace) LSPGetStates() map[string]LSPClientInfo { return nil }
 func (w *NexusWorkspace) LSPGetDiagnosticCounts(_ string) lsp.DiagnosticCounts {
 	return lsp.DiagnosticCounts{}
 }
@@ -632,39 +640,36 @@ func (w *NexusWorkspace) Config() *config.Config {
 
 	provider, modelID := w.splitModel()
 	providers := csync.NewMap[string, config.ProviderConfig]()
+	providerIDs := map[string]struct{}{provider: {}}
 
-	// Populate a ProviderConfig entry for every key stored by DetectProviders
-	// or SetProviderAPIKey. This is what isConfigured() checks in handleSelectModel.
-	w.providerKeys.Range(func(k, v any) bool {
-		pid := k.(string)
-		apiKey, _ := v.(string)
+	w.providerKeys.Range(func(k, _ any) bool {
+		providerIDs[k.(string)] = struct{}{}
+		return true
+	})
+	w.providerBaseURLs.Range(func(k, _ any) bool {
+		providerIDs[k.(string)] = struct{}{}
+		return true
+	})
 
+	for pid := range providerIDs {
+		apiKey := w.resolveAPIKey(pid)
+		baseURL := w.resolveProviderBaseURL(pid)
 		var models []catwalk.Model
 		if pid == "ollama" {
 			w.ollamaMu.RLock()
 			models = append([]catwalk.Model(nil), w.ollamaModels...)
 			w.ollamaMu.RUnlock()
 		}
-
+		if pid == provider && len(models) == 0 {
+			models = []catwalk.Model{{ID: modelID, Name: modelID, ContextWindow: 200000}}
+		}
 		providers.Set(pid, config.ProviderConfig{
-			ID:     pid,
-			Name:   displayNameFor(pid),
-			APIKey: apiKey,
-			Type:   catwalkTypeFor(pid),
-			Models: models,
-		})
-		return true
-	})
-
-	// Always ensure the current model's provider is present.
-	if _, ok := providers.Get(provider); !ok {
-		providers.Set(provider, config.ProviderConfig{
-			ID:   provider,
-			Name: displayNameFor(provider),
-			Type: catwalkTypeFor(provider),
-			Models: []catwalk.Model{
-				{ID: modelID, Name: modelID, ContextWindow: 200000},
-			},
+			ID:      pid,
+			Name:    displayNameFor(pid),
+			APIKey:  apiKey,
+			BaseURL: baseURL,
+			Type:    catwalkTypeFor(pid),
+			Models:  models,
 		})
 	}
 
@@ -696,45 +701,124 @@ func (w *NexusWorkspace) UpdatePreferredModel(_ config.Scope, _ config.SelectedM
 	return nil
 }
 
-func (w *NexusWorkspace) SetCompactMode(_ config.Scope, _ bool) error   { return nil }
-func (w *NexusWorkspace) SetConfigField(_ config.Scope, _ string, _ any) error { return nil }
+func (w *NexusWorkspace) SetCompactMode(_ config.Scope, _ bool) error { return nil }
+func (w *NexusWorkspace) SetConfigField(_ config.Scope, key string, value any) error {
+	stringValue := strings.TrimSpace(fmt.Sprint(value))
+	switch {
+	case strings.HasPrefix(key, "providers.") && strings.HasSuffix(key, ".base_url"):
+		providerID := strings.TrimSuffix(strings.TrimPrefix(key, "providers."), ".base_url")
+		if stringValue == "" {
+			stringValue = defaultProviderBaseURL(providerID)
+		}
+		w.providerBaseURLs.Store(providerID, stringValue)
+		if providerID == "ollama" {
+			_ = os.Setenv("OLLAMA_HOST", stringValue)
+			ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+			defer cancel()
+			if models := fetchOllamaModels(ctx, stringValue); len(models) > 0 {
+				w.ollamaMu.Lock()
+				w.ollamaModels = models
+				w.ollamaMu.Unlock()
+				w.providerKeys.Store("ollama", "")
+			}
+		}
+		w.cfgMu.Lock()
+		w.cfg = nil
+		w.cfgMu.Unlock()
+		go w.persistProviderBaseURL(providerID, stringValue)
+		return nil
+	case key == "web_search_provider":
+		if stringValue == "" {
+			stringValue = "auto"
+		}
+		_ = os.Setenv("WEB_SEARCH_PROVIDER", stringValue)
+		go w.persistCredential("setting:web_search_provider", stringValue)
+		return nil
+	case strings.HasPrefix(key, "web_search.") && strings.HasSuffix(key, ".api_key"):
+		providerID := strings.TrimSuffix(strings.TrimPrefix(key, "web_search."), ".api_key")
+		if envVar := webSearchAPIKeyEnvVar(providerID); envVar != "" {
+			if stringValue == "" {
+				_ = os.Unsetenv(envVar)
+			} else {
+				_ = os.Setenv(envVar, stringValue)
+			}
+			go w.persistCredential("web_search_api_key:"+providerID, stringValue)
+		}
+		return nil
+	case strings.HasPrefix(key, "web_search.") && strings.HasSuffix(key, ".base_url"):
+		providerID := strings.TrimSuffix(strings.TrimPrefix(key, "web_search."), ".base_url")
+		if envVar := webSearchBaseURLEnvVar(providerID); envVar != "" {
+			if stringValue == "" {
+				_ = os.Unsetenv(envVar)
+			} else {
+				_ = os.Setenv(envVar, stringValue)
+			}
+			go w.persistCredential("web_search_base_url:"+providerID, stringValue)
+		}
+		return nil
+	default:
+		return nil
+	}
+}
 
 // SetProviderAPIKey persists the API key for a provider and marks it as
 // configured in the TUI's in-memory config (so isConfigured() returns true).
 func (w *NexusWorkspace) SetProviderAPIKey(_ config.Scope, providerID string, value any) error {
-	apiKey, _ := value.(string)
+	apiKey := ""
+	switch v := value.(type) {
+	case string:
+		apiKey = v
+	case *oauth.Token:
+		if v != nil {
+			apiKey = v.AccessToken
+		}
+	}
 
-	// Store in workspace registry for resolveAPIKey / UpdateAgentModel.
 	w.providerKeys.Store(providerID, apiKey)
 
-	// Update the cached TUI config immediately so isConfigured() sees it
-	// without waiting for the next Config() cache invalidation.
 	cfg := w.Config()
 	existing, _ := cfg.Providers.Get(providerID)
 	existing.ID = providerID
 	existing.Name = displayNameFor(providerID)
 	existing.APIKey = apiKey
 	existing.Type = catwalkTypeFor(providerID)
+	if existing.BaseURL == "" {
+		existing.BaseURL = w.resolveProviderBaseURL(providerID)
+	}
 	cfg.Providers.Set(providerID, existing)
 
-	// Persist asynchronously — non-blocking for the UI.
-	if apiKey != "" {
-		go w.persistProviderAPIKey(providerID, apiKey)
-	}
-
+	go w.persistProviderAPIKey(providerID, apiKey)
 	return nil
 }
-func (w *NexusWorkspace) RemoveConfigField(_ config.Scope, _ string) error         { return nil }
-func (w *NexusWorkspace) ImportCopilot() (*oauth.Token, bool)                      { return nil, false }
+func (w *NexusWorkspace) RemoveConfigField(_ config.Scope, _ string) error { return nil }
+func (w *NexusWorkspace) ImportCopilot() (*oauth.Token, bool)              { return nil, false }
 func (w *NexusWorkspace) RefreshOAuthToken(_ context.Context, _ config.Scope, _ string) error {
 	return nil
 }
 
 // ─── Project lifecycle (stubs) ────────────────────────────────────────────────
 
-func (w *NexusWorkspace) ProjectNeedsInitialization() (bool, error)    { return false, nil }
-func (w *NexusWorkspace) MarkProjectInitialized() error                { return nil }
-func (w *NexusWorkspace) InitializePrompt() (string, error)            { return "", nil }
+func (w *NexusWorkspace) ProjectNeedsInitialization() (bool, error) { return false, nil }
+func (w *NexusWorkspace) MarkProjectInitialized() error             { return nil }
+func (w *NexusWorkspace) InitializePrompt() (string, error)         { return "", nil }
+func (w *NexusWorkspace) ListTools(ctx context.Context) ([]ToolInfo, error) {
+	if w.client == nil {
+		return nil, nil
+	}
+	surface, err := w.client.BuildToolSurface(ctx)
+	if err != nil {
+		return nil, err
+	}
+	tools := make([]ToolInfo, 0, len(surface.Tools))
+	for _, def := range surface.Tools {
+		tools = append(tools, ToolInfo{
+			Name:        def.Name,
+			Description: def.Description,
+			Category:    def.Category,
+		})
+	}
+	return tools, nil
+}
 func (w *NexusWorkspace) ListSkills(_ context.Context) ([]skills.CatalogEntry, error) {
 	cfg := w.Config()
 	var skillsPaths []string
@@ -760,18 +844,18 @@ func (w *NexusWorkspace) ReadSkill(_ context.Context, _ string) ([]byte, skills.
 
 // ─── MCP (stubs) ──────────────────────────────────────────────────────────────
 
-func (w *NexusWorkspace) MCPGetStates() map[string]mcptools.ClientInfo { return mcptools.GetStates() }
-func (w *NexusWorkspace) MCPRefreshPrompts(_ context.Context, _ string)                         {}
-func (w *NexusWorkspace) MCPRefreshResources(_ context.Context, _ string)                       {}
-func (w *NexusWorkspace) RefreshMCPTools(_ context.Context, _ string)                           {}
+func (w *NexusWorkspace) MCPGetStates() map[string]mcptools.ClientInfo    { return mcptools.GetStates() }
+func (w *NexusWorkspace) MCPRefreshPrompts(_ context.Context, _ string)   {}
+func (w *NexusWorkspace) MCPRefreshResources(_ context.Context, _ string) {}
+func (w *NexusWorkspace) RefreshMCPTools(_ context.Context, _ string)     {}
 func (w *NexusWorkspace) ReadMCPResource(_ context.Context, _, _ string) ([]MCPResourceContents, error) {
 	return nil, nil
 }
 func (w *NexusWorkspace) GetMCPPrompt(_, _ string, _ map[string]string) (string, error) {
 	return "", nil
 }
-func (w *NexusWorkspace) EnableDockerMCP(_ context.Context) error  { return nil }
-func (w *NexusWorkspace) DisableDockerMCP() error                  { return nil }
+func (w *NexusWorkspace) EnableDockerMCP(_ context.Context) error { return nil }
+func (w *NexusWorkspace) DisableDockerMCP() error                 { return nil }
 
 // ─── SDK callback receivers (called from SDK event callbacks) ─────────────────
 
@@ -796,7 +880,9 @@ func (w *NexusWorkspace) HandleChunk(delta string, isThinking bool) {
 }
 
 // HandleToolProgress updates the in-progress tool call within the message.
-func (w *NexusWorkspace) HandleToolProgress(toolUseID, toolName, status, msg string) {
+// It extracts the full tool input and result content from p.Metadata so that
+// tool renderers receive the correct parameters and output during live streaming.
+func (w *NexusWorkspace) HandleToolProgress(p sdk.ToolProgress) {
 	w.streamMu.Lock()
 	cur := w.streamMsg
 	sessID := w.streamSess
@@ -805,44 +891,76 @@ func (w *NexusWorkspace) HandleToolProgress(toolUseID, toolName, status, msg str
 		return
 	}
 
+	toolUseID := p.ToolUseID
+	toolName := p.ToolName
+	status := string(p.Stage)
+
+	// Serialize tool_input from metadata into JSON for the ToolCall.Input field.
+	// This is populated by the execution layer before the tool runs, so it is
+	// available on the first pending/running event.
+	inputJSON := toolInputFromMetadata(p.Metadata)
+
 	switch status {
 	case "running", "pending":
-		// Create or update a ToolCall part.
 		found := false
-		for i, p := range cur.Parts {
-			if tc, ok := p.(message.ToolCall); ok && tc.ID == toolUseID {
-				cur.Parts[i] = message.ToolCall{ID: toolUseID, Name: toolName, Input: tc.Input, Finished: false}
+		for i, part := range cur.Parts {
+			if tc, ok := part.(message.ToolCall); ok && tc.ID == toolUseID {
+				input := tc.Input
+				if inputJSON != "" {
+					input = inputJSON
+				}
+				cur.Parts[i] = message.ToolCall{ID: toolUseID, Name: toolName, Input: input, Finished: false}
 				found = true
 				break
 			}
 		}
 		if !found {
-			cur.Parts = append(cur.Parts, message.ToolCall{ID: toolUseID, Name: toolName, Finished: false})
+			cur.Parts = append(cur.Parts, message.ToolCall{ID: toolUseID, Name: toolName, Input: inputJSON, Finished: false})
 		}
+
 	case "completed", "done":
-		for i, p := range cur.Parts {
-			if tc, ok := p.(message.ToolCall); ok && tc.ID == toolUseID {
-				cur.Parts[i] = message.ToolCall{ID: toolUseID, Name: toolName, Input: tc.Input, Finished: true}
+		for i, part := range cur.Parts {
+			if tc, ok := part.(message.ToolCall); ok && tc.ID == toolUseID {
+				input := tc.Input
+				if inputJSON != "" {
+					input = inputJSON
+				}
+				cur.Parts[i] = message.ToolCall{ID: toolUseID, Name: toolName, Input: input, Finished: true}
 				break
 			}
 		}
-		// Append a ToolResult.
+		// Extract actual tool output from metadata["content"]; fall back to the
+		// human-readable message only when no content was provided.
+		content := p.Message
+		if c, ok := p.Metadata["content"].(string); ok && c != "" {
+			content = c
+		}
 		cur.Parts = append(cur.Parts, message.ToolResult{
 			ToolCallID: toolUseID,
 			Name:       toolName,
-			Content:    msg,
+			Content:    content,
+			Metadata:   toolResultMetadataJSON(p.Metadata),
 		})
+
 	case "failed", "error":
-		for i, p := range cur.Parts {
-			if tc, ok := p.(message.ToolCall); ok && tc.ID == toolUseID {
-				cur.Parts[i] = message.ToolCall{ID: toolUseID, Name: toolName, Input: tc.Input, Finished: true}
+		for i, part := range cur.Parts {
+			if tc, ok := part.(message.ToolCall); ok && tc.ID == toolUseID {
+				input := tc.Input
+				if inputJSON != "" {
+					input = inputJSON
+				}
+				cur.Parts[i] = message.ToolCall{ID: toolUseID, Name: toolName, Input: input, Finished: true}
 				break
 			}
+		}
+		content := p.Message
+		if c, ok := p.Metadata["content"].(string); ok && c != "" {
+			content = c
 		}
 		cur.Parts = append(cur.Parts, message.ToolResult{
 			ToolCallID: toolUseID,
 			Name:       toolName,
-			Content:    msg,
+			Content:    content,
 			IsError:    true,
 		})
 	}
@@ -850,6 +968,49 @@ func (w *NexusWorkspace) HandleToolProgress(toolUseID, toolName, status, msg str
 	cur.UpdatedAt = time.Now().UnixMilli()
 	w.updateMsg(sessID, *cur)
 	w.debounce.update(*cur, sessID)
+}
+
+// toolInputFromMetadata extracts the tool_input from ToolProgress.Metadata and
+// returns it as a JSON string. Returns "" when no input is present.
+func toolInputFromMetadata(meta map[string]any) string {
+	if meta == nil {
+		return ""
+	}
+	toolInput, ok := meta["tool_input"]
+	if !ok || toolInput == nil {
+		return ""
+	}
+	data, err := json.Marshal(toolInput)
+	if err != nil {
+		return ""
+	}
+	return string(data)
+}
+
+// toolResultMetadataJSON builds a JSON string from ToolProgress.Metadata for use
+// as ToolResult.Metadata. It excludes internal bookkeeping keys (tool_name,
+// tool_input, content) so only tool-specific fields (exit_code, output, diff,
+// shell_id, etc.) are included — matching the format written by the SDK's
+// session storage and read by the tool renderers.
+func toolResultMetadataJSON(meta map[string]any) string {
+	if len(meta) == 0 {
+		return ""
+	}
+	skip := map[string]bool{"tool_name": true, "tool_input": true, "content": true}
+	filtered := make(map[string]any, len(meta))
+	for k, v := range meta {
+		if !skip[k] {
+			filtered[k] = v
+		}
+	}
+	if len(filtered) == 0 {
+		return ""
+	}
+	data, err := json.Marshal(filtered)
+	if err != nil {
+		return ""
+	}
+	return string(data)
 }
 
 // HandlePermissionRequest emits a permission request to the nexustui UI.
@@ -920,25 +1081,98 @@ func (w *NexusWorkspace) logFilePath() string {
 // OnChunk is the sdk.ResponseChunk callback — translates to HandleChunk.
 func (w *NexusWorkspace) OnChunk(chunk sdk.ResponseChunk) {
 	switch chunk.Type {
+	case sdk.ResponseChunkTypeContentBlockStart, sdk.ResponseChunkTypeContentBlockDelta, sdk.ResponseChunkTypeContentBlockStop:
+		w.rotateStreamingAssistantMessageIfNeeded()
+	}
+
+	switch chunk.Type {
+	case sdk.ResponseChunkTypeContentBlockStart:
+		// When a tool_use block starts, immediately create a pending ToolCall
+		// so the item appears in the chat with a spinner before execution begins.
+		if toolUse, ok := chunk.ContentBlock.(sdk.ToolUseContent); ok {
+			w.streamMu.Lock()
+			w.streamToolUseID = toolUse.ID
+			w.streamToolUseName = toolUse.Name
+			w.streamToolInputBuf = ""
+			cur := w.streamMsg
+			sessID := w.streamSess
+			w.streamMu.Unlock()
+			if cur != nil {
+				cur.Parts = append(cur.Parts, message.ToolCall{
+					ID:       toolUse.ID,
+					Name:     toolUse.Name,
+					Finished: false,
+				})
+				cur.UpdatedAt = time.Now().UnixMilli()
+				w.updateMsg(sessID, *cur)
+				w.debounce.update(*cur, sessID)
+			}
+		} else {
+			// Text or thinking block: clear tool tracking.
+			w.streamMu.Lock()
+			w.streamToolUseID = ""
+			w.streamToolInputBuf = ""
+			w.streamMu.Unlock()
+		}
+
 	case sdk.ResponseChunkTypeContentBlockDelta:
 		switch chunk.DeltaType {
 		case "text_delta", "":
 			w.HandleChunk(chunk.Delta, false)
 		case "thinking_delta":
 			w.HandleChunk(chunk.Delta, true)
+		case "input_json_delta":
+			w.handleToolInputDelta(chunk.PartialJSON)
 		}
+
+	case sdk.ResponseChunkTypeContentBlockStop:
+		// Clear block tracking on stop.
+		w.streamMu.Lock()
+		w.streamToolUseID = ""
+		w.streamToolInputBuf = ""
+		w.streamMu.Unlock()
+
 	case sdk.ResponseChunkTypeMessageStop:
 		w.debounce.forceFlush()
+		w.streamMu.Lock()
+		w.streamResponseDone = true
+		w.streamToolUseID = ""
+		w.streamToolUseName = ""
+		w.streamToolInputBuf = ""
+		w.streamMu.Unlock()
+	}
+}
+
+// handleToolInputDelta accumulates a partial JSON fragment for the current
+// tool_use block and updates the ToolCall.Input in the streaming message.
+func (w *NexusWorkspace) handleToolInputDelta(partialJSON string) {
+	w.streamMu.Lock()
+	toolUseID := w.streamToolUseID
+	toolName := w.streamToolUseName
+	w.streamToolInputBuf += partialJSON
+	input := w.streamToolInputBuf
+	cur := w.streamMsg
+	sessID := w.streamSess
+	w.streamMu.Unlock()
+
+	if cur == nil || toolUseID == "" {
+		return
+	}
+
+	for i, part := range cur.Parts {
+		if tc, ok := part.(message.ToolCall); ok && tc.ID == toolUseID {
+			cur.Parts[i] = message.ToolCall{ID: toolUseID, Name: toolName, Input: input, Finished: false}
+			cur.UpdatedAt = time.Now().UnixMilli()
+			w.updateMsg(sessID, *cur)
+			w.debounce.update(*cur, sessID)
+			return
+		}
 	}
 }
 
 // OnProgress is the sdk.ToolProgress callback.
 func (w *NexusWorkspace) OnProgress(p sdk.ToolProgress) {
-	msg := p.Message
-	if msg == "" {
-		msg = string(p.Stage)
-	}
-	w.HandleToolProgress(p.ToolUseID, p.ToolName, string(p.Stage), msg)
+	w.HandleToolProgress(p)
 }
 
 // OnRuntimeEvent handles subagent events (no-op for now).
@@ -1005,6 +1239,41 @@ func (w *NexusWorkspace) appendMsg(sessionID string, msg message.Message) {
 	w.msgMu.Lock()
 	w.msgStore[sessionID] = append(w.msgStore[sessionID], msg)
 	w.msgMu.Unlock()
+}
+
+func (w *NexusWorkspace) newStreamingAssistantMessage(sessionID string) message.Message {
+	now := time.Now().UnixMilli()
+	msg := message.Message{
+		ID:        uuid.New().String(),
+		SessionID: sessionID,
+		Role:      message.Assistant,
+		Parts:     []message.ContentPart{},
+		CreatedAt: now,
+		UpdatedAt: now,
+	}
+	w.appendMsg(sessionID, msg)
+	w.msgBroker.Publish(pubsub.CreatedEvent, msg)
+	return msg
+}
+
+func (w *NexusWorkspace) rotateStreamingAssistantMessageIfNeeded() {
+	w.streamMu.Lock()
+	if !w.streamResponseDone || w.streamSess == "" {
+		w.streamMu.Unlock()
+		return
+	}
+	sessionID := w.streamSess
+	w.streamMu.Unlock()
+
+	msg := w.newStreamingAssistantMessage(sessionID)
+
+	w.streamMu.Lock()
+	w.streamMsg = &msg
+	w.streamResponseDone = false
+	w.streamToolUseID = ""
+	w.streamToolUseName = ""
+	w.streamToolInputBuf = ""
+	w.streamMu.Unlock()
 }
 
 func (w *NexusWorkspace) updateMsg(sessionID string, msg message.Message) {
@@ -1153,7 +1422,7 @@ func sdkStopToFinish(stopReason string) message.FinishReason {
 // ─── msgDebounce — batches streaming pubsub updates at a fixed interval ───────
 
 type msgDebounce struct {
-	mu      sync.Mutex
+	mu         sync.Mutex
 	latestMsg  message.Message
 	latestSess string
 	dirty      bool

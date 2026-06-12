@@ -10,7 +10,6 @@ import (
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
 	"charm.land/lipgloss/v2/tree"
-	"github.com/EngineerProjects/nexus-engine/internal/nexustui/agent"
 	"github.com/EngineerProjects/nexus-engine/internal/nexustui/agent/tools"
 	"github.com/EngineerProjects/nexus-engine/internal/nexustui/diff"
 	"github.com/EngineerProjects/nexus-engine/internal/nexustui/fsext"
@@ -29,6 +28,9 @@ const responseContextHeight = 10
 
 // toolBodyLeftPaddingTotal represents the padding that should be applied to each tool body
 const toolBodyLeftPaddingTotal = 2
+
+// assistantMessageTruncateFormat is used in tool output and diff truncation hints.
+const assistantMessageTruncateFormat = "… (%d lines hidden) [click or space to expand]"
 
 // ToolStatus represents the current state of a tool call.
 type ToolStatus int
@@ -245,7 +247,7 @@ func NewToolMessageItem(
 		item = NewSourcegraphToolMessageItem(sty, toolCall, result, canceled)
 	case tools.DiagnosticsToolName:
 		item = NewDiagnosticsToolMessageItem(sty, toolCall, result, canceled)
-	case agent.AgentToolName:
+	case tools.AgentToolName:
 		item = NewAgentToolMessageItem(sty, toolCall, result, canceled)
 	case tools.AgenticFetchToolName:
 		item = NewAgenticFetchToolMessageItem(sty, toolCall, result, canceled)
@@ -319,7 +321,7 @@ func (t *baseToolMessageItem) Animate(msg anim.StepMsg) tea.Cmd {
 func (t *baseToolMessageItem) RawRender(width int) string {
 	toolItemWidth := width - MessageLeftPaddingTotal
 	if t.hasCappedWidth {
-		toolItemWidth = cappedMessageWidth(width)
+		toolItemWidth = cappedToolWidth(width)
 	}
 
 	content, height, ok := t.getCachedRender(toolItemWidth)
@@ -517,8 +519,13 @@ func pendingTool(sty *styles.Styles, name string, anim *anim.Anim, nested bool) 
 	return fmt.Sprintf("%s %s %s", icon, toolName, animView)
 }
 
-// toolEarlyStateContent handles error/cancelled/pending states before content rendering.
-// Returns the rendered output and true if early state was handled.
+// toolEarlyStateContent handles error/cancelled/awaiting-permission states before
+// content rendering. Returns the rendered output and true if early state was handled.
+// Note: ToolStatusRunning is intentionally NOT handled here — renderers call
+// IsPending() first and return pendingTool() for genuinely live tools. If we
+// reach this function with status=Running it means Finished=true but no result
+// (e.g. an old/interrupted session), in which case the caller's !HasResult()
+// guard already returns just the header.
 func toolEarlyStateContent(sty *styles.Styles, opts *ToolRenderOpts, width int) (string, bool) {
 	var msg string
 	switch opts.Status {
@@ -528,12 +535,18 @@ func toolEarlyStateContent(sty *styles.Styles, opts *ToolRenderOpts, width int) 
 		msg = sty.Tool.StateCancelled.Render("Canceled.")
 	case ToolStatusAwaitingPermission:
 		msg = sty.Tool.StateWaiting.Render("Requesting permission...")
-	case ToolStatusRunning:
-		msg = sty.Tool.StateWaiting.Render("Waiting for tool response...")
 	default:
 		return "", false
 	}
 	return msg, true
+}
+
+// invalidInputContent returns a clean header when the tool's input couldn't be
+// parsed. This is only called after IsPending() returns false, so the tool is
+// always in a terminal state (finished or canceled) — an ERROR badge is never
+// appropriate here.
+func invalidInputContent(sty *styles.Styles, opts *ToolRenderOpts, name string, cappedWidth int) string {
+	return toolHeader(sty, opts.Status, name, cappedWidth, opts.Compact)
 }
 
 // toolErrorContent formats an error message with an ERROR or WARN tag.
@@ -1039,15 +1052,29 @@ func roundedEnumerator(lPadding, width int) tree.Enumerator {
 }
 
 // toolOutputMarkdownContent renders markdown content with optional truncation.
-func toolOutputMarkdownContent(sty *styles.Styles, content string, width int, expanded bool) string {
+func toolOutputMarkdownContent(sty *styles.Styles, content string, width int, expanded bool) (result string) {
+	// Glamour can panic (nil ansi.Parser) when deeply nested block elements
+	// collapse the inner render width to zero. Fall back to plain text on any panic.
+	defer func() {
+		if r := recover(); r != nil {
+			result = toolOutputPlainContent(sty, content, width, expanded)
+		}
+	}()
+
 	content = stringext.NormalizeSpace(content)
 
 	// Cap width for readability.
 	if width > maxTextWidth {
 		width = maxTextWidth
 	}
+	if width <= 0 {
+		return toolOutputPlainContent(sty, content, width, expanded)
+	}
 
 	renderer := common.QuietMarkdownRenderer(sty, width)
+	if renderer == nil {
+		return toolOutputPlainContent(sty, content, width, expanded)
+	}
 	mu := common.LockMarkdownRenderer(renderer)
 	mu.Lock()
 	rendered, err := renderer.Render(content)
@@ -1250,8 +1277,8 @@ func (t *baseToolMessageItem) formatParametersForCopy() string {
 		}
 	case tools.DiagnosticsToolName:
 		return "**Project:** diagnostics"
-	case agent.AgentToolName:
-		var params agent.AgentParams
+	case tools.AgentToolName:
+		var params tools.AgentParams
 		if json.Unmarshal([]byte(t.toolCall.Input), &params) == nil {
 			return fmt.Sprintf("**Task:**\n%s", params.Prompt)
 		}
@@ -1303,7 +1330,7 @@ func (t *baseToolMessageItem) formatResultForCopy() string {
 		return t.formatAgenticFetchResultForCopy()
 	case tools.WebFetchToolName:
 		return t.formatWebFetchResultForCopy()
-	case agent.AgentToolName:
+	case tools.AgentToolName:
 		return t.formatAgentResultForCopy()
 	case tools.DownloadToolName, tools.GrepToolName, tools.GlobToolName, tools.LSToolName, tools.SourcegraphToolName, tools.DiagnosticsToolName, tools.TodosToolName:
 		return fmt.Sprintf("```\n%s\n```", t.result.Content)
@@ -1621,18 +1648,18 @@ func (t *baseToolMessageItem) formatAgentResultForCopy() string {
 // prettifyToolName returns a human-readable name for tool names.
 func prettifyToolName(name string) string {
 	switch name {
-	case agent.AgentToolName:
+	case tools.AgentToolName:
 		return "Agent"
 	case tools.BashToolName:
 		return "Bash"
 	case tools.JobOutputToolName:
-		return "Job: Output"
+		return "Job Output"
 	case tools.JobKillToolName:
-		return "Job: Kill"
+		return "Job Kill"
 	case tools.DownloadToolName:
 		return "Download"
 	case tools.EditToolName:
-		return "Edit"
+		return "Edit File"
 	case tools.MultiEditToolName:
 		return "Multi-Edit"
 	case tools.FetchToolName:
@@ -1640,23 +1667,23 @@ func prettifyToolName(name string) string {
 	case tools.AgenticFetchToolName:
 		return "Agentic Fetch"
 	case tools.WebFetchToolName:
-		return "Fetch"
+		return "Web Fetch"
 	case tools.WebSearchToolName:
-		return "Search"
+		return "Web Search"
 	case tools.GlobToolName:
 		return "Glob"
 	case tools.GrepToolName:
 		return "Grep"
 	case tools.LSToolName:
-		return "List"
+		return "List Directory"
 	case tools.SourcegraphToolName:
 		return "Sourcegraph"
 	case tools.TodosToolName:
 		return "To-Do"
 	case tools.ViewToolName:
-		return "View"
+		return "Read File"
 	case tools.WriteToolName:
-		return "Write"
+		return "Write File"
 	default:
 		return humanizedToolName(name)
 	}

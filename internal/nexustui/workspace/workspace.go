@@ -64,6 +64,13 @@ type AgentModel struct {
 	ModelCfg   config.SelectedModel
 }
 
+// ToolInfo holds tool metadata exposed to the TUI.
+type ToolInfo struct {
+	Name        string
+	Description string
+	Category    string
+}
+
 // Workspace is the main abstraction consumed by the TUI and CLI. It
 // groups every operation a frontend needs to perform against a running
 // workspace, regardless of whether the workspace is in-process or
@@ -96,6 +103,7 @@ type Workspace interface {
 	AgentIsSessionBusy(sessionID string) bool
 	AgentModel() AgentModel
 	AgentIsReady() bool
+	ExecutionMode() string
 	AgentQueuedPrompts(sessionID string) int
 	AgentQueuedPromptsList(sessionID string) []string
 	AgentClearQueue(sessionID string)
@@ -151,6 +159,7 @@ type Workspace interface {
 	ProjectNeedsInitialization() (bool, error)
 	MarkProjectInitialized() error
 	InitializePrompt() (string, error)
+	ListTools(ctx context.Context) ([]ToolInfo, error)
 	ListSkills(ctx context.Context) ([]skills.CatalogEntry, error)
 	ReadSkill(ctx context.Context, skillID string) ([]byte, skills.SkillReadResult, error)
 

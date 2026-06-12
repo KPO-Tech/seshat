@@ -21,7 +21,6 @@ import (
 // content width so lines don't exceed the available area.
 const MessageLeftPaddingTotal = 4
 
-
 // Identifiable is an interface for items that can provide a unique identifier.
 type Identifiable interface {
 	ID() string
@@ -347,6 +346,15 @@ func cappedMessageWidth(availableWidth int) int {
 	return max(0, availableWidth-MessageLeftPaddingTotal)
 }
 
+const toolHorizontalInset = 6
+
+// cappedToolWidth returns a slightly narrower content width for tool items so
+// tool output wraps earlier than assistant/user messages and feels visually
+// subordinate in the transcript.
+func cappedToolWidth(availableWidth int) int {
+	return max(0, availableWidth-MessageLeftPaddingTotal-toolHorizontalInset)
+}
+
 // ExtractMessageItems extracts [MessageItem]s from a [message.Message]. It
 // returns all parts of the message as [MessageItem]s.
 //
@@ -364,23 +372,37 @@ func ExtractMessageItems(sty *styles.Styles, msg *message.Message, toolResults m
 		)
 		return []MessageItem{NewUserMessageItem(sty, msg, r)}
 	case message.Assistant:
+		canceled := msg.FinishReason() == message.FinishReasonCanceled
 		var items []MessageItem
-		if ShouldRenderAssistantMessage(msg) {
+		assistantAdded := false
+
+		// Walk Parts in their natural order so tools that were called before text
+		// (or before thinking) appear above the assistant text block, not after.
+		for _, part := range msg.Parts {
+			switch p := part.(type) {
+			case message.TextContent, message.ReasoningContent:
+				if !assistantAdded && ShouldRenderAssistantMessage(msg) {
+					items = append(items, NewAssistantMessageItem(sty, msg))
+					assistantAdded = true
+				}
+			case message.ToolCall:
+				if !ShouldRenderToolCall(p) {
+					continue
+				}
+				var result *message.ToolResult
+				if tr, ok := toolResults[p.ID]; ok {
+					result = &tr
+				}
+				items = append(items, NewToolMessageItem(sty, msg.ID, p, result, canceled))
+			}
+		}
+
+		// Add the assistant item at the end if it wasn't encountered yet
+		// (e.g. error/cancel messages with no text or thinking parts).
+		if !assistantAdded && ShouldRenderAssistantMessage(msg) {
 			items = append(items, NewAssistantMessageItem(sty, msg))
 		}
-		for _, tc := range msg.ToolCalls() {
-			var result *message.ToolResult
-			if tr, ok := toolResults[tc.ID]; ok {
-				result = &tr
-			}
-			items = append(items, NewToolMessageItem(
-				sty,
-				msg.ID,
-				tc,
-				result,
-				msg.FinishReason() == message.FinishReasonCanceled,
-			))
-		}
+
 		return items
 	}
 	return []MessageItem{}

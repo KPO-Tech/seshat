@@ -34,14 +34,14 @@ type FetchToolRenderContext struct{}
 
 // RenderTool implements the [ToolRenderer] interface.
 func (f *FetchToolRenderContext) RenderTool(sty *styles.Styles, width int, opts *ToolRenderOpts) string {
-	cappedWidth := cappedMessageWidth(width)
+	cappedWidth := cappedToolWidth(width)
 	if opts.IsPending() {
 		return pendingTool(sty, "Fetch", opts.Anim, opts.Compact)
 	}
 
 	var params tools.FetchParams
 	if err := json.Unmarshal([]byte(opts.ToolCall.Input), &params); err != nil {
-		return toolErrorContent(sty, &message.ToolResult{Content: "Invalid parameters"}, cappedWidth)
+		return invalidInputContent(sty, opts, "Fetch", cappedWidth)
 	}
 
 	toolParams := []string{params.URL}
@@ -109,18 +109,18 @@ type WebFetchToolRenderContext struct{}
 
 // RenderTool implements the [ToolRenderer] interface.
 func (w *WebFetchToolRenderContext) RenderTool(sty *styles.Styles, width int, opts *ToolRenderOpts) string {
-	cappedWidth := cappedMessageWidth(width)
+	cappedWidth := cappedToolWidth(width)
 	if opts.IsPending() {
-		return pendingTool(sty, "Fetch", opts.Anim, opts.Compact)
+		return pendingTool(sty, "Web Fetch", opts.Anim, opts.Compact)
 	}
 
 	var params tools.WebFetchParams
 	if err := json.Unmarshal([]byte(opts.ToolCall.Input), &params); err != nil {
-		return toolErrorContent(sty, &message.ToolResult{Content: "Invalid parameters"}, cappedWidth)
+		return invalidInputContent(sty, opts, "Web Fetch", cappedWidth)
 	}
 
 	toolParams := []string{params.URL}
-	header := toolHeader(sty, opts.Status, "Fetch", cappedWidth, opts.Compact, toolParams...)
+	header := toolHeader(sty, opts.Status, "Web Fetch", cappedWidth, opts.Compact, toolParams...)
 	if opts.Compact {
 		return header
 	}
@@ -163,18 +163,18 @@ type WebSearchToolRenderContext struct{}
 
 // RenderTool implements the [ToolRenderer] interface.
 func (w *WebSearchToolRenderContext) RenderTool(sty *styles.Styles, width int, opts *ToolRenderOpts) string {
-	cappedWidth := cappedMessageWidth(width)
+	cappedWidth := cappedToolWidth(width)
 	if opts.IsPending() {
-		return pendingTool(sty, "Search", opts.Anim, opts.Compact)
+		return pendingTool(sty, "Web Search", opts.Anim, opts.Compact)
 	}
 
 	var params tools.WebSearchParams
 	if err := json.Unmarshal([]byte(opts.ToolCall.Input), &params); err != nil {
-		return toolErrorContent(sty, &message.ToolResult{Content: "Invalid parameters"}, cappedWidth)
+		return invalidInputContent(sty, opts, "Web Search", cappedWidth)
 	}
 
 	toolParams := []string{params.Query}
-	header := toolHeader(sty, opts.Status, "Search", cappedWidth, opts.Compact, toolParams...)
+	header := toolHeader(sty, opts.Status, "Web Search", cappedWidth, opts.Compact, toolParams...)
 	if opts.Compact {
 		return header
 	}

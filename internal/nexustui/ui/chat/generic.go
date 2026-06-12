@@ -30,7 +30,7 @@ type GenericToolRenderContext struct{}
 
 // RenderTool implements the [ToolRenderer] interface.
 func (g *GenericToolRenderContext) RenderTool(sty *styles.Styles, width int, opts *ToolRenderOpts) string {
-	cappedWidth := cappedMessageWidth(width)
+	cappedWidth := cappedToolWidth(width)
 	name := humanizedToolName(opts.ToolCall.Name)
 
 	if opts.IsPending() {
@@ -39,7 +39,7 @@ func (g *GenericToolRenderContext) RenderTool(sty *styles.Styles, width int, opt
 
 	var params map[string]any
 	if err := json.Unmarshal([]byte(opts.ToolCall.Input), &params); err != nil {
-		return toolErrorContent(sty, &message.ToolResult{Content: "Invalid parameters"}, cappedWidth)
+		return invalidInputContent(sty, opts, name, cappedWidth)
 	}
 
 	var toolParams []string
