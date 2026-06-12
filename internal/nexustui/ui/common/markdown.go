@@ -43,6 +43,7 @@ var (
 // must serialize via [LockMarkdownRenderer]. Treat the renderer
 // as effectively pinned to one goroutine at a time.
 func MarkdownRenderer(sty *styles.Styles, width int) *glamour.TermRenderer {
+	width = max(1, width)
 	mdCacheMu.Lock()
 	defer mdCacheMu.Unlock()
 	if r, ok := mdCache[width]; ok {
@@ -53,7 +54,9 @@ func MarkdownRenderer(sty *styles.Styles, width int) *glamour.TermRenderer {
 		glamour.WithWordWrap(width),
 		glamour.WithChromaFormatter(formatterName),
 	)
-	mdCache[width] = r
+	if r != nil {
+		mdCache[width] = r
+	}
 	return r
 }
 
@@ -62,6 +65,7 @@ func MarkdownRenderer(sty *styles.Styles, width int) *glamour.TermRenderer {
 // width and shared across callers. Same concurrency contract as
 // [MarkdownRenderer]: serialize via [LockMarkdownRenderer].
 func QuietMarkdownRenderer(sty *styles.Styles, width int) *glamour.TermRenderer {
+	width = max(1, width)
 	mdCacheMu.Lock()
 	defer mdCacheMu.Unlock()
 	if r, ok := quietMDCache[width]; ok {
@@ -72,7 +76,9 @@ func QuietMarkdownRenderer(sty *styles.Styles, width int) *glamour.TermRenderer 
 		glamour.WithWordWrap(width),
 		glamour.WithChromaFormatter(formatterName),
 	)
-	quietMDCache[width] = r
+	if r != nil {
+		quietMDCache[width] = r
+	}
 	return r
 }
 

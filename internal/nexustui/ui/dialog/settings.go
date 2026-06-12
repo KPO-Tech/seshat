@@ -841,6 +841,10 @@ func (s *Settings) infoMCP() []string {
 	// Config file locations the user edits to add/remove MCP servers.
 	globalCfg := config.GlobalConfig()
 	globalData := config.GlobalConfigData()
+	configPaths := []string{globalCfg}
+	if globalData != globalCfg {
+		configPaths = append(configPaths, globalData)
+	}
 
 	if cfg == nil || len(cfg.MCP) == 0 {
 		lines := []string{
@@ -849,17 +853,22 @@ func (s *Settings) infoMCP() []string {
 			muted.Render("    No MCP servers configured."),
 			"",
 			muted.Render("  Add servers to one of these files:"),
-			muted.Render("    " + globalCfg),
-			muted.Render("    " + globalData),
+		}
+		for _, path := range configPaths {
+			lines = append(lines, muted.Render("    "+path))
 		}
 		lines = append(lines, "", muted.Render("  Press esc or ← to go back."))
 		return lines
 	}
 	lines := []string{"", accent.Render(fmt.Sprintf("  Configured MCP servers: %d", len(cfg.MCP)))}
-	lines = append(lines,
-		muted.Render("  Config: "+globalCfg),
-		muted.Render("         "+globalData),
-	)
+	if len(configPaths) == 1 {
+		lines = append(lines, muted.Render("  Config: "+configPaths[0]))
+	} else {
+		lines = append(lines, muted.Render("  Config: "+configPaths[0]))
+		for _, path := range configPaths[1:] {
+			lines = append(lines, muted.Render("         "+path))
+		}
+	}
 	lines = append(lines, "", accent.Render("  Current runtime state:"))
 	for _, server := range cfg.MCP.Sorted() {
 		state, ok := states[server.Name]
@@ -1361,4 +1370,3 @@ func (i *settingsWebSearchItem) Render(width int) string {
 	gap := strings.Repeat(" ", max(0, lineWidth-prefixW-nameWidth-descWidth-infoWidth))
 	return style.Render(prefix + nameStr + descStr + gap + infoText)
 }
-

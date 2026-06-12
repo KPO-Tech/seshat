@@ -22,9 +22,15 @@ const (
 	WebFetchToolName     = "web_fetch"
 	WebSearchToolName    = "web_search"
 	TodosToolName        = "todos"
+	AgentToolName        = "agent"
 
 	BashNoOutput = "<no output>"
 )
+
+// AgentParams holds the input for an agent tool call.
+type AgentParams struct {
+	Prompt string `json:"prompt" description:"The task for the agent to perform"`
+}
 
 // --- Permission param structs (used by the permission dialog for rendering) ---
 

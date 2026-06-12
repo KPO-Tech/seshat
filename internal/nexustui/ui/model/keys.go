@@ -11,6 +11,7 @@ type KeyMap struct {
 		AddImage    key.Binding
 		PasteImage  key.Binding
 		MentionFile key.Binding
+		Skills      key.Binding
 		Commands    key.Binding
 
 		// Attachments key maps
@@ -144,9 +145,13 @@ func DefaultKeyMap() KeyMap {
 		key.WithKeys("@"),
 		key.WithHelp("@", "mention file"),
 	)
-	km.Editor.Commands = key.NewBinding(
+	km.Editor.Skills = key.NewBinding(
 		key.WithKeys("/"),
-		key.WithHelp("/", "commands"),
+		key.WithHelp("/", "skills"),
+	)
+	km.Editor.Commands = key.NewBinding(
+		key.WithKeys("\\"),
+		key.WithHelp("\\", "commands"),
 	)
 	km.Editor.AttachmentDeleteMode = key.NewBinding(
 		key.WithKeys("ctrl+r"),

@@ -30,20 +30,25 @@ func (w *NexusWorkspace) DetectProviders() {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
-	// 1. Env vars (highest priority — already present when the TUI starts).
 	for _, p := range engineconfig.AvailableProviders() {
-		if _, already := w.providerKeys.Load(string(p.Name)); already {
-			continue
+		pid := string(p.Name)
+		if _, already := w.providerKeys.Load(pid); !already {
+			for _, envVar := range engineconfig.ProviderCredentialEnvVars(p.Name) {
+				if v := strings.TrimSpace(os.Getenv(envVar)); v != "" {
+					w.providerKeys.Store(pid, v)
+					break
+				}
+			}
 		}
-		for _, envVar := range engineconfig.ProviderCredentialEnvVars(p.Name) {
-			if v := strings.TrimSpace(os.Getenv(envVar)); v != "" {
-				w.providerKeys.Store(string(p.Name), v)
-				break
+		if pid == "ollama" {
+			if v := strings.TrimSpace(os.Getenv("OLLAMA_HOST")); v != "" {
+				normalized := strings.TrimRight(v, "/")
+				w.providerBaseURLs.Store(pid, normalized)
+				_ = os.Setenv("OLLAMA_HOST", normalized)
 			}
 		}
 	}
 
-	// 2. Credentials DB (persisted by previous TUI sessions or `nexus config`).
 	if engCfg, err := engineconfig.Load(); err == nil {
 		dbPath := engineconfig.EffectiveSessionDBPath(engCfg)
 		if database, err := db.Open(context.Background(), db.DefaultSQLiteConfig(dbPath)); err == nil {
@@ -51,31 +56,48 @@ func (w *NexusWorkspace) DetectProviders() {
 			dbCtx := context.Background()
 			for _, p := range engineconfig.AvailableProviders() {
 				pid := string(p.Name)
-				if _, already := w.providerKeys.Load(pid); already {
-					continue // env var wins
+				if _, already := w.providerKeys.Load(pid); !already {
+					if val, ok, _ := database.GetCredential(dbCtx, "api_key:"+strings.ToLower(pid)); ok && strings.TrimSpace(val) != "" {
+						w.providerKeys.Store(pid, val)
+					}
 				}
-				key := "api_key:" + strings.ToLower(pid)
-				if val, ok, _ := database.GetCredential(dbCtx, key); ok && strings.TrimSpace(val) != "" {
-					w.providerKeys.Store(pid, val)
+				if _, already := w.providerBaseURLs.Load(pid); !already {
+					if val, ok, _ := database.GetCredential(dbCtx, "base_url:"+strings.ToLower(pid)); ok && strings.TrimSpace(val) != "" {
+						w.providerBaseURLs.Store(pid, strings.TrimRight(strings.TrimSpace(val), "/"))
+					}
+				}
+			}
+
+			if os.Getenv("WEB_SEARCH_PROVIDER") == "" {
+				if val, ok, _ := database.GetCredential(dbCtx, "setting:web_search_provider"); ok && strings.TrimSpace(val) != "" {
+					_ = os.Setenv("WEB_SEARCH_PROVIDER", strings.TrimSpace(val))
+				}
+			}
+			for _, pid := range []string{"tavily", "exa", "jina", "langsearch"} {
+				envVar := webSearchAPIKeyEnvVar(pid)
+				if envVar == "" || os.Getenv(envVar) != "" {
+					continue
+				}
+				if val, ok, _ := database.GetCredential(dbCtx, "web_search_api_key:"+pid); ok && strings.TrimSpace(val) != "" {
+					_ = os.Setenv(envVar, strings.TrimSpace(val))
+				}
+			}
+			if os.Getenv("SEARXNG_BASE_URL") == "" {
+				if val, ok, _ := database.GetCredential(dbCtx, "web_search_base_url:searxng"); ok && strings.TrimSpace(val) != "" {
+					_ = os.Setenv("SEARXNG_BASE_URL", strings.TrimSpace(val))
 				}
 			}
 		}
 	}
 
-	// 3. Ollama — no API key required; just check connectivity + fetch models.
-	ollamaBase := strings.TrimRight(os.Getenv("OLLAMA_HOST"), "/")
-	if ollamaBase == "" {
-		ollamaBase = "http://localhost:11434"
-	}
+	ollamaBase := w.resolveProviderBaseURL("ollama")
 	if models := fetchOllamaModels(ctx, ollamaBase); len(models) > 0 {
 		w.ollamaMu.Lock()
 		w.ollamaModels = models
 		w.ollamaMu.Unlock()
-		// Mark as configured even without a key.
 		w.providerKeys.Store("ollama", "")
 	}
 
-	// Invalidate the cached TUI config so Config() rebuilds with the new data.
 	w.cfgMu.Lock()
 	w.cfg = nil
 	w.cfgMu.Unlock()
@@ -96,9 +118,96 @@ func (w *NexusWorkspace) resolveAPIKey(providerID string) string {
 	return ""
 }
 
-// persistProviderAPIKey saves providerID's API key to the credentials DB.
-// Best-effort: errors are logged but not propagated.
-func (w *NexusWorkspace) persistProviderAPIKey(providerID, apiKey string) {
+func (w *NexusWorkspace) resolveProviderBaseURL(providerID string) string {
+	if v, ok := w.providerBaseURLs.Load(providerID); ok {
+		if baseURL, _ := v.(string); strings.TrimSpace(baseURL) != "" {
+			return strings.TrimSpace(baseURL)
+		}
+	}
+	if providerID == "ollama" {
+		if v := strings.TrimSpace(os.Getenv("OLLAMA_HOST")); v != "" {
+			return strings.TrimRight(v, "/")
+		}
+	}
+	return defaultProviderBaseURL(providerID)
+}
+
+func defaultProviderBaseURL(providerID string) string {
+	switch strings.ToLower(strings.TrimSpace(providerID)) {
+	case "anthropic":
+		return "https://api.anthropic.com/v1"
+	case "openai":
+		return "https://api.openai.com/v1"
+	case "gemini":
+		return "https://generativelanguage.googleapis.com"
+	case "mistral":
+		return "https://api.mistral.ai/v1"
+	case "deepseek":
+		return "https://api.deepseek.com/v1"
+	case "openrouter":
+		return "https://openrouter.ai/api/v1"
+	case "z-ai", "zai":
+		return "https://api.z.ai/api/paas/v4"
+	case "minimax":
+		return "https://api.minimax.chat/v1"
+	case "opencode":
+		return "https://opencode.ai/zen/v1"
+	case "workers-ai":
+		return "https://api.cloudflare.com/client/v4/accounts"
+	case "kimi":
+		return "https://api.moonshot.cn/v1"
+	case "ollama":
+		return "http://localhost:11434"
+	default:
+		return ""
+	}
+}
+
+func sdkProviderBaseURL(providerID, baseURL string) string {
+	baseURL = strings.TrimSpace(baseURL)
+	if baseURL == "" {
+		return ""
+	}
+	switch strings.ToLower(strings.TrimSpace(providerID)) {
+	case "anthropic":
+		return strings.TrimSuffix(baseURL, "/v1")
+	case "ollama":
+		return strings.TrimSuffix(baseURL, "/v1")
+	case "gemini":
+		if strings.Contains(baseURL, "/v1beta") {
+			return baseURL
+		}
+		return strings.TrimRight(baseURL, "/") + "/v1beta"
+	default:
+		return baseURL
+	}
+}
+
+func webSearchAPIKeyEnvVar(providerID string) string {
+	switch strings.ToLower(strings.TrimSpace(providerID)) {
+	case "tavily":
+		return "TAVILY_API_KEY"
+	case "exa":
+		return "EXA_API_KEY"
+	case "jina":
+		return "JINA_API_KEY"
+	case "langsearch":
+		return "LANGSEARCH_API_KEY"
+	default:
+		return ""
+	}
+}
+
+func webSearchBaseURLEnvVar(providerID string) string {
+	switch strings.ToLower(strings.TrimSpace(providerID)) {
+	case "searxng":
+		return "SEARXNG_BASE_URL"
+	default:
+		return ""
+	}
+}
+
+func (w *NexusWorkspace) persistCredential(key, value string) {
 	engCfg, err := engineconfig.Load()
 	if err != nil {
 		return
@@ -108,13 +217,31 @@ func (w *NexusWorkspace) persistProviderAPIKey(providerID, apiKey string) {
 		return
 	}
 	defer database.Close()
-	key := "api_key:" + strings.ToLower(providerID)
-	_ = database.UpsertCredential(context.Background(), key, apiKey)
+	ctx := context.Background()
+	if strings.TrimSpace(value) == "" {
+		_ = database.DeleteCredential(ctx, key)
+		return
+	}
+	_ = database.UpsertCredential(ctx, key, value)
+}
+
+// persistProviderAPIKey saves providerID's API key to the credentials DB.
+// Best-effort: errors are logged but not propagated.
+func (w *NexusWorkspace) persistProviderAPIKey(providerID, apiKey string) {
+	w.persistCredential("api_key:"+strings.ToLower(providerID), apiKey)
+}
+
+func (w *NexusWorkspace) persistProviderBaseURL(providerID, baseURL string) {
+	w.persistCredential("base_url:"+strings.ToLower(providerID), baseURL)
 }
 
 // fetchOllamaModels queries Ollama's /api/tags endpoint and converts the
 // response to a catwalk model list.
 func fetchOllamaModels(ctx context.Context, baseURL string) []catwalk.Model {
+	baseURL = strings.TrimRight(strings.TrimSuffix(baseURL, "/v1"), "/")
+	if baseURL == "" {
+		baseURL = "http://localhost:11434"
+	}
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, baseURL+"/api/tags", nil)
 	if err != nil {
 		return nil
@@ -137,7 +264,6 @@ func fetchOllamaModels(ctx context.Context, baseURL string) []catwalk.Model {
 	models := make([]catwalk.Model, 0, len(payload.Models))
 	for _, m := range payload.Models {
 		displayName := m.Name
-		// Strip ":latest" suffix for cleaner display ("llama3.2" not "llama3.2:latest").
 		if tag := strings.LastIndex(displayName, ":"); tag > 0 && displayName[tag+1:] == "latest" {
 			displayName = displayName[:tag]
 		}
@@ -163,7 +289,6 @@ func catwalkTypeFor(providerID string) catwalk.Type {
 	case "vertex":
 		return "google-vertex"
 	default:
-		// openai, openrouter, deepseek, mistral, minimax, workers-ai, opencode, ollama
 		return catwalk.TypeOpenAI
 	}
 }

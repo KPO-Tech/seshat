@@ -39,6 +39,15 @@ type Attachments struct {
 func (m *Attachments) List() []message.Attachment { return m.list }
 func (m *Attachments) Reset()                     { m.list = nil }
 
+func (m *Attachments) HandleClick(x, y, width int) bool {
+	if idx, ok := m.renderer.DeleteHit(m.list, m.deleting, width, x, y); ok {
+		m.list = slices.Delete(m.list, idx, idx+1)
+		m.deleting = false
+		return true
+	}
+	return false
+}
+
 func (m *Attachments) Update(msg tea.Msg) bool {
 	switch msg := msg.(type) {
 	case message.Attachment:
@@ -75,7 +84,7 @@ func (m *Attachments) Update(msg tea.Msg) bool {
 }
 
 func (m *Attachments) Render(width int) string {
-	return m.renderer.Render(m.list, m.deleting, width)
+	return m.renderer.RenderComposer(m.list, m.deleting, width)
 }
 
 // Renderer returns the attachment renderer so callers can update its
@@ -103,42 +112,93 @@ func (r *Renderer) SetStyles(normalStyle, deletingStyle, imageStyle, textStyle, 
 
 type Renderer struct {
 	normalStyle, textStyle, imageStyle, skillStyle, deletingStyle lipgloss.Style
+	deleteHits                                                    []deleteHit
+}
+
+type deleteHit struct {
+	index  int
+	startX int
+	endX   int
 }
 
 func (r *Renderer) Render(attachments []message.Attachment, deleting bool, width int) string {
-	var chips []string
+	rendered, _ := r.renderLayout(attachments, deleting, false, width)
+	return rendered
+}
 
-	maxItemWidth := lipgloss.Width(r.imageStyle.String() + r.normalStyle.Render(strings.Repeat("x", maxFilename)))
+func (r *Renderer) RenderComposer(attachments []message.Attachment, deleting bool, width int) string {
+	rendered, hits := r.renderLayout(attachments, deleting, true, width)
+	r.deleteHits = hits
+	return rendered
+}
+
+func (r *Renderer) DeleteHit(attachments []message.Attachment, deleting bool, width, x, y int) (int, bool) {
+	if y != 0 || deleting {
+		return 0, false
+	}
+	_, hits := r.renderLayout(attachments, deleting, true, width)
+	for _, hit := range hits {
+		if x >= hit.startX && x < hit.endX {
+			return hit.index, true
+		}
+	}
+	return 0, false
+}
+
+func (r *Renderer) renderLayout(attachments []message.Attachment, deleting, showRemove bool, width int) (string, []deleteHit) {
+	var (
+		chips []string
+		hits  []deleteHit
+		curX  int
+	)
+
+	nameStyle := r.normalStyle
+	maxItemWidth := lipgloss.Width(r.imageStyle.String() + nameStyle.Render(strings.Repeat("x", maxFilename)))
+	if showRemove && !deleting {
+		nameStyle = nameStyle.Copy().MarginRight(0)
+		maxItemWidth = lipgloss.Width(r.imageStyle.String()+nameStyle.Render(strings.Repeat("x", maxFilename))) + lipgloss.Width(r.deletingStyle.Render("×")) + 1
+	}
 	fits := int(math.Floor(float64(width)/float64(maxItemWidth))) - 1
 
 	for i, att := range attachments {
 		filename := filepath.Base(att.FileName)
-		// Truncate if needed.
 		if ansi.StringWidth(filename) > maxFilename {
 			filename = ansi.Truncate(filename, maxFilename, "…")
 		}
 
 		if deleting {
-			chips = append(
-				chips,
+			for _, chip := range []string{
 				r.deletingStyle.Render(fmt.Sprintf("%d", i)),
-				r.normalStyle.Render(filename),
-			)
+				nameStyle.Render(filename),
+			} {
+				chips = append(chips, chip)
+				curX += lipgloss.Width(chip)
+			}
 		} else {
-			chips = append(
-				chips,
-				r.icon(att).String(),
-				r.normalStyle.Render(filename),
-			)
+			for _, chip := range []string{r.icon(att).String(), nameStyle.Render(filename)} {
+				chips = append(chips, chip)
+				curX += lipgloss.Width(chip)
+			}
+			if showRemove {
+				deleteChip := r.deletingStyle.Render("×")
+				chips = append(chips, deleteChip)
+				deleteWidth := lipgloss.Width(deleteChip)
+				hits = append(hits, deleteHit{index: i, startX: curX, endX: curX + deleteWidth})
+				curX += deleteWidth
+				if i < len(attachments)-1 {
+					chips = append(chips, " ")
+					curX++
+				}
+			}
 		}
 
-		if i == fits && len(attachments) > i {
+		if i == fits && len(attachments) > i+1 {
 			chips = append(chips, lipgloss.NewStyle().Width(maxItemWidth).Render(fmt.Sprintf("%d more…", len(attachments)-fits)))
 			break
 		}
 	}
 
-	return lipgloss.JoinHorizontal(lipgloss.Left, chips...)
+	return lipgloss.JoinHorizontal(lipgloss.Left, chips...), hits
 }
 
 func (r *Renderer) icon(a message.Attachment) lipgloss.Style {

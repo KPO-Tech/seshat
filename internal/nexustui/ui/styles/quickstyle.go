@@ -143,7 +143,7 @@ func quickStyle(o quickStyleOpts) Styles {
 		Heading: ansi.StyleBlock{
 			StylePrimitive: ansi.StylePrimitive{
 				BlockSuffix: "\n",
-				Color:       hex(o.info),
+				Color:       hex(o.warning),
 				Bold:        new(true),
 			},
 		},
@@ -158,29 +158,30 @@ func quickStyle(o quickStyleOpts) Styles {
 		},
 		H2: ansi.StyleBlock{
 			StylePrimitive: ansi.StylePrimitive{
-				Prefix: "## ",
+				Bold:  new(true),
+				Color: hex(o.accent),
 			},
 		},
 		H3: ansi.StyleBlock{
 			StylePrimitive: ansi.StylePrimitive{
-				Prefix: "### ",
+				Bold:  new(true),
+				Color: hex(o.warning),
 			},
 		},
 		H4: ansi.StyleBlock{
 			StylePrimitive: ansi.StylePrimitive{
-				Prefix: "#### ",
+				Color: hex(o.warningSubtle),
 			},
 		},
 		H5: ansi.StyleBlock{
 			StylePrimitive: ansi.StylePrimitive{
-				Prefix: "##### ",
+				Color: hex(o.info),
 			},
 		},
 		H6: ansi.StyleBlock{
 			StylePrimitive: ansi.StylePrimitive{
-				Prefix: "###### ",
-				Color:  hex(o.successMostSubtle),
-				Bold:   new(false),
+				Color: hex(o.successMostSubtle),
+				Bold:  new(false),
 			},
 		},
 		Strikethrough: ansi.StylePrimitive{
@@ -332,8 +333,9 @@ func quickStyle(o quickStyleOpts) Styles {
 		},
 	}
 
-	// QuietMarkdown style - muted colors on subtle background for thinking content.
-	plainBg := hex(o.bgLeastVisible)
+	// QuietMarkdown style — muted text, page-default background (bgBase) so the
+	// thinking box interior matches the page and no extra fill is visible.
+	plainBg := hex(o.bgBase)
 	plainFg := hex(o.fgMoreSubtle)
 	s.QuietMarkdown = ansi.StyleConfig{
 		Document: ansi.StyleBlock{
@@ -357,50 +359,45 @@ func quickStyle(o quickStyleOpts) Styles {
 			StylePrimitive: ansi.StylePrimitive{
 				BlockSuffix:     "\n",
 				Bold:            new(true),
-				Color:           plainFg,
+				Color:           hex(o.warning),
 				BackgroundColor: plainBg,
 			},
 		},
 		H1: ansi.StyleBlock{
 			StylePrimitive: ansi.StylePrimitive{
-				Prefix:          " ",
-				Suffix:          " ",
 				Bold:            new(true),
-				Color:           plainFg,
+				Color:           hex(o.accent),
 				BackgroundColor: plainBg,
 			},
 		},
 		H2: ansi.StyleBlock{
 			StylePrimitive: ansi.StylePrimitive{
-				Prefix:          "## ",
-				Color:           plainFg,
+				Bold:            new(true),
+				Color:           hex(o.primary),
 				BackgroundColor: plainBg,
 			},
 		},
 		H3: ansi.StyleBlock{
 			StylePrimitive: ansi.StylePrimitive{
-				Prefix:          "### ",
-				Color:           plainFg,
+				Bold:            new(true),
+				Color:           hex(o.warning),
 				BackgroundColor: plainBg,
 			},
 		},
 		H4: ansi.StyleBlock{
 			StylePrimitive: ansi.StylePrimitive{
-				Prefix:          "#### ",
-				Color:           plainFg,
+				Color:           hex(o.warningSubtle),
 				BackgroundColor: plainBg,
 			},
 		},
 		H5: ansi.StyleBlock{
 			StylePrimitive: ansi.StylePrimitive{
-				Prefix:          "##### ",
 				Color:           plainFg,
 				BackgroundColor: plainBg,
 			},
 		},
 		H6: ansi.StyleBlock{
 			StylePrimitive: ansi.StylePrimitive{
-				Prefix:          "###### ",
 				Color:           plainFg,
 				BackgroundColor: plainBg,
 			},
@@ -604,16 +601,17 @@ func quickStyle(o quickStyleOpts) Styles {
 	s.Tool.ParamMain = subtle
 	s.Tool.ParamKey = subtle
 
-	// Content rendering - prepared styles that accept width parameter
-	s.Tool.ContentLine = muted.Background(o.bgLeastVisible)
-	s.Tool.ContentTruncation = muted.Background(o.bgLeastVisible)
+	// Content rendering — explicit bgBase background prevents terminal escape-code
+	// bleeding from previously styled content while matching the page background.
+	s.Tool.ContentLine = muted.Background(o.bgBase)
+	s.Tool.ContentTruncation = muted.Background(o.bgBase)
 	s.Tool.ContentCodeLine = base.Background(o.bgBase).PaddingLeft(2)
 	s.Tool.ContentCodeTruncation = muted.Background(o.bgBase).PaddingLeft(2)
 	s.Tool.ContentCodeBg = o.bgBase
 	s.Tool.Body = base.PaddingLeft(2)
 
 	// Deprecated - kept for backward compatibility
-	s.Tool.ContentBg = muted.Background(o.bgLeastVisible)
+	s.Tool.ContentBg = muted.Background(o.bgBase)
 	s.Tool.ContentText = muted
 	s.Tool.ContentLineNumber = base.Foreground(o.fgMoreSubtle).Background(o.bgBase).PaddingRight(1).PaddingLeft(1)
 
@@ -627,7 +625,7 @@ func quickStyle(o quickStyleOpts) Styles {
 	s.Tool.WarnMessage = base.Foreground(o.fgSubtle)
 
 	// Diff and multi-edit styles
-	s.Tool.DiffTruncation = muted.Background(o.bgLeastVisible).PaddingLeft(2)
+	s.Tool.DiffTruncation = muted.Background(o.bgBase).PaddingLeft(2)
 	s.Tool.NoteTag = base.Padding(0, 1).Background(o.info).Foreground(o.onPrimary)
 	s.Tool.NoteMessage = base.Foreground(o.fgSubtle)
 
@@ -821,8 +819,12 @@ func quickStyle(o quickStyleOpts) Styles {
 	s.Messages.AssistantInfoDuration = subtle
 	s.Messages.AssistantCanceled = lipgloss.NewStyle().Foreground(o.fgBase).Italic(true)
 
-	// Thinking section styles
-	s.Messages.ThinkingBox = subtle.Background(o.bgLeastVisible)
+	// Thinking section styles — bordered box, no background fill
+	s.Messages.ThinkingBox = lipgloss.NewStyle().
+		Foreground(o.fgSubtle).
+		Border(lipgloss.RoundedBorder()).
+		BorderForeground(o.fgMostSubtle).
+		Padding(0, 1)
 	s.Messages.ThinkingTruncationHint = muted
 	s.Messages.ThinkingFooterTitle = muted
 	s.Messages.ThinkingFooterDuration = subtle

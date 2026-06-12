@@ -98,6 +98,11 @@ func runChat(ctx context.Context, args []string, stdin io.Reader, stdout, stderr
 		return err
 	}
 
+	useTUI := !*noTUI && isatty.IsTerminal(os.Stdout.Fd())
+	if useTUI {
+		ensureNexusTUIRuntimeRoot()
+	}
+
 	options, err := loadRuntimeOptions(runtimeOverrides{
 		Model:          *model,
 		PermissionMode: *permissionMode,
@@ -111,7 +116,7 @@ func runChat(ctx context.Context, args []string, stdin io.Reader, stdout, stderr
 
 	// Launch the TUI when running interactively. Fall back to the text-mode
 	// chat loop when stdout is not a terminal or --no-tui is passed.
-	if !*noTUI && isatty.IsTerminal(os.Stdout.Fd()) {
+	if useTUI {
 		return runNexusTUI(ctx, options, *resumeSessionID, *continueLast)
 	}
 

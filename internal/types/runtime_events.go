@@ -122,6 +122,7 @@ type PlanRuntimeEvent struct {
 	Filename string `json:"filename"`
 	Status   string `json:"status"`
 	Version  int    `json:"version"`
+	Content  string `json:"content,omitempty"`
 }
 
 // BrowserRuntimeEvent is the structured payload emitted for browser lifecycle and interaction activity.

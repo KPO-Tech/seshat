@@ -16,10 +16,6 @@ import (
 	"github.com/charmbracelet/x/ansi"
 )
 
-// assistantMessageTruncateFormat is the text shown when an assistant message is
-// truncated in the collapsed state.
-const assistantMessageTruncateFormat = "… (%d lines hidden) [click or space to expand]"
-
 // assistantMessageTailWindowFormat is shown above a tail-windowed thinking
 // block to advertise that earlier lines exist and that the user can
 // promote the view to a full expansion. The promotion is wired through
@@ -27,8 +23,10 @@ const assistantMessageTruncateFormat = "… (%d lines hidden) [click or space to
 // does not add a new keybinding.
 const assistantMessageTailWindowFormat = "… %d earlier lines hidden [click or space for full view]"
 
-// maxCollapsedThinkingHeight defines the maximum height of the thinking
-const maxCollapsedThinkingHeight = 10
+// maxCollapsedThinkingHeight is the number of lines shown in the collapsed
+// thinking preview. Content beyond this is hidden and the footer shows
+// "click to expand".
+const maxCollapsedThinkingHeight = 4
 
 // maxExpandedThinkingTailLines is the F5 tail-window cap. When the user
 // expands a thinking block whose post-glamour line count exceeds this
@@ -447,7 +445,17 @@ func (a *AssistantMessageItem) cachedError(width int) string {
 // ThinkingBox style is applied on top of the (already-windowed)
 // lines so the visual box matches what the user sees today.
 func (a *AssistantMessageItem) renderThinking(thinking string, width int) string {
-	renderer := common.QuietMarkdownRenderer(a.sty, width)
+	// Width() in lipgloss includes padding but NOT borders (borders are external).
+	// So: Width(width - borderH) → total rendered = (width-borderH) + borderH = width.
+	// The glamour renderer must wrap at (width - borderH - padH) so lines fit inside
+	// the content area without overflowing the right border.
+	thinkingBox := a.sty.Messages.ThinkingBox
+	borderH := thinkingBox.GetHorizontalBorderSize()
+	padH := thinkingBox.GetHorizontalPadding()
+	contentWidth := max(1, width-borderH-padH) // glamour wrap width (inner content area)
+	boxWidth := max(1, width-borderH)           // Width() value (includes padding, not borders)
+
+	renderer := common.QuietMarkdownRenderer(a.sty, contentWidth)
 	mu := common.LockMarkdownRenderer(renderer)
 	mu.Lock()
 	rendered, err := renderer.Render(thinking)
@@ -460,14 +468,20 @@ func (a *AssistantMessageItem) renderThinking(thinking string, width int) string
 	lines := strings.Split(rendered, "\n")
 	totalLines := len(lines)
 
+	var wasTruncated bool
 	switch a.thinkingViewMode {
 	case thinkingCollapsed:
 		if totalLines > maxCollapsedThinkingHeight {
-			lines = lines[totalLines-maxCollapsedThinkingHeight:]
+			// Show the tail — the last lines are the most recent reasoning
+			// so they give the most relevant preview. Prepend a "…" inside
+			// the box to signal that earlier content is hidden above.
+			hidden := totalLines - maxCollapsedThinkingHeight
+			lines = lines[hidden:]
 			hint := a.sty.Messages.ThinkingTruncationHint.Render(
-				fmt.Sprintf(assistantMessageTruncateFormat, totalLines-maxCollapsedThinkingHeight),
+				fmt.Sprintf("… %d earlier lines hidden", hidden),
 			)
 			lines = append([]string{hint, ""}, lines...)
+			wasTruncated = true
 		}
 	case thinkingTailWindow:
 		if totalLines > maxExpandedThinkingTailLines {
@@ -479,12 +493,10 @@ func (a *AssistantMessageItem) renderThinking(thinking string, width int) string
 		}
 	}
 
-	thinkingStyle := a.sty.Messages.ThinkingBox.Width(width)
-	result := thinkingStyle.Render(strings.Join(lines, "\n"))
+	result := thinkingBox.Width(boxWidth).Render(strings.Join(lines, "\n"))
 	a.thinkingBoxHeight = lipgloss.Height(result)
 
 	var footer string
-	// if thinking is done add the thought for footer
 	if !a.message.IsThinking() || len(a.message.ToolCalls()) > 0 {
 		duration := a.message.ThinkingDuration()
 		if duration.String() != "0s" {
@@ -493,8 +505,17 @@ func (a *AssistantMessageItem) renderThinking(thinking string, width int) string
 		}
 	}
 
+	if wasTruncated {
+		expandHint := a.sty.Messages.ThinkingTruncationHint.Render("click to expand")
+		if footer != "" {
+			footer += "   " + expandHint
+		} else {
+			footer = expandHint
+		}
+	}
+
 	if footer != "" {
-		result += "\n\n" + footer
+		result += "\n" + footer
 	}
 
 	return result

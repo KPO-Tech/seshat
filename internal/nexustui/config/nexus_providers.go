@@ -79,7 +79,7 @@ func apiEndpointFor(providerID string) string {
 	case "kimi":
 		return "https://api.moonshot.cn/v1"
 	case "ollama":
-		return "http://localhost:11434/v1"
+		return "http://localhost:11434"
 	default:
 		return ""
 	}

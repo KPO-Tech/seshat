@@ -2,6 +2,7 @@ package workspace
 
 import (
 	"context"
+	"encoding/base64"
 	"testing"
 	"time"
 
@@ -86,5 +87,50 @@ func TestOnChunkDoesNotSplitWhileSameResponseIsStillStreaming(t *testing.T) {
 	}
 	if got := msgs[0].Content().Text; got != "same response" {
 		t.Fatalf("expected text to stay on the current assistant message, got %q", got)
+	}
+}
+
+func TestNewUserMessagePreservesAttachmentPayloads(t *testing.T) {
+	now := time.Now().UnixMilli()
+	msg := newUserMessage("session-1", "look at this", []message.Attachment{{
+		FilePath: "paste_1.txt",
+		FileName: "paste_1.txt",
+		MimeType: "text/plain",
+		Content:  []byte("hello world"),
+	}}, now)
+
+	if got := msg.Content().Text; got != "look at this" {
+		t.Fatalf("expected prompt text to stay compact in transcript, got %q", got)
+	}
+	binary := msg.BinaryContent()
+	if len(binary) != 1 {
+		t.Fatalf("expected 1 binary attachment, got %d", len(binary))
+	}
+	if got := string(binary[0].Data); got != "hello world" {
+		t.Fatalf("expected attachment payload to be preserved, got %q", got)
+	}
+	if got := binary[0].Path; got != "paste_1.txt" {
+		t.Fatalf("expected attachment path paste_1.txt, got %q", got)
+	}
+}
+
+func TestImageContentsFromAttachmentsFiltersAndEncodesImages(t *testing.T) {
+	attachments := []message.Attachment{
+		{FileName: "note.txt", MimeType: "text/plain", Content: []byte("skip")},
+		{FileName: "shot.png", MimeType: "image/png", Content: []byte("png-bytes")},
+	}
+
+	images := imageContentsFromAttachments(attachments)
+	if len(images) != 1 {
+		t.Fatalf("expected 1 image content block, got %d", len(images))
+	}
+	if got := images[0].Source.Type; got != "base64" {
+		t.Fatalf("expected source type base64, got %q", got)
+	}
+	if got := images[0].Source.MediaType; got != "image/png" {
+		t.Fatalf("expected media type image/png, got %q", got)
+	}
+	if got := images[0].Source.Data; got != base64.StdEncoding.EncodeToString([]byte("png-bytes")) {
+		t.Fatalf("unexpected encoded payload %q", got)
 	}
 }

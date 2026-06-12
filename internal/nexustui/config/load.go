@@ -24,6 +24,7 @@ import (
 	"github.com/EngineerProjects/nexus-engine/internal/nexustui/filepathext"
 	"github.com/EngineerProjects/nexus-engine/internal/nexustui/fsext"
 	"github.com/EngineerProjects/nexus-engine/internal/nexustui/home"
+	"github.com/EngineerProjects/nexus-engine/pkg/runtimepath"
 	powernapConfig "github.com/charmbracelet/x/powernap/pkg/config"
 	"github.com/qjebbs/go-jsons"
 	"github.com/tidwall/gjson"
@@ -731,12 +732,12 @@ func configureSelectedModels(store *ConfigStore, knownProviders []catwalk.Provid
 // regardless of the boundary.
 func lookupConfigs(cwd string) []string {
 	// prepend default config paths
-	configPaths := []string{
-		GlobalConfig(),
-		GlobalConfigData(),
+	configPaths := []string{GlobalConfig()}
+	if dataPath := GlobalConfigData(); dataPath != configPaths[0] {
+		configPaths = append(configPaths, dataPath)
 	}
 
-	configNames := []string{appName + ".json", "." + appName + ".json"}
+	configNames := []string{configFileName(), "." + configFileName()}
 
 	foundConfigs, err := fsext.LookupBounded(cwd, projectBoundary(cwd), configNames...)
 	if err != nil {
@@ -890,12 +891,14 @@ func migrateDisableNotifications() {
 	}
 }
 
+func configFileName() string { return fmt.Sprintf("%s.json", appName) }
+
 // GlobalConfig returns the global configuration file path for the application.
 func GlobalConfig() string {
 	if nexusGlobal := os.Getenv("NEXUS_GLOBAL_CONFIG"); nexusGlobal != "" {
-		return filepath.Join(nexusGlobal, fmt.Sprintf("%s.json", appName))
+		return filepath.Join(nexusGlobal, configFileName())
 	}
-	return filepath.Join(home.Config(), appName, fmt.Sprintf("%s.json", appName))
+	return runtimepath.Join("", configFileName())
 }
 
 // GlobalCacheDir returns the path to the global cache directory for the
@@ -904,17 +907,7 @@ func GlobalCacheDir() string {
 	if nexusCache := os.Getenv("NEXUS_CACHE_DIR"); nexusCache != "" {
 		return nexusCache
 	}
-	if xdgCacheHome := os.Getenv("XDG_CACHE_HOME"); xdgCacheHome != "" {
-		return filepath.Join(xdgCacheHome, appName)
-	}
-	if runtime.GOOS == "windows" {
-		localAppData := cmp.Or(
-			os.Getenv("LOCALAPPDATA"),
-			filepath.Join(os.Getenv("USERPROFILE"), "AppData", "Local"),
-		)
-		return filepath.Join(localAppData, appName, "cache")
-	}
-	return filepath.Join(home.Dir(), ".cache", appName)
+	return runtimepath.CacheDir("")
 }
 
 // ProjectConfigs returns list of current project configs paths.
@@ -922,28 +915,13 @@ func ProjectConfigs(cwd string) []string {
 	return lookupConfigs(cwd)
 }
 
-// GlobalConfigData returns the path to the main data directory for the application.
-// this config is used when the app overrides configurations instead of updating the global config.
+// GlobalConfigData returns the runtime-root data config path for the application.
+// This config is used when the app overrides configurations instead of updating the global config.
 func GlobalConfigData() string {
 	if nexusData := os.Getenv("NEXUS_GLOBAL_DATA"); nexusData != "" {
-		return filepath.Join(nexusData, fmt.Sprintf("%s.json", appName))
+		return filepath.Join(nexusData, configFileName())
 	}
-	if xdgDataHome := os.Getenv("XDG_DATA_HOME"); xdgDataHome != "" {
-		return filepath.Join(xdgDataHome, appName, fmt.Sprintf("%s.json", appName))
-	}
-
-	// return the path to the main data directory
-	// for windows, it should be in `%LOCALAPPDATA%/nexus/`
-	// for linux and macOS, it should be in `$HOME/.local/share/nexus/`
-	if runtime.GOOS == "windows" {
-		localAppData := cmp.Or(
-			os.Getenv("LOCALAPPDATA"),
-			filepath.Join(os.Getenv("USERPROFILE"), "AppData", "Local"),
-		)
-		return filepath.Join(localAppData, appName, fmt.Sprintf("%s.json", appName))
-	}
-
-	return filepath.Join(home.Dir(), ".local", "share", appName, fmt.Sprintf("%s.json", appName))
+	return runtimepath.Join("", configFileName())
 }
 
 // GlobalWorkspaceDir returns the path to the global server workspace
@@ -1021,14 +999,14 @@ func GlobalSkillsDirs() []string {
 	}
 
 	paths := []string{
-		filepath.Join(home.Config(), appName, "skills"),
+		runtimepath.SkillsDir(""),
 		filepath.Join(home.Config(), "agents", "skills"),
 		// Per the Agent Skills spec, scan ~/.agents/skills
 		filepath.Join(home.Dir(), ".agents", "skills"),
 		filepath.Join(home.Dir(), ".claude", "skills"),
 	}
 
-	// On Windows, also load from app data on top of `$HOME/.config/nexus`.
+	// On Windows, also load from app data on top of the runtime-root skills dir.
 	// This is here mostly for backwards compatibility.
 	if runtime.GOOS == "windows" {
 		appData := cmp.Or(

@@ -372,6 +372,10 @@ func (m *OAuth) saveKeyAndContinue() Action {
 		return ActionCmd{util.ReportError(fmt.Errorf("failed to save API key: %w", err))}
 	}
 
+	if m.model.Model == "" {
+		return ActionOpenModels{PreferredProviderID: string(m.provider.ID)}
+	}
+
 	return ActionSelectModel{
 		Provider:  m.provider,
 		Model:     m.model,

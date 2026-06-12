@@ -61,6 +61,7 @@ type (
 	Role              = types.Role
 	RuntimeEvent      = types.RuntimeEvent
 	RuntimeEventType  = types.RuntimeEventType
+	PlanRuntimeEvent  = types.PlanRuntimeEvent
 
 	// Lifecycle hooks
 	HookEvent        = types.HookEvent
@@ -183,11 +184,13 @@ const (
 	RetentionTemporary = storage.RetentionTemporary
 	RetentionSession   = storage.RetentionSession
 
-	RuntimeEventTypeTurnStarted   = types.RuntimeEventTypeTurnStarted
-	RuntimeEventTypeTurnCompleted = types.RuntimeEventTypeTurnCompleted
-	RuntimeEventTypeTurnFailed    = types.RuntimeEventTypeTurnFailed
-	RuntimeEventTypeResponseChunk = types.RuntimeEventTypeResponseChunk
-	RuntimeEventTypeToolProgress  = types.RuntimeEventTypeToolProgress
+	RuntimeEventTypeTurnStarted       = types.RuntimeEventTypeTurnStarted
+	RuntimeEventTypeTurnCompleted     = types.RuntimeEventTypeTurnCompleted
+	RuntimeEventTypeTurnFailed        = types.RuntimeEventTypeTurnFailed
+	RuntimeEventTypeResponseChunk     = types.RuntimeEventTypeResponseChunk
+	RuntimeEventTypeToolProgress      = types.RuntimeEventTypeToolProgress
+	RuntimeEventTypePlanSubmitted     = types.RuntimeEventTypePlanSubmitted
+	RuntimeEventTypePlanStatusChanged = types.RuntimeEventTypePlanStatusChanged
 
 	// HookEvent constants — lifecycle events emitted throughout the engine.
 	HookEventSessionStart       = types.HookEventSessionStart

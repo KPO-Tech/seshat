@@ -258,7 +258,7 @@ func (Attribution) JSONSchemaExtend(schema *jsonschema.Schema) {
 
 type Options struct {
 	ContextPaths         []string    `json:"context_paths,omitempty" jsonschema:"description=Paths to files containing context information for the AI,example=.cursorrules,example=NEXUS.md"`
-	SkillsPaths          []string    `json:"skills_paths,omitempty" jsonschema:"description=Paths to directories containing Agent Skills (folders with SKILL.md files),example=~/.config/nexus/skills,example=./skills"`
+	SkillsPaths          []string    `json:"skills_paths,omitempty" jsonschema:"description=Paths to directories containing Agent Skills (folders with SKILL.md files),example=~/.config/nexus-tui/skills,example=./skills"`
 	TUI                  *TUIOptions `json:"tui,omitempty" jsonschema:"description=Terminal user interface options"`
 	Debug                bool        `json:"debug,omitempty" jsonschema:"description=Enable debug logging,default=false"`
 	DebugLSP             bool        `json:"debug_lsp,omitempty" jsonschema:"description=Enable debug logging for LSP servers,default=false"`
@@ -741,6 +741,11 @@ func (c *ProviderConfig) TestConnection(resolver VariableResolver) error {
 	)
 
 	switch providerID {
+	case catwalk.InferenceProvider("ollama"):
+		baseURL, _ := resolver.ResolveValue(c.BaseURL)
+		baseURL = strings.TrimRight(cmp.Or(baseURL, "http://localhost:11434"), "/")
+		baseURL = strings.TrimSuffix(baseURL, "/v1")
+		testURL = baseURL + "/api/tags"
 	case catwalk.InferenceProviderMiniMax, catwalk.InferenceProviderMiniMaxChina:
 		// NOTE: MiniMax has no good endpoint we can use to validate the API key.
 		return nil
@@ -770,14 +775,11 @@ func (c *ProviderConfig) TestConnection(resolver VariableResolver) error {
 		headers["Authorization"] = "Bearer " + apiKey
 	case catwalk.TypeAnthropic:
 		baseURL, _ := resolver.ResolveValue(c.BaseURL)
-		baseURL = cmp.Or(baseURL, "https://api.anthropic.com/v1")
-
-		switch providerID {
-		case catwalk.InferenceKimiCoding:
-			testURL = baseURL + "/v1/models"
-		default:
-			testURL = baseURL + "/models"
+		baseURL = strings.TrimRight(cmp.Or(baseURL, "https://api.anthropic.com/v1"), "/")
+		if !strings.HasSuffix(baseURL, "/v1") {
+			baseURL += "/v1"
 		}
+		testURL = baseURL + "/models"
 
 		headers["x-api-key"] = apiKey
 		headers["anthropic-version"] = "2023-06-01"

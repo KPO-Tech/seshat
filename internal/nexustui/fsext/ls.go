@@ -10,9 +10,10 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/charlievieth/fastwalk"
 	"github.com/EngineerProjects/nexus-engine/internal/nexustui/csync"
 	"github.com/EngineerProjects/nexus-engine/internal/nexustui/home"
+	"github.com/EngineerProjects/nexus-engine/pkg/runtimepath"
+	"github.com/charlievieth/fastwalk"
 	gitconfig "github.com/go-git/go-git/v5/config"
 	"github.com/go-git/go-git/v5/plumbing/format/gitignore"
 )
@@ -109,9 +110,9 @@ var gitGlobalIgnorePatterns = sync.OnceValue(func() []gitignore.Pattern {
 })
 
 // nexusGlobalIgnorePatterns returns patterns from the user's
-// ~/.config/nexus/ignore file.
+// runtime-root ignore file (for the TUI this defaults to ~/.config/nexus-tui/ignore).
 var nexusGlobalIgnorePatterns = sync.OnceValue(func() []gitignore.Pattern {
-	name := filepath.Join(home.Config(), "nexus", "ignore")
+	name := runtimepath.Join("", "ignore")
 	bts, err := os.ReadFile(name)
 	if err != nil {
 		if !os.IsNotExist(err) {

@@ -13,6 +13,7 @@ import (
 	"github.com/EngineerProjects/nexus-engine/internal/nexustui/message"
 	"github.com/EngineerProjects/nexus-engine/internal/nexustui/oauth"
 	"github.com/EngineerProjects/nexus-engine/internal/nexustui/permission"
+	"github.com/EngineerProjects/nexus-engine/internal/nexustui/planreview"
 	"github.com/EngineerProjects/nexus-engine/internal/nexustui/session"
 	"github.com/EngineerProjects/nexus-engine/internal/nexustui/skills"
 	"github.com/EngineerProjects/nexus-engine/internal/nexustui/ui/common"
@@ -28,6 +29,21 @@ type ActionQuit = tea.QuitMsg
 // ActionOpenDialog is a message to open a dialog.
 type ActionOpenDialog struct {
 	DialogID string
+}
+
+// ActionOpenModels opens the models dialog, optionally focused on a provider.
+type ActionOpenModels struct {
+	PreferredProviderID string
+}
+
+// ActionOpenWebSearchConfig opens the web-search configuration dialog.
+type ActionOpenWebSearchConfig struct {
+	ProviderID string
+}
+
+// ActionSelectWebSearchProvider selects the active web-search provider mode.
+type ActionSelectWebSearchProvider struct {
+	ProviderID string
 }
 
 // ActionSelectSession is a message indicating a session has been selected.
@@ -70,6 +86,9 @@ type (
 		Permission permission.PermissionRequest
 		Action     PermissionAction
 	}
+	ActionPlanReviewSubmit struct {
+		Review planreview.Review
+	}
 	// ActionRunCustomCommand is a message to run a custom command.
 	ActionRunCustomCommand struct {
 		Content   string
@@ -110,6 +129,7 @@ type (
 type (
 	ActionChangeAPIKeyState struct {
 		State APIKeyInputState
+		Error error
 	}
 )
 

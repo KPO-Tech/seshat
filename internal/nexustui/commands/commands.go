@@ -13,6 +13,7 @@ import (
 	"github.com/EngineerProjects/nexus-engine/internal/nexustui/config"
 	"github.com/EngineerProjects/nexus-engine/internal/nexustui/home"
 	"github.com/EngineerProjects/nexus-engine/internal/nexustui/skills"
+	"github.com/EngineerProjects/nexus-engine/pkg/runtimepath"
 )
 
 var namedArgPattern = regexp.MustCompile(`\$([A-Z][A-Z0-9_]*)`)
@@ -121,7 +122,7 @@ func LoadMCPPrompts() ([]MCPPrompt, error) {
 func buildCommandSources(cfg *config.Config) []commandSource {
 	return []commandSource{
 		{
-			path:   filepath.Join(home.Config(), "nexus", "commands"),
+			path:   runtimepath.Join("", "commands"),
 			prefix: userCommandPrefix,
 		},
 		{

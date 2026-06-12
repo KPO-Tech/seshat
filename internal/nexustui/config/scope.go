@@ -6,7 +6,7 @@ import "fmt"
 type Scope int
 
 const (
-	// ScopeGlobal targets the global data config (~/.local/share/nexus/nexus.json).
+	// ScopeGlobal targets the global TUI config under the runtime root (for example ~/.config/nexus-tui/nexus.json).
 	ScopeGlobal Scope = iota
 	// ScopeWorkspace targets the workspace config (.nexus/nexus.json).
 	ScopeWorkspace

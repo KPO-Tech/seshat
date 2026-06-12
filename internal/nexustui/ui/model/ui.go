@@ -38,6 +38,7 @@ import (
 	"github.com/EngineerProjects/nexus-engine/internal/nexustui/home"
 	"github.com/EngineerProjects/nexus-engine/internal/nexustui/message"
 	"github.com/EngineerProjects/nexus-engine/internal/nexustui/permission"
+	"github.com/EngineerProjects/nexus-engine/internal/nexustui/planreview"
 	"github.com/EngineerProjects/nexus-engine/internal/nexustui/pubsub"
 	"github.com/EngineerProjects/nexus-engine/internal/nexustui/session"
 	"github.com/EngineerProjects/nexus-engine/internal/nexustui/skills"
@@ -743,6 +744,12 @@ func (m *UI) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 	case pubsub.Event[permission.PermissionNotification]:
 		m.handlePermissionNotification(msg.Payload)
+	case pubsub.Event[planreview.Submission]:
+		if msg.Type == pubsub.CreatedEvent {
+			if cmd := m.openPlanReviewDialog(msg.Payload); cmd != nil {
+				cmds = append(cmds, cmd)
+			}
+		}
 	case cancelTimerExpiredMsg:
 		m.isCanceling = false
 	case tea.TerminalVersionMsg:
@@ -777,6 +784,10 @@ func (m *UI) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			if cmd := m.handleDialogMsg(msg); cmd != nil {
 				cmds = append(cmds, cmd)
 			}
+			return m, tea.Batch(cmds...)
+		}
+
+		if m.handleAttachmentClick(msg) {
 			return m, tea.Batch(cmds...)
 		}
 
@@ -1186,6 +1197,18 @@ func (m *UI) appendSessionMessage(msg message.Message) tea.Cmd {
 		}
 	}
 	return tea.Sequence(cmds...)
+}
+
+func (m *UI) handleAttachmentClick(msg tea.MouseClickMsg) bool {
+	if m.state != uiChat || len(m.attachments.List()) == 0 {
+		return false
+	}
+	if !image.Pt(msg.X, msg.Y).In(m.layout.editor) {
+		return false
+	}
+	x := msg.X - m.layout.editor.Min.X
+	y := msg.Y - m.layout.editor.Min.Y
+	return m.attachments.HandleClick(x, y, m.layout.editor.Dx())
 }
 
 func (m *UI) handleClickFocus(msg tea.MouseClickMsg) (cmd tea.Cmd) {
@@ -1680,6 +1703,9 @@ func (m *UI) handleDialogMsg(msg tea.Msg) tea.Cmd {
 		case dialog.PermissionDeny:
 			m.com.Workspace.PermissionDeny(msg.Permission)
 		}
+	case dialog.ActionPlanReviewSubmit:
+		m.dialog.CloseDialog(dialog.PlanReviewID)
+		cmds = append(cmds, m.sendMessage(formatPlanReviewResponse(msg.Review)))
 
 	case dialog.ActionFilePickerSelected:
 		cmds = append(cmds, tea.Sequence(
@@ -3623,6 +3649,45 @@ func (m *UI) openFilesDialog() tea.Cmd {
 	m.dialog.OpenDialog(filePicker)
 
 	return cmd
+}
+
+func formatPlanReviewResponse(review planreview.Review) string {
+	if review.Approved {
+		return "Proceed"
+	}
+
+	var b strings.Builder
+	b.WriteString(fmt.Sprintf("Changes requested for plan %s (v%d)\n\n", review.Submission.Filename, review.Submission.Version))
+	if global := strings.TrimSpace(review.GlobalComment); global != "" {
+		b.WriteString("Global comment:\n")
+		b.WriteString(global)
+		b.WriteString("\n\n")
+	}
+	if comments := review.SortedLineComments(); len(comments) > 0 {
+		b.WriteString("Line comments:\n")
+		for _, comment := range comments {
+			b.WriteString(fmt.Sprintf("- line %d: %s\n", comment.Line, comment.Comment))
+		}
+		b.WriteString("\n")
+	}
+	b.WriteString("Please revise the plan and submit an updated version with submit_plan.")
+	return strings.TrimSpace(b.String())
+}
+
+func (m *UI) openPlanReviewDialog(submission planreview.Submission) tea.Cmd {
+	if m.session == nil || submission.SessionID != m.session.ID {
+		return nil
+	}
+	if existing := m.dialog.Dialog(dialog.PlanReviewID); existing != nil {
+		if reviewDialog, ok := existing.(*dialog.PlanReview); ok {
+			reviewDialog.AddSubmission(submission)
+			m.dialog.BringToFront(dialog.PlanReviewID)
+			return nil
+		}
+		m.dialog.CloseDialog(dialog.PlanReviewID)
+	}
+	m.dialog.OpenDialog(dialog.NewPlanReview(m.com, submission))
+	return nil
 }
 
 // openPermissionsDialog opens the permissions dialog for a permission request.

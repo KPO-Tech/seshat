@@ -58,7 +58,7 @@ type ConfigStore struct {
 	config             *Config
 	workingDir         string
 	resolver           VariableResolver
-	globalDataPath     string   // ~/.local/share/nexus/nexus.json
+	globalDataPath     string   // runtime-root global config (for example ~/.config/nexus-tui/nexus.json)
 	workspacePath      string   // .nexus/nexus.json
 	loadedPaths        []string // config files that were successfully loaded
 	knownProviders     []catwalk.Provider

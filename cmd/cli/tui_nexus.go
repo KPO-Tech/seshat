@@ -6,21 +6,24 @@ import (
 	"log"
 	"os"
 	"path/filepath"
+	"strings"
 
 	tea "charm.land/bubbletea/v2"
-	uv "github.com/charmbracelet/ultraviolet"
 	"github.com/EngineerProjects/nexus-engine/internal/monitoring"
 	crushcommon "github.com/EngineerProjects/nexus-engine/internal/nexustui/ui/common"
 	uimodel "github.com/EngineerProjects/nexus-engine/internal/nexustui/ui/model"
 	crushws "github.com/EngineerProjects/nexus-engine/internal/nexustui/workspace"
 	engineconfig "github.com/EngineerProjects/nexus-engine/pkg/config"
+	"github.com/EngineerProjects/nexus-engine/pkg/runtimepath"
 	"github.com/EngineerProjects/nexus-engine/pkg/sdk"
+	uv "github.com/charmbracelet/ultraviolet"
 )
 
 // runNexusTUI starts the Crush-based TUI. It reuses the same
 // SDK configuration and session wiring as the original TUI but delegates
 // all rendering to the copied Crush UI layer.
 func runNexusTUI(ctx context.Context, options runtimeOptions, initialSessionID string, continueLast bool) error {
+	ensureNexusTUIRuntimeRoot()
 	if err := validateProviderSetup(options); err != nil {
 		return err
 	}
@@ -76,9 +79,9 @@ func runNexusTUI(ctx context.Context, options runtimeOptions, initialSessionID s
 }
 
 func buildTUIMonitoring() *sdk.MonitoringSystem {
-	logDir := filepath.Join(nexusLogDir(), "logs")
+	logDir := runtimepath.LogsDir("")
 	_ = os.MkdirAll(logDir, 0o755)
-	logPath := filepath.Join(logDir, "nexus.log")
+	logPath := filepath.Join(logDir, "app.log")
 	logger := monitoring.NewLoggerWithConfig(&monitoring.LoggerConfig{
 		Level:    monitoring.LogLevelInfo,
 		Output:   "file",
@@ -88,12 +91,22 @@ func buildTUIMonitoring() *sdk.MonitoringSystem {
 	return monitoring.NewSystem(logger)
 }
 
-func nexusLogDir() string {
+func defaultNexusTUIRuntimeRoot() string {
 	home, err := os.UserHomeDir()
-	if err != nil {
-		return os.TempDir()
+	if err == nil && strings.TrimSpace(home) != "" {
+		return filepath.Join(home, ".config", "nexus-tui")
 	}
-	return filepath.Join(home, ".nexus")
+	if home = strings.TrimSpace(os.Getenv("HOME")); home != "" {
+		return filepath.Join(home, ".config", "nexus-tui")
+	}
+	return filepath.Join(os.TempDir(), "nexus-tui")
+}
+
+func ensureNexusTUIRuntimeRoot() {
+	if strings.TrimSpace(os.Getenv(runtimepath.EnvRuntimeRoot)) != "" {
+		return
+	}
+	_ = os.Setenv(runtimepath.EnvRuntimeRoot, defaultNexusTUIRuntimeRoot())
 }
 
 func openCLILogFile() *os.File {

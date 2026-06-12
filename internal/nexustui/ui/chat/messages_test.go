@@ -54,12 +54,15 @@ func TestExtractMessageItemsKeepsVisibleToolsWhileSkippingHiddenPlanModeTools(t 
 	}
 }
 
-func TestShouldRenderToolNameHidesOnlyPlanModeSystemTools(t *testing.T) {
+func TestShouldRenderToolNameHidesPlanReviewSystemTools(t *testing.T) {
 	if ShouldRenderToolName(planTool.ToolNameEnterPlanMode) {
 		t.Fatalf("expected enter_plan_mode to be hidden from chat")
 	}
 	if ShouldRenderToolName(planTool.ToolNameExitPlanMode) {
 		t.Fatalf("expected exit_plan_mode to be hidden from chat")
+	}
+	if ShouldRenderToolName(planTool.ToolNameSubmitPlan) {
+		t.Fatalf("expected submit_plan to be hidden from chat")
 	}
 	if !ShouldRenderToolName("bash") {
 		t.Fatalf("expected bash to remain visible in chat")

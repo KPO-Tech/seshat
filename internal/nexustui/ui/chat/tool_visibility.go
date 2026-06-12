@@ -16,7 +16,7 @@ func ShouldRenderToolCall(tc message.ToolCall) bool {
 // appear as a normal transcript item.
 func ShouldRenderToolName(name string) bool {
 	switch name {
-	case planTool.ToolNameEnterPlanMode, planTool.ToolNameExitPlanMode:
+	case planTool.ToolNameEnterPlanMode, planTool.ToolNameExitPlanMode, planTool.ToolNameSubmitPlan:
 		return false
 	default:
 		return true

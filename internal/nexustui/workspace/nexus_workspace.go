@@ -7,6 +7,7 @@ package workspace
 
 import (
 	"context"
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"strings"
@@ -17,6 +18,7 @@ import (
 	"log/slog"
 	"os"
 	"path/filepath"
+	"slices"
 
 	tea "charm.land/bubbletea/v2"
 	"charm.land/catwalk/pkg/catwalk"
@@ -29,6 +31,7 @@ import (
 	"github.com/EngineerProjects/nexus-engine/internal/nexustui/message"
 	"github.com/EngineerProjects/nexus-engine/internal/nexustui/oauth"
 	"github.com/EngineerProjects/nexus-engine/internal/nexustui/permission"
+	"github.com/EngineerProjects/nexus-engine/internal/nexustui/planreview"
 	"github.com/EngineerProjects/nexus-engine/internal/nexustui/pubsub"
 	"github.com/EngineerProjects/nexus-engine/internal/nexustui/session"
 	"github.com/EngineerProjects/nexus-engine/internal/nexustui/skills"
@@ -61,6 +64,7 @@ type NexusWorkspace struct {
 	sessBroker *pubsub.Broker[session.Session]
 	msgBroker  *pubsub.Broker[message.Message]
 	permBroker *pubsub.Broker[permission.PermissionRequest]
+	planBroker *pubsub.Broker[planreview.Submission]
 	sessStore  map[string]session.Session
 	sessionsMu sync.RWMutex
 
@@ -124,6 +128,7 @@ func NewNexusWorkspace(client *sdk.Client, workDir, modelStr string) *NexusWorks
 		sessBroker: pubsub.NewBroker[session.Session](),
 		msgBroker:  pubsub.NewBroker[message.Message](),
 		permBroker: pubsub.NewBroker[permission.PermissionRequest](),
+		planBroker: pubsub.NewBroker[planreview.Submission](),
 	}
 	w.debounce = newMsgDebounce(33*time.Millisecond, func(msg message.Message, sessID string) {
 		w.publishMsg(pubsub.UpdatedEvent, sessID, msg)
@@ -163,12 +168,21 @@ func (w *NexusWorkspace) Subscribe(p *tea.Program) {
 			p.Send(ev)
 		}
 	}()
+
+	// Fan out plan review events.
+	go func() {
+		ch := w.planBroker.Subscribe(ctx)
+		for ev := range ch {
+			p.Send(ev)
+		}
+	}()
 }
 
 func (w *NexusWorkspace) Shutdown() {
 	w.sessBroker.Shutdown()
 	w.msgBroker.Shutdown()
 	w.permBroker.Shutdown()
+	w.planBroker.Shutdown()
 	if w.client != nil {
 		_ = w.client.Close()
 	}
@@ -367,7 +381,7 @@ func (w *NexusWorkspace) ListAllUserMessages(_ context.Context) ([]message.Messa
 
 // ─── Agent ────────────────────────────────────────────────────────────────────
 
-func (w *NexusWorkspace) AgentRun(ctx context.Context, sessionID, prompt string, _ ...message.Attachment) error {
+func (w *NexusWorkspace) AgentRun(ctx context.Context, sessionID, prompt string, attachments ...message.Attachment) error {
 	w.sessMu.Lock()
 	sess := w.session
 	w.sessMu.Unlock()
@@ -380,16 +394,12 @@ func (w *NexusWorkspace) AgentRun(ctx context.Context, sessionID, prompt string,
 	}
 	w.busy.Store(true)
 
+	submittedPrompt := message.PromptWithTextAttachments(prompt, attachments)
+	images := imageContentsFromAttachments(attachments)
+
 	// Record the user message.
 	now := time.Now().UnixMilli()
-	userMsg := message.Message{
-		ID:        uuid.New().String(),
-		SessionID: sessionID,
-		Role:      message.User,
-		Parts:     []message.ContentPart{message.TextContent{Text: prompt}},
-		CreatedAt: now,
-		UpdatedAt: now,
-	}
+	userMsg := newUserMessage(sessionID, prompt, attachments, now)
 	w.appendMsg(sessionID, userMsg)
 	w.msgBroker.Publish(pubsub.CreatedEvent, userMsg)
 
@@ -417,7 +427,15 @@ func (w *NexusWorkspace) AgentRun(ctx context.Context, sessionID, prompt string,
 			w.debounce.forceFlush()
 		}()
 
-		resp, err := sess.SubmitMessage(submitCtx, prompt)
+		var (
+			resp *sdk.SessionResponse
+			err  error
+		)
+		if len(images) > 0 {
+			resp, err = sess.SubmitMessageWithContent(submitCtx, submittedPrompt, images)
+		} else {
+			resp, err = sess.SubmitMessage(submitCtx, submittedPrompt)
+		}
 
 		w.streamMu.Lock()
 		cur := w.streamMsg
@@ -467,6 +485,44 @@ func (w *NexusWorkspace) AgentRun(ctx context.Context, sessionID, prompt string,
 		w.sessionsMu.Unlock()
 	}()
 	return nil
+}
+
+func newUserMessage(sessionID, prompt string, attachments []message.Attachment, now int64) message.Message {
+	parts := []message.ContentPart{message.TextContent{Text: prompt}}
+	for _, attachment := range attachments {
+		path := attachment.FilePath
+		if path == "" {
+			path = attachment.FileName
+		}
+		parts = append(parts, message.BinaryContent{
+			Path:     path,
+			MIMEType: attachment.MimeType,
+			Data:     slices.Clone(attachment.Content),
+		})
+	}
+	return message.Message{
+		ID:        uuid.New().String(),
+		SessionID: sessionID,
+		Role:      message.User,
+		Parts:     parts,
+		CreatedAt: now,
+		UpdatedAt: now,
+	}
+}
+
+func imageContentsFromAttachments(attachments []message.Attachment) []types.ImageContent {
+	images := make([]types.ImageContent, 0)
+	for _, attachment := range attachments {
+		if !attachment.IsImage() {
+			continue
+		}
+		img := types.ImageContent{}
+		img.Source.Type = "base64"
+		img.Source.MediaType = attachment.MimeType
+		img.Source.Data = base64.StdEncoding.EncodeToString(attachment.Content)
+		images = append(images, img)
+	}
+	return images
 }
 
 func (w *NexusWorkspace) AgentCancel(sessionID string) {
@@ -1175,8 +1231,26 @@ func (w *NexusWorkspace) OnProgress(p sdk.ToolProgress) {
 	w.HandleToolProgress(p)
 }
 
-// OnRuntimeEvent handles subagent events (no-op for now).
-func (w *NexusWorkspace) OnRuntimeEvent(_ sdk.RuntimeEvent) {}
+// OnRuntimeEvent forwards structured runtime events that need dedicated TUI
+// surfaces outside the normal transcript.
+func (w *NexusWorkspace) OnRuntimeEvent(ev sdk.RuntimeEvent) {
+	switch ev.Type {
+	case sdk.RuntimeEventTypePlanSubmitted:
+		if ev.PlanEvent == nil {
+			return
+		}
+		submission := planreview.Submission{
+			SessionID: string(ev.SessionID),
+			PlanID:    ev.PlanEvent.PlanID,
+			Slug:      ev.PlanEvent.Slug,
+			Filename:  ev.PlanEvent.Filename,
+			Status:    ev.PlanEvent.Status,
+			Version:   ev.PlanEvent.Version,
+			Content:   ev.PlanEvent.Content,
+		}
+		w.planBroker.PublishMustDeliver(context.Background(), pubsub.CreatedEvent, submission)
+	}
+}
 
 // OnSessionTitled updates the session title in our local store.
 func (w *NexusWorkspace) OnSessionTitled(id sdk.SessionID, title string) {
