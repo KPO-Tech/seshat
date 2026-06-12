@@ -16,8 +16,11 @@ import (
 	"time"
 
 	"log/slog"
+	"mime"
+	"net/http"
 	"os"
 	"path/filepath"
+	"regexp"
 	"slices"
 
 	tea "charm.land/bubbletea/v2"
@@ -37,6 +40,7 @@ import (
 	"github.com/EngineerProjects/nexus-engine/internal/nexustui/skills"
 	internalproviders "github.com/EngineerProjects/nexus-engine/internal/providers"
 	"github.com/EngineerProjects/nexus-engine/internal/types"
+	"github.com/EngineerProjects/nexus-engine/pkg/runtimepath"
 	"github.com/EngineerProjects/nexus-engine/pkg/sdk"
 	"github.com/google/uuid"
 )
@@ -394,12 +398,18 @@ func (w *NexusWorkspace) AgentRun(ctx context.Context, sessionID, prompt string,
 	}
 	w.busy.Store(true)
 
-	submittedPrompt := message.PromptWithTextAttachments(prompt, attachments)
-	images := imageContentsFromAttachments(attachments)
+	persistedAttachments, err := persistEphemeralSessionAttachments(sessionID, attachments)
+	if err != nil {
+		w.busy.Store(false)
+		return fmt.Errorf("persist attachments: %w", err)
+	}
+
+	submittedPrompt := message.PromptWithTextAttachments(prompt, persistedAttachments)
+	images := imageContentsFromAttachments(persistedAttachments)
 
 	// Record the user message.
 	now := time.Now().UnixMilli()
-	userMsg := newUserMessage(sessionID, prompt, attachments, now)
+	userMsg := newUserMessage(sessionID, prompt, persistedAttachments, now)
 	w.appendMsg(sessionID, userMsg)
 	w.msgBroker.Publish(pubsub.CreatedEvent, userMsg)
 
@@ -485,6 +495,149 @@ func (w *NexusWorkspace) AgentRun(ctx context.Context, sessionID, prompt string,
 		w.sessionsMu.Unlock()
 	}()
 	return nil
+}
+
+const textAttachmentSystemInfo = "\n<system_info>The files below have been attached by the user, consider them in your response</system_info>\n"
+
+var textAttachmentBlockRE = regexp.MustCompile(`(?s)<file(?: path='([^']*)')?>\n\n(.*?)\n</file>\n?`)
+var ephemeralPasteNameRE = regexp.MustCompile(`^paste_\d+\.[A-Za-z0-9]+$`)
+
+func persistEphemeralSessionAttachments(sessionID string, attachments []message.Attachment) ([]message.Attachment, error) {
+	persisted := make([]message.Attachment, len(attachments))
+	copy(persisted, attachments)
+	for i, attachment := range persisted {
+		if !isEphemeralPasteAttachment(attachment) {
+			continue
+		}
+		persistedPath, err := persistSessionPasteAttachment(sessionID, attachment)
+		if err != nil {
+			return nil, err
+		}
+		persisted[i].FilePath = persistedPath
+	}
+	return persisted, nil
+}
+
+func isEphemeralPasteAttachment(attachment message.Attachment) bool {
+	if attachment.FileName == "" || attachment.FilePath == "" {
+		return false
+	}
+	if attachment.FilePath != attachment.FileName {
+		return false
+	}
+	return ephemeralPasteNameRE.MatchString(filepath.Base(attachment.FileName))
+}
+
+func persistSessionPasteAttachment(sessionID string, attachment message.Attachment) (string, error) {
+	dir := sessionPasteDirForAttachment(sessionID, attachment)
+	if err := os.MkdirAll(dir, 0o700); err != nil {
+		return "", err
+	}
+	filename := filepath.Base(attachment.FileName)
+	path, err := nextAvailablePath(dir, filename)
+	if err != nil {
+		return "", err
+	}
+	if err := os.WriteFile(path, attachment.Content, 0o600); err != nil {
+		return "", err
+	}
+	return path, nil
+}
+
+func sessionPasteDirForAttachment(sessionID string, attachment message.Attachment) string {
+	switch {
+	case attachment.IsImage():
+		return runtimepath.SessionPastesImagesDir("", sessionID)
+	case attachment.IsText() || strings.HasPrefix(strings.ToLower(strings.TrimSpace(attachment.MimeType)), "application/json"):
+		return runtimepath.SessionPastesTextDir("", sessionID)
+	default:
+		return runtimepath.SessionPastesOtherDir("", sessionID)
+	}
+}
+
+func nextAvailablePath(dir, filename string) (string, error) {
+	clean := filepath.Base(filename)
+	if clean == "." || clean == string(filepath.Separator) || clean == "" {
+		clean = "paste.bin"
+	}
+	candidate := filepath.Join(dir, clean)
+	if _, err := os.Stat(candidate); os.IsNotExist(err) {
+		return candidate, nil
+	} else if err != nil {
+		return "", err
+	}
+	ext := filepath.Ext(clean)
+	base := strings.TrimSuffix(clean, ext)
+	for i := 2; ; i++ {
+		candidate = filepath.Join(dir, fmt.Sprintf("%s-%d%s", base, i, ext))
+		if _, err := os.Stat(candidate); os.IsNotExist(err) {
+			return candidate, nil
+		} else if err != nil {
+			return "", err
+		}
+	}
+}
+
+func splitPromptTextAttachments(text string) (string, []message.BinaryContent) {
+	prompt, tail, found := strings.Cut(text, textAttachmentSystemInfo)
+	if !found {
+		return text, nil
+	}
+	matches := textAttachmentBlockRE.FindAllStringSubmatch(tail, -1)
+	if len(matches) == 0 {
+		return text, nil
+	}
+	attachments := make([]message.BinaryContent, 0, len(matches))
+	for idx, match := range matches {
+		path := strings.TrimSpace(match[1])
+		data := []byte(match[2])
+		mimeType := detectAttachmentMime(path, data)
+		if path == "" {
+			path = syntheticAttachmentName(idx+1, mimeType)
+		}
+		attachments = append(attachments, message.BinaryContent{Path: path, MIMEType: mimeType, Data: data})
+	}
+	return strings.TrimSpace(prompt), attachments
+}
+
+func detectAttachmentMime(path string, data []byte) string {
+	if ext := filepath.Ext(path); ext != "" {
+		if mimeType := mime.TypeByExtension(ext); mimeType != "" {
+			return mimeType
+		}
+	}
+	if len(data) == 0 {
+		return "application/octet-stream"
+	}
+	return http.DetectContentType(data[:min(512, len(data))])
+}
+
+func syntheticAttachmentName(index int, mimeType string) string {
+	ext := ".bin"
+	if exts, err := mime.ExtensionsByType(strings.TrimSpace(mimeType)); err == nil && len(exts) > 0 {
+		ext = exts[0]
+	}
+	return fmt.Sprintf("attached_file_%d%s", index, ext)
+}
+
+func binaryFromSDKImage(block sdk.ImageContent, index int) (message.BinaryContent, bool) {
+	data, err := base64.StdEncoding.DecodeString(block.Source.Data)
+	if err != nil {
+		return message.BinaryContent{}, false
+	}
+	return message.BinaryContent{
+		Path:     fmt.Sprintf("attached_image_%d%s", index, extensionForMIME(block.Source.MediaType, ".png")),
+		MIMEType: block.Source.MediaType,
+		Data:     data,
+	}, true
+}
+
+func extensionForMIME(mimeType, fallback string) string {
+	exts, err := mime.ExtensionsByType(strings.TrimSpace(mimeType))
+	if err != nil || len(exts) == 0 {
+		return fallback
+	}
+	return exts[0]
 }
 
 func newUserMessage(sessionID, prompt string, attachments []message.Attachment, now int64) message.Message {
@@ -1413,9 +1566,22 @@ func convertSDKMessages(sessionID string, sdkMsgs []sdk.Message) []message.Messa
 		switch m.Role {
 		case sdk.RoleUser:
 			msg.Role = message.User
+			imageIndex := 0
 			for _, block := range m.Content {
-				if t, ok := block.(sdk.TextContent); ok {
-					msg.Parts = append(msg.Parts, message.TextContent{Text: t.Text})
+				switch b := block.(type) {
+				case sdk.TextContent:
+					promptText, attachments := splitPromptTextAttachments(b.Text)
+					if promptText != "" || len(attachments) == 0 {
+						msg.Parts = append(msg.Parts, message.TextContent{Text: promptText})
+					}
+					for _, attachment := range attachments {
+						msg.Parts = append(msg.Parts, attachment)
+					}
+				case sdk.ImageContent:
+					imageIndex++
+					if attachment, ok := binaryFromSDKImage(b, imageIndex); ok {
+						msg.Parts = append(msg.Parts, attachment)
+					}
 				}
 			}
 		case sdk.RoleAssistant:

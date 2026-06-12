@@ -221,7 +221,7 @@ func TestArtifactStorePutArtifactUsesNamespacedLayout(t *testing.T) {
 		t.Fatalf("PutArtifact failed: %v", err)
 	}
 
-	if !strings.HasPrefix(ref.Key, "artifacts/browser/downloads/sess-1/page-2/2026/05/13/") {
+	if !strings.HasPrefix(ref.Key, "sessions/sess-1/tools/page-2/2026/05/13/") {
 		t.Fatalf("unexpected key layout: %s", ref.Key)
 	}
 	if !strings.HasSuffix(ref.Key, "-report.pdf") {

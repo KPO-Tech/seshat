@@ -1200,7 +1200,10 @@ func (m *UI) appendSessionMessage(msg message.Message) tea.Cmd {
 }
 
 func (m *UI) handleAttachmentClick(msg tea.MouseClickMsg) bool {
-	if m.state != uiChat || len(m.attachments.List()) == 0 {
+	if len(m.attachments.List()) == 0 {
+		return false
+	}
+	if m.state != uiChat && m.state != uiLanding {
 		return false
 	}
 	if !image.Pt(msg.X, msg.Y).In(m.layout.editor) {
@@ -2377,7 +2380,7 @@ func (m *UI) Draw(scr uv.Screen, area uv.Rectangle) *tea.Cursor {
 		main := uv.NewStyledString(m.landingView())
 		main.Draw(scr, layout.main)
 
-		editor := uv.NewStyledString(m.renderEditorView(scr.Bounds().Dx()))
+		editor := uv.NewStyledString(m.renderEditorView(layout.editor.Dx()))
 		editor.Draw(scr, layout.editor)
 
 	case uiChat:
@@ -2388,7 +2391,7 @@ func (m *UI) Draw(scr uv.Screen, area uv.Rectangle) *tea.Cursor {
 			uv.NewStyledString(m.pillsView).Draw(scr, layout.pills)
 		}
 
-		editor := uv.NewStyledString(m.renderEditorView(scr.Bounds().Dx()))
+		editor := uv.NewStyledString(m.renderEditorView(layout.editor.Dx()))
 		editor.Draw(scr, layout.editor)
 
 		if m.detailsOpen {

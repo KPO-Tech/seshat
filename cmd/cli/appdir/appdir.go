@@ -1,24 +1,28 @@
 // Package appdir is the single source of truth for the CLI's filesystem layout.
 //
-// All persistent data lives under Root() (~/.config/nexus-cli/ by default, or
+// All persistent data lives under Root() (~/.config/nexus-tui/ by default, or
 // the value of NEXUS_RUNTIME_ROOT). Session-scoped data is isolated under
 // sessions/{session_id}/ so deleting a session is a single os.RemoveAll call.
 //
 // Directory layout:
 //
-//	~/.config/nexus-cli/
+//	~/.config/nexus-tui/
 //	├── logs/
 //	├── documents/          ← user-uploaded PDFs and docs (global, persistent)
 //	├── rag/                ← RAG-indexed documents (global, persistent)
 //	└── sessions/
 //	    └── {session_id}/
-//	        ├── screenshots/        ← browser screenshots
+//	        ├── artifacts/
+//	        │   ├── screenshots/    ← browser screenshots
+//	        │   ├── images/         ← AI-generated images
+//	        │   ├── web/            ← web-scraped content
+//	        │   └── audio/          ← TTS / STT audio
+//	        ├── pastes/
+//	        │   ├── text/
+//	        │   ├── images/
+//	        │   └── other/
 //	        ├── plans/              ← plan-mode markdown files
-//	        ├── tools/              ← browser downloads
-//	        └── artifacts/
-//	            ├── web/            ← web-scraped content
-//	            ├── images/         ← AI-generated images
-//	            └── audio/          ← TTS / STT audio
+//	        └── tools/              ← browser downloads
 package appdir
 
 import (
@@ -29,7 +33,7 @@ import (
 )
 
 // Root returns the application root directory, resolved via NEXUS_RUNTIME_ROOT
-// or the platform default (~/.config/nexus-cli/ on Linux/macOS).
+// or the platform default (~/.config/nexus-tui/ on Linux/macOS).
 func Root() string { return runtimepath.ResolveRoot("") }
 
 // ─── Global directories ───────────────────────────────────────────────────────
@@ -43,9 +47,10 @@ func SessionDir(sessionID string) string { return runtimepath.SessionDir("", ses
 func SessionScreenshotsDir(sessionID string) string {
 	return runtimepath.SessionScreenshotsDir("", sessionID)
 }
-func SessionPlansDir(sessionID string) string { return runtimepath.SessionPlansDir("", sessionID) }
-func SessionToolsDir(sessionID string) string { return runtimepath.SessionToolsDir("", sessionID) }
-func SessionLogPath(sessionID string) string  { return runtimepath.SessionLogPath("", sessionID) }
+func SessionPlansDir(sessionID string) string  { return runtimepath.SessionPlansDir("", sessionID) }
+func SessionPastesDir(sessionID string) string { return runtimepath.SessionPastesDir("", sessionID) }
+func SessionToolsDir(sessionID string) string  { return runtimepath.SessionToolsDir("", sessionID) }
+func SessionLogPath(sessionID string) string   { return runtimepath.SessionLogPath("", sessionID) }
 
 // Artifact subdirectories — agent-produced content, session-scoped.
 func SessionArtifactsDir(sessionID string) string {
@@ -56,6 +61,15 @@ func SessionArtifactsWebDir(sessionID string) string {
 }
 func SessionArtifactsImagesDir(sessionID string) string {
 	return runtimepath.SessionArtifactsImagesDir("", sessionID)
+}
+func SessionPastesTextDir(sessionID string) string {
+	return runtimepath.SessionPastesTextDir("", sessionID)
+}
+func SessionPastesImagesDir(sessionID string) string {
+	return runtimepath.SessionPastesImagesDir("", sessionID)
+}
+func SessionPastesOtherDir(sessionID string) string {
+	return runtimepath.SessionPastesOtherDir("", sessionID)
 }
 func SessionArtifactsAudioDir(sessionID string) string {
 	return runtimepath.SessionArtifactsAudioDir("", sessionID)
@@ -83,11 +97,14 @@ func EnsureAppDirs() error {
 func EnsureSessionDir(sessionID string) error {
 	dirs := []string{
 		SessionScreenshotsDir(sessionID),
+		SessionArtifactsImagesDir(sessionID),
+		SessionArtifactsWebDir(sessionID),
+		SessionArtifactsAudioDir(sessionID),
+		SessionPastesTextDir(sessionID),
+		SessionPastesImagesDir(sessionID),
+		SessionPastesOtherDir(sessionID),
 		SessionPlansDir(sessionID),
 		SessionToolsDir(sessionID),
-		SessionArtifactsWebDir(sessionID),
-		SessionArtifactsImagesDir(sessionID),
-		SessionArtifactsAudioDir(sessionID),
 	}
 	for _, d := range dirs {
 		if err := os.MkdirAll(d, 0o700); err != nil {

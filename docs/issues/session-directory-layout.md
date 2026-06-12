@@ -65,23 +65,30 @@ La variable d'environnement `NEXUS_RUNTIME_ROOT` continue de prendre la priorit�
 ├── config.yaml               # configuration utilisateur
 ├── secret.key                # clé AES-256 (mode 0600)
 ├── nexus.db                  # SQLite : metadata sessions, credentials, transcripts
-├── nexus.json                # Configurations mcp
-├── skills/                   # L'ensemble des repos de skills
+├── nexus.json                # configuration MCP
+├── skills/                   # répertoires des skills clonés
 ├── logs/
 │   └── app.log               # log applicatif global (démarrage, erreurs critiques)
 └── sessions/
     └── {session_id}/
-        ├── images/           # screenshots browser, images générées
+        ├── artifacts/
+        │   ├── screenshots/  # captures navigateur
+        │   └── images/       # images générées
+        ├── pastes/
+        │   ├── text/         # textes collés persistés à l'envoi
+        │   ├── images/       # images collées persistées à l'envoi
+        │   └── other/        # autres blobs collés persistés à l'envoi
         ├── plans/            # fichiers de plan mode ({slug}.md ou plan.md)
         ├── tools/            # fichiers téléchargés, outputs d'outils, metadata non-DB
-        └── session.log       # log spécifique à cette session
-        └── permissions.json  # Save permissions per tools during the session
+        ├── session.log       # log spécifique à cette session
+        └── permissions.json  # permissions des outils pour cette session
 ```
 
 ### Principes
 
 - **Tout ce qui est propre à une session vit dans `sessions/{id}/`** — un seul `os.RemoveAll` suffit pour supprimer toutes les données physiques d'une session.
-- **La DB reste la source de vérité pour les métadonnées** — les chemins physiques en sont déduits via les fonctions du package `runtimepath`, jamais hardcodés.
+- **Les collages restent en mémoire jusqu'à l'envoi** — on écrit sous `sessions/{id}/pastes/` uniquement au moment du submit pour éviter les fichiers orphelins quand l'utilisateur colle puis supprime avant d'envoyer.
+- **La DB reste la source de vérité pour les métadonnées** — les chemins physiques en sont déduits via les fonctions du package `runtimepath`, jamais hardcodés. Pour les collages texte, le transcript persistant contient la référence de chemin injectée au moment de l'envoi afin de faciliter la réhydratation au reload.
 - **Le package `runtimepath` fournit les fonctions, l'application gère l'initialisation** — les packages internes prennent les chemins en entrée, ils ne font pas de découverte de répertoire eux-mêmes.
 - **La DB SQLite passe à la racine** (`nexus.db` au lieu de `data/nexus.db`) — simplification sans impact fonctionnel.
 
@@ -104,8 +111,14 @@ func SessionsDir(root string) string    { return Join(root, "sessions") }
 func SessionDir(root, sessionID string) string {
     return filepath.Join(SessionsDir(root), sessionID)
 }
-func SessionImagesDir(root, sessionID string) string {
-    return filepath.Join(SessionDir(root, sessionID), "images")
+func SessionArtifactsScreenshotsDir(root, sessionID string) string {
+    return filepath.Join(SessionDir(root, sessionID), "artifacts", "screenshots")
+}
+func SessionArtifactsImagesDir(root, sessionID string) string {
+    return filepath.Join(SessionDir(root, sessionID), "artifacts", "images")
+}
+func SessionPastesDir(root, sessionID string) string {
+    return filepath.Join(SessionDir(root, sessionID), "pastes")
 }
 func SessionPlansDir(root, sessionID string) string {
     return filepath.Join(SessionDir(root, sessionID), "plans")
@@ -135,7 +148,7 @@ func Root() string
 // Idempotent. À appeler une seule fois dans main().
 func EnsureAppDirs() error
 
-// EnsureSessionDir crée sessions/{id}/ et ses sous-répertoires (images, plans, tools).
+// EnsureSessionDir crée sessions/{id}/ et ses sous-répertoires standards (`artifacts/`, `pastes/`, `plans/`, `tools/`).
 // À appeler quand une nouvelle session démarre.
 func EnsureSessionDir(sessionID string) error
 
@@ -158,9 +171,9 @@ func SessionLogPath(sessionID string) string
 
 **Avant :** `storage/artifacts/browser/screenshots/{session_id}/{page_id}/{date}/{ts}-screenshot.png`
 
-**Après :** `sessions/{session_id}/images/{page_id}/{date}/{ts}-screenshot.png`
+**Après :** `sessions/{session_id}/artifacts/screenshots/{page_id}/{date}/{ts}-screenshot.png`
 
-La fonction `ScreenshotKey` dans `storage/keys.go` est mise à jour pour utiliser `appdir.SessionImagesDir(sessionID)` comme base. De même pour les downloads → `SessionToolsDir`.
+La fonction `ScreenshotKey` dans `storage/keys.go` est mise à jour pour utiliser `appdir.SessionImagesDir(sessionID)` comme base. De même pour les downloads → `SessionToolsDir`. Les collages persistés vont sous `SessionPastesDir` au moment de l'envoi.
 
 ### 4. Fichiers de plan
 
@@ -197,6 +210,31 @@ store.DeleteSession(sessionID)
 ### 6. Logs par session
 
 À chaque démarrage de session, un `log.Logger` est créé pointant vers `sessions/{id}/session.log`. Les erreurs spécifiques à la session (tool failures, context errors, provider errors) y sont écrites en plus du log global.
+
+### 7. Stratégie long terme pour les collages
+
+Le comportement actuel optimisé UX est le suivant :
+
+- les collages restent **en mémoire** tant qu'ils ne sont pas envoyés
+- au moment de l'envoi, seuls les collages éphémères (`paste_*`) sont **matérialisés sur disque** sous `sessions/{id}/pastes/`
+- pour le runtime actuel, les collages texte sont encore **injectés inline dans le prompt** afin de garder un flux simple et fiable
+
+Cette solution est correcte à court terme, mais elle n'est pas optimale en coût token pour les gros collages texte. La direction long terme recommandée est :
+
+1. **Conserver la persistance disque à l'envoi** sous `sessions/{id}/pastes/`
+2. **Référencer chaque collage en DB** avec un identifiant stable (`attachment_id`) et ses métadonnées (session_id, chemin, mime, taille, hash, created_at)
+3. **Envoyer un manifeste compact dans le prompt** au lieu d'injecter tout le contenu texte pour les gros collages
+4. **Introduire une surface dédiée** de type `read_attachment(id, start, end)` plutôt que d'obliger l'agent à relire le fichier via `read_file` sur un chemin runtime interne
+5. **Garder l'inlining uniquement pour les petits collages texte** afin de préserver la fluidité et la simplicité quand le coût token est négligeable
+6. **Dédupliquer par hash** les collages identiques pour éviter les duplications inutiles en stockage et en prompt
+
+En pratique, la stratégie cible est donc **hybride** :
+
+- petit collage texte : inline direct dans le prompt
+- gros collage texte : référence compacte + lecture explicite à la demande
+- image collée : bloc image natif quand le modèle le supporte
+
+Cette trajectoire minimise les tokens sans dégrader l'expérience utilisateur ni exposer au modèle des chemins internes de runtime comme surface principale.
 
 ---
 

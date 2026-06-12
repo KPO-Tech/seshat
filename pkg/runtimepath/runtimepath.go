@@ -94,13 +94,16 @@ func ElectronCrashDumpsDir(root string) string { return Join(root, "electron", "
 //
 // Layout:
 //   sessions/{id}/
-//   ├── screenshots/        ← browser screenshots
+//   ├── artifacts/
+//   │   ├── screenshots/    ← browser screenshots
+//   │   └── images/         ← AI-generated images (DALL-E, Stable Diffusion, …)
+//   ├── pastes/
+//   │   ├── text/           ← persisted pasted text attachments
+//   │   ├── images/         ← persisted pasted image attachments
+//   │   └── other/          ← persisted pasted binary attachments
 //   ├── plans/              ← plan-mode markdown files
-//   ├── tools/              ← browser downloads
-//   └── artifacts/
-//       ├── web/            ← web-scraped content
-//       ├── images/         ← AI-generated images (DALL-E, Stable Diffusion, …)
-//       └── audio/          ← TTS/STT audio files
+//   ├── tools/              ← browser downloads and tool outputs
+//   └── session.log
 
 func SessionsDir(root string) string { return Join(root, "sessions") }
 
@@ -108,9 +111,26 @@ func SessionDir(root, sessionID string) string {
 	return filepath.Join(ResolveRoot(root), "sessions", sessionID)
 }
 
-// SessionScreenshotsDir holds browser screenshots.
+// SessionScreenshotsDir holds browser screenshots under artifacts/.
 func SessionScreenshotsDir(root, sessionID string) string {
-	return filepath.Join(ResolveRoot(root), "sessions", sessionID, "screenshots")
+	return filepath.Join(ResolveRoot(root), "sessions", sessionID, "artifacts", "screenshots")
+}
+
+// SessionPastesDir holds persisted pasted attachments for the session.
+func SessionPastesDir(root, sessionID string) string {
+	return filepath.Join(ResolveRoot(root), "sessions", sessionID, "pastes")
+}
+
+func SessionPastesTextDir(root, sessionID string) string {
+	return filepath.Join(SessionPastesDir(root, sessionID), "text")
+}
+
+func SessionPastesImagesDir(root, sessionID string) string {
+	return filepath.Join(SessionPastesDir(root, sessionID), "images")
+}
+
+func SessionPastesOtherDir(root, sessionID string) string {
+	return filepath.Join(SessionPastesDir(root, sessionID), "other")
 }
 
 // SessionPlansDir holds plan-mode markdown files for the session.
