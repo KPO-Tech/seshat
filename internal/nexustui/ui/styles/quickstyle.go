@@ -595,8 +595,8 @@ func quickStyle(o quickStyleOpts) Styles {
 	s.Tool.IconError = base.Foreground(o.error).SetString(ToolError)
 	s.Tool.IconCancelled = muted.SetString(ToolPending)
 
-	s.Tool.NameNormal = base.Foreground(o.info)
-	s.Tool.NameNested = base.Foreground(o.info)
+	s.Tool.NameNormal = base.Foreground(charmtone.Tang)
+	s.Tool.NameNested = base.Foreground(charmtone.Tang)
 
 	s.Tool.ParamMain = subtle
 	s.Tool.ParamKey = subtle
@@ -608,7 +608,7 @@ func quickStyle(o quickStyleOpts) Styles {
 	s.Tool.ContentCodeLine = base.Background(o.bgBase).PaddingLeft(2)
 	s.Tool.ContentCodeTruncation = muted.Background(o.bgBase).PaddingLeft(2)
 	s.Tool.ContentCodeBg = o.bgBase
-	s.Tool.Body = base.PaddingLeft(2)
+	s.Tool.Body = base.PaddingLeft(4)
 
 	// Deprecated - kept for backward compatibility
 	s.Tool.ContentBg = muted.Background(o.bgBase)

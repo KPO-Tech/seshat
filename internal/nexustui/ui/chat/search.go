@@ -410,7 +410,7 @@ func renderDirEntries(sty *styles.Styles, entries []lsDirEntry, total int, width
 	var out []string
 	for _, r := range rows {
 		truncName := ansi.Truncate(r.name, nameColWidth, "…")
-		nameStr := sty.Tool.ResultItemName.Render(truncName)
+		nameStr := sty.Tool.ContentText.Render(truncName)
 		if r.size == "" {
 			out = append(out, nameStr)
 		} else {

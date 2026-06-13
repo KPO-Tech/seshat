@@ -1,7 +1,7 @@
 CMD_CLI  := ./cmd/cli
 CMD_GRPC := ./cmd/grpc
 
-.PHONY: all build build-cli build-grpc test test-race lint fmt vet tidy clean hooks
+.PHONY: all build build-cli build-grpc test test-race lint fmt vet tidy clean hooks install-deps
 
 all: build
 
@@ -39,3 +39,20 @@ clean:
 hooks:
 	git config core.hooksPath .githooks
 	@echo "Git hooks installed from .githooks/"
+
+# Install external runtime dependencies (ripgrep).
+install-deps:
+	@echo "Checking for ripgrep (rg)..."
+	@if command -v rg > /dev/null 2>&1; then \
+		echo "ripgrep already installed: $$(rg --version | head -1)"; \
+	elif [ "$$(uname)" = "Darwin" ]; then \
+		brew install ripgrep; \
+	elif [ -f /etc/debian_version ]; then \
+		sudo apt-get update -qq && sudo apt-get install -y ripgrep; \
+	elif [ -f /etc/arch-release ]; then \
+		sudo pacman -S --noconfirm ripgrep; \
+	elif [ -f /etc/fedora-release ] || [ -f /etc/redhat-release ]; then \
+		sudo dnf install -y ripgrep; \
+	else \
+		echo "Could not detect package manager. Install ripgrep manually: https://github.com/BurntSushi/ripgrep#installation" && exit 1; \
+	fi
