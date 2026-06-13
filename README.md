@@ -357,12 +357,15 @@ nexus-engine is the headless runtime — no users, no billing, no access control
 ## 🛠️ Development
 
 ```bash
-make build       # build CLI and gRPC binaries to bin/
-make test        # run all tests
-make test-race   # run tests with race detector
-make lint        # golangci-lint
-make hooks       # install git pre-commit hooks (run once after cloning)
+make build         # build CLI and gRPC binaries to bin/
+make install-deps  # install runtime dependencies (ripgrep — required for glob/grep tools)
+make test          # run all tests
+make test-race     # run tests with race detector
+make lint          # golangci-lint
+make hooks         # install git pre-commit hooks (run once after cloning)
 ```
+
+> **Runtime dependency:** the `glob` and `grep` tools require [`ripgrep`](https://github.com/BurntSushi/ripgrep) (`rg`) to be installed. Run `make install-deps` once after cloning — it detects your OS and installs ripgrep via `apt`, `brew`, `dnf`, or `pacman`.
 
 See [`CONTRIBUTING.md`](./CONTRIBUTING.md) for the full contribution guide.
 

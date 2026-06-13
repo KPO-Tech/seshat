@@ -44,6 +44,13 @@ The canonical runtime sources are:
 - [x] Normal truncation behavior stays enabled for write/edit style outputs; the transcript is not globally forced into wrapping mode.
 - [x] The tool-ordering streaming fix is compatible with this roadmap: tool items stay inline, but post-tool assistant synthesis now lands in the correct place.
 - [x] `enter_plan_mode` and `exit_plan_mode` are now hidden from the chat transcript, and the header reflects the real execution mode (`execute` / `plan` / `pair`).
+- [x] `request_permissions` is now hidden from the chat transcript; the permission modal is the sole UX surface.
+- [x] `enter_worktree` and `exit_worktree` are now hidden from the transcript. Header displays `⎇ <path>` when a worktree is active. `exit_worktree` now always prompts (`Ask`) instead of silently denying via `CheckPermissions`.
+- [x] `rm -rf *` default permission rule changed from `Deny` to `Ask` — destructive shell commands now always surface the permission dialog instead of being silently blocked.
+- [x] Tool name color changed from Malibu blue (`#00A4FF`) to Tang orange (`#FF985A`) to match the logo palette.
+- [x] Tool body content indentation increased from 2 to 4 spaces to visually anchor body content under the tool name.
+- [x] All tool body content now uses muted grey (`ContentText` / `ContentLine`) so tool output sits below agent conclusion text in the visual hierarchy. `glob`, `grep`, and `list_directory` compact renderers were aligned to this rule (previously `glob` and `grep` used bright `fgBase` for filenames).
+- [x] `glob`, `grep`, and `list_directory` now have dedicated compact renderers: pattern/path + counts in the header, file/match lists in the body with `+N more` truncation and expand/collapse support.
 
 ## Cross-Cutting Product Rules
 
@@ -209,9 +216,9 @@ These tools should stay visible in chat, but the transcript item should be inten
 
 | Tool(s) | Surface | State | Notes |
 |---|---|---|---|
-| `list_directory` | `chat` | Open | Candidate compact treatment: path, item count, maybe first few entries. Full raw listing probably too noisy. |
-| `glob` | `chat` | Planned | Compact summary with pattern, root path, match count, optional short preview. |
-| `grep` | `chat` | Planned | Compact summary with pattern, file count, hit count, and a few top matches. |
+| `list_directory` | `chat` | Done | Compact renderer: path + item count in header; dir/file list with right-aligned sizes, `+N more` truncation, expand/collapse. Entries use muted grey (`ContentText`) to match bash output style. |
+| `glob` | `chat` | Done | Compact renderer: pattern + file count in header; file path list (max 8, then `+N more`), expand/collapse. File paths use muted grey (`ContentText`). |
+| `grep` | `chat` | Done | Compact renderer: pattern (+ include filter) + file count + match count in header; `file:match` lines (max 6, then `+N more`), expand/collapse. File part uses `ContentText`, match body uses `ResultItemDesc`. |
 | `web_search` | `chat` | Planned | Keep the search visible, but prefer query + result count + top hits over raw payload. |
 | `web_fetch` | `chat` | Planned | Show URL, status, content type, and maybe short snippet; do not flood transcript. |
 | `browser_open`, `browser_navigate`, `browser_select_page`, `browser_close_page` | `chat` | Planned | Navigation state changes are useful, but should be one-line or near one-line items. |
