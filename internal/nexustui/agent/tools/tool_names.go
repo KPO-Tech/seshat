@@ -1,7 +1,5 @@
 package tools
 
-import "github.com/EngineerProjects/nexus-engine/internal/nexustui/session"
-
 // Tool name constants matching SDK builtin names where applicable.
 // These are used by the permission dialog and chat UI to render tool-specific UI.
 const (
@@ -21,7 +19,6 @@ const (
 	SourcegraphToolName  = "sourcegraph"
 	WebFetchToolName     = "web_fetch"
 	WebSearchToolName    = "web_search"
-	TodosToolName        = "todos"
 	AgentToolName        = "agent"
 
 	BashNoOutput = "<no output>"
@@ -159,21 +156,6 @@ type MultiEditResponseMetadata struct {
 	NewContent   string `json:"new_content,omitempty"`
 	EditsFailed  []any  `json:"edits_failed,omitempty"`
 	EditsApplied int    `json:"edits_applied,omitempty"`
-}
-
-// TodosParams holds the input for a todos tool call.
-type TodosParams struct {
-	Todos []session.Todo `json:"todos"`
-}
-
-// TodosResponseMetadata holds the metadata returned by a todos tool call.
-type TodosResponseMetadata struct {
-	IsNew         bool           `json:"is_new,omitempty"`
-	JustStarted   string         `json:"just_started,omitempty"`
-	Total         int            `json:"total,omitempty"`
-	Completed     int            `json:"completed,omitempty"`
-	Todos         []session.Todo `json:"todos,omitempty"`
-	JustCompleted []session.Todo `json:"just_completed,omitempty"`
 }
 
 // ViewResourceSkill is the resource type for skill-backed file views.
