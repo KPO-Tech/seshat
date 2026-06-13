@@ -3,24 +3,27 @@ package tools
 // Tool name constants matching SDK builtin names where applicable.
 // These are used by the permission dialog and chat UI to render tool-specific UI.
 const (
-	BashToolName         = "bash"
-	EditToolName         = "edit_file"
-	WriteToolName        = "write_file"
-	MultiEditToolName    = "multi_edit"
-	ApplyPatchToolName   = "apply_patch"
-	ViewToolName         = "read_file"
-	DownloadToolName     = "download"
-	FetchToolName        = "fetch"
-	AgenticFetchToolName = "agentic_fetch"
-	LSToolName           = "list_directory"
-	JobOutputToolName    = "job_output"
-	JobKillToolName      = "job_kill"
-	GlobToolName         = "glob"
-	GrepToolName         = "grep"
-	SourcegraphToolName  = "sourcegraph"
-	WebFetchToolName     = "web_fetch"
-	WebSearchToolName    = "web_search"
-	AgentToolName        = "agent"
+	BashToolName            = "bash"
+	EditToolName            = "edit_file"
+	WriteToolName           = "write_file"
+	MultiEditToolName       = "multi_edit"
+	ApplyPatchToolName      = "apply_patch"
+	ViewToolName            = "read_file"
+	RemoveFileToolName      = "remove_file"
+	CreateDirectoryToolName = "create_directory"
+	GetFileMetadataToolName = "get_file_metadata"
+	DownloadToolName        = "download"
+	FetchToolName           = "fetch"
+	AgenticFetchToolName    = "agentic_fetch"
+	LSToolName              = "list_directory"
+	JobOutputToolName       = "job_output"
+	JobKillToolName         = "job_kill"
+	GlobToolName            = "glob"
+	GrepToolName            = "grep"
+	SourcegraphToolName     = "sourcegraph"
+	WebFetchToolName        = "web_fetch"
+	WebSearchToolName       = "web_search"
+	AgentToolName           = "agent"
 
 	BashNoOutput = "<no output>"
 )
@@ -209,6 +212,22 @@ type MultiEditParams struct {
 // ApplyPatchParams holds the input for an apply_patch tool call.
 type ApplyPatchParams struct {
 	Patch string `json:"patch"`
+}
+
+// RemoveFileParams holds the input for a remove_file tool call.
+type RemoveFileParams struct {
+	Path      string `json:"path"`
+	Recursive bool   `json:"recursive,omitempty"`
+}
+
+// CreateDirectoryParams holds the input for a create_directory tool call.
+type CreateDirectoryParams struct {
+	Path string `json:"path"`
+}
+
+// GetFileMetadataParams holds the input for a get_file_metadata tool call.
+type GetFileMetadataParams struct {
+	Path string `json:"path"`
 }
 
 // DownloadParams holds the input for a download tool call.

@@ -83,43 +83,11 @@ func (v *ViewToolRenderContext) RenderTool(sty *styles.Styles, width int, opts *
 		return joinToolParts(header, body)
 	}
 
-	summary := buildViewToolSummary(params, opts.Result.Content)
-	if summary == "" {
-		return header
+	// On error show the error; success is silent (content is for the AI, not the UI).
+	if opts.Result.IsError {
+		return joinToolParts(header, toolErrorContent(sty, opts.Result, cappedWidth))
 	}
-
-	bodyWidth := cappedWidth - toolBodyLeftPaddingTotal
-	body := sty.Tool.Body.Render(toolOutputPlainContent(sty, summary, bodyWidth, opts.ExpandedContent))
-	return joinToolParts(header, body)
-}
-
-func buildViewToolSummary(params tools.ViewParams, content string) string {
-	var lines []string
-
-	if summary := extractReadFileLinesSummary(content); summary != "" {
-		lines = append(lines, summary)
-	} else {
-		if params.Offset > 0 && params.Limit > 0 {
-			lines = append(lines, fmt.Sprintf("Lines requested: %d-%d", params.Offset, params.Offset+params.Limit-1))
-		} else if params.Offset > 0 {
-			lines = append(lines, fmt.Sprintf("Starting from line %d", params.Offset))
-		} else if params.Limit > 0 {
-			lines = append(lines, fmt.Sprintf("Requested up to %d lines", params.Limit))
-		}
-	}
-
-	lines = append(lines, "Content hidden in transcript")
-	return strings.Join(lines, "\n")
-}
-
-func extractReadFileLinesSummary(content string) string {
-	for _, line := range strings.Split(content, "\n") {
-		trimmed := strings.TrimSpace(line)
-		if strings.HasPrefix(trimmed, "Lines:") {
-			return trimmed
-		}
-	}
-	return ""
+	return header
 }
 
 // -----------------------------------------------------------------------------
@@ -337,6 +305,162 @@ func (m *MultiEditToolRenderContext) RenderTool(sty *styles.Styles, width int, o
 	}
 
 	return joinToolParts(header, diff)
+}
+
+// -----------------------------------------------------------------------------
+// Remove File Tool
+// -----------------------------------------------------------------------------
+
+// RemoveFileToolMessageItem is a message item that represents a remove_file tool call.
+type RemoveFileToolMessageItem struct {
+	*baseToolMessageItem
+}
+
+var _ ToolMessageItem = (*RemoveFileToolMessageItem)(nil)
+
+// NewRemoveFileToolMessageItem creates a new [RemoveFileToolMessageItem].
+func NewRemoveFileToolMessageItem(
+	sty *styles.Styles,
+	toolCall message.ToolCall,
+	result *message.ToolResult,
+	canceled bool,
+) ToolMessageItem {
+	return newBaseToolMessageItem(sty, toolCall, result, &RemoveFileToolRenderContext{}, canceled)
+}
+
+// RemoveFileToolRenderContext renders remove_file tool messages.
+type RemoveFileToolRenderContext struct{}
+
+// RenderTool implements the [ToolRenderer] interface.
+func (r *RemoveFileToolRenderContext) RenderTool(sty *styles.Styles, width int, opts *ToolRenderOpts) string {
+	cappedWidth := cappedToolWidth(width)
+	if opts.IsPending() {
+		return pendingTool(sty, "Remove File", opts.Anim, opts.Compact)
+	}
+
+	var params tools.RemoveFileParams
+	if err := json.Unmarshal([]byte(opts.ToolCall.Input), &params); err != nil {
+		return invalidInputContent(sty, opts, "Remove File", cappedWidth)
+	}
+
+	path := fsext.PrettyPath(params.Path)
+	header := toolHeader(sty, opts.Status, "Remove File", cappedWidth, opts.Compact, path)
+	if opts.Compact {
+		return header
+	}
+
+	if earlyState, ok := toolEarlyStateContent(sty, opts, cappedWidth); ok {
+		return joinToolParts(header, earlyState)
+	}
+
+	if !opts.HasResult() || !opts.Result.IsError {
+		return header
+	}
+	return joinToolParts(header, toolErrorContent(sty, opts.Result, cappedWidth))
+}
+
+// -----------------------------------------------------------------------------
+// Create Directory Tool
+// -----------------------------------------------------------------------------
+
+// CreateDirectoryToolMessageItem is a message item that represents a create_directory tool call.
+type CreateDirectoryToolMessageItem struct {
+	*baseToolMessageItem
+}
+
+var _ ToolMessageItem = (*CreateDirectoryToolMessageItem)(nil)
+
+// NewCreateDirectoryToolMessageItem creates a new [CreateDirectoryToolMessageItem].
+func NewCreateDirectoryToolMessageItem(
+	sty *styles.Styles,
+	toolCall message.ToolCall,
+	result *message.ToolResult,
+	canceled bool,
+) ToolMessageItem {
+	return newBaseToolMessageItem(sty, toolCall, result, &CreateDirectoryToolRenderContext{}, canceled)
+}
+
+// CreateDirectoryToolRenderContext renders create_directory tool messages.
+type CreateDirectoryToolRenderContext struct{}
+
+// RenderTool implements the [ToolRenderer] interface.
+func (c *CreateDirectoryToolRenderContext) RenderTool(sty *styles.Styles, width int, opts *ToolRenderOpts) string {
+	cappedWidth := cappedToolWidth(width)
+	if opts.IsPending() {
+		return pendingTool(sty, "Create Directory", opts.Anim, opts.Compact)
+	}
+
+	var params tools.CreateDirectoryParams
+	if err := json.Unmarshal([]byte(opts.ToolCall.Input), &params); err != nil {
+		return invalidInputContent(sty, opts, "Create Directory", cappedWidth)
+	}
+
+	path := fsext.PrettyPath(params.Path)
+	header := toolHeader(sty, opts.Status, "Create Directory", cappedWidth, opts.Compact, path)
+	if opts.Compact {
+		return header
+	}
+
+	if earlyState, ok := toolEarlyStateContent(sty, opts, cappedWidth); ok {
+		return joinToolParts(header, earlyState)
+	}
+
+	if !opts.HasResult() || !opts.Result.IsError {
+		return header
+	}
+	return joinToolParts(header, toolErrorContent(sty, opts.Result, cappedWidth))
+}
+
+// -----------------------------------------------------------------------------
+// Get File Metadata Tool
+// -----------------------------------------------------------------------------
+
+// GetFileMetadataToolMessageItem is a message item that represents a get_file_metadata tool call.
+type GetFileMetadataToolMessageItem struct {
+	*baseToolMessageItem
+}
+
+var _ ToolMessageItem = (*GetFileMetadataToolMessageItem)(nil)
+
+// NewGetFileMetadataToolMessageItem creates a new [GetFileMetadataToolMessageItem].
+func NewGetFileMetadataToolMessageItem(
+	sty *styles.Styles,
+	toolCall message.ToolCall,
+	result *message.ToolResult,
+	canceled bool,
+) ToolMessageItem {
+	return newBaseToolMessageItem(sty, toolCall, result, &GetFileMetadataToolRenderContext{}, canceled)
+}
+
+// GetFileMetadataToolRenderContext renders get_file_metadata tool messages.
+type GetFileMetadataToolRenderContext struct{}
+
+// RenderTool implements the [ToolRenderer] interface.
+func (g *GetFileMetadataToolRenderContext) RenderTool(sty *styles.Styles, width int, opts *ToolRenderOpts) string {
+	cappedWidth := cappedToolWidth(width)
+	if opts.IsPending() {
+		return pendingTool(sty, "File Metadata", opts.Anim, opts.Compact)
+	}
+
+	var params tools.GetFileMetadataParams
+	if err := json.Unmarshal([]byte(opts.ToolCall.Input), &params); err != nil {
+		return invalidInputContent(sty, opts, "File Metadata", cappedWidth)
+	}
+
+	path := fsext.PrettyPath(params.Path)
+	header := toolHeader(sty, opts.Status, "File Metadata", cappedWidth, opts.Compact, path)
+	if opts.Compact {
+		return header
+	}
+
+	if earlyState, ok := toolEarlyStateContent(sty, opts, cappedWidth); ok {
+		return joinToolParts(header, earlyState)
+	}
+
+	if !opts.HasResult() || !opts.Result.IsError {
+		return header
+	}
+	return joinToolParts(header, toolErrorContent(sty, opts.Result, cappedWidth))
 }
 
 // -----------------------------------------------------------------------------

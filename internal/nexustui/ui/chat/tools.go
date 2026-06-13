@@ -228,6 +228,12 @@ func NewToolMessageItem(
 		item = NewJobKillToolMessageItem(sty, toolCall, result, canceled)
 	case tools.ViewToolName:
 		item = NewViewToolMessageItem(sty, toolCall, result, canceled)
+	case tools.RemoveFileToolName:
+		item = NewRemoveFileToolMessageItem(sty, toolCall, result, canceled)
+	case tools.CreateDirectoryToolName:
+		item = NewCreateDirectoryToolMessageItem(sty, toolCall, result, canceled)
+	case tools.GetFileMetadataToolName:
+		item = NewGetFileMetadataToolMessageItem(sty, toolCall, result, canceled)
 	case tools.WriteToolName:
 		item = NewWriteToolMessageItem(sty, toolCall, result, canceled)
 	case tools.EditToolName:
