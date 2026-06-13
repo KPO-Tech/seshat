@@ -155,7 +155,7 @@ func (r *Renderer) renderLayout(attachments []message.Attachment, deleting, show
 	nameStyle := r.normalStyle
 	maxItemWidth := lipgloss.Width(r.imageStyle.String() + nameStyle.Render(strings.Repeat("x", maxFilename)))
 	if showRemove && !deleting {
-		nameStyle = nameStyle.Copy().MarginRight(0)
+		nameStyle = nameStyle.MarginRight(0)
 		maxItemWidth = lipgloss.Width(r.imageStyle.String()+nameStyle.Render(strings.Repeat("x", maxFilename))) + lipgloss.Width(r.deletingStyle.Render("×")) + 1
 	}
 	fits := int(math.Floor(float64(width)/float64(maxItemWidth))) - 1

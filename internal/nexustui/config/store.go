@@ -712,7 +712,7 @@ func (s *ConfigStore) CaptureStalenessSnapshot(paths []string) {
 	slices.Sort(s.trackedConfigPaths)
 
 	// Capture initial snapshots
-	s.RefreshStalenessSnapshot()
+	_ = s.RefreshStalenessSnapshot()
 }
 
 // captureStalenessSnapshot is an alias for CaptureStalenessSnapshot for internal use.

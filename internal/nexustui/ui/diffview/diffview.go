@@ -791,8 +791,8 @@ func (dv *DiffView) createSyntaxCacheKey(source string, bgColor color.Color) str
 
 	// Create a hash of the content + color to use as cache key
 	h := xxh3.New()
-	h.Write([]byte(source))
-	h.Write([]byte(colorStr))
+	_, _ = h.Write([]byte(source))
+	_, _ = h.Write([]byte(colorStr))
 	return fmt.Sprintf("%x", h.Sum(nil))
 }
 

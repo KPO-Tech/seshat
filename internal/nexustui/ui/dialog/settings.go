@@ -1046,13 +1046,13 @@ func (i *settingsSectionItem) Render(width int) string {
 
 	// Description: grey foreground via attribute-only codes.
 	// ansi.Style{}.ForegroundColor(c).String()      = "\x1b[38;2;r;g;bm"  (set fg)
-	// ansi.Style{}.DefaultForegroundColor().String() = "\x1b[39m"          (reset fg only)
+	// ansi.Style{}.ForegroundColor(nil).String() = "\x1b[39m"          (reset fg only)
 	var descStr string
 	descWidth := 0
 	if i.desc != "" {
 		greyColor := t.Sidebar.WorkingDir.GetForeground()
 		greyOn := ansi.Style{}.ForegroundColor(greyColor).String()
-		greyOff := ansi.Style{}.DefaultForegroundColor().String()
+		greyOff := ansi.Style{}.ForegroundColor(nil).String()
 		const sep = "  "
 		maxDesc := lineWidth - prefixW - nameWidth - len(sep) - infoWidth - 1
 		if maxDesc > 2 {
@@ -1231,7 +1231,7 @@ func (i *settingsThemeItem) Render(width int) string {
 	// Description in grey using fg-only ANSI codes (preserves outer background).
 	greyColor := t.Sidebar.WorkingDir.GetForeground()
 	greyOn := ansi.Style{}.ForegroundColor(greyColor).String()
-	greyOff := ansi.Style{}.DefaultForegroundColor().String()
+	greyOff := ansi.Style{}.ForegroundColor(nil).String()
 	const sep = "  "
 	maxDesc := lineWidth - prefixW - nameWidth - len(sep) - infoWidth - 1
 	var descStr string
@@ -1358,7 +1358,7 @@ func (i *settingsWebSearchItem) Render(width int) string {
 	if i.desc != "" {
 		greyColor := t.Sidebar.WorkingDir.GetForeground()
 		greyOn := ansi.Style{}.ForegroundColor(greyColor).String()
-		greyOff := ansi.Style{}.DefaultForegroundColor().String()
+		greyOff := ansi.Style{}.ForegroundColor(nil).String()
 		const sep = "  "
 		maxDesc := lineWidth - prefixW - nameWidth - len(sep) - infoWidth - 1
 		if maxDesc > 2 {

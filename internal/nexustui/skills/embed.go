@@ -32,7 +32,7 @@ func DiscoverBuiltinWithStates() ([]*Skill, []*SkillState) {
 	var discovered []*Skill
 	var states []*SkillState
 
-	fs.WalkDir(builtinFS, "builtin", func(path string, d fs.DirEntry, err error) error {
+	_ = fs.WalkDir(builtinFS, "builtin", func(path string, d fs.DirEntry, err error) error {
 		if err != nil {
 			return nil
 		}

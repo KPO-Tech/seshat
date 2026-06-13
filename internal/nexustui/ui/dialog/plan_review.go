@@ -408,10 +408,10 @@ func (p *PlanReview) renderViewportContent(width int) string {
 	p.ensureSelectionInBounds()
 
 	accent := lipgloss.NewStyle().Foreground(p.com.Styles.Logo.FieldColor).Bold(true)
-	commentStyle := p.com.Styles.Status.SuccessMessage.Copy().UnsetBackground().Padding(0)
-	numberStyle := p.com.Styles.Dialog.SecondaryText.Copy().Padding(0)
-	selectedStyle := p.com.Styles.Dialog.PrimaryText.Copy().Bold(true).Padding(0)
-	normalStyle := p.com.Styles.Dialog.PrimaryText.Copy().Padding(0)
+	commentStyle := p.com.Styles.Status.SuccessMessage.UnsetBackground().Padding(0)
+	numberStyle := p.com.Styles.Dialog.SecondaryText.Padding(0)
+	selectedStyle := p.com.Styles.Dialog.PrimaryText.Bold(true).Padding(0)
+	normalStyle := p.com.Styles.Dialog.PrimaryText.Padding(0)
 
 	digits := len(fmt.Sprintf("%d", len(lines)))
 	var rendered []string
@@ -528,7 +528,7 @@ func (p *PlanReview) Draw(scr uv.Screen, area uv.Rectangle) *tea.Cursor {
 	if len(p.submissions) > 1 {
 		versionInfo = fmt.Sprintf("v%d (%d/%d)", p.currentSubmission().Version, p.activeVersion+1, len(p.submissions))
 	}
-	titleInfo := t.Dialog.SecondaryText.Copy().Padding(0).Render(versionInfo)
+	titleInfo := t.Dialog.SecondaryText.Padding(0).Render(versionInfo)
 
 	title := common.DialogTitle(t, "Plan Review", max(0, innerWidth-lipgloss.Width(titleInfo)), t.Dialog.TitleGradFromColor, t.Dialog.TitleGradToColor)
 	titleLine := t.Dialog.Title.Render(title) + titleInfo

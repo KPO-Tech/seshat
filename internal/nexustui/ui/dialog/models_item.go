@@ -56,7 +56,7 @@ func (m *ModelGroup) Render(width int) string {
 	title := m.Title
 	if m.configured {
 		greenOn := ansi.Style{}.ForegroundColor(m.t.ToolCallSuccess.GetForeground()).String()
-		greenOff := ansi.Style{}.DefaultForegroundColor().String()
+		greenOff := ansi.Style{}.ForegroundColor(nil).String()
 		title = greenOn + title + greenOff
 	}
 	title = " " + title + " "
@@ -157,7 +157,7 @@ func (m *ModelItem) Render(width int) string {
 		ctxText := fmtContextWindow(m.model.ContextWindow)
 		greyColor := t.Sidebar.WorkingDir.GetForeground()
 		greyOn := ansi.Style{}.ForegroundColor(greyColor).String()
-		greyOff := ansi.Style{}.DefaultForegroundColor().String()
+		greyOff := ansi.Style{}.ForegroundColor(nil).String()
 		ctxStr = " " + greyOn + ctxText + greyOff
 		ctxWidth = 1 + ansi.StringWidth(ctxText)
 	}

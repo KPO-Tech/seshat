@@ -1454,7 +1454,7 @@ func (w *NexusWorkspace) syncSessionTodos(sessionID string) {
 	}
 	todos := make([]session.Todo, 0, len(tasks))
 	for _, task := range tasks {
-		status := session.TodoStatusPending
+		var status session.TodoStatus
 		switch task.Status {
 		case tasktool.TaskStatusCompleted:
 			status = session.TodoStatusCompleted

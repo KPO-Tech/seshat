@@ -61,6 +61,8 @@ import (
 	"github.com/charmbracelet/ultraviolet/screen"
 	"github.com/charmbracelet/x/editor"
 	xstrings "github.com/charmbracelet/x/exp/strings"
+	"golang.org/x/text/cases"
+	"golang.org/x/text/language"
 )
 
 // MouseScrollThreshold defines how many lines to scroll the chat when a mouse
@@ -1631,7 +1633,7 @@ func (m *UI) handleDialogMsg(msg tea.Msg) tea.Cmd {
 			if err := m.com.Workspace.UpdatePreferredModel(config.ScopeGlobal, agentCfg.Model, currentModel); err != nil {
 				return util.ReportError(err)()
 			}
-			m.com.Workspace.UpdateAgentModel(context.TODO())
+			_ = m.com.Workspace.UpdateAgentModel(context.TODO())
 			status := "disabled"
 			if currentModel.Think {
 				status = "enabled"
@@ -1696,7 +1698,7 @@ func (m *UI) handleDialogMsg(msg tea.Msg) tea.Cmd {
 			if err := m.com.Workspace.SetConfigField(config.ScopeGlobal, "web_search_provider", msg.ProviderID); err != nil {
 				return util.ReportError(err)()
 			}
-			return util.NewInfoMsg("Web search provider changed to " + strings.Title(msg.ProviderID))
+			return util.NewInfoMsg("Web search provider changed to " + cases.Title(language.English).String(msg.ProviderID))
 		})
 	case dialog.ActionCopyLastMessage:
 		m.dialog.CloseDialog(dialog.CommandsID)
@@ -1742,7 +1744,7 @@ func (m *UI) handleDialogMsg(msg tea.Msg) tea.Cmd {
 		}
 
 		cmds = append(cmds, func() tea.Msg {
-			m.com.Workspace.UpdateAgentModel(context.TODO())
+			_ = m.com.Workspace.UpdateAgentModel(context.TODO())
 			return util.NewInfoMsg("Reasoning effort set to " + msg.Effort)
 		})
 		m.dialog.CloseDialog(dialog.ReasoningID)
@@ -4211,7 +4213,7 @@ func (m *UI) runMCPPrompt(clientID, promptID string, arguments map[string]string
 
 func (m *UI) handleStateChanged() tea.Cmd {
 	return func() tea.Msg {
-		m.com.Workspace.UpdateAgentModel(context.Background())
+		_ = m.com.Workspace.UpdateAgentModel(context.Background())
 		return mcpStateChangedMsg{
 			states: m.com.Workspace.MCPGetStates(),
 		}
