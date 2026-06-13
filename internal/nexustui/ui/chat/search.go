@@ -2,16 +2,22 @@ package chat
 
 import (
 	"encoding/json"
+	"fmt"
+	"strings"
 
+	"charm.land/lipgloss/v2"
 	"github.com/EngineerProjects/nexus-engine/internal/nexustui/agent/tools"
 	"github.com/EngineerProjects/nexus-engine/internal/nexustui/fsext"
 	"github.com/EngineerProjects/nexus-engine/internal/nexustui/message"
 	"github.com/EngineerProjects/nexus-engine/internal/nexustui/ui/styles"
+	"github.com/charmbracelet/x/ansi"
 )
 
 // -----------------------------------------------------------------------------
 // Glob Tool
 // -----------------------------------------------------------------------------
+
+const globMaxVisible = 8
 
 // GlobToolMessageItem is a message item that represents a glob tool call.
 type GlobToolMessageItem struct {
@@ -45,12 +51,31 @@ func (g *GlobToolRenderContext) RenderTool(sty *styles.Styles, width int, opts *
 		return invalidInputContent(sty, opts, "Glob", cappedWidth)
 	}
 
-	toolParams := []string{params.Pattern}
-	if params.Path != "" {
-		toolParams = append(toolParams, "path", params.Path)
+	var count int
+	var filenames []string
+	var truncated bool
+	if opts.HasResult() && opts.Result.Content != "" {
+		count, filenames, truncated = parseGlobContent(opts.Result.Content)
 	}
 
-	header := toolHeader(sty, opts.Status, "Glob", cappedWidth, opts.Compact, toolParams...)
+	headerParams := []string{params.Pattern}
+	if opts.HasResult() {
+		if count > 0 {
+			s := "files"
+			if count == 1 {
+				s = "file"
+			}
+			countStr := fmt.Sprintf("%d %s", count, s)
+			if truncated {
+				countStr += "+"
+			}
+			headerParams = append(headerParams, countStr)
+		} else {
+			headerParams = append(headerParams, "no results")
+		}
+	}
+
+	header := toolHeader(sty, opts.Status, "Glob", cappedWidth, opts.Compact, headerParams...)
 	if opts.Compact {
 		return header
 	}
@@ -59,18 +84,69 @@ func (g *GlobToolRenderContext) RenderTool(sty *styles.Styles, width int, opts *
 		return joinToolParts(header, earlyState)
 	}
 
-	if !opts.HasResult() || opts.Result.Content == "" {
+	if len(filenames) == 0 {
 		return header
 	}
 
 	bodyWidth := cappedWidth - toolBodyLeftPaddingTotal
-	body := sty.Tool.Body.Render(toolOutputPlainContent(sty, opts.Result.Content, bodyWidth, opts.ExpandedContent))
-	return joinToolParts(header, body)
+	body := renderFileList(sty, filenames, bodyWidth, opts.ExpandedContent)
+	return joinToolParts(header, sty.Tool.Body.Render(body))
+}
+
+// parseGlobContent splits the glob Content into count + filenames.
+// Expected format (set by formatGlobResult):
+//
+//	"Found N files in Xms[\n(results limited to 100 files)]\nfile1\nfile2\n..."
+//	or "No files found"
+func parseGlobContent(content string) (count int, filenames []string, truncated bool) {
+	lines := strings.Split(strings.TrimSpace(content), "\n")
+	if len(lines) == 0 {
+		return 0, nil, false
+	}
+	first := lines[0]
+	if strings.Contains(first, "results limited") {
+		truncated = true
+	}
+	if idx := strings.Index(first, "Found "); idx >= 0 {
+		var n int
+		if _, err := fmt.Sscanf(first[idx+6:], "%d", &n); err == nil {
+			count = n
+		}
+	}
+	for _, l := range lines[1:] {
+		if l = strings.TrimSpace(l); l != "" {
+			filenames = append(filenames, l)
+		}
+	}
+	return count, filenames, truncated
+}
+
+func renderFileList(sty *styles.Styles, filenames []string, width int, expanded bool) string {
+	maxVisible := globMaxVisible
+	if expanded {
+		maxVisible = len(filenames)
+	}
+	shown := min(maxVisible, len(filenames))
+
+	var out []string
+	for i := 0; i < shown; i++ {
+		name := filenames[i]
+		rendered := sty.Tool.ResultItemName.Render(ansi.Truncate(name, width, "…"))
+		out = append(out, rendered)
+	}
+
+	if remaining := len(filenames) - shown; remaining > 0 {
+		out = append(out, sty.Tool.ResultTruncation.Render(fmt.Sprintf("… +%d more", remaining)))
+	}
+
+	return strings.Join(out, "\n")
 }
 
 // -----------------------------------------------------------------------------
 // Grep Tool
 // -----------------------------------------------------------------------------
+
+const grepMaxVisible = 6
 
 // GrepToolMessageItem is a message item that represents a grep tool call.
 type GrepToolMessageItem struct {
@@ -104,18 +180,25 @@ func (g *GrepToolRenderContext) RenderTool(sty *styles.Styles, width int, opts *
 		return invalidInputContent(sty, opts, "Grep", cappedWidth)
 	}
 
-	toolParams := []string{params.Pattern}
-	if params.Path != "" {
-		toolParams = append(toolParams, "path", params.Path)
-	}
+	headerParams := []string{params.Pattern}
 	if params.Include != "" {
-		toolParams = append(toolParams, "include", params.Include)
-	}
-	if params.LiteralText {
-		toolParams = append(toolParams, "literal", "true")
+		headerParams = append(headerParams, params.Include)
 	}
 
-	header := toolHeader(sty, opts.Status, "Grep", cappedWidth, opts.Compact, toolParams...)
+	var fileCount, matchCount int
+	if opts.HasResult() && opts.Result.Content != "" {
+		fileCount, matchCount = parseGrepContent(opts.Result.Content)
+		if fileCount > 0 {
+			headerParams = append(headerParams, fmt.Sprintf("%d files", fileCount))
+		}
+		if matchCount > 0 {
+			headerParams = append(headerParams, fmt.Sprintf("%d matches", matchCount))
+		} else if fileCount == 0 {
+			headerParams = append(headerParams, "no results")
+		}
+	}
+
+	header := toolHeader(sty, opts.Status, "Grep", cappedWidth, opts.Compact, headerParams...)
 	if opts.Compact {
 		return header
 	}
@@ -124,18 +207,79 @@ func (g *GrepToolRenderContext) RenderTool(sty *styles.Styles, width int, opts *
 		return joinToolParts(header, earlyState)
 	}
 
-	if opts.HasEmptyResult() {
+	if opts.HasEmptyResult() || matchCount == 0 {
 		return header
 	}
 
 	bodyWidth := cappedWidth - toolBodyLeftPaddingTotal
-	body := sty.Tool.Body.Render(toolOutputPlainContent(sty, opts.Result.Content, bodyWidth, opts.ExpandedContent))
-	return joinToolParts(header, body)
+	body := renderGrepMatches(sty, opts.Result.Content, bodyWidth, opts.ExpandedContent)
+	return joinToolParts(header, sty.Tool.Body.Render(body))
+}
+
+// parseGrepContent counts unique files and total match lines from ripgrep output.
+// Lines follow "file:line:content" or "file:content" format.
+func parseGrepContent(content string) (fileCount, matchCount int) {
+	seen := map[string]struct{}{}
+	for _, line := range strings.Split(strings.TrimSpace(content), "\n") {
+		if line == "" {
+			continue
+		}
+		matchCount++
+		if idx := strings.IndexByte(line, ':'); idx > 0 {
+			seen[line[:idx]] = struct{}{}
+		}
+	}
+	return len(seen), matchCount
+}
+
+func renderGrepMatches(sty *styles.Styles, content string, width int, expanded bool) string {
+	lines := strings.Split(strings.TrimSpace(content), "\n")
+	maxVisible := grepMaxVisible
+	if expanded {
+		maxVisible = len(lines)
+	}
+	shown := min(maxVisible, len(lines))
+
+	var out []string
+	for i := 0; i < shown; i++ {
+		line := lines[i]
+		// "file:rest" — colorize file prefix separately from match content
+		if idx := strings.IndexByte(line, ':'); idx > 0 {
+			filePart := sty.Tool.ResultItemName.Render(line[:idx])
+			rest := sty.Tool.ResultItemDesc.Render(ansi.Truncate(line[idx:], width-lipgloss.Width(filePart), "…"))
+			out = append(out, filePart+rest)
+		} else {
+			out = append(out, sty.Tool.ResultItemName.Render(ansi.Truncate(line, width, "…")))
+		}
+	}
+
+	if remaining := len(lines) - shown; remaining > 0 {
+		out = append(out, sty.Tool.ResultTruncation.Render(fmt.Sprintf("… +%d more matches", remaining)))
+	}
+
+	return strings.Join(out, "\n")
 }
 
 // -----------------------------------------------------------------------------
-// LS Tool
+// List Directory Tool
 // -----------------------------------------------------------------------------
+
+const lsMaxVisible = 10
+
+// lsDirEntry mirrors the JSON shape returned by the list_directory tool.
+type lsDirEntry struct {
+	Name        string `json:"name"`
+	IsDirectory bool   `json:"is_directory"`
+	SizeBytes   int64  `json:"size_bytes"`
+}
+
+// lsDirResult is the top-level JSON returned by list_directory.
+type lsDirResult struct {
+	Path      string       `json:"path"`
+	Entries   []lsDirEntry `json:"entries"`
+	Count     int          `json:"count"`
+	Truncated bool         `json:"truncated"`
+}
 
 // LSToolMessageItem is a message item that represents an ls tool call.
 type LSToolMessageItem struct {
@@ -175,7 +319,22 @@ func (l *LSToolRenderContext) RenderTool(sty *styles.Styles, width int, opts *To
 	}
 	path = fsext.PrettyPath(path)
 
-	header := toolHeader(sty, opts.Status, "List Directory", cappedWidth, opts.Compact, path)
+	headerParams := []string{path}
+
+	var dir lsDirResult
+	hasParsed := false
+	if opts.HasResult() && opts.Result.Content != "" {
+		if err := json.Unmarshal([]byte(opts.Result.Content), &dir); err == nil {
+			hasParsed = true
+			countStr := fmt.Sprintf("%d items", dir.Count)
+			if dir.Truncated {
+				countStr += "+"
+			}
+			headerParams = append(headerParams, countStr)
+		}
+	}
+
+	header := toolHeader(sty, opts.Status, "List Directory", cappedWidth, opts.Compact, headerParams...)
 	if opts.Compact {
 		return header
 	}
@@ -189,8 +348,83 @@ func (l *LSToolRenderContext) RenderTool(sty *styles.Styles, width int, opts *To
 	}
 
 	bodyWidth := cappedWidth - toolBodyLeftPaddingTotal
-	body := sty.Tool.Body.Render(toolOutputPlainContent(sty, opts.Result.Content, bodyWidth, opts.ExpandedContent))
-	return joinToolParts(header, body)
+
+	if !hasParsed {
+		// Fallback: render raw content if JSON parse failed
+		body := sty.Tool.Body.Render(toolOutputPlainContent(sty, opts.Result.Content, bodyWidth, opts.ExpandedContent))
+		return joinToolParts(header, body)
+	}
+
+	if len(dir.Entries) == 0 {
+		empty := sty.Tool.ResultEmpty.Render("empty directory")
+		return joinToolParts(header, sty.Tool.Body.Render(empty))
+	}
+
+	body := renderDirEntries(sty, dir.Entries, dir.Count, bodyWidth, opts.ExpandedContent)
+	return joinToolParts(header, sty.Tool.Body.Render(body))
+}
+
+func renderDirEntries(sty *styles.Styles, entries []lsDirEntry, total int, width int, expanded bool) string {
+	maxVisible := lsMaxVisible
+	if expanded {
+		maxVisible = len(entries)
+	}
+	shown := min(maxVisible, len(entries))
+
+	// Measure max display-name length across visible entries for size alignment.
+	const sizeColWidth = 8 // enough for "999.9 MB"
+	nameColWidth := width - sizeColWidth - 1
+	if nameColWidth < 12 {
+		nameColWidth = width
+	}
+
+	// First pass: collect display names and sizes.
+	type row struct {
+		name    string
+		size    string
+		nameLen int
+	}
+	rows := make([]row, shown)
+	maxNameLen := 0
+	for i := 0; i < shown; i++ {
+		e := entries[i]
+		name := e.Name
+		if e.IsDirectory {
+			name += "/"
+		}
+		size := ""
+		if !e.IsDirectory {
+			size = formatSize(int(e.SizeBytes))
+		}
+		nl := len([]rune(name))
+		if nl > maxNameLen {
+			maxNameLen = nl
+		}
+		rows[i] = row{name, size, nl}
+	}
+	if maxNameLen > nameColWidth {
+		maxNameLen = nameColWidth
+	}
+
+	// Second pass: render aligned rows.
+	var out []string
+	for _, r := range rows {
+		truncName := ansi.Truncate(r.name, nameColWidth, "…")
+		nameStr := sty.Tool.ResultItemName.Render(truncName)
+		if r.size == "" {
+			out = append(out, nameStr)
+		} else {
+			pad := strings.Repeat(" ", max(0, maxNameLen-r.nameLen+2))
+			sizeStr := sty.Tool.ResultItemDesc.Render(pad + r.size)
+			out = append(out, nameStr+sizeStr)
+		}
+	}
+
+	if remaining := total - shown; remaining > 0 {
+		out = append(out, sty.Tool.ResultTruncation.Render(fmt.Sprintf("… +%d more", remaining)))
+	}
+
+	return strings.Join(out, "\n")
 }
 
 // -----------------------------------------------------------------------------

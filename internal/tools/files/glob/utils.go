@@ -127,28 +127,23 @@ func validatePathForSecurity(path string) error {
 	return nil
 }
 
-// formatGlobResult formats the result message in a user-friendly way
+// formatGlobResult formats the result as a summary line followed by matched paths.
+// The summary line is machine-parseable: "Found N file(s) in Xms [truncated]".
+// Callers (TUI, LLM) can split on "\n" to separate the summary from the path list.
 func formatGlobResult(filenames []string, numFiles int, durationMs int64, truncated bool) string {
-	var parts []string
-
-	// Main result message
 	if numFiles == 0 {
-		parts = append(parts, "No files found")
-	} else {
-		parts = append(parts, fmt.Sprintf("Found %d file%s", numFiles, plural(numFiles)))
+		return "No files found"
 	}
 
-	// Duration info
-	if durationMs > 0 {
-		parts = append(parts, fmt.Sprintf("in %dms", durationMs))
-	}
-
-	// Truncation warning
+	summary := fmt.Sprintf("Found %d file%s in %dms", numFiles, plural(numFiles), durationMs)
 	if truncated {
-		parts = append(parts, fmt.Sprintf("(results limited to %d files)", MaxResults))
+		summary += fmt.Sprintf(" (results limited to %d files)", MaxResults)
 	}
 
-	return strings.Join(parts, " ")
+	lines := make([]string, 0, 1+len(filenames))
+	lines = append(lines, summary)
+	lines = append(lines, filenames...)
+	return strings.Join(lines, "\n")
 }
 
 // plural returns the plural suffix for a count
