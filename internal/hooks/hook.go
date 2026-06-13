@@ -24,6 +24,27 @@ import (
 // HaltExitCode is the exit code that halts the entire turn (crush convention).
 const HaltExitCode = 49
 
+// HookMetadata is embedded in tool response metadata so the UI can
+// display a hook indicator.
+type HookMetadata struct {
+	HookCount    int        `json:"hook_count"`
+	Decision     string     `json:"decision"`
+	Halt         bool       `json:"halt,omitempty"`
+	Reason       string     `json:"reason,omitempty"`
+	InputRewrite bool       `json:"input_rewrite,omitempty"`
+	Hooks        []HookInfo `json:"hooks,omitempty"`
+}
+
+// HookInfo identifies a single hook that ran and its individual result.
+type HookInfo struct {
+	Name         string `json:"name"`
+	Matcher      string `json:"matcher,omitempty"`
+	Decision     string `json:"decision"`
+	Halt         bool   `json:"halt,omitempty"`
+	Reason       string `json:"reason,omitempty"`
+	InputRewrite bool   `json:"input_rewrite,omitempty"`
+}
+
 // Decision is the outcome of a hook.
 type Decision int
 
@@ -78,6 +99,7 @@ type AggregateResult struct {
 	UpdatedInput string
 	Context      string
 	HookCount    int
+	Hooks        []HookInfo
 }
 
 // compiled pairs a HookConfig with its compiled matcher.
@@ -140,7 +162,7 @@ func (r *Runner) Run(ctx context.Context, sessionID, toolName, toolInputJSON str
 	}
 	wg.Wait()
 
-	agg := aggregate(results, toolInputJSON)
+	agg := aggregate(unique, results, toolInputJSON)
 	agg.HookCount = len(unique)
 	slog.Info("hooks: pre_tool_use", "tool", toolName, "hooks", len(unique), "decision", agg.Decision.String(), "halt", agg.Halt)
 	return agg, nil
@@ -242,9 +264,20 @@ func parseStdout(out string) HookResult {
 	return result
 }
 
-func aggregate(results []HookResult, inputJSON string) AggregateResult {
+func aggregate(configs []HookConfig, results []HookResult, inputJSON string) AggregateResult {
 	agg := AggregateResult{Decision: DecisionNone}
-	for _, r := range results {
+	for i, r := range results {
+		cfg := configs[i]
+		info := HookInfo{
+			Name:         cfg.Command,
+			Matcher:      cfg.Matcher,
+			Decision:     r.Decision.String(),
+			Halt:         r.Halt,
+			Reason:       r.Reason,
+			InputRewrite: r.UpdatedInput != "",
+		}
+		agg.Hooks = append(agg.Hooks, info)
+
 		if r.Halt {
 			agg.Halt = true
 			agg.Decision = DecisionDeny

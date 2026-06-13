@@ -40,7 +40,8 @@ func Open(ctx context.Context, cfg Config) (*DB, error) {
 	}
 
 	gormCfg := &gorm.Config{
-		Logger: logger.Default.LogMode(logger.Silent),
+		Logger:      logger.Default.LogMode(logger.Silent),
+		PrepareStmt: true,
 	}
 
 	gdb, err := gorm.Open(dialector, gormCfg)
@@ -180,7 +181,24 @@ func buildDialector(cfg Config) (gorm.Dialector, string, error) {
 		if err := ensureSQLitePath(cfg.DSN); err != nil {
 			return nil, "", err
 		}
-		return glebarez.Open(cfg.DSN), cfg.DSN, nil
+		dsn := cfg.DSN
+		if dsn != ":memory:" {
+			if !strings.HasPrefix(dsn, "file:") {
+				abs, err := filepath.Abs(dsn)
+				if err == nil {
+					dsn = abs
+				}
+				dsn = "file:" + dsn
+			}
+			if !strings.Contains(dsn, "_txlock=") {
+				if strings.Contains(dsn, "?") {
+					dsn += "&_txlock=immediate"
+				} else {
+					dsn += "?_txlock=immediate"
+				}
+			}
+		}
+		return glebarez.Open(dsn), dsn, nil
 
 	case DriverPostgres:
 		return postgres.Open(cfg.DSN), cfg.DSN, nil

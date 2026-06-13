@@ -2,6 +2,7 @@ package execution
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 
 	tool "github.com/EngineerProjects/nexus-engine/internal/tools/contract"
@@ -106,7 +107,7 @@ func (o *Orchestrator) partitionPreparedToolUses(preparedToolUses []preparedTool
 	return batches
 }
 
-func (o *Orchestrator) failPreparedToolUse(prepared preparedToolUse, progress []types.ToolProgress, extraMessages []types.Message) toolExecutionOutcome {
+func (o *Orchestrator) failPreparedToolUse(prepared preparedToolUse, progress []types.ToolProgress, extraMessages []types.Message, req ExecuteRequest) toolExecutionOutcome {
 	failure := prepared.failure
 	if failure == nil {
 		err := fmt.Errorf("tool preparation failed")
@@ -125,6 +126,7 @@ func (o *Orchestrator) failPreparedToolUse(prepared preparedToolUse, progress []
 		prepared.trace,
 		failure.err,
 		extraMessages,
+		req,
 	)
 }
 
@@ -176,7 +178,11 @@ func (s toolRuntimeState) withPermissionResults(localPermission, globalPermissio
 	s.trace.LocalPermission = clonePermissionResult(localPermission)
 	s.trace.GlobalPermission = clonePermissionResult(globalPermission)
 	s.trace.FinalInput = cloneToolInput(finalInput)
-	s.callInput.Raw = fmt.Sprintf("%v", finalInput)
+	if rawBytes, err := json.Marshal(finalInput); err == nil {
+		s.callInput.Raw = string(rawBytes)
+	} else {
+		s.callInput.Raw = "{}"
+	}
 	s.callInput.Parsed = cloneToolInput(finalInput)
 	return s
 }

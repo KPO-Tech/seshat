@@ -18,6 +18,10 @@ func BuildArtifactKey(request ArtifactPutRequest) string {
 	filename := normalizeArtifactFilename(request.Filename, request.ContentType, defaultArtifactBaseName(namespace))
 	datePrefix := fmt.Sprintf("%04d/%02d/%02d", now.Year(), now.Month(), now.Day())
 
+	if prefix, ok := sessionScopedArtifactPrefix(request, namespace, datePrefix); ok {
+		return path.Join(prefix, fmt.Sprintf("%d-%s", now.UnixNano(), filename))
+	}
+
 	prefixParts := []string{namespace}
 	if request.SessionID != "" {
 		prefixParts = append(prefixParts, sanitizePathSegment(request.SessionID))
@@ -30,6 +34,33 @@ func BuildArtifactKey(request ArtifactPutRequest) string {
 	return path.Join(path.Join(prefixParts...), fmt.Sprintf("%d-%s", now.UnixNano(), filename))
 }
 
+func sessionScopedArtifactPrefix(request ArtifactPutRequest, namespace string, datePrefix string) (string, bool) {
+	if request.SessionID == "" {
+		return "", false
+	}
+	sessionID := sanitizePathSegment(request.SessionID)
+	switch namespace {
+	case string(NamespaceBrowserScreenshots):
+		parts := []string{"sessions", sessionID, "artifacts", "screenshots"}
+		if request.PageID != "" {
+			parts = append(parts, sanitizePathSegment(request.PageID))
+		}
+		parts = append(parts, datePrefix)
+		return path.Join(parts...), true
+	case string(NamespaceBrowserDownloads):
+		parts := []string{"sessions", sessionID, "tools"}
+		if request.PageID != "" {
+			parts = append(parts, sanitizePathSegment(request.PageID))
+		}
+		parts = append(parts, datePrefix)
+		return path.Join(parts...), true
+	case string(NamespaceWebArtifacts):
+		return path.Join("sessions", sessionID, "artifacts", "web", datePrefix), true
+	default:
+		return "", false
+	}
+}
+
 func PDFKey(title string, now time.Time) string {
 	return BuildArtifactKey(ArtifactPutRequest{
 		Namespace:   NamespaceDocuments,
@@ -40,7 +71,7 @@ func PDFKey(title string, now time.Time) string {
 }
 
 // ScreenshotKey builds a session-scoped storage key for a browser screenshot.
-// Layout: sessions/{sessionID}/screenshots/{pageID}/{date}/{timestamp}-screenshot.png
+// Layout: sessions/{sessionID}/artifacts/screenshots/{pageID}/{date}/{timestamp}-screenshot.png
 func ScreenshotKey(sessionID, pageID string, now time.Time) string {
 	now = now.UTC()
 	if now.IsZero() {

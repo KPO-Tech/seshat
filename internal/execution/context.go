@@ -65,7 +65,7 @@ func (o *Orchestrator) applyContextModifier(current tool.ToolUseContext, result 
 
 func (o *Orchestrator) buildToolResultMessages(toolUse types.ToolUseContent, result tool.CallResult, turnID types.TurnID) []types.Message {
 	messages := make([]types.Message, 0, 1+len(result.NewMessages))
-	metadata := toolResultMetadata(toolUse, result)
+	metadata := toolResultMetadata(toolUse, result, nil)
 	toolResultMessage := types.UserMessage(
 		fmt.Sprintf("msg-%s-result", toolUse.ID),
 		"",

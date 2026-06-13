@@ -3,6 +3,7 @@ package plan
 import (
 	"context"
 	"fmt"
+	"time"
 
 	"github.com/EngineerProjects/nexus-engine/internal/modes"
 	"github.com/EngineerProjects/nexus-engine/internal/modes/execution"
@@ -130,6 +131,15 @@ func (t *ExitPlanModeTool) Call(
 
 	// Apply runtime-only plan exit side effects for this session.
 	execution.ExitPlanMode(sessionID)
+
+	if emitter, ok := ctx.Value(types.RuntimeEventEmitterKey).(func(types.RuntimeEvent)); ok && emitter != nil {
+		emitter(types.RuntimeEvent{
+			Type:          types.RuntimeEventTypeExecutionModeChanged,
+			SessionID:     sessionID,
+			Timestamp:     time.Now().UTC(),
+			ExecutionMode: string(modes.ExecutionModeExecute),
+		})
+	}
 
 	// Restore the approval mode that was active before entering plan mode.
 	restoreMode := toolCtx.PrePlanMode

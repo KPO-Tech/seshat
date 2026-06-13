@@ -27,6 +27,7 @@ const (
 	credKeyExa        = "EXA_API_KEY"
 	credKeyJina       = "JINA_API_KEY"
 	credKeyLangSearch = "LANGSEARCH_API_KEY"
+	credKeySearXNG    = "SEARXNG_BASE_URL"
 )
 
 func runConfig(args []string, stdin io.Reader, stdout, stderr io.Writer) error {

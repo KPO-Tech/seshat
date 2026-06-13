@@ -21,6 +21,8 @@ type ToolHookResult struct {
 
 	UpdatedInput map[string]any
 
+	Metadata map[string]any
+
 	ExtraMessages []types.Message
 }
 

@@ -1,0 +1,73 @@
+{
+  "_comment": "Extra TUI display models beyond the SDK's 3-per-provider hardcoded base. Add model IDs here to extend what appears in the models dialog without touching the SDK. Ollama is empty — models come from live /api/tags detection at runtime.",
+
+  "anthropic": [
+    {"id": "claude-opus-4-8",            "name": "Claude Opus 4.8",    "context_window": 200000, "default_max_tokens": 32000,  "can_reason": false, "supports_images": true},
+    {"id": "claude-sonnet-4-6",          "name": "Claude Sonnet 4.6",  "context_window": 200000, "default_max_tokens": 64000,  "can_reason": false, "supports_images": true},
+    {"id": "claude-haiku-4-5-20251001",  "name": "Claude Haiku 4.5",   "context_window": 200000, "default_max_tokens": 8192,   "can_reason": false, "supports_images": true},
+    {"id": "claude-3-opus-20240229",     "name": "Claude 3 Opus",      "context_window": 200000, "default_max_tokens": 4096,   "can_reason": false, "supports_images": true}
+  ],
+
+  "openai": [
+    {"id": "gpt-4o-mini",  "name": "GPT-4o Mini",  "context_window": 128000, "default_max_tokens": 16384, "can_reason": false, "supports_images": true},
+    {"id": "o1",           "name": "O1",            "context_window": 200000, "default_max_tokens": 100000, "can_reason": true},
+    {"id": "o3",           "name": "O3",            "context_window": 200000, "default_max_tokens": 100000, "can_reason": true},
+    {"id": "o3-mini",      "name": "O3 Mini",       "context_window": 200000, "default_max_tokens": 65536,  "can_reason": true},
+    {"id": "o4-mini",      "name": "O4 Mini",       "context_window": 200000, "default_max_tokens": 65536,  "can_reason": true}
+  ],
+
+  "gemini": [
+    {"id": "gemini-2.5-pro",       "name": "Gemini 2.5 Pro",       "context_window": 2000000, "default_max_tokens": 65536, "can_reason": true,  "supports_images": true},
+    {"id": "gemini-2.5-flash",     "name": "Gemini 2.5 Flash",     "context_window": 1000000, "default_max_tokens": 65536, "can_reason": true,  "supports_images": true},
+    {"id": "gemini-2.0-flash-lite","name": "Gemini 2.0 Flash Lite","context_window": 1000000, "default_max_tokens": 8192,  "can_reason": false, "supports_images": true}
+  ],
+
+  "mistral": [
+    {"id": "codestral-latest",  "name": "Codestral",     "context_window": 256000, "default_max_tokens": 32768},
+    {"id": "devstral-latest",   "name": "Devstral",      "context_window": 128000, "default_max_tokens": 32768},
+    {"id": "mistral-medium",    "name": "Mistral Medium", "context_window": 131072, "default_max_tokens": 16384}
+  ],
+
+  "deepseek": [
+    {"id": "deepseek-v3",      "name": "DeepSeek V3",     "context_window": 64000, "default_max_tokens": 8192}
+  ],
+
+  "openrouter": [
+    {"id": "anthropic/claude-sonnet-4-20250514",  "name": "Claude Sonnet 4 (OR)",    "context_window": 200000,  "default_max_tokens": 64000,  "supports_images": true},
+    {"id": "anthropic/claude-3.5-sonnet",         "name": "Claude 3.5 Sonnet (OR)",  "context_window": 200000,  "default_max_tokens": 8192,   "supports_images": true},
+    {"id": "anthropic/claude-3.5-haiku",          "name": "Claude 3.5 Haiku (OR)",   "context_window": 200000,  "default_max_tokens": 8192,   "supports_images": true},
+    {"id": "openai/gpt-4o",                       "name": "GPT-4o (OR)",             "context_window": 128000,  "default_max_tokens": 16384,  "supports_images": true},
+    {"id": "openai/gpt-4o-mini",                  "name": "GPT-4o Mini (OR)",        "context_window": 128000,  "default_max_tokens": 16384,  "supports_images": true},
+    {"id": "openai/o3",                           "name": "O3 (OR)",                 "context_window": 200000,  "default_max_tokens": 100000, "can_reason": true},
+    {"id": "google/gemini-2.5-pro",               "name": "Gemini 2.5 Pro (OR)",     "context_window": 1000000, "default_max_tokens": 65536,  "supports_images": true},
+    {"id": "google/gemini-2.5-flash",             "name": "Gemini 2.5 Flash (OR)",   "context_window": 1000000, "default_max_tokens": 65536,  "supports_images": true},
+    {"id": "deepseek/deepseek-r1",                "name": "DeepSeek R1 (OR)",        "context_window": 64000,   "default_max_tokens": 32000,  "can_reason": true},
+    {"id": "moonshotai/kimi-k2-0905",             "name": "Kimi K2 (OR)",            "context_window": 131072,  "default_max_tokens": 32768,  "can_reason": true},
+    {"id": "meta-llama/llama-3.3-70b-instruct",   "name": "Llama 3.3 70B (OR)",     "context_window": 131072,  "default_max_tokens": 8192}
+  ],
+
+  "kimi": [
+    {"id": "kimi-k2",       "name": "Kimi K2",       "context_window": 131072, "default_max_tokens": 32768, "can_reason": true},
+    {"id": "kimi-k1.5",     "name": "Kimi K1.5",     "context_window": 131072, "default_max_tokens": 16384, "can_reason": true}
+  ],
+
+  "z-ai": [
+    {"id": "glm-z1",   "name": "GLM Z1",   "context_window": 200000, "default_max_tokens": 16384, "can_reason": true},
+    {"id": "glm-z1-air","name": "GLM Z1 Air","context_window": 200000, "default_max_tokens": 8192,  "can_reason": true}
+  ],
+
+  "minimax": [],
+  "codex":   [],
+  "opencode":[],
+  "bedrock": [
+    {"id": "anthropic.claude-sonnet-4-20250514",   "name": "Claude Sonnet 4 (Bedrock)",   "context_window": 200000, "default_max_tokens": 64000, "supports_images": true},
+    {"id": "anthropic.claude-3-7-sonnet-20250219", "name": "Claude 3.7 Sonnet (Bedrock)", "context_window": 200000, "default_max_tokens": 16384, "supports_images": true}
+  ],
+  "vertex": [
+    {"id": "claude-sonnet-4@20250514",   "name": "Claude Sonnet 4 (Vertex)",   "context_window": 200000, "default_max_tokens": 64000, "supports_images": true},
+    {"id": "claude-3-7-sonnet@20250219", "name": "Claude 3.7 Sonnet (Vertex)", "context_window": 200000, "default_max_tokens": 16384, "supports_images": true}
+  ],
+  "foundry": [],
+  "workers-ai": [],
+  "ollama": []
+}

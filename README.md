@@ -56,7 +56,7 @@
   </tr>
 </table>
 
-> **Keyboard shortcuts:** `ctrl+p` settings · `ctrl+m` model · `ctrl+s` sessions · `ctrl+,` provider config · `ctrl+shift+c` copy selection · `ctrl+c` cancel/quit
+> **Keyboard shortcuts:** `ctrl+p` settings · `ctrl+m` models · `ctrl+s` sessions · `ctrl+,` providers · `ctrl+n` new session · `ctrl+t` tasks · `ctrl+u` copy last response · `ctrl+y` toggle yolo · `ctrl+o` open editor · `ctrl+g` help · `ctrl+c` quit
 
 > **Clipboard note (Linux):** selection copy works best when `wl-clipboard` (Wayland) or `xclip`/`xsel` (X11) is installed. Without a system clipboard backend, Nexus can request terminal clipboard access but cannot guarantee a real system copy.
 
@@ -100,11 +100,13 @@ nexus config --print
 **Run**
 
 ```bash
-nexus chat                                   # interactive TUI session
+nexus chat                                        # interactive TUI session
+nexus chat --resume <session-id>                  # resume a specific session
+nexus chat --continue                             # resume the most recent session
 nexus run "list all TODO comments in this codebase"  # one-shot task
-nexus sessions list                          # browse past sessions
-nexus sessions list --status active          # active sessions only
-nexus help                                   # full command reference
+nexus sessions list                               # browse past sessions
+nexus sessions list --status active               # active sessions only
+nexus help                                        # full command reference
 ```
 
 Sessions are persisted locally in SQLite. Skills are loaded from `.nexus/skills/` in your project. The full tool set is available — file edits, sandboxed bash, web search, browser, MCP servers, sub-agents.
@@ -219,7 +221,9 @@ nexus config --provider anthropic --api-key sk-ant-...
 nexus config --model anthropic:claude-sonnet-4-20250514
 
 # 3. Start chatting
-nexus chat
+nexus chat                          # new session
+nexus chat --continue               # resume last session
+nexus chat --resume <session-id>    # resume a specific session
 
 # One-shot task in the current directory
 nexus run "list all TODO comments in this codebase"

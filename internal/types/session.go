@@ -36,6 +36,10 @@ type SessionMetadata struct {
 	// ID is the unique session identifier
 	ID SessionID `json:"id"`
 
+	// Title is the human-readable session name (e.g. "untitled_session_1").
+	// Generated once at creation; never reassigned automatically.
+	Title string `json:"title,omitempty"`
+
 	// Status is the current status
 	Status SessionStatus `json:"status"`
 

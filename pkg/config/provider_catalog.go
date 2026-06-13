@@ -55,6 +55,7 @@ var providerOrder = []sdk.APIProvider{
 	sdk.APIProviderMistral,
 	sdk.APIProviderMiniMax,
 	sdk.APIProviderWorkersAI,
+	sdk.APIProviderKimi,
 	sdk.APIProviderOllama,
 	sdk.APIProviderBedrock,
 	sdk.APIProviderVertex,
@@ -133,6 +134,8 @@ func ProviderCredentialEnvVars(provider sdk.APIProvider) []string {
 		return []string{"MINIMAX_API_KEY"}
 	case sdk.APIProviderWorkersAI:
 		return []string{"CLOUDFLARE_API_KEY"}
+	case sdk.APIProviderKimi:
+		return []string{"MOONSHOT_API_KEY", "KIMI_API_KEY"}
 	case sdk.APIProviderFoundry:
 		return []string{"ANTHROPIC_FOUNDRY_API_KEY"}
 	case sdk.APIProviderOllama, sdk.APIProviderBedrock, sdk.APIProviderVertex:

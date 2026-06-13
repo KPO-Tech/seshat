@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"sort"
+	"sync"
 	"time"
 
 	"github.com/EngineerProjects/nexus-engine/internal/monitoring"
@@ -38,6 +39,8 @@ type Orchestrator struct {
 	safetyChecker     types.SafetyChecker
 	denialLimitConfig types.DenialLimitConfig
 	monitoring        *monitoring.System
+
+	progressMu sync.Mutex
 }
 
 // NewOrchestrator creates a new tool execution orchestrator.
@@ -71,6 +74,14 @@ func (o *Orchestrator) SetDenialLimitConfig(config types.DenialLimitConfig) {
 // AddHook registers a pre- or post-tool-use hook.
 func (o *Orchestrator) AddHook(hook ToolHook) {
 	o.hooks.Add(hook)
+}
+
+func (o *Orchestrator) emitProgress(req ExecuteRequest, progress types.ToolProgress) {
+	if req.ProgressCallback != nil {
+		o.progressMu.Lock()
+		defer o.progressMu.Unlock()
+		req.ProgressCallback(progress)
+	}
 }
 
 // ---------------------------------------------------------------------------
@@ -118,11 +129,6 @@ func (o *Orchestrator) Execute(ctx context.Context, req ExecuteRequest) (Execute
 			messagesByIndex[outcome.Index] = append(messagesByIndex[outcome.Index], outcome.Messages...)
 			tracesByIndex[outcome.Index] = cloneTrace(outcome.Trace)
 			allProgress = append(allProgress, outcome.Progress...)
-			if req.ProgressCallback != nil {
-				for _, progress := range outcome.Progress {
-					req.ProgressCallback(progress)
-				}
-			}
 
 			// Record tool execution results in monitoring
 			if o.monitoring != nil {

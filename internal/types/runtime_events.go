@@ -20,6 +20,8 @@ const (
 	RuntimeEventTypePromptRequired         RuntimeEventType = "prompt.request"
 	RuntimeEventTypePlanSubmitted          RuntimeEventType = "plan.submitted"
 	RuntimeEventTypePlanStatusChanged      RuntimeEventType = "plan.status_changed"
+	RuntimeEventTypeExecutionModeChanged   RuntimeEventType = "execution_mode.changed"
+	RuntimeEventTypeTaskChanged            RuntimeEventType = "task.changed"
 
 	// Goal events — mirrors Codex ThreadGoalUpdatedNotification / ThreadGoalUpdatedEvent.
 	RuntimeEventTypeGoalUpdated RuntimeEventType = "goal.updated"
@@ -57,6 +59,7 @@ type RuntimeEvent struct {
 	PermissionRequest *ToolPermissionRequest `json:"permission_request,omitempty"`
 	PromptRequest     *PromptRequest         `json:"prompt_request,omitempty"`
 	PlanEvent         *PlanRuntimeEvent      `json:"plan_event,omitempty"`
+	TaskEvent         *TaskRuntimeEvent      `json:"task_event,omitempty"`
 
 	// AgentToolUseID is set when this event originates from a sub-agent.
 	// It identifies the parent agent tool_use block that spawned the sub-agent.
@@ -122,6 +125,14 @@ type PlanRuntimeEvent struct {
 	Filename string `json:"filename"`
 	Status   string `json:"status"`
 	Version  int    `json:"version"`
+	Content  string `json:"content,omitempty"`
+}
+
+type TaskRuntimeEvent struct {
+	TaskID  string `json:"task_id"`
+	Action  string `json:"action"`
+	Status  string `json:"status,omitempty"`
+	Subject string `json:"subject,omitempty"`
 }
 
 // BrowserRuntimeEvent is the structured payload emitted for browser lifecycle and interaction activity.

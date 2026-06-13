@@ -9,12 +9,14 @@ import (
 type PreExecutionResult struct {
 	Stop          *ToolHookStop
 	UpdatedInput  map[string]any
+	Metadata      map[string]any
 	ExtraMessages []types.Message
 }
 
 func ExecutePre(ctx context.Context, hooks []ToolHook, input ToolHookInput) PreExecutionResult {
 	currentInput := cloneToolInput(input.Input)
 	extraMessages := make([]types.Message, 0)
+	combinedMetadata := make(map[string]any)
 
 	for _, hook := range hooks {
 		if ctx.Err() != nil {
@@ -26,10 +28,16 @@ func ExecutePre(ctx context.Context, hooks []ToolHook, input ToolHookInput) PreE
 			Input:     cloneToolInput(currentInput),
 			ToolCtx:   input.ToolCtx,
 		})
+
+		for k, v := range result.Metadata {
+			combinedMetadata[k] = v
+		}
+
 		if result.Stop != nil {
 			return PreExecutionResult{
 				Stop:          result.Stop,
 				UpdatedInput:  currentInput,
+				Metadata:      combinedMetadata,
 				ExtraMessages: extraMessages,
 			}
 		}
@@ -41,6 +49,7 @@ func ExecutePre(ctx context.Context, hooks []ToolHook, input ToolHookInput) PreE
 
 	return PreExecutionResult{
 		UpdatedInput:  currentInput,
+		Metadata:      combinedMetadata,
 		ExtraMessages: extraMessages,
 	}
 }

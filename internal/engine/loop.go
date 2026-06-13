@@ -2,6 +2,7 @@ package engine
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
 	"sort"
@@ -1175,6 +1176,9 @@ func (l *Loop) executeTools(ctx context.Context, toolUses []types.ToolUseContent
 
 func (l *Loop) isRecoverableError(err error) bool {
 	if err == nil {
+		return false
+	}
+	if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
 		return false
 	}
 	if engineErr, ok := err.(*types.EngineError); ok {

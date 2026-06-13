@@ -178,12 +178,12 @@ Both tools are always registered but disabled when no provider is configured.
 
 | Tool | Description |
 |---|---|
-| `TaskCreate` | Create a background task with metadata. |
-| `TaskList` | List tasks with filtering. |
-| `TaskGet` | Fetch task details. |
-| `TaskUpdate` | Update task status and fields. |
-| `TaskStop` | Stop a running background task. |
-| `TaskOutput` | Get the output of a task. |
+| `TaskCreate` | Create a session-scoped tracked task for execution progress. |
+| `TaskList` | List tracked session tasks and, when requested, background runtime tasks. |
+| `TaskGet` | Fetch details for a tracked session task, with background-task fallback. |
+| `TaskUpdate` | Update tracked task status, details, and dependencies. |
+| `TaskStop` | Stop tracking a session task, with background-task fallback for runtime jobs. |
+| `TaskOutput` | Get the output of a background runtime task. |
 
 ### Agent tool (`internal/tools/agent/`)
 

@@ -88,8 +88,13 @@ func (t *TaskUpdateTool) Call(ctx context.Context, input tool.CallInput, permiss
 		}, nil
 	}
 
+	sessionID, err := resolveTaskSessionID(input)
+	if err != nil {
+		return tool.CallResult{Error: err}, nil
+	}
+
 	// Check if task exists
-	existingTask, err := GlobalTaskStore().GetTask(taskID)
+	existingTask, err := GlobalTaskStore().GetTask(ctx, sessionID, taskID)
 	if err != nil {
 		output := map[string]any{
 			"success":       false,
@@ -129,7 +134,7 @@ func (t *TaskUpdateTool) Call(ctx context.Context, input tool.CallInput, permiss
 	if status, ok := parsed["status"].(string); ok && status != existingTask.Status {
 		// Handle deletion
 		if status == TaskStatusDeleted {
-			err := GlobalTaskStore().DeleteTask(taskID)
+			err := GlobalTaskStore().DeleteTask(ctx, sessionID, taskID)
 			if err != nil {
 				output := map[string]any{
 					"success":       false,
@@ -141,6 +146,7 @@ func (t *TaskUpdateTool) Call(ctx context.Context, input tool.CallInput, permiss
 					Data: output,
 				}, nil
 			}
+			emitTaskRuntimeEvent(ctx, sessionID, "delete", &Task{ID: taskID, SessionID: sessionID, Subject: existingTask.Subject, Status: TaskStatusDeleted})
 			output := map[string]any{
 				"success":       true,
 				"taskId":        taskID,
@@ -176,7 +182,7 @@ func (t *TaskUpdateTool) Call(ctx context.Context, input tool.CallInput, permiss
 	if addBlocks, ok := parsed["addBlocks"].([]any); ok && len(addBlocks) > 0 {
 		for _, blockID := range addBlocks {
 			if blockIDStr, ok := blockID.(string); ok {
-				GlobalTaskStore().BlockTask(taskID, blockIDStr) //nolint:errcheck
+				GlobalTaskStore().BlockTask(ctx, sessionID, taskID, blockIDStr) //nolint:errcheck
 			}
 		}
 		updatedFields = append(updatedFields, "blocks")
@@ -186,7 +192,7 @@ func (t *TaskUpdateTool) Call(ctx context.Context, input tool.CallInput, permiss
 	if addBlockedBy, ok := parsed["addBlockedBy"].([]any); ok && len(addBlockedBy) > 0 {
 		for _, blockerID := range addBlockedBy {
 			if blockerIDStr, ok := blockerID.(string); ok {
-				GlobalTaskStore().BlockTask(blockerIDStr, taskID) //nolint:errcheck
+				GlobalTaskStore().BlockTask(ctx, sessionID, blockerIDStr, taskID) //nolint:errcheck
 			}
 		}
 		updatedFields = append(updatedFields, "blockedBy")
@@ -194,12 +200,17 @@ func (t *TaskUpdateTool) Call(ctx context.Context, input tool.CallInput, permiss
 
 	// Apply updates if any
 	if len(updates) > 0 {
-		_, err := GlobalTaskStore().UpdateTask(taskID, updates)
+		_, err := GlobalTaskStore().UpdateTask(ctx, sessionID, taskID, updates)
 		if err != nil {
 			return tool.CallResult{
 				Error: fmt.Errorf("failed to update task: %w", err),
 			}, nil
 		}
+	}
+
+	updatedTask, err := GlobalTaskStore().GetTask(ctx, sessionID, taskID)
+	if err == nil {
+		emitTaskRuntimeEvent(ctx, sessionID, "update", updatedTask)
 	}
 
 	// Build response

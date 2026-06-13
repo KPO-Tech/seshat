@@ -46,6 +46,18 @@ func (c *Client) registerShellPreToolHooks(cfgs []PreToolHookConfig, workDir str
 				return runtimehooks.ToolHookResult{} // non-blocking error
 			}
 
+			// Capture hook metadata for the TUI.
+			metadata := map[string]any{
+				"hook": shellhooks.HookMetadata{
+					HookCount:    agg.HookCount,
+					Decision:     agg.Decision.String(),
+					Halt:         agg.Halt,
+					Reason:       agg.Reason,
+					InputRewrite: agg.UpdatedInput != "",
+					Hooks:        agg.Hooks,
+				},
+			}
+
 			if agg.Halt || agg.Decision == shellhooks.DecisionDeny {
 				reason := agg.Reason
 				if reason == "" {
@@ -56,11 +68,14 @@ func (c *Client) registerShellPreToolHooks(cfgs []PreToolHookConfig, workDir str
 					}
 				}
 				return runtimehooks.ToolHookResult{
-					Stop: &runtimehooks.ToolHookStop{Content: reason, IsError: true},
+					Stop:     &runtimehooks.ToolHookStop{Content: reason, IsError: true},
+					Metadata: metadata,
 				}
 			}
 
-			result := runtimehooks.ToolHookResult{}
+			result := runtimehooks.ToolHookResult{
+				Metadata: metadata,
+			}
 
 			// Rewrite tool input if the hook returned updatedInput.
 			if agg.UpdatedInput != "" {

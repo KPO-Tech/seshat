@@ -1,0 +1,1796 @@
+// Package workspace implements the Workspace interface backed by pkg/sdk.
+//
+// NexusWorkspace is the active implementation (Option A — SDK-only path).
+// All LLM traffic flows through pkg/sdk.Client; the Fantasy-based agent
+// package (internal/nexustui/agent/) is NOT used here.
+package workspace
+
+import (
+	"context"
+	"encoding/base64"
+	"encoding/json"
+	"fmt"
+	"strings"
+	"sync"
+	"sync/atomic"
+	"time"
+
+	"log/slog"
+	"mime"
+	"net/http"
+	"os"
+	"path/filepath"
+	"regexp"
+	"slices"
+
+	tea "charm.land/bubbletea/v2"
+	"charm.land/catwalk/pkg/catwalk"
+	tuiTools "github.com/EngineerProjects/nexus-engine/internal/nexustui/agent/tools"
+	mcptools "github.com/EngineerProjects/nexus-engine/internal/nexustui/agent/tools/mcp"
+	"github.com/EngineerProjects/nexus-engine/internal/nexustui/config"
+	"github.com/EngineerProjects/nexus-engine/internal/nexustui/csync"
+	"github.com/EngineerProjects/nexus-engine/internal/nexustui/history"
+	"github.com/EngineerProjects/nexus-engine/internal/nexustui/lsp"
+	"github.com/EngineerProjects/nexus-engine/internal/nexustui/message"
+	"github.com/EngineerProjects/nexus-engine/internal/nexustui/oauth"
+	"github.com/EngineerProjects/nexus-engine/internal/nexustui/permission"
+	"github.com/EngineerProjects/nexus-engine/internal/nexustui/planreview"
+	"github.com/EngineerProjects/nexus-engine/internal/nexustui/pubsub"
+	"github.com/EngineerProjects/nexus-engine/internal/nexustui/session"
+	"github.com/EngineerProjects/nexus-engine/internal/nexustui/skills"
+	internalproviders "github.com/EngineerProjects/nexus-engine/internal/providers"
+	tasktool "github.com/EngineerProjects/nexus-engine/internal/tools/task"
+	"github.com/EngineerProjects/nexus-engine/internal/types"
+	"github.com/EngineerProjects/nexus-engine/pkg/runtimepath"
+	"github.com/EngineerProjects/nexus-engine/pkg/sdk"
+	"github.com/google/uuid"
+)
+
+// Verify compile-time that NexusWorkspace implements Workspace.
+var _ Workspace = (*NexusWorkspace)(nil)
+
+// NexusWorkspace adapts the nexus-engine SDK to the Workspace interface.
+// It keeps an in-memory message store and publishes pubsub events that the
+// nexustui UI consumes to render the conversation.
+type NexusWorkspace struct {
+	// SDK layer
+	client  *sdk.Client
+	workDir string
+	model   string // "provider:model" string
+
+	// Active session
+	sessMu  sync.Mutex
+	session *sdk.Session
+
+	modeMu        sync.RWMutex
+	liveExecModes map[string]string
+
+	// In-memory stores (sessionID → records)
+	msgMu    sync.RWMutex
+	msgStore map[string][]message.Message // complete message list per session
+
+	sessBroker *pubsub.Broker[session.Session]
+	msgBroker  *pubsub.Broker[message.Message]
+	permBroker *pubsub.Broker[permission.PermissionRequest]
+	planBroker *pubsub.Broker[planreview.Submission]
+	sessStore  map[string]session.Session
+	sessionsMu sync.RWMutex
+
+	// tea.Program for Subscribe
+	programMu sync.Mutex
+	program   *tea.Program
+
+	// streaming state (single active assistant message)
+	streamMu           sync.Mutex
+	streamMsg          *message.Message // the in-progress assistant message for the current model response
+	streamSess         string           // session ID of the streaming message
+	streamResponseDone bool             // set after message_stop; the next model chunk starts a new assistant message
+	streamToolUseID    string           // tool_use block currently being streamed by the LLM
+	streamToolUseName  string
+	streamToolInputBuf string // accumulated input_json_delta for the current block
+
+	// debounce for streaming updates (33 ms)
+	debounce *msgDebounce
+
+	// busy flag
+	busy atomic.Bool
+
+	// cancel for the active submit goroutine
+	submitMu     sync.Mutex
+	submitCancel context.CancelFunc
+
+	// Config (lazily built, mutex-guarded)
+	cfgMu sync.Mutex
+	cfg   *config.Config
+
+	// Permission: allow-all skip flag
+	permSkip atomic.Bool
+
+	// pendingPerms maps PermissionRequest.ID → resolution channel.
+	// PromptFn blocks on the channel; Grant/Deny send the response.
+	pendingPerms sync.Map // map[string]chan sdk.PromptResponse
+
+	// Provider registry — populated by DetectProviders() at startup.
+	providerKeys     sync.Map // providerID → apiKey string (empty string = no key needed)
+	providerBaseURLs sync.Map // providerID → editable/test base URL override
+	ollamaMu         sync.RWMutex
+	ollamaModels     []catwalk.Model
+
+	// Options stored for client rebuilds on model/provider switch.
+	sqlitePath string
+	permMode   sdk.PermissionMode
+	monitoring *sdk.MonitoringSystem
+}
+
+// ─── Constructor ──────────────────────────────────────────────────────────────
+
+// NewNexusWorkspace creates a workspace backed by the given SDK client.
+// modelStr is the "provider:model" string shown in the UI header.
+func NewNexusWorkspace(client *sdk.Client, workDir, modelStr string) *NexusWorkspace {
+	w := &NexusWorkspace{
+		client:        client,
+		workDir:       workDir,
+		model:         modelStr,
+		msgStore:      make(map[string][]message.Message),
+		sessStore:     make(map[string]session.Session),
+		liveExecModes: make(map[string]string),
+		sessBroker:    pubsub.NewBroker[session.Session](),
+		msgBroker:     pubsub.NewBroker[message.Message](),
+		permBroker:    pubsub.NewBroker[permission.PermissionRequest](),
+		planBroker:    pubsub.NewBroker[planreview.Submission](),
+	}
+	w.debounce = newMsgDebounce(33*time.Millisecond, func(msg message.Message, sessID string) {
+		w.publishMsg(pubsub.UpdatedEvent, sessID, msg)
+	})
+	return w
+}
+
+// ─── Subscribe / event fan-out ────────────────────────────────────────────────
+
+func (w *NexusWorkspace) Subscribe(p *tea.Program) {
+	w.programMu.Lock()
+	w.program = p
+	w.programMu.Unlock()
+
+	ctx := context.Background()
+
+	// Fan out session events.
+	go func() {
+		ch := w.sessBroker.Subscribe(ctx)
+		for ev := range ch {
+			p.Send(ev)
+		}
+	}()
+
+	// Fan out message events.
+	go func() {
+		ch := w.msgBroker.Subscribe(ctx)
+		for ev := range ch {
+			p.Send(ev)
+		}
+	}()
+
+	// Fan out permission events.
+	go func() {
+		ch := w.permBroker.Subscribe(ctx)
+		for ev := range ch {
+			p.Send(ev)
+		}
+	}()
+
+	// Fan out plan review events.
+	go func() {
+		ch := w.planBroker.Subscribe(ctx)
+		for ev := range ch {
+			p.Send(ev)
+		}
+	}()
+}
+
+func (w *NexusWorkspace) Shutdown() {
+	w.sessBroker.Shutdown()
+	w.msgBroker.Shutdown()
+	w.permBroker.Shutdown()
+	w.planBroker.Shutdown()
+	if w.client != nil {
+		_ = w.client.Close()
+	}
+}
+
+func (w *NexusWorkspace) ExecutionMode() string {
+	w.sessMu.Lock()
+	defer w.sessMu.Unlock()
+	if w.session == nil {
+		return string(sdk.ExecutionModeExecute)
+	}
+	if mode := w.liveExecutionMode(string(w.session.GetID())); mode != "" {
+		return mode
+	}
+	return string(w.session.GetExecutionMode())
+}
+
+// ─── Sessions ─────────────────────────────────────────────────────────────────
+
+func (w *NexusWorkspace) CreateSession(ctx context.Context, title string) (session.Session, error) {
+	sess, err := w.client.CreateSession(ctx)
+	if err != nil {
+		return session.Session{}, fmt.Errorf("create session: %w", err)
+	}
+	id := string(sess.GetID())
+	now := time.Now().UnixMilli()
+	s := session.Session{
+		ID:        id,
+		Title:     title,
+		CreatedAt: now,
+		UpdatedAt: now,
+	}
+	w.sessionsMu.Lock()
+	w.sessStore[id] = s
+	w.sessionsMu.Unlock()
+
+	w.sessMu.Lock()
+	w.session = sess
+	w.sessMu.Unlock()
+
+	w.sessBroker.Publish(pubsub.CreatedEvent, s)
+	return s, nil
+}
+
+func (w *NexusWorkspace) GetSession(_ context.Context, sessionID string) (session.Session, error) {
+	w.sessionsMu.RLock()
+	s, ok := w.sessStore[sessionID]
+	w.sessionsMu.RUnlock()
+	if ok {
+		return s, nil
+	}
+	return session.Session{}, fmt.Errorf("session %q not found", sessionID)
+}
+
+func (w *NexusWorkspace) ListSessions(_ context.Context) ([]session.Session, error) {
+	infos, err := w.client.ListSessions()
+	if err != nil {
+		return nil, err
+	}
+	result := make([]session.Session, 0, len(infos))
+	for _, info := range infos {
+		if info == nil {
+			continue
+		}
+		now := time.Now().UnixMilli()
+		updAt := info.UpdatedAt * 1000
+		if updAt == 0 {
+			updAt = now
+		}
+		creAt := info.CreatedAt * 1000
+		if creAt == 0 {
+			creAt = now
+		}
+		s := session.Session{
+			ID:        string(info.ID),
+			Title:     info.Title,
+			CreatedAt: creAt,
+			UpdatedAt: updAt,
+		}
+		w.sessionsMu.Lock()
+		w.sessStore[s.ID] = s
+		w.sessionsMu.Unlock()
+		result = append(result, s)
+	}
+	return result, nil
+}
+
+func (w *NexusWorkspace) SaveSession(_ context.Context, sess session.Session) (session.Session, error) {
+	w.sessionsMu.Lock()
+	w.sessStore[sess.ID] = sess
+	w.sessionsMu.Unlock()
+	w.sessBroker.Publish(pubsub.UpdatedEvent, sess)
+	return sess, nil
+}
+
+func (w *NexusWorkspace) DeleteSession(_ context.Context, sessionID string) error {
+	w.sessMu.Lock()
+	active := w.session != nil && string(w.session.GetID()) == sessionID
+	var sdkSess *sdk.Session
+	if active {
+		sdkSess = w.session
+		w.session = nil
+	}
+	w.sessMu.Unlock()
+
+	if sdkSess != nil {
+		_ = sdkSess.Interrupt()
+		_ = sdkSess.Close()
+	}
+	if err := w.client.DeleteSession(sdk.SessionID(sessionID)); err != nil {
+		return err
+	}
+
+	w.sessionsMu.Lock()
+	s := w.sessStore[sessionID]
+	delete(w.sessStore, sessionID)
+	w.sessionsMu.Unlock()
+
+	w.msgMu.Lock()
+	delete(w.msgStore, sessionID)
+	w.msgMu.Unlock()
+
+	w.sessBroker.Publish(pubsub.DeletedEvent, s)
+	return nil
+}
+
+func (w *NexusWorkspace) SetCurrentSession(ctx context.Context, sessionID string) error {
+	if sessionID == "" {
+		return nil
+	}
+	// Fast path: session is already active.
+	w.sessMu.Lock()
+	if w.session != nil && string(w.session.GetID()) == sessionID {
+		w.sessMu.Unlock()
+		return nil
+	}
+	w.sessMu.Unlock()
+
+	sess, err := w.client.LoadSession(ctx, sdk.SessionID(sessionID))
+	if err != nil {
+		return fmt.Errorf("activate session %q: %w", sessionID, err)
+	}
+	w.LoadSessionMessages(sessionID, sess.GetMessages())
+	w.syncSessionTodos(sessionID)
+	w.sessMu.Lock()
+	w.session = sess
+	w.sessMu.Unlock()
+	return nil
+}
+
+// Agent tool session IDs use a simple "msgID:toolID" encoding.
+func (w *NexusWorkspace) CreateAgentToolSessionID(messageID, toolCallID string) string {
+	return messageID + ":" + toolCallID
+}
+
+func (w *NexusWorkspace) ParseAgentToolSessionID(sessionID string) (string, string, bool) {
+	parts := strings.SplitN(sessionID, ":", 2)
+	if len(parts) != 2 {
+		return "", "", false
+	}
+	return parts[0], parts[1], true
+}
+
+// ─── Messages ─────────────────────────────────────────────────────────────────
+
+func (w *NexusWorkspace) ListMessages(_ context.Context, sessionID string) ([]message.Message, error) {
+	w.msgMu.RLock()
+	msgs := make([]message.Message, len(w.msgStore[sessionID]))
+	copy(msgs, w.msgStore[sessionID])
+	w.msgMu.RUnlock()
+	return msgs, nil
+}
+
+func (w *NexusWorkspace) ListUserMessages(_ context.Context, sessionID string) ([]message.Message, error) {
+	w.msgMu.RLock()
+	all := w.msgStore[sessionID]
+	var result []message.Message
+	for _, m := range all {
+		if m.Role == message.User {
+			result = append(result, m)
+		}
+	}
+	w.msgMu.RUnlock()
+	return result, nil
+}
+
+func (w *NexusWorkspace) ListAllUserMessages(_ context.Context) ([]message.Message, error) {
+	w.msgMu.RLock()
+	var result []message.Message
+	for _, msgs := range w.msgStore {
+		for _, m := range msgs {
+			if m.Role == message.User {
+				result = append(result, m)
+			}
+		}
+	}
+	w.msgMu.RUnlock()
+	return result, nil
+}
+
+// ─── Agent ────────────────────────────────────────────────────────────────────
+
+func (w *NexusWorkspace) AgentRun(ctx context.Context, sessionID, prompt string, attachments ...message.Attachment) error {
+	w.sessMu.Lock()
+	sess := w.session
+	w.sessMu.Unlock()
+
+	if sess == nil || string(sess.GetID()) != sessionID {
+		return fmt.Errorf("session %q not active", sessionID)
+	}
+	if w.busy.Load() {
+		return fmt.Errorf("agent busy")
+	}
+	w.busy.Store(true)
+
+	persistedAttachments, err := persistEphemeralSessionAttachments(sessionID, attachments)
+	if err != nil {
+		w.busy.Store(false)
+		return fmt.Errorf("persist attachments: %w", err)
+	}
+
+	submittedPrompt := message.PromptWithTextAttachments(prompt, persistedAttachments)
+	images := imageContentsFromAttachments(persistedAttachments)
+
+	// Record the user message.
+	now := time.Now().UnixMilli()
+	userMsg := newUserMessage(sessionID, prompt, persistedAttachments, now)
+	w.appendMsg(sessionID, userMsg)
+	w.msgBroker.Publish(pubsub.CreatedEvent, userMsg)
+
+	// Create the assistant message placeholder for the first model response.
+	asstMsg := w.newStreamingAssistantMessage(sessionID)
+
+	w.streamMu.Lock()
+	w.streamMsg = &asstMsg
+	w.streamSess = sessionID
+	w.streamResponseDone = false
+	w.streamMu.Unlock()
+
+	submitCtx, cancel := context.WithCancel(ctx)
+	w.submitMu.Lock()
+	w.submitCancel = cancel
+	w.submitMu.Unlock()
+
+	go func() {
+		defer func() {
+			w.submitMu.Lock()
+			w.submitCancel = nil
+			w.submitMu.Unlock()
+			cancel()
+			w.busy.Store(false)
+			w.debounce.forceFlush()
+		}()
+
+		var (
+			resp *sdk.SessionResponse
+			err  error
+		)
+		if len(images) > 0 {
+			resp, err = sess.SubmitMessageWithContent(submitCtx, submittedPrompt, images)
+		} else {
+			resp, err = sess.SubmitMessage(submitCtx, submittedPrompt)
+		}
+
+		w.streamMu.Lock()
+		cur := w.streamMsg
+		w.streamMsg = nil
+		w.streamSess = ""
+		w.streamMu.Unlock()
+
+		if cur == nil {
+			return
+		}
+
+		finishReason := message.FinishReasonEndTurn
+		if err != nil {
+			if submitCtx.Err() != nil {
+				finishReason = message.FinishReasonCanceled
+			} else {
+				finishReason = message.FinishReasonError
+			}
+		} else if resp != nil {
+			switch resp.StopReason {
+			case "max_tokens":
+				finishReason = message.FinishReasonMaxTokens
+			case "tool_use":
+				finishReason = message.FinishReasonToolUse
+			}
+		}
+
+		cur.Parts = append(cur.Parts, message.Finish{
+			Reason: finishReason,
+			Time:   time.Now().UnixMilli(),
+		})
+		cur.UpdatedAt = time.Now().UnixMilli()
+		w.updateMsg(sessionID, *cur)
+		w.msgBroker.Publish(pubsub.UpdatedEvent, *cur)
+
+		// Update session record.
+		w.sessionsMu.Lock()
+		if s, ok := w.sessStore[sessionID]; ok {
+			s.UpdatedAt = time.Now().UnixMilli()
+			if resp != nil && resp.Usage != nil {
+				s.PromptTokens += int64(resp.Usage.InputTokens)
+				s.CompletionTokens += int64(resp.Usage.OutputTokens)
+			}
+			w.sessStore[sessionID] = s
+			w.sessBroker.Publish(pubsub.UpdatedEvent, s)
+		}
+		w.sessionsMu.Unlock()
+	}()
+	return nil
+}
+
+const textAttachmentSystemInfo = "\n<system_info>The files below have been attached by the user, consider them in your response</system_info>\n"
+
+var textAttachmentBlockRE = regexp.MustCompile(`(?s)<file(?: path='([^']*)')?>\n\n(.*?)\n</file>\n?`)
+var ephemeralPasteNameRE = regexp.MustCompile(`^paste_\d+\.[A-Za-z0-9]+$`)
+
+func persistEphemeralSessionAttachments(sessionID string, attachments []message.Attachment) ([]message.Attachment, error) {
+	persisted := make([]message.Attachment, len(attachments))
+	copy(persisted, attachments)
+	for i, attachment := range persisted {
+		if !isEphemeralPasteAttachment(attachment) {
+			continue
+		}
+		persistedPath, err := persistSessionPasteAttachment(sessionID, attachment)
+		if err != nil {
+			return nil, err
+		}
+		persisted[i].FilePath = persistedPath
+	}
+	return persisted, nil
+}
+
+func isEphemeralPasteAttachment(attachment message.Attachment) bool {
+	if attachment.FileName == "" || attachment.FilePath == "" {
+		return false
+	}
+	if attachment.FilePath != attachment.FileName {
+		return false
+	}
+	return ephemeralPasteNameRE.MatchString(filepath.Base(attachment.FileName))
+}
+
+func persistSessionPasteAttachment(sessionID string, attachment message.Attachment) (string, error) {
+	dir := sessionPasteDirForAttachment(sessionID, attachment)
+	if err := os.MkdirAll(dir, 0o700); err != nil {
+		return "", err
+	}
+	filename := filepath.Base(attachment.FileName)
+	path, err := nextAvailablePath(dir, filename)
+	if err != nil {
+		return "", err
+	}
+	if err := os.WriteFile(path, attachment.Content, 0o600); err != nil {
+		return "", err
+	}
+	return path, nil
+}
+
+func sessionPasteDirForAttachment(sessionID string, attachment message.Attachment) string {
+	switch {
+	case attachment.IsImage():
+		return runtimepath.SessionPastesImagesDir("", sessionID)
+	case attachment.IsText() || strings.HasPrefix(strings.ToLower(strings.TrimSpace(attachment.MimeType)), "application/json"):
+		return runtimepath.SessionPastesTextDir("", sessionID)
+	default:
+		return runtimepath.SessionPastesOtherDir("", sessionID)
+	}
+}
+
+func nextAvailablePath(dir, filename string) (string, error) {
+	clean := filepath.Base(filename)
+	if clean == "." || clean == string(filepath.Separator) || clean == "" {
+		clean = "paste.bin"
+	}
+	candidate := filepath.Join(dir, clean)
+	if _, err := os.Stat(candidate); os.IsNotExist(err) {
+		return candidate, nil
+	} else if err != nil {
+		return "", err
+	}
+	ext := filepath.Ext(clean)
+	base := strings.TrimSuffix(clean, ext)
+	for i := 2; ; i++ {
+		candidate = filepath.Join(dir, fmt.Sprintf("%s-%d%s", base, i, ext))
+		if _, err := os.Stat(candidate); os.IsNotExist(err) {
+			return candidate, nil
+		} else if err != nil {
+			return "", err
+		}
+	}
+}
+
+func splitPromptTextAttachments(text string) (string, []message.BinaryContent) {
+	prompt, tail, found := strings.Cut(text, textAttachmentSystemInfo)
+	if !found {
+		return text, nil
+	}
+	matches := textAttachmentBlockRE.FindAllStringSubmatch(tail, -1)
+	if len(matches) == 0 {
+		return text, nil
+	}
+	attachments := make([]message.BinaryContent, 0, len(matches))
+	for idx, match := range matches {
+		path := strings.TrimSpace(match[1])
+		data := []byte(match[2])
+		mimeType := detectAttachmentMime(path, data)
+		if path == "" {
+			path = syntheticAttachmentName(idx+1, mimeType)
+		}
+		attachments = append(attachments, message.BinaryContent{Path: path, MIMEType: mimeType, Data: data})
+	}
+	return strings.TrimSpace(prompt), attachments
+}
+
+func detectAttachmentMime(path string, data []byte) string {
+	if ext := filepath.Ext(path); ext != "" {
+		if mimeType := mime.TypeByExtension(ext); mimeType != "" {
+			return mimeType
+		}
+	}
+	if len(data) == 0 {
+		return "application/octet-stream"
+	}
+	return http.DetectContentType(data[:min(512, len(data))])
+}
+
+func syntheticAttachmentName(index int, mimeType string) string {
+	ext := ".bin"
+	if exts, err := mime.ExtensionsByType(strings.TrimSpace(mimeType)); err == nil && len(exts) > 0 {
+		ext = exts[0]
+	}
+	return fmt.Sprintf("attached_file_%d%s", index, ext)
+}
+
+func binaryFromSDKImage(block sdk.ImageContent, index int) (message.BinaryContent, bool) {
+	data, err := base64.StdEncoding.DecodeString(block.Source.Data)
+	if err != nil {
+		return message.BinaryContent{}, false
+	}
+	return message.BinaryContent{
+		Path:     fmt.Sprintf("attached_image_%d%s", index, extensionForMIME(block.Source.MediaType, ".png")),
+		MIMEType: block.Source.MediaType,
+		Data:     data,
+	}, true
+}
+
+func extensionForMIME(mimeType, fallback string) string {
+	exts, err := mime.ExtensionsByType(strings.TrimSpace(mimeType))
+	if err != nil || len(exts) == 0 {
+		return fallback
+	}
+	return exts[0]
+}
+
+func newUserMessage(sessionID, prompt string, attachments []message.Attachment, now int64) message.Message {
+	parts := []message.ContentPart{message.TextContent{Text: prompt}}
+	for _, attachment := range attachments {
+		path := attachment.FilePath
+		if path == "" {
+			path = attachment.FileName
+		}
+		parts = append(parts, message.BinaryContent{
+			Path:     path,
+			MIMEType: attachment.MimeType,
+			Data:     slices.Clone(attachment.Content),
+		})
+	}
+	return message.Message{
+		ID:        uuid.New().String(),
+		SessionID: sessionID,
+		Role:      message.User,
+		Parts:     parts,
+		CreatedAt: now,
+		UpdatedAt: now,
+	}
+}
+
+func imageContentsFromAttachments(attachments []message.Attachment) []types.ImageContent {
+	images := make([]types.ImageContent, 0)
+	for _, attachment := range attachments {
+		if !attachment.IsImage() {
+			continue
+		}
+		img := types.ImageContent{}
+		img.Source.Type = "base64"
+		img.Source.MediaType = attachment.MimeType
+		img.Source.Data = base64.StdEncoding.EncodeToString(attachment.Content)
+		images = append(images, img)
+	}
+	return images
+}
+
+func (w *NexusWorkspace) AgentCancel(sessionID string) {
+	w.submitMu.Lock()
+	cancel := w.submitCancel
+	w.submitMu.Unlock()
+	if cancel != nil {
+		cancel()
+	}
+	w.sessMu.Lock()
+	sess := w.session
+	w.sessMu.Unlock()
+	if sess != nil && string(sess.GetID()) == sessionID {
+		_ = sess.Interrupt()
+	}
+	w.busy.Store(false)
+}
+
+func (w *NexusWorkspace) AgentIsBusy() bool { return w.busy.Load() }
+func (w *NexusWorkspace) AgentIsSessionBusy(sessionID string) bool {
+	if !w.busy.Load() {
+		return false
+	}
+	w.sessMu.Lock()
+	defer w.sessMu.Unlock()
+	return w.session != nil && string(w.session.GetID()) == sessionID
+}
+
+func (w *NexusWorkspace) AgentIsReady() bool                               { return w.client != nil }
+func (w *NexusWorkspace) AgentQueuedPrompts(_ string) int                  { return 0 }
+func (w *NexusWorkspace) AgentQueuedPromptsList(_ string) []string         { return nil }
+func (w *NexusWorkspace) AgentClearQueue(_ string)                         {}
+func (w *NexusWorkspace) AgentSummarize(_ context.Context, _ string) error { return nil }
+func (w *NexusWorkspace) InitCoderAgent(_ context.Context) error           { return nil }
+
+// UpdateAgentModel rebuilds the SDK client with the current w.model string.
+// Called by the TUI after the user selects a new model.
+func (w *NexusWorkspace) UpdateAgentModel(ctx context.Context) error {
+	provider, modelID := w.splitModel()
+	apiKey := w.resolveAPIKey(provider)
+
+	provCfg := internalproviders.GetProviderConfig(types.APIProvider(provider))
+	if provCfg == nil {
+		provCfg = &internalproviders.Config{Provider: types.APIProvider(provider)}
+	}
+	provCfg.APIKey = apiKey
+	if baseURL := sdkProviderBaseURL(provider, w.resolveProviderBaseURL(provider)); baseURL != "" {
+		provCfg.BaseURL = baseURL
+	}
+
+	enableMonitoring := w.monitoring != nil
+	newClient, err := sdk.NewClient(&sdk.ClientConfig{
+		APIKey:            apiKey,
+		Model:             sdk.ModelIdentifier{Provider: sdk.APIProvider(provider), Model: modelID},
+		PermissionMode:    w.permMode,
+		AutoCompact:       true,
+		PersistSessions:   true,
+		SessionSQLitePath: w.sqlitePath,
+		PromptFn:          w.PromptFn,
+		ProgressFn:        w.OnProgress,
+		ResponseChunkFn:   w.OnChunk,
+		RuntimeEventFn:    w.OnRuntimeEvent,
+		OnSessionTitled:   w.OnSessionTitled,
+		WorkingDir:        w.workDir,
+		ProviderConfig:    provCfg,
+		EnableMonitoring:  enableMonitoring,
+		Monitoring:        w.monitoring,
+	})
+	if err != nil {
+		return fmt.Errorf("rebuild SDK client: %w", err)
+	}
+
+	if w.client != nil {
+		w.client.Close()
+	}
+	w.SetSDKClient(newClient)
+	return nil
+}
+
+func (w *NexusWorkspace) AgentModel() AgentModel {
+	provider, modelID := w.splitModel()
+	return AgentModel{
+		CatwalkCfg: catwalk.Model{
+			ID:            modelID,
+			Name:          modelID,
+			ContextWindow: 200000,
+			CanReason:     strings.Contains(strings.ToLower(modelID), "think") || strings.Contains(strings.ToLower(modelID), "o3") || strings.Contains(strings.ToLower(modelID), "o1"),
+		},
+		ModelCfg: config.SelectedModel{
+			Model:    modelID,
+			Provider: provider,
+		},
+	}
+}
+
+func (w *NexusWorkspace) GetDefaultSmallModel(_ string) config.SelectedModel {
+	provider, modelID := w.splitModel()
+	return config.SelectedModel{Model: modelID, Provider: provider}
+}
+
+func (w *NexusWorkspace) splitModel() (provider, model string) {
+	if parts := strings.SplitN(w.model, ":", 2); len(parts) == 2 {
+		return parts[0], parts[1]
+	}
+	return "anthropic", w.model
+}
+
+// ─── Permissions ──────────────────────────────────────────────────────────────
+
+func (w *NexusWorkspace) PermissionGrant(perm permission.PermissionRequest) bool {
+	w.permBroker.Publish(pubsub.UpdatedEvent, perm)
+	return w.resolvePermission(perm.ID, sdk.PromptResponse{Value: true})
+}
+
+func (w *NexusWorkspace) PermissionGrantPersistent(perm permission.PermissionRequest) bool {
+	w.permBroker.Publish(pubsub.UpdatedEvent, perm)
+	return w.resolvePermission(perm.ID, sdk.PromptResponse{Value: "always"})
+}
+
+func (w *NexusWorkspace) PermissionDeny(perm permission.PermissionRequest) bool {
+	w.permBroker.Publish(pubsub.UpdatedEvent, perm)
+	return w.resolvePermission(perm.ID, sdk.PromptResponse{Cancelled: true})
+}
+
+// resolvePermission sends a response on the pending channel for the given ID.
+// Returns false if no pending request was found (already resolved or unknown).
+func (w *NexusWorkspace) resolvePermission(id string, resp sdk.PromptResponse) bool {
+	if ch, ok := w.pendingPerms.LoadAndDelete(id); ok {
+		ch.(chan sdk.PromptResponse) <- resp
+		return true
+	}
+	return false
+}
+
+func (w *NexusWorkspace) PermissionSkipRequests() bool        { return w.permSkip.Load() }
+func (w *NexusWorkspace) PermissionSetSkipRequests(skip bool) { w.permSkip.Store(skip) }
+
+// ─── File Tracker (no-op) ─────────────────────────────────────────────────────
+
+func (w *NexusWorkspace) FileTrackerRecordRead(_ context.Context, _, _ string) {}
+func (w *NexusWorkspace) FileTrackerLastReadTime(_ context.Context, _, _ string) time.Time {
+	return time.Time{}
+}
+func (w *NexusWorkspace) FileTrackerListReadFiles(_ context.Context, _ string) ([]string, error) {
+	return nil, nil
+}
+
+// ─── History (no-op) ─────────────────────────────────────────────────────────
+
+func (w *NexusWorkspace) ListSessionHistory(_ context.Context, _ string) ([]history.File, error) {
+	return nil, nil
+}
+
+// ─── LSP (no-op) ─────────────────────────────────────────────────────────────
+
+func (w *NexusWorkspace) LSPStart(_ context.Context, _ string)   {}
+func (w *NexusWorkspace) LSPStopAll(_ context.Context)           {}
+func (w *NexusWorkspace) LSPGetStates() map[string]LSPClientInfo { return nil }
+func (w *NexusWorkspace) LSPGetDiagnosticCounts(_ string) lsp.DiagnosticCounts {
+	return lsp.DiagnosticCounts{}
+}
+
+// ─── Config ───────────────────────────────────────────────────────────────────
+
+func (w *NexusWorkspace) Config() *config.Config {
+	w.cfgMu.Lock()
+	defer w.cfgMu.Unlock()
+	if w.cfg != nil {
+		return w.cfg
+	}
+
+	provider, modelID := w.splitModel()
+	providers := csync.NewMap[string, config.ProviderConfig]()
+	providerIDs := map[string]struct{}{provider: {}}
+
+	w.providerKeys.Range(func(k, _ any) bool {
+		providerIDs[k.(string)] = struct{}{}
+		return true
+	})
+	w.providerBaseURLs.Range(func(k, _ any) bool {
+		providerIDs[k.(string)] = struct{}{}
+		return true
+	})
+
+	for pid := range providerIDs {
+		apiKey := w.resolveAPIKey(pid)
+		baseURL := w.resolveProviderBaseURL(pid)
+		var models []catwalk.Model
+		if pid == "ollama" {
+			w.ollamaMu.RLock()
+			models = append([]catwalk.Model(nil), w.ollamaModels...)
+			w.ollamaMu.RUnlock()
+		}
+		if pid == provider && len(models) == 0 {
+			models = []catwalk.Model{{ID: modelID, Name: modelID, ContextWindow: 200000}}
+		}
+		providers.Set(pid, config.ProviderConfig{
+			ID:      pid,
+			Name:    displayNameFor(pid),
+			APIKey:  apiKey,
+			BaseURL: baseURL,
+			Type:    catwalkTypeFor(pid),
+			Models:  models,
+		})
+	}
+
+	cfg := &config.Config{
+		Models: map[config.SelectedModelType]config.SelectedModel{
+			config.SelectedModelTypeLarge: {Model: modelID, Provider: provider},
+			config.SelectedModelTypeSmall: {Model: modelID, Provider: provider},
+		},
+		Providers: providers,
+		Options:   &config.Options{TUI: &config.TUIOptions{}},
+	}
+	w.cfg = cfg
+	return cfg
+}
+
+func (w *NexusWorkspace) WorkingDir() string { return w.workDir }
+
+func (w *NexusWorkspace) Resolver() config.VariableResolver {
+	return config.IdentityResolver()
+}
+
+// ─── Config mutations (stubs — UI writes, we ignore) ─────────────────────────
+
+func (w *NexusWorkspace) UpdatePreferredModel(_ config.Scope, _ config.SelectedModelType, m config.SelectedModel) error {
+	w.model = m.Provider + ":" + m.Model
+	w.cfgMu.Lock()
+	w.cfg = nil // invalidate cached config
+	w.cfgMu.Unlock()
+	return nil
+}
+
+func (w *NexusWorkspace) SetCompactMode(_ config.Scope, _ bool) error { return nil }
+func (w *NexusWorkspace) SetConfigField(_ config.Scope, key string, value any) error {
+	stringValue := strings.TrimSpace(fmt.Sprint(value))
+	switch {
+	case strings.HasPrefix(key, "providers.") && strings.HasSuffix(key, ".base_url"):
+		providerID := strings.TrimSuffix(strings.TrimPrefix(key, "providers."), ".base_url")
+		if stringValue == "" {
+			stringValue = defaultProviderBaseURL(providerID)
+		}
+		w.providerBaseURLs.Store(providerID, stringValue)
+		if providerID == "ollama" {
+			_ = os.Setenv("OLLAMA_HOST", stringValue)
+			ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+			defer cancel()
+			if models := fetchOllamaModels(ctx, stringValue); len(models) > 0 {
+				w.ollamaMu.Lock()
+				w.ollamaModels = models
+				w.ollamaMu.Unlock()
+				w.providerKeys.Store("ollama", "")
+			}
+		}
+		w.cfgMu.Lock()
+		w.cfg = nil
+		w.cfgMu.Unlock()
+		go w.persistProviderBaseURL(providerID, stringValue)
+		return nil
+	case key == "web_search_provider":
+		if stringValue == "" {
+			stringValue = "auto"
+		}
+		_ = os.Setenv("WEB_SEARCH_PROVIDER", stringValue)
+		go w.persistCredential("setting:web_search_provider", stringValue)
+		return nil
+	case strings.HasPrefix(key, "web_search.") && strings.HasSuffix(key, ".api_key"):
+		providerID := strings.TrimSuffix(strings.TrimPrefix(key, "web_search."), ".api_key")
+		if envVar := webSearchAPIKeyEnvVar(providerID); envVar != "" {
+			if stringValue == "" {
+				_ = os.Unsetenv(envVar)
+			} else {
+				_ = os.Setenv(envVar, stringValue)
+			}
+			go w.persistCredential("web_search_api_key:"+providerID, stringValue)
+		}
+		return nil
+	case strings.HasPrefix(key, "web_search.") && strings.HasSuffix(key, ".base_url"):
+		providerID := strings.TrimSuffix(strings.TrimPrefix(key, "web_search."), ".base_url")
+		if envVar := webSearchBaseURLEnvVar(providerID); envVar != "" {
+			if stringValue == "" {
+				_ = os.Unsetenv(envVar)
+			} else {
+				_ = os.Setenv(envVar, stringValue)
+			}
+			go w.persistCredential("web_search_base_url:"+providerID, stringValue)
+		}
+		return nil
+	default:
+		return nil
+	}
+}
+
+// SetProviderAPIKey persists the API key for a provider and marks it as
+// configured in the TUI's in-memory config (so isConfigured() returns true).
+func (w *NexusWorkspace) SetProviderAPIKey(_ config.Scope, providerID string, value any) error {
+	apiKey := ""
+	switch v := value.(type) {
+	case string:
+		apiKey = v
+	case *oauth.Token:
+		if v != nil {
+			apiKey = v.AccessToken
+		}
+	}
+
+	w.providerKeys.Store(providerID, apiKey)
+
+	cfg := w.Config()
+	existing, _ := cfg.Providers.Get(providerID)
+	existing.ID = providerID
+	existing.Name = displayNameFor(providerID)
+	existing.APIKey = apiKey
+	existing.Type = catwalkTypeFor(providerID)
+	if existing.BaseURL == "" {
+		existing.BaseURL = w.resolveProviderBaseURL(providerID)
+	}
+	cfg.Providers.Set(providerID, existing)
+
+	go w.persistProviderAPIKey(providerID, apiKey)
+	return nil
+}
+func (w *NexusWorkspace) RemoveConfigField(_ config.Scope, _ string) error { return nil }
+func (w *NexusWorkspace) ImportCopilot() (*oauth.Token, bool)              { return nil, false }
+func (w *NexusWorkspace) RefreshOAuthToken(_ context.Context, _ config.Scope, _ string) error {
+	return nil
+}
+
+// ─── Project lifecycle (stubs) ────────────────────────────────────────────────
+
+func (w *NexusWorkspace) ProjectNeedsInitialization() (bool, error) { return false, nil }
+func (w *NexusWorkspace) MarkProjectInitialized() error             { return nil }
+func (w *NexusWorkspace) InitializePrompt() (string, error)         { return "", nil }
+func (w *NexusWorkspace) ListTools(ctx context.Context) ([]ToolInfo, error) {
+	if w.client == nil {
+		return nil, nil
+	}
+	surface, err := w.client.BuildToolSurface(ctx)
+	if err != nil {
+		return nil, err
+	}
+	tools := make([]ToolInfo, 0, len(surface.Tools))
+	for _, def := range surface.Tools {
+		tools = append(tools, ToolInfo{
+			Name:        def.Name,
+			Description: def.Description,
+			Category:    def.Category,
+		})
+	}
+	return tools, nil
+}
+func (w *NexusWorkspace) ListSkills(_ context.Context) ([]skills.CatalogEntry, error) {
+	cfg := w.Config()
+	var skillsPaths []string
+	var disabledSkills []string
+	if cfg.Options != nil {
+		skillsPaths = cfg.Options.SkillsPaths
+		disabledSkills = cfg.Options.DisabledSkills
+	}
+	resolver := w.Resolver()
+	discCfg := skills.DiscoveryConfig{
+		SkillsPaths:    skillsPaths,
+		DisabledSkills: disabledSkills,
+		WorkingDir:     w.workDir,
+		Resolver:       resolver.ResolveValue,
+	}
+	_, active, _ := skills.DiscoverFromConfig(discCfg)
+	resolvedPaths := discCfg.ResolvePaths()
+	return skills.Catalog(active, resolvedPaths, w.workDir), nil
+}
+func (w *NexusWorkspace) ReadSkill(_ context.Context, _ string) ([]byte, skills.SkillReadResult, error) {
+	return nil, skills.SkillReadResult{}, nil
+}
+
+// ─── MCP (stubs) ──────────────────────────────────────────────────────────────
+
+func (w *NexusWorkspace) MCPGetStates() map[string]mcptools.ClientInfo    { return mcptools.GetStates() }
+func (w *NexusWorkspace) MCPRefreshPrompts(_ context.Context, _ string)   {}
+func (w *NexusWorkspace) MCPRefreshResources(_ context.Context, _ string) {}
+func (w *NexusWorkspace) RefreshMCPTools(_ context.Context, _ string)     {}
+func (w *NexusWorkspace) ReadMCPResource(_ context.Context, _, _ string) ([]MCPResourceContents, error) {
+	return nil, nil
+}
+func (w *NexusWorkspace) GetMCPPrompt(_, _ string, _ map[string]string) (string, error) {
+	return "", nil
+}
+func (w *NexusWorkspace) EnableDockerMCP(_ context.Context) error { return nil }
+func (w *NexusWorkspace) DisableDockerMCP() error                 { return nil }
+
+// ─── SDK callback receivers (called from SDK event callbacks) ─────────────────
+
+// HandleChunk processes a streaming text delta and updates the in-progress message.
+func (w *NexusWorkspace) HandleChunk(delta string, isThinking bool) {
+	w.streamMu.Lock()
+	cur := w.streamMsg
+	sessID := w.streamSess
+	w.streamMu.Unlock()
+	if cur == nil {
+		return
+	}
+
+	if isThinking {
+		cur.AppendReasoningContent(delta)
+	} else {
+		cur.AppendContent(delta)
+	}
+	cur.UpdatedAt = time.Now().UnixMilli()
+	w.updateMsg(sessID, *cur)
+	w.debounce.update(*cur, sessID)
+}
+
+// HandleToolProgress updates the in-progress tool call within the message.
+// It extracts the full tool input and result content from p.Metadata so that
+// tool renderers receive the correct parameters and output during live streaming.
+func (w *NexusWorkspace) HandleToolProgress(p sdk.ToolProgress) {
+	w.streamMu.Lock()
+	cur := w.streamMsg
+	sessID := w.streamSess
+	w.streamMu.Unlock()
+	if cur == nil {
+		return
+	}
+
+	toolUseID := p.ToolUseID
+	toolName := p.ToolName
+	status := string(p.Stage)
+
+	// Serialize tool_input from metadata into JSON for the ToolCall.Input field.
+	// This is populated by the execution layer before the tool runs, so it is
+	// available on the first pending/running event.
+	inputJSON := toolInputFromMetadata(p.Metadata)
+
+	switch status {
+	case "running", "pending":
+		found := false
+		for i, part := range cur.Parts {
+			if tc, ok := part.(message.ToolCall); ok && tc.ID == toolUseID {
+				input := tc.Input
+				if inputJSON != "" {
+					input = inputJSON
+				}
+				cur.Parts[i] = message.ToolCall{ID: toolUseID, Name: toolName, Input: input, Finished: false}
+				found = true
+				break
+			}
+		}
+		if !found {
+			cur.Parts = append(cur.Parts, message.ToolCall{ID: toolUseID, Name: toolName, Input: inputJSON, Finished: false})
+		}
+
+	case "completed", "done":
+		for i, part := range cur.Parts {
+			if tc, ok := part.(message.ToolCall); ok && tc.ID == toolUseID {
+				input := tc.Input
+				if inputJSON != "" {
+					input = inputJSON
+				}
+				cur.Parts[i] = message.ToolCall{ID: toolUseID, Name: toolName, Input: input, Finished: true}
+				break
+			}
+		}
+		// Extract actual tool output from metadata["content"]; fall back to the
+		// human-readable message only when no content was provided.
+		content := p.Message
+		if c, ok := p.Metadata["content"].(string); ok && c != "" {
+			content = c
+		}
+		cur.Parts = append(cur.Parts, message.ToolResult{
+			ToolCallID: toolUseID,
+			Name:       toolName,
+			Content:    content,
+			Metadata:   toolResultMetadataJSON(p.Metadata),
+		})
+
+	case "failed", "error":
+		for i, part := range cur.Parts {
+			if tc, ok := part.(message.ToolCall); ok && tc.ID == toolUseID {
+				input := tc.Input
+				if inputJSON != "" {
+					input = inputJSON
+				}
+				cur.Parts[i] = message.ToolCall{ID: toolUseID, Name: toolName, Input: input, Finished: true}
+				break
+			}
+		}
+		content := p.Message
+		if c, ok := p.Metadata["content"].(string); ok && c != "" {
+			content = c
+		}
+		cur.Parts = append(cur.Parts, message.ToolResult{
+			ToolCallID: toolUseID,
+			Name:       toolName,
+			Content:    content,
+			IsError:    true,
+		})
+	}
+
+	cur.UpdatedAt = time.Now().UnixMilli()
+	w.updateMsg(sessID, *cur)
+	w.debounce.update(*cur, sessID)
+}
+
+// toolInputFromMetadata extracts the tool_input from ToolProgress.Metadata and
+// returns it as a JSON string. Returns "" when no input is present.
+func toolInputFromMetadata(meta map[string]any) string {
+	if meta == nil {
+		return ""
+	}
+	toolInput, ok := meta["tool_input"]
+	if !ok || toolInput == nil {
+		return ""
+	}
+	data, err := json.Marshal(toolInput)
+	if err != nil {
+		return ""
+	}
+	return string(data)
+}
+
+// toolResultMetadataJSON builds a JSON string from ToolProgress.Metadata for use
+// as ToolResult.Metadata. It excludes internal bookkeeping keys (tool_name,
+// tool_input, content) so only tool-specific fields (exit_code, output, diff,
+// shell_id, etc.) are included — matching the format written by the SDK's
+// session storage and read by the tool renderers.
+func toolResultMetadataJSON(meta map[string]any) string {
+	if len(meta) == 0 {
+		return ""
+	}
+	skip := map[string]bool{"tool_name": true, "tool_input": true, "content": true}
+	filtered := make(map[string]any, len(meta))
+	for k, v := range meta {
+		if !skip[k] {
+			filtered[k] = v
+		}
+	}
+	if len(filtered) == 0 {
+		return ""
+	}
+	data, err := json.Marshal(filtered)
+	if err != nil {
+		return ""
+	}
+	return string(data)
+}
+
+// HandlePermissionRequest emits a permission request to the nexustui UI.
+func (w *NexusWorkspace) HandlePermissionRequest(req permission.PermissionRequest) {
+	w.permBroker.Publish(pubsub.CreatedEvent, req)
+}
+
+// LoadSessionMessages populates the message store from the SDK session history
+// (call after LoadSession completes).
+func (w *NexusWorkspace) LoadSessionMessages(sessionID string, sdkMsgs []sdk.Message) {
+	msgs := convertSDKMessages(sessionID, sdkMsgs)
+	w.msgMu.Lock()
+	w.msgStore[sessionID] = msgs
+	w.msgMu.Unlock()
+}
+
+// ─── SDK glue — called from newClient() callbacks ────────────────────────────
+
+// SetSDKClient wires the SDK client and registers unique TUI tools.
+func (w *NexusWorkspace) SetSDKClient(client *sdk.Client) {
+	w.client = client
+	w.registerTUITools(nil)
+}
+
+// RegisterLSPTools registers the LSP-backed unique TUI tools with the live LSP manager.
+// Call this once the LSP manager is available (after startup).
+func (w *NexusWorkspace) RegisterLSPTools(lspManager *lsp.Manager) {
+	w.registerTUITools(lspManager)
+}
+
+// registerTUITools registers unique nexustui tools (not covered by SDK builtins).
+// lspManager may be nil; LSP tools will report "no LSP available" until one is set.
+func (w *NexusWorkspace) registerTUITools(lspManager *lsp.Manager) {
+	if w.client == nil {
+		return
+	}
+	logFile := w.logFilePath()
+	uniqueTools := []sdk.Tool{
+		tuiTools.NewNexusLogsTool(logFile),
+		tuiTools.NewDiagnosticsTool(lspManager),
+		tuiTools.NewLSPRestartTool(lspManager),
+		tuiTools.NewReferencesTool(lspManager),
+	}
+	for _, t := range uniqueTools {
+		if err := w.client.RegisterTool(t); err != nil {
+			slog.Debug("Failed to register TUI tool", "tool", t.Definition().Name, "error", err)
+		}
+	}
+}
+
+// logFilePath returns the path to the nexus log file, derived from config.
+func (w *NexusWorkspace) logFilePath() string {
+	cfg := w.Config()
+	dataDir := ""
+	if cfg.Options != nil {
+		dataDir = cfg.Options.DataDirectory
+	}
+	if dataDir == "" {
+		if cacheDir, err := os.UserCacheDir(); err == nil {
+			dataDir = filepath.Join(cacheDir, "nexus-engine")
+		} else {
+			dataDir = os.TempDir()
+		}
+	}
+	return filepath.Join(dataDir, "logs", "nexus.log")
+}
+
+// OnChunk is the sdk.ResponseChunk callback — translates to HandleChunk.
+func (w *NexusWorkspace) OnChunk(chunk sdk.ResponseChunk) {
+	switch chunk.Type {
+	case sdk.ResponseChunkTypeContentBlockStart, sdk.ResponseChunkTypeContentBlockDelta, sdk.ResponseChunkTypeContentBlockStop:
+		w.rotateStreamingAssistantMessageIfNeeded()
+	}
+
+	switch chunk.Type {
+	case sdk.ResponseChunkTypeContentBlockStart:
+		// When a tool_use block starts, immediately create a pending ToolCall
+		// so the item appears in the chat with a spinner before execution begins.
+		if toolUse, ok := chunk.ContentBlock.(sdk.ToolUseContent); ok {
+			w.streamMu.Lock()
+			w.streamToolUseID = toolUse.ID
+			w.streamToolUseName = toolUse.Name
+			w.streamToolInputBuf = ""
+			cur := w.streamMsg
+			sessID := w.streamSess
+			w.streamMu.Unlock()
+			if cur != nil {
+				cur.Parts = append(cur.Parts, message.ToolCall{
+					ID:       toolUse.ID,
+					Name:     toolUse.Name,
+					Finished: false,
+				})
+				cur.UpdatedAt = time.Now().UnixMilli()
+				w.updateMsg(sessID, *cur)
+				w.debounce.update(*cur, sessID)
+			}
+		} else {
+			// Text or thinking block: clear tool tracking.
+			w.streamMu.Lock()
+			w.streamToolUseID = ""
+			w.streamToolInputBuf = ""
+			w.streamMu.Unlock()
+		}
+
+	case sdk.ResponseChunkTypeContentBlockDelta:
+		switch chunk.DeltaType {
+		case "text_delta", "":
+			w.HandleChunk(chunk.Delta, false)
+		case "thinking_delta":
+			w.HandleChunk(chunk.Delta, true)
+		case "input_json_delta":
+			w.handleToolInputDelta(chunk.PartialJSON)
+		}
+
+	case sdk.ResponseChunkTypeContentBlockStop:
+		// Clear block tracking on stop.
+		w.streamMu.Lock()
+		w.streamToolUseID = ""
+		w.streamToolInputBuf = ""
+		w.streamMu.Unlock()
+
+	case sdk.ResponseChunkTypeMessageStop:
+		w.debounce.forceFlush()
+		w.streamMu.Lock()
+		w.streamResponseDone = true
+		w.streamToolUseID = ""
+		w.streamToolUseName = ""
+		w.streamToolInputBuf = ""
+		w.streamMu.Unlock()
+	}
+}
+
+// handleToolInputDelta accumulates a partial JSON fragment for the current
+// tool_use block and updates the ToolCall.Input in the streaming message.
+func (w *NexusWorkspace) handleToolInputDelta(partialJSON string) {
+	w.streamMu.Lock()
+	toolUseID := w.streamToolUseID
+	toolName := w.streamToolUseName
+	w.streamToolInputBuf += partialJSON
+	input := w.streamToolInputBuf
+	cur := w.streamMsg
+	sessID := w.streamSess
+	w.streamMu.Unlock()
+
+	if cur == nil || toolUseID == "" {
+		return
+	}
+
+	for i, part := range cur.Parts {
+		if tc, ok := part.(message.ToolCall); ok && tc.ID == toolUseID {
+			cur.Parts[i] = message.ToolCall{ID: toolUseID, Name: toolName, Input: input, Finished: false}
+			cur.UpdatedAt = time.Now().UnixMilli()
+			w.updateMsg(sessID, *cur)
+			w.debounce.update(*cur, sessID)
+			return
+		}
+	}
+}
+
+// OnProgress is the sdk.ToolProgress callback.
+func (w *NexusWorkspace) OnProgress(p sdk.ToolProgress) {
+	w.HandleToolProgress(p)
+}
+
+// OnRuntimeEvent forwards structured runtime events that need dedicated TUI
+// surfaces outside the normal transcript.
+func (w *NexusWorkspace) OnRuntimeEvent(ev sdk.RuntimeEvent) {
+	switch ev.Type {
+	case sdk.RuntimeEventTypeTaskChanged:
+		sessionID := string(ev.SessionID)
+		if sessionID == "" {
+			return
+		}
+		w.syncSessionTodos(sessionID)
+		w.publishSessionRefresh(sessionID)
+	case sdk.RuntimeEventTypeExecutionModeChanged, sdk.RuntimeEventTypeTurnStarted, sdk.RuntimeEventTypeTurnCompleted:
+		sessionID := string(ev.SessionID)
+		if sessionID == "" {
+			return
+		}
+		if ev.ExecutionMode != "" {
+			w.setLiveExecutionMode(sessionID, ev.ExecutionMode)
+		}
+		w.publishSessionRefresh(sessionID)
+	case sdk.RuntimeEventTypePlanSubmitted:
+		if ev.PlanEvent == nil {
+			return
+		}
+		submission := planreview.Submission{
+			SessionID: string(ev.SessionID),
+			PlanID:    ev.PlanEvent.PlanID,
+			Slug:      ev.PlanEvent.Slug,
+			Filename:  ev.PlanEvent.Filename,
+			Status:    ev.PlanEvent.Status,
+			Version:   ev.PlanEvent.Version,
+			Content:   ev.PlanEvent.Content,
+		}
+		w.planBroker.PublishMustDeliver(context.Background(), pubsub.CreatedEvent, submission)
+	}
+}
+
+// OnSessionTitled updates the session title in our local store.
+func (w *NexusWorkspace) liveExecutionMode(sessionID string) string {
+	w.modeMu.RLock()
+	defer w.modeMu.RUnlock()
+	return w.liveExecModes[sessionID]
+}
+
+func (w *NexusWorkspace) setLiveExecutionMode(sessionID, mode string) {
+	w.modeMu.Lock()
+	defer w.modeMu.Unlock()
+	if mode == "" {
+		delete(w.liveExecModes, sessionID)
+		return
+	}
+	w.liveExecModes[sessionID] = mode
+}
+
+func (w *NexusWorkspace) syncSessionTodos(sessionID string) {
+	tasks, err := tasktool.GlobalTaskStore().ListTasks(context.Background(), sessionID)
+	if err != nil {
+		return
+	}
+	todos := make([]session.Todo, 0, len(tasks))
+	for _, task := range tasks {
+		var status session.TodoStatus
+		switch task.Status {
+		case tasktool.TaskStatusCompleted:
+			status = session.TodoStatusCompleted
+		case tasktool.TaskStatusInProgress:
+			status = session.TodoStatusInProgress
+		default:
+			status = session.TodoStatusPending
+		}
+		todos = append(todos, session.Todo{ID: task.ID, Content: task.Subject, Description: task.Description, Status: status, ActiveForm: task.ActiveForm, Owner: task.Owner})
+	}
+	w.sessionsMu.Lock()
+	if s, ok := w.sessStore[sessionID]; ok {
+		s.Todos = todos
+		w.sessStore[sessionID] = s
+	}
+	w.sessionsMu.Unlock()
+}
+
+func (w *NexusWorkspace) publishSessionRefresh(sessionID string) {
+	w.sessionsMu.RLock()
+	s, ok := w.sessStore[sessionID]
+	w.sessionsMu.RUnlock()
+	if !ok {
+		return
+	}
+	w.sessBroker.Publish(pubsub.UpdatedEvent, s)
+}
+
+func (w *NexusWorkspace) OnSessionTitled(id sdk.SessionID, title string) {
+	sessID := string(id)
+	w.sessionsMu.Lock()
+	if s, ok := w.sessStore[sessID]; ok {
+		s.Title = title
+		s.UpdatedAt = time.Now().UnixMilli()
+		w.sessStore[sessID] = s
+		w.sessBroker.Publish(pubsub.UpdatedEvent, s)
+	}
+	w.sessionsMu.Unlock()
+}
+
+// PromptFn blocks the SDK agent goroutine until the UI resolves the permission dialog.
+// The UI calls PermissionGrant/PermissionDeny which unblock this via pendingPerms.
+func (w *NexusWorkspace) PromptFn(ctx context.Context, req sdk.PromptRequest) (sdk.PromptResponse, error) {
+	// Yolo mode: auto-allow without showing the dialog.
+	if w.permSkip.Load() {
+		return sdk.PromptResponse{Value: true}, nil
+	}
+
+	toolName, _ := req.Metadata["tool_name"].(string)
+	toolUseID, _ := req.Metadata["tool_use_id"].(string)
+	workDir, _ := req.Metadata["working_directory"].(string)
+	if workDir == "" {
+		workDir = w.workDir
+	}
+
+	permID := uuid.New().String()
+	permReq := permission.PermissionRequest{
+		ID:          permID,
+		ToolCallID:  toolUseID,
+		ToolName:    toolName,
+		Description: req.Message,
+		Action:      string(req.Type),
+		Path:        workDir,
+	}
+
+	// Register the resolution channel before publishing (avoids race with fast UI).
+	ch := make(chan sdk.PromptResponse, 1)
+	w.pendingPerms.Store(permID, ch)
+
+	// Show the permission dialog.
+	w.permBroker.Publish(pubsub.CreatedEvent, permReq)
+
+	// Block until the UI resolves or the context is cancelled.
+	select {
+	case resp := <-ch:
+		return resp, nil
+	case <-ctx.Done():
+		w.pendingPerms.Delete(permID)
+		return sdk.PromptResponse{Cancelled: true}, ctx.Err()
+	}
+}
+
+// ─── Internal helpers ─────────────────────────────────────────────────────────
+
+func (w *NexusWorkspace) appendMsg(sessionID string, msg message.Message) {
+	w.msgMu.Lock()
+	w.msgStore[sessionID] = append(w.msgStore[sessionID], msg)
+	w.msgMu.Unlock()
+}
+
+func (w *NexusWorkspace) newStreamingAssistantMessage(sessionID string) message.Message {
+	now := time.Now().UnixMilli()
+	msg := message.Message{
+		ID:        uuid.New().String(),
+		SessionID: sessionID,
+		Role:      message.Assistant,
+		Parts:     []message.ContentPart{},
+		CreatedAt: now,
+		UpdatedAt: now,
+	}
+	w.appendMsg(sessionID, msg)
+	w.msgBroker.Publish(pubsub.CreatedEvent, msg)
+	return msg
+}
+
+func (w *NexusWorkspace) rotateStreamingAssistantMessageIfNeeded() {
+	w.streamMu.Lock()
+	if !w.streamResponseDone || w.streamSess == "" {
+		w.streamMu.Unlock()
+		return
+	}
+	sessionID := w.streamSess
+	w.streamMu.Unlock()
+
+	msg := w.newStreamingAssistantMessage(sessionID)
+
+	w.streamMu.Lock()
+	w.streamMsg = &msg
+	w.streamResponseDone = false
+	w.streamToolUseID = ""
+	w.streamToolUseName = ""
+	w.streamToolInputBuf = ""
+	w.streamMu.Unlock()
+}
+
+func (w *NexusWorkspace) updateMsg(sessionID string, msg message.Message) {
+	w.msgMu.Lock()
+	msgs := w.msgStore[sessionID]
+	for i := len(msgs) - 1; i >= 0; i-- {
+		if msgs[i].ID == msg.ID {
+			msgs[i] = msg
+			break
+		}
+	}
+	w.msgMu.Unlock()
+}
+
+func (w *NexusWorkspace) publishMsg(evt pubsub.EventType, _ string, msg message.Message) {
+	w.msgBroker.Publish(evt, msg)
+}
+
+// convertSDKMessages converts the SDK message history to nexustui message types.
+func convertSDKMessages(sessionID string, sdkMsgs []sdk.Message) []message.Message {
+	// Pre-build tool result map keyed by tool_use_id.
+	type resultEntry struct {
+		content  string
+		isError  bool
+		metadata string
+	}
+	resultMap := make(map[string]resultEntry)
+	for _, m := range sdkMsgs {
+		if m.Role != sdk.RoleUser {
+			continue
+		}
+		for _, block := range m.Content {
+			if tr, ok := block.(sdk.ToolResultContent); ok {
+				meta := ""
+				if tr.Metadata != nil {
+					if data, err := json.Marshal(tr.Metadata); err == nil {
+						meta = string(data)
+					}
+				}
+				resultMap[tr.ToolUseID] = resultEntry{
+					content:  tr.Content,
+					isError:  tr.IsError,
+					metadata: meta,
+				}
+			}
+		}
+	}
+
+	var out []message.Message
+	for _, m := range sdkMsgs {
+		ts := m.Timestamp.UnixMilli()
+		if ts <= 0 {
+			ts = time.Now().UnixMilli()
+		}
+
+		msg := message.Message{
+			ID:        string(m.ID),
+			SessionID: sessionID,
+			CreatedAt: ts,
+			UpdatedAt: ts,
+		}
+
+		switch m.Role {
+		case sdk.RoleUser:
+			msg.Role = message.User
+			imageIndex := 0
+			for _, block := range m.Content {
+				switch b := block.(type) {
+				case sdk.TextContent:
+					promptText, attachments := splitPromptTextAttachments(b.Text)
+					if promptText != "" || len(attachments) == 0 {
+						msg.Parts = append(msg.Parts, message.TextContent{Text: promptText})
+					}
+					for _, attachment := range attachments {
+						msg.Parts = append(msg.Parts, attachment)
+					}
+				case sdk.ImageContent:
+					imageIndex++
+					if attachment, ok := binaryFromSDKImage(b, imageIndex); ok {
+						msg.Parts = append(msg.Parts, attachment)
+					}
+				}
+			}
+		case sdk.RoleAssistant:
+			msg.Role = message.Assistant
+			if m.Metadata != nil && m.Metadata.StopReason != "" {
+				finishReason := sdkStopToFinish(m.Metadata.StopReason)
+				msg.Parts = append(msg.Parts, message.Finish{
+					Reason: finishReason,
+					Time:   ts,
+				})
+			}
+			for _, block := range m.Content {
+				switch b := block.(type) {
+				case sdk.TextContent:
+					// Insert text before the Finish part if present.
+					msg.Parts = prependPart(msg.Parts, message.TextContent{Text: b.Text})
+				case sdk.ThinkingContent:
+					msg.Parts = prependPart(msg.Parts, message.ReasoningContent{Thinking: b.Thinking})
+				case sdk.ToolUseContent:
+					inputJSON, _ := json.Marshal(b.Input)
+					tc := message.ToolCall{
+						ID:       b.ID,
+						Name:     b.Name,
+						Input:    string(inputJSON),
+						Finished: true,
+					}
+					msg.Parts = prependPart(msg.Parts, tc)
+					if r, ok := resultMap[b.ID]; ok {
+						msg.Parts = prependPart(msg.Parts, message.ToolResult{
+							ToolCallID: b.ID,
+							Name:       b.Name,
+							Content:    r.content,
+							Metadata:   r.metadata,
+							IsError:    r.isError,
+						})
+					}
+				}
+			}
+		}
+
+		if len(msg.Parts) > 0 {
+			out = append(out, msg)
+		}
+	}
+	return out
+}
+
+// prependPart inserts a part before any existing Finish parts (so text/tools
+// appear before the finish marker in the parts slice).
+func prependPart(parts []message.ContentPart, p message.ContentPart) []message.ContentPart {
+	// Find the first Finish part index.
+	for i, part := range parts {
+		if _, ok := part.(message.Finish); ok {
+			// Insert before it.
+			result := make([]message.ContentPart, 0, len(parts)+1)
+			result = append(result, parts[:i]...)
+			result = append(result, p)
+			result = append(result, parts[i:]...)
+			return result
+		}
+	}
+	return append(parts, p)
+}
+
+func sdkStopToFinish(stopReason string) message.FinishReason {
+	switch stopReason {
+	case "end_turn", "stop":
+		return message.FinishReasonEndTurn
+	case "max_tokens":
+		return message.FinishReasonMaxTokens
+	case "tool_use":
+		return message.FinishReasonToolUse
+	default:
+		return message.FinishReasonEndTurn
+	}
+}
+
+// ─── msgDebounce — batches streaming pubsub updates at a fixed interval ───────
+
+type msgDebounce struct {
+	mu         sync.Mutex
+	latestMsg  message.Message
+	latestSess string
+	dirty      bool
+	timer      *time.Timer
+	delay      time.Duration
+	flush      func(message.Message, string)
+}
+
+func newMsgDebounce(delay time.Duration, flush func(message.Message, string)) *msgDebounce {
+	return &msgDebounce{delay: delay, flush: flush}
+}
+
+func (d *msgDebounce) update(msg message.Message, sessID string) {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	d.latestMsg = msg
+	d.latestSess = sessID
+	d.dirty = true
+	if d.timer == nil {
+		d.timer = time.AfterFunc(d.delay, d.tick)
+	}
+}
+
+func (d *msgDebounce) tick() {
+	d.mu.Lock()
+	if !d.dirty {
+		d.timer = nil
+		d.mu.Unlock()
+		return
+	}
+	msg := d.latestMsg
+	sess := d.latestSess
+	d.dirty = false
+	d.timer = nil
+	d.mu.Unlock()
+	d.flush(msg, sess)
+}
+
+func (d *msgDebounce) forceFlush() {
+	d.mu.Lock()
+	if d.timer != nil {
+		d.timer.Stop()
+		d.timer = nil
+	}
+	if !d.dirty {
+		d.mu.Unlock()
+		return
+	}
+	msg := d.latestMsg
+	sess := d.latestSess
+	d.dirty = false
+	d.mu.Unlock()
+	d.flush(msg, sess)
+}

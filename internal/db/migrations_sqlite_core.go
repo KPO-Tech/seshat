@@ -63,6 +63,17 @@ func sqliteCoreMigrations() []schemaMigration {
 			Scope: migrationScopeCoreSQLite,
 			Run:   migrateSQLiteTranscriptFTS5,
 		},
+		{
+			// Rebuild FTS5 virtual table and triggers to cleanly fix legacy FTS3/4 delete trigger syntax.
+			ID:    "20260608_010_rebuild_transcript_fts5",
+			Scope: migrationScopeCoreSQLite,
+			Run:   migrateSQLiteTranscriptFTS5Rebuild,
+		},
+		{
+			ID:    "20260612_011_session_tasks",
+			Scope: migrationScopeCoreSQLite,
+			Run:   migrateSQLiteSessionTasks,
+		},
 	}
 }
 
@@ -210,10 +221,10 @@ func migrateSQLiteTranscriptFTS5(ctx context.Context, db *DB) error {
 		     VALUES (new.rowid, new.session_id, new.entry_json);
 		 END`,
 		// Trigger: keep FTS5 in sync on delete (also fires for ON DELETE CASCADE rows).
+		`DROP TRIGGER IF EXISTS trg_transcript_fts_delete`,
 		`CREATE TRIGGER IF NOT EXISTS trg_transcript_fts_delete
 		 AFTER DELETE ON session_transcript_entries BEGIN
-		     INSERT INTO session_transcript_fts(session_transcript_fts, rowid)
-		     VALUES ('delete', old.rowid);
+		     DELETE FROM session_transcript_fts WHERE rowid = old.rowid;
 		 END`,
 	}
 	for _, stmt := range statements {
@@ -248,6 +259,67 @@ func migrateSQLiteSessionFiles(ctx context.Context, db *DB) error {
 			ON session_files(file_path)`,
 		`CREATE INDEX IF NOT EXISTS idx_session_files_tool_use
 			ON session_files(tool_use_id)`,
+	}
+	for _, stmt := range statements {
+		if err := db.gormDB.WithContext(ctx).Exec(stmt).Error; err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func migrateSQLiteTranscriptFTS5Rebuild(ctx context.Context, db *DB) error {
+	statements := []string{
+		`DROP TRIGGER IF EXISTS trg_transcript_fts_insert`,
+		`DROP TRIGGER IF EXISTS trg_transcript_fts_delete`,
+		`DROP TABLE IF EXISTS session_transcript_fts`,
+		`CREATE VIRTUAL TABLE IF NOT EXISTS session_transcript_fts USING fts5(
+		     session_id UNINDEXED,
+		     entry_json,
+		     tokenize = 'unicode61 remove_diacritics 1'
+		 )`,
+		`INSERT OR IGNORE INTO session_transcript_fts(rowid, session_id, entry_json)
+		 SELECT rowid, session_id, entry_json FROM session_transcript_entries`,
+		`CREATE TRIGGER IF NOT EXISTS trg_transcript_fts_insert
+		 AFTER INSERT ON session_transcript_entries BEGIN
+		     INSERT OR REPLACE INTO session_transcript_fts(rowid, session_id, entry_json)
+		     VALUES (new.rowid, new.session_id, new.entry_json);
+		 END`,
+		`CREATE TRIGGER IF NOT EXISTS trg_transcript_fts_delete
+		 AFTER DELETE ON session_transcript_entries BEGIN
+		     DELETE FROM session_transcript_fts WHERE rowid = old.rowid;
+		 END`,
+	}
+	for _, stmt := range statements {
+		if err := db.gormDB.WithContext(ctx).Exec(stmt).Error; err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func migrateSQLiteSessionTasks(ctx context.Context, db *DB) error {
+	statements := []string{
+		`CREATE TABLE IF NOT EXISTS session_tasks (
+			id               INTEGER PRIMARY KEY AUTOINCREMENT,
+			session_id       TEXT    NOT NULL,
+			task_id          TEXT    NOT NULL,
+			position         INTEGER NOT NULL,
+			subject          TEXT    NOT NULL,
+			description      TEXT    NOT NULL DEFAULT '',
+			status           TEXT    NOT NULL,
+			active_form      TEXT    NOT NULL DEFAULT '',
+			owner            TEXT    NOT NULL DEFAULT '',
+			blocks_json      TEXT    NOT NULL DEFAULT '[]',
+			blocked_by_json  TEXT    NOT NULL DEFAULT '[]',
+			metadata_json    TEXT    NOT NULL DEFAULT '{}',
+			created_at_unix  INTEGER NOT NULL,
+			updated_at_unix  INTEGER NOT NULL,
+			UNIQUE(session_id, task_id),
+			UNIQUE(session_id, position)
+		)`,
+		`CREATE INDEX IF NOT EXISTS idx_session_tasks_session_position
+			ON session_tasks(session_id, position ASC)`,
 	}
 	for _, stmt := range statements {
 		if err := db.gormDB.WithContext(ctx).Exec(stmt).Error; err != nil {

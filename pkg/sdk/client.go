@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -22,6 +23,8 @@ import (
 	"github.com/EngineerProjects/nexus-engine/internal/tools/registry"
 	agentTool "github.com/EngineerProjects/nexus-engine/internal/tools/special/agents"
 	"github.com/EngineerProjects/nexus-engine/internal/tools/system/mcp"
+	taskTool "github.com/EngineerProjects/nexus-engine/internal/tools/task"
+	"github.com/EngineerProjects/nexus-engine/internal/types"
 	browsercore "github.com/EngineerProjects/nexus-engine/internal/web/browser"
 )
 
@@ -133,6 +136,12 @@ func NewClient(config *ClientConfig) (*Client, error) {
 
 	monitoringSys := initMonitoringSystem(config)
 
+	if config.SessionSQLitePath != "" {
+		if err := taskTool.InitializeGlobalTaskStore(config.SessionSQLitePath); err != nil {
+			return nil, fmt.Errorf("initialize task store: %w", err)
+		}
+	}
+
 	queryEngine := engine.NewEngine(
 		apiClient, orchestrator, compactor, promptAssembler,
 		permissionIntegrator, reg, sessionStore, queryConfig, memSvc, monitoringSys,
@@ -182,6 +191,26 @@ func NewClient(config *ClientConfig) (*Client, error) {
 	// Register shell pre-tool hooks from ClientConfig.
 	if len(config.PreToolHooks) > 0 {
 		client.registerShellPreToolHooks(config.PreToolHooks, config.WorkingDir)
+	}
+
+	// Wire the session title callback into the engine.
+	// The callback runs in a goroutine spawned by the engine after the first
+	// completed turn. It updates the persisted title and then notifies the
+	// host via config.OnSessionTitled (e.g. so the TUI can refresh the list).
+	if !config.DisableTitleGeneration {
+		queryEngine.SetOnSessionTitled(func(id types.SessionID, title string) {
+			if store != nil {
+				type titleUpdater interface {
+					UpdateSessionTitle(types.SessionID, string) error
+				}
+				if tu, ok := store.(titleUpdater); ok {
+					_ = tu.UpdateSessionTitle(id, title)
+				}
+			}
+			if config.OnSessionTitled != nil {
+				config.OnSessionTitled(SessionID(id), title)
+			}
+		})
 	}
 
 	return client, nil
@@ -260,12 +289,45 @@ func (c *Client) Ask(ctx context.Context, prompt string, tools []Tool) (*AskResp
 }
 
 // CreateSession creates a new session for multi-turn conversations.
+// The session is assigned a sequential human-readable title of the form
+// "untitled_session_N" where N is 1 + the highest N already in use.
 func (c *Client) CreateSession(ctx context.Context) (*Session, error) {
-	querySession, err := c.queryEngine.NewSession(ctx)
+	title := c.nextUntitledTitle()
+	now := time.Now()
+	meta := &types.SessionMetadata{
+		Title:         title,
+		CreatedAt:     now,
+		UpdatedAt:     now,
+		SchemaVersion: types.SessionMetadataSchemaVersion,
+	}
+	querySession, err := c.queryEngine.NewSessionFromState(ctx, types.SessionID(""), meta, nil)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create session: %w", err)
 	}
 	return newSDKSession(c, querySession), nil
+}
+
+// nextUntitledTitle returns the next "untitled_session_N" title.
+// It inspects existing session titles and picks max(N)+1. Defaults to 1.
+func (c *Client) nextUntitledTitle() string {
+	const prefix = "untitled_session_"
+	max := 0
+	if c.store != nil {
+		if infos, err := c.store.GetAllSessionsInfo(); err == nil {
+			for _, info := range infos {
+				if info == nil {
+					continue
+				}
+				if strings.HasPrefix(info.Title, prefix) {
+					n, err := strconv.Atoi(strings.TrimPrefix(info.Title, prefix))
+					if err == nil && n > max {
+						max = n
+					}
+				}
+			}
+		}
+	}
+	return fmt.Sprintf("%s%d", prefix, max+1)
 }
 
 // LoadSession loads an existing session.

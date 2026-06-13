@@ -86,6 +86,8 @@ func DefaultBaseURL(providerName string) string {
 		return "https://api.deepseek.com"
 	case "opencode", "opencode-zen", "opencode_zen":
 		return "https://opencode.ai/zen"
+	case "kimi", "moonshot", "moonshot-ai", "moonshotai":
+		return "https://api.moonshot.cn"
 	default:
 		return ""
 	}

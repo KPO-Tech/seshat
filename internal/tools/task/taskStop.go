@@ -9,7 +9,7 @@ import (
 	"github.com/EngineerProjects/nexus-engine/internal/types"
 )
 
-// TaskStopTool implements the TaskStop tool for stopping background tasks.
+// TaskStopTool implements the TaskStop tool for stopping tracked tasks.
 type TaskStopTool struct{}
 
 func NewTaskStopTool() *TaskStopTool { return &TaskStopTool{} }
@@ -20,14 +20,19 @@ func (t *TaskStopTool) Definition() tool.Definition {
 		DisplayName: "TaskStop",
 		SearchHint:  SearchHintTaskStop,
 		Description: ToolDescriptionTaskStop,
-		Category:    "process",
+		Category:    "task",
 		Metadata:    taskSurfaceMetadata(),
 		InputSchema: schema.FromMap(map[string]any{
 			"type": "object",
 			"properties": map[string]any{
 				"task_id": map[string]any{
 					"type":        "string",
-					"description": "The ID of the background task to stop",
+					"description": "The ID of the task to stop",
+				},
+				"taskType": map[string]any{
+					"type":        "string",
+					"enum":        []string{"todo", "background"},
+					"description": "Optional task kind override. Defaults to todo first, then background fallback.",
 				},
 			},
 			"required": []string{"task_id"},
@@ -45,6 +50,45 @@ func (t *TaskStopTool) Call(ctx context.Context, input tool.CallInput, permissio
 		return tool.CallResult{Error: fmt.Errorf("task_id is required")}, nil
 	}
 
+	taskType := resolveTaskKind(parsed, "")
+	sessionID := resolveOptionalTaskSessionID(input)
+
+	if taskType != "background" {
+		if sessionID != "" {
+			todoTask, err := GlobalTaskStore().GetTask(ctx, sessionID, taskID)
+			if err == nil && todoTask != nil {
+				if err := GlobalTaskStore().DeleteTask(ctx, sessionID, taskID); err != nil {
+					return tool.CallResult{Error: fmt.Errorf("failed to stop task: %w", err)}, nil
+				}
+				emitTaskRuntimeEvent(ctx, sessionID, "delete", &Task{ID: todoTask.ID, SessionID: sessionID, Subject: todoTask.Subject, Status: TaskStatusDeleted})
+				messageText := fmt.Sprintf("Stopped task tracking: %s", todoTask.Subject)
+				return tool.CallResult{Data: map[string]any{
+					"message":   messageText,
+					"task_id":   taskID,
+					"task_type": "todo",
+					"subject":   todoTask.Subject,
+				}, Metadata: &tool.ResultMetadata{Additional: map[string]any{
+					"task_stop": taskStopRenderMetadata{
+						TaskID:   taskID,
+						TaskType: "todo",
+						Message:  messageText,
+						Todo: &TaskStopTodoDetails{
+							ID:             todoTask.ID,
+							Subject:        todoTask.Subject,
+							PreviousStatus: todoTask.Status,
+						},
+					},
+				}}}, nil
+			}
+		} else if taskType == "todo" {
+			return tool.CallResult{Error: fmt.Errorf("session ID is required for todo task stop")}, nil
+		}
+	}
+
+	if taskType == "todo" {
+		return tool.CallResult{Error: fmt.Errorf("no task found with ID: %s", taskID)}, nil
+	}
+
 	runtime, err := requireRuntime()
 	if err != nil {
 		return tool.CallResult{Error: fmt.Errorf("task runtime not available")}, nil
@@ -60,12 +104,20 @@ func (t *TaskStopTool) Call(ctx context.Context, input tool.CallInput, permissio
 		return tool.CallResult{Error: fmt.Errorf("failed to stop task: %w", err)}, nil
 	}
 
+	messageText := fmt.Sprintf("Successfully stopped task: %s", taskID)
 	return tool.CallResult{Data: map[string]any{
-		"message":   fmt.Sprintf("Successfully stopped task: %s", taskID),
+		"message":   messageText,
 		"task_id":   taskID,
 		"task_type": string(task.Type),
 		"command":   task.Command,
-	}}, nil
+	}, Metadata: &tool.ResultMetadata{Additional: map[string]any{
+		"task_stop": taskStopRenderMetadata{
+			TaskID:   taskID,
+			TaskType: string(task.Type),
+			Command:  task.Command,
+			Message:  messageText,
+		},
+	}}}, nil
 }
 
 func (t *TaskStopTool) Description(ctx context.Context) (string, error) {
@@ -78,6 +130,15 @@ func (t *TaskStopTool) CheckPermissions(ctx context.Context, input map[string]an
 	taskID, ok := input["task_id"].(string)
 	if !ok || taskID == "" {
 		return types.Deny("task_id is required")
+	}
+	taskType := resolveTaskKind(input, "")
+	if taskType != "background" && toolCtx.SessionID != "" {
+		if _, err := GlobalTaskStore().GetTask(ctx, string(toolCtx.SessionID), taskID); err == nil {
+			return types.PermissionResult{Behavior: types.PermissionBehaviorAllow}
+		}
+	}
+	if taskType == "todo" {
+		return types.Deny("todo task not found")
 	}
 	runtime, err := requireRuntime()
 	if err != nil {
@@ -102,8 +163,16 @@ func (t *TaskStopTool) FormatResult(data any) string {
 	if m, ok := data.(map[string]any); ok {
 		message, _ := m["message"].(string)
 		taskID, _ := m["task_id"].(string)
+		taskType, _ := m["task_type"].(string)
+		subject, _ := m["subject"].(string)
 		command, _ := m["command"].(string)
-		return fmt.Sprintf("%s (task: %s, command: %s)", message, taskID, command)
+		suffix := taskID
+		if taskType == "todo" && subject != "" {
+			suffix = subject
+		} else if command != "" {
+			suffix = fmt.Sprintf("%s, command: %s", taskID, command)
+		}
+		return fmt.Sprintf("%s (%s)", message, suffix)
 	}
 	return fmt.Sprintf("%v", data)
 }
@@ -111,7 +180,7 @@ func (t *TaskStopTool) BackfillInput(ctx context.Context, input map[string]any) 
 	return input
 }
 
-// ListRunningTasks returns all running tasks.
+// ListRunningTasks returns all running background tasks.
 func ListRunningTasks(ctx context.Context) []map[string]any {
 	runtime, err := requireRuntime()
 	if err != nil {

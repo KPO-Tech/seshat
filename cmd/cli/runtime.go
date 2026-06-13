@@ -136,6 +136,7 @@ func newClient(
 	progressFn func(sdk.ToolProgress),
 	chunkFn func(sdk.ResponseChunk),
 	runtimeEventFn func(sdk.RuntimeEvent),
+	titledFn func(sdk.SessionID, string),
 ) (*sdk.Client, error) {
 	// Load pre_tool_use hooks from config if any are defined.
 	var preToolHooks []sdk.PreToolHookConfig
@@ -182,6 +183,7 @@ func newClient(
 		ProgressFn:              progressFn,
 		ResponseChunkFn:         chunkFn,
 		RuntimeEventFn:          runtimeEventFn,
+		OnSessionTitled:         titledFn,
 		WorkingDir:              options.WorkingDir,
 		BrowserRemoteControlURL: options.BrowserRemoteControlURL,
 		BrowserExecutablePath:   options.BrowserExecutablePath,

@@ -94,6 +94,22 @@ func TestSQLiteBackendRoundTrip(t *testing.T) {
 	if len(sessions) != 1 || sessions[0] != sessionID {
 		t.Fatalf("expected one session %q, got %#v", sessionID, sessions)
 	}
+
+	// Trigger a delete by replacing a non-empty transcript
+	newTranscript := []types.TranscriptEntry{
+		{
+			ID:   types.MessageID("msg-2"),
+			Type: types.EntryTypeMessage,
+			Role: types.RoleUser,
+			Content: []types.ContentBlock{
+				types.TextContent{Text: "world"},
+			},
+			Timestamp: time.Unix(1700001004, 0).UTC(),
+		},
+	}
+	if err := backend.ReplaceTranscript(sessionID, newTranscript); err != nil {
+		t.Fatalf("ReplaceTranscript on non-empty failed: %v", err)
+	}
 }
 
 // --- from store_test.go ---

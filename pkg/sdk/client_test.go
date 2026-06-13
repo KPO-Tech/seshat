@@ -1470,10 +1470,11 @@ func TestPersistedSessionsCarryPlanModeAcrossRestore(t *testing.T) {
 	defer server.Close()
 
 	client, err := NewClient(&ClientConfig{
-		PersistSessions:   true,
-		SessionStorageDir: filepath.Join(t.TempDir(), "sessions"),
-		PermissionMode:    types.PermissionModeOnRequest,
-		AutoCompact:       false,
+		PersistSessions:        true,
+		SessionStorageDir:      filepath.Join(t.TempDir(), "sessions"),
+		PermissionMode:         types.PermissionModeOnRequest,
+		AutoCompact:            false,
+		DisableTitleGeneration: true,
 		PromptFn: func(ctx context.Context, request types.PromptRequest) (types.PromptResponse, error) {
 			return types.PromptResponse{Value: true}, nil
 		},
@@ -1749,10 +1750,11 @@ func testPersistedSessionResumeNativeProvider(t *testing.T, tc persistedNativePr
 	defer server.Close()
 
 	client, err := NewClient(&ClientConfig{
-		PersistSessions:   true,
-		SessionStorageDir: filepath.Join(t.TempDir(), "sessions"),
-		PermissionMode:    types.PermissionModeBypass,
-		AutoCompact:       false,
+		PersistSessions:        true,
+		SessionStorageDir:      filepath.Join(t.TempDir(), "sessions"),
+		PermissionMode:         types.PermissionModeBypass,
+		AutoCompact:            false,
+		DisableTitleGeneration: true,
 		Model: types.ModelIdentifier{
 			Provider: tc.provider,
 			Model:    tc.model,
@@ -2028,4 +2030,119 @@ func sdkPayloadContainsText(payload map[string]any, want string) bool {
 		}
 	}
 	return false
+}
+
+func TestSessionAutoTitleGeneration(t *testing.T) {
+	requestsChan := make(chan string, 2)
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var payload map[string]any
+		if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
+			t.Fatalf("decode request payload: %v", err)
+		}
+
+		systemPrompt, _ := payload["system"].(string)
+		if strings.Contains(systemPrompt, "ultra-short session titles") {
+			requestsChan <- "title"
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusOK)
+			_, _ = w.Write([]byte(`{
+				"role": "assistant",
+				"content": [
+					{
+						"type": "text",
+						"text": "Greeting"
+					}
+				],
+				"stop_reason": "end_turn",
+				"id": "msg-title"
+			}`))
+		} else {
+			requestsChan <- "message"
+			w.Header().Set("Content-Type", "text/event-stream")
+			sdkWriteStreamEvents(t, w, []map[string]any{
+				{
+					"type": "content_block_start",
+					"content_block": map[string]any{
+						"type": "text",
+						"text": "",
+					},
+				},
+				{
+					"type": "content_block_delta",
+					"delta": map[string]any{
+						"type": "text_delta",
+						"text": "Hello there!",
+					},
+				},
+				{"type": "content_block_stop"},
+				{
+					"type": "message_delta",
+					"delta": map[string]any{
+						"stop_reason": "end_turn",
+					},
+				},
+				{"type": "message_stop"},
+			})
+		}
+	}))
+	defer server.Close()
+
+	titleCalled := make(chan string, 1)
+
+	client, err := NewClient(&ClientConfig{
+		PersistSessions:   true,
+		SessionStorageDir: filepath.Join(t.TempDir(), "sessions"),
+		PermissionMode:    types.PermissionModeBypass,
+		AutoCompact:       false,
+		Model: types.ModelIdentifier{
+			Provider: types.APIProviderAnthropic,
+			Model:    "claude-3-5-sonnet-20241022",
+		},
+		OnSessionTitled: func(id SessionID, title string) {
+			titleCalled <- title
+		},
+	})
+	if err != nil {
+		t.Fatalf("NewClient failed: %v", err)
+	}
+	defer client.Close()
+
+	apiClient := providers.NewClientWithConfig("test-key", &providers.Config{
+		Provider: types.APIProviderAnthropic,
+		BaseURL:  server.URL,
+	})
+	apiClient.SetHTTPClient(server.Client())
+	apiClient.SetRetryConfig(types.RetryConfig{MaxAttempts: 1})
+	client.queryEngine.SetAPIClient(apiClient)
+
+	session, err := client.CreateSession(context.Background())
+	if err != nil {
+		t.Fatalf("CreateSession failed: %v", err)
+	}
+
+	// Submit first message, which should trigger title generation after it finishes
+	_, err = session.SubmitMessage(context.Background(), "hello")
+	if err != nil {
+		t.Fatalf("SubmitMessage failed: %v", err)
+	}
+
+	// Wait for OnSessionTitled to be called
+	select {
+	case title := <-titleCalled:
+		if title != "Greeting" {
+			t.Errorf("expected title to be 'Greeting', got %q", title)
+		}
+	case <-time.After(5 * time.Second):
+		t.Fatal("timed out waiting for OnSessionTitled callback")
+	}
+
+	// Verify the stored session has the title updated
+	metadata, err := client.GetSessionStore().LoadSession(types.SessionID(session.GetID()))
+	if err != nil {
+		t.Fatalf("LoadSession failed: %v", err)
+	}
+	if metadata.Title != "Greeting" {
+		t.Errorf("expected stored title to be 'Greeting', got %q", metadata.Title)
+	}
 }
