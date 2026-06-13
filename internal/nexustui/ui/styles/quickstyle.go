@@ -337,6 +337,7 @@ func quickStyle(o quickStyleOpts) Styles {
 	// thinking box interior matches the page and no extra fill is visible.
 	plainBg := hex(o.bgBase)
 	plainFg := hex(o.fgMoreSubtle)
+	headingFg := hex(o.fgSubtle) // slightly lighter than body, no hue — headings stay readable without competing with agent text
 	s.QuietMarkdown = ansi.StyleConfig{
 		Document: ansi.StyleBlock{
 			StylePrimitive: ansi.StylePrimitive{
@@ -359,35 +360,35 @@ func quickStyle(o quickStyleOpts) Styles {
 			StylePrimitive: ansi.StylePrimitive{
 				BlockSuffix:     "\n",
 				Bold:            new(false),
-				Color:           hex(o.warningSubtle),
+				Color:           headingFg,
 				BackgroundColor: plainBg,
 			},
 		},
 		H1: ansi.StyleBlock{
 			StylePrimitive: ansi.StylePrimitive{
 				Bold:            new(false),
-				Color:           hex(o.accent),
+				Color:           headingFg,
 				BackgroundColor: plainBg,
 			},
 		},
 		H2: ansi.StyleBlock{
 			StylePrimitive: ansi.StylePrimitive{
 				Bold:            new(false),
-				Color:           hex(o.primary),
+				Color:           headingFg,
 				BackgroundColor: plainBg,
 			},
 		},
 		H3: ansi.StyleBlock{
 			StylePrimitive: ansi.StylePrimitive{
 				Bold:            new(false),
-				Color:           hex(o.warningSubtle),
+				Color:           headingFg,
 				BackgroundColor: plainBg,
 			},
 		},
 		H4: ansi.StyleBlock{
 			StylePrimitive: ansi.StylePrimitive{
 				Bold:            new(false),
-				Color:           hex(o.warningSubtle),
+				Color:           headingFg,
 				BackgroundColor: plainBg,
 			},
 		},
