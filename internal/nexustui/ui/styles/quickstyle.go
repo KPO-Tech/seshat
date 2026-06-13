@@ -358,34 +358,35 @@ func quickStyle(o quickStyleOpts) Styles {
 		Heading: ansi.StyleBlock{
 			StylePrimitive: ansi.StylePrimitive{
 				BlockSuffix:     "\n",
-				Bold:            new(true),
-				Color:           hex(o.warning),
+				Bold:            new(false),
+				Color:           hex(o.warningSubtle),
 				BackgroundColor: plainBg,
 			},
 		},
 		H1: ansi.StyleBlock{
 			StylePrimitive: ansi.StylePrimitive{
-				Bold:            new(true),
+				Bold:            new(false),
 				Color:           hex(o.accent),
 				BackgroundColor: plainBg,
 			},
 		},
 		H2: ansi.StyleBlock{
 			StylePrimitive: ansi.StylePrimitive{
-				Bold:            new(true),
+				Bold:            new(false),
 				Color:           hex(o.primary),
 				BackgroundColor: plainBg,
 			},
 		},
 		H3: ansi.StyleBlock{
 			StylePrimitive: ansi.StylePrimitive{
-				Bold:            new(true),
-				Color:           hex(o.warning),
+				Bold:            new(false),
+				Color:           hex(o.warningSubtle),
 				BackgroundColor: plainBg,
 			},
 		},
 		H4: ansi.StyleBlock{
 			StylePrimitive: ansi.StylePrimitive{
+				Bold:            new(false),
 				Color:           hex(o.warningSubtle),
 				BackgroundColor: plainBg,
 			},
