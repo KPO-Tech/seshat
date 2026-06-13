@@ -131,7 +131,7 @@ func renderFileList(sty *styles.Styles, filenames []string, width int, expanded 
 	var out []string
 	for i := 0; i < shown; i++ {
 		name := filenames[i]
-		rendered := sty.Tool.ResultItemName.Render(ansi.Truncate(name, width, "…"))
+		rendered := sty.Tool.ContentText.Render(ansi.Truncate(name, width, "…"))
 		out = append(out, rendered)
 	}
 
@@ -243,13 +243,13 @@ func renderGrepMatches(sty *styles.Styles, content string, width int, expanded b
 	var out []string
 	for i := 0; i < shown; i++ {
 		line := lines[i]
-		// "file:rest" — colorize file prefix separately from match content
+		// "file:rest" — file prefix slightly brighter than match content
 		if idx := strings.IndexByte(line, ':'); idx > 0 {
-			filePart := sty.Tool.ResultItemName.Render(line[:idx])
+			filePart := sty.Tool.ContentText.Render(line[:idx])
 			rest := sty.Tool.ResultItemDesc.Render(ansi.Truncate(line[idx:], width-lipgloss.Width(filePart), "…"))
 			out = append(out, filePart+rest)
 		} else {
-			out = append(out, sty.Tool.ResultItemName.Render(ansi.Truncate(line, width, "…")))
+			out = append(out, sty.Tool.ContentText.Render(ansi.Truncate(line, width, "…")))
 		}
 	}
 
