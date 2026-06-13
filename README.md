@@ -342,7 +342,7 @@ nexus-engine is the headless runtime — no users, no billing, no access control
 
 | Doc | What it covers |
 |---|---|
-| [Vision & Roadmap](./docs/vision/README.md) | Project idea, design principles, Level 1→2→3 roadmap |
+| [Vision & Roadmap](./docs/vision/README.md) | Project idea, design principles, Level 1->2->3 roadmap |
 | [Architecture](./docs/architecture.md) | System design, layer diagrams, query loop state machine |
 | [SDK Guide](./docs/sdk.md) | `ClientConfig`, sessions, streaming, callbacks, MCP |
 | [Tools](./docs/tools.md) | Built-in tools reference, permission pipeline |

@@ -2,7 +2,7 @@
 
 This document covers the gRPC server, proto codegen, and environment configuration for nexus-engine.
 
-> The HTTP REST/SSE API (`cmd/api`) is part of **nexus-product**, not nexus-engine. See nexus-product documentation for that surface.
+> The HTTP REST/SSE API (`cmd/api`) is part of **[nexus-ai](https://github.com/EngineerProjects/nexus-ai)**, not nexus-engine. See nexus-ai documentation for that surface.
 
 ---
 

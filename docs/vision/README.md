@@ -11,4 +11,4 @@ This directory defines what nexus-engine is, why it exists, and where it is goin
 ---
 
 > These documents describe the **engine** — the open-source runtime.  
-> The product layer (multi-user backend, desktop app) is built on top in a separate repository and is not covered here.
+> The product layer (multi-user backend, desktop app) is built on top in **[nexus-ai](https://github.com/EngineerProjects/nexus-ai)** and is not covered here.

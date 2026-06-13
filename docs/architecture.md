@@ -19,7 +19,7 @@
 
 Nexus Engine is a **headless AI coding runtime**. It connects an LLM provider to a set of tools (file system, bash, web, LSP, etc.) and orchestrates multi-turn conversations where the model can invoke tools, observe results, and continue reasoning.
 
-The engine exposes two built-in entry points. A third (HTTP REST + SSE) is provided by nexus-product and built on top of the Go SDK.
+The engine exposes two built-in entry points. A third (HTTP REST + SSE) is provided by [nexus-ai](https://github.com/EngineerProjects/nexus-ai) and built on top of the Go SDK.
 
 ```
               ┌─────────────┐                           ┌──────────────┐
@@ -71,7 +71,7 @@ The system is organized in four layers:
             ╔══════════════════════════════════════════════════════════════════╗
             ║  ENTRY POINTS (nexus-engine)                                     ║
             ║  cmd/cli (terminal) · cmd/grpc (gRPC :50051)                     ║
-            ║  + cmd/api (HTTP+SSE) lives in nexus-product, uses pkg/sdk       ║
+            ║  + cmd/api (HTTP+SSE) lives in nexus-ai, uses pkg/sdk            ║
             ╚══════════════════════════╤═══════════════════════════════════════╝
                                       │ uses
             ╔══════════════════════════▼═══════════════════════════════════════╗
