@@ -7,42 +7,54 @@ import (
 	"github.com/EngineerProjects/nexus-engine/internal/types"
 )
 
-func progressForStage(toolUse types.ToolUseContent, stage string, percent float64) types.ToolProgress {
+func progressForStage(toolUse types.ToolUseContent, stage string, percent float64, extraMetadata map[string]any) types.ToolProgress {
+	metadata := progressMetadata(toolUse)
+	for k, v := range extraMetadata {
+		metadata[k] = v
+	}
 	return types.ToolProgress{
 		ToolName:        toolUse.Name,
 		ToolUseID:       toolUse.ID,
 		Stage:           types.ToolProgressStageRunning,
 		Message:         fmt.Sprintf("%s: %s", toolUse.Name, stage),
 		PercentComplete: percent,
-		Metadata:        progressMetadata(toolUse),
+		Metadata:        metadata,
 	}
 }
 
-func completeProgress(toolUse types.ToolUseContent, result tool.CallResult) types.ToolProgress {
-	progress := types.ToolProgress{
+func completeProgress(toolUse types.ToolUseContent, result tool.CallResult, extraMetadata map[string]any) types.ToolProgress {
+	metadata := progressMetadata(toolUse)
+	for k, v := range extraMetadata {
+		metadata[k] = v
+	}
+	if resultMetadata := toolResultMetadata(toolUse, result, extraMetadata); len(resultMetadata) > 0 {
+		for key, value := range resultMetadata {
+			metadata[key] = value
+		}
+	}
+
+	return types.ToolProgress{
 		ToolName:        toolUse.Name,
 		ToolUseID:       toolUse.ID,
 		Stage:           types.ToolProgressStageCompleted,
 		Message:         fmt.Sprintf("Tool %s completed", toolUse.Name),
 		PercentComplete: 100,
-		Metadata:        progressMetadata(toolUse),
+		Metadata:        metadata,
 	}
-	if metadata := toolResultMetadata(toolUse, result); len(metadata) > 0 {
-		for key, value := range metadata {
-			progress.Metadata[key] = value
-		}
-	}
-	return progress
 }
 
-func failedProgress(toolUse types.ToolUseContent, err error) types.ToolProgress {
+func failedProgress(toolUse types.ToolUseContent, err error, extraMetadata map[string]any) types.ToolProgress {
+	metadata := progressMetadata(toolUse)
+	for k, v := range extraMetadata {
+		metadata[k] = v
+	}
 	return types.ToolProgress{
 		ToolName:        toolUse.Name,
 		ToolUseID:       toolUse.ID,
 		Stage:           types.ToolProgressStageFailed,
 		Message:         fmt.Sprintf("Tool %s failed: %v", toolUse.Name, err),
 		PercentComplete: 100,
-		Metadata:        progressMetadata(toolUse),
+		Metadata:        metadata,
 	}
 }
 
@@ -56,8 +68,11 @@ func progressMetadata(toolUse types.ToolUseContent) map[string]any {
 	return metadata
 }
 
-func toolResultMetadata(toolUse types.ToolUseContent, result tool.CallResult) map[string]any {
+func toolResultMetadata(toolUse types.ToolUseContent, result tool.CallResult, extraMetadata map[string]any) map[string]any {
 	metadata := progressMetadata(toolUse)
+	for k, v := range extraMetadata {
+		metadata[k] = v
+	}
 
 	if content := result.GetContent(); content != "" {
 		metadata["content"] = content
@@ -87,8 +102,11 @@ func (o *Orchestrator) failedOutcome(
 	trace ToolExecutionTrace,
 	err error,
 	extraMessages []types.Message,
+	req ExecuteRequest,
 ) toolExecutionOutcome {
-	progress = append(progress, failedProgress(toolUse, err))
+	prog := failedProgress(toolUse, err, trace.Metadata)
+	progress = append(progress, prog)
+	o.emitProgress(req, prog)
 	return toolExecutionOutcome{
 		ToolUse:    toolUse,
 		Index:      index,
@@ -107,9 +125,12 @@ func (o *Orchestrator) cancelledOutcome(
 	progress []types.ToolProgress,
 	state toolRuntimeState,
 	extraMessages []types.Message,
+	req ExecuteRequest,
 ) toolExecutionOutcome {
 	err := fmt.Errorf("cancelled")
-	progress = append(progress, failedProgress(toolUse, err))
+	prog := failedProgress(toolUse, err, state.trace.Metadata)
+	progress = append(progress, prog)
+	o.emitProgress(req, prog)
 	return toolExecutionOutcome{
 		ToolUse:    toolUse,
 		Index:      index,
@@ -129,9 +150,12 @@ func (o *Orchestrator) hookStopOutcome(
 	state toolRuntimeState,
 	stop *ToolHookStop,
 	extraMessages []types.Message,
+	req ExecuteRequest,
 ) toolExecutionOutcome {
 	err := fmt.Errorf("stopped by hook")
-	progress = append(progress, failedProgress(toolUse, err))
+	prog := failedProgress(toolUse, err, state.trace.Metadata)
+	progress = append(progress, prog)
+	o.emitProgress(req, prog)
 	result := tool.NewErrorResult(err)
 	if stop.Content != "" {
 		result.Content = stop.Content

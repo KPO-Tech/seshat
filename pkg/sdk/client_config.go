@@ -44,6 +44,10 @@ type ClientConfig struct {
 	ProgressFn      func(ToolProgress)  `json:"-"`
 	ResponseChunkFn func(ResponseChunk) `json:"-"`
 	RuntimeEventFn  func(RuntimeEvent)  `json:"-"`
+	// OnSessionTitled is called after the engine auto-generates a title for a
+	// session (once, after the first completed turn). The id is the session ID
+	// and title is the short, AI-generated label. Use this to refresh the UI.
+	OnSessionTitled func(id SessionID, title string) `json:"-"`
 
 	// Filesystem
 	WorkingDir string `json:"working_dir"`
@@ -79,8 +83,9 @@ type ClientConfig struct {
 	MemoryFailFast bool `json:"memory_fail_fast"`
 
 	// Feature flags
-	EnableHooks      bool `json:"enable_hooks"`
-	EnableMonitoring bool `json:"enable_monitoring"`
+	EnableHooks            bool `json:"enable_hooks"`
+	EnableMonitoring       bool `json:"enable_monitoring"`
+	DisableTitleGeneration bool `json:"disable_title_generation"`
 
 	// Model parameters
 	MaxTokens               int `json:"max_tokens"`

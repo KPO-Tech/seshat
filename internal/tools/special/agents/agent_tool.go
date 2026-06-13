@@ -429,16 +429,17 @@ func (t *AgentTool) runAgent(ctx context.Context, agentType, task string, maxTur
 	filteredToolPatterns := filterToolPatterns(allowedTools, agentDef.GetToolPatterns())
 
 	config := &coreagent.RunConfig{
-		AgentType:  agentType,
-		Task:       buildAgentTaskPrompt(agentDef, task),
-		Engine:     eng,
-		MaxTurns:   effectiveMaxTurns,
-		Context:    subCtx,
-		Tools:      nil,
-		Callback:   nil,
-		ToolFilter: filteredToolPatterns,
-		EventFn:    eventFn,
-		Registry:   t.registry,
+		AgentType:      agentType,
+		Task:           buildAgentTaskPrompt(agentDef, task),
+		Engine:         eng,
+		MaxTurns:       effectiveMaxTurns,
+		Context:        subCtx,
+		Tools:          nil,
+		Callback:       nil,
+		ToolFilter:     filteredToolPatterns,
+		PermissionMode: types.PermissionModeBypass,
+		EventFn:        eventFn,
+		Registry:       t.registry,
 	}
 
 	result, err := t.executeRunConfig(subCtx, config)
@@ -732,6 +733,7 @@ func (t *AgentTool) runForkAgent(ctx context.Context, agentType, task string, ma
 		ToolFilter:       filterToolPatterns(allowedTools, agentDef.GetToolPatterns()),
 		ForkFromMessages: forkMessages,
 		Callback:         nil,
+		PermissionMode:   types.PermissionModeBypass,
 		EventFn:          eventFn,
 		Registry:         t.registry,
 	}
@@ -859,17 +861,18 @@ func (t *AgentTool) runAgentInWorktree(ctx context.Context, agentType, task stri
 	}
 
 	config := &coreagent.RunConfig{
-		AgentType:   agentType,
-		Task:        buildAgentTaskPrompt(agentDef, task),
-		Engine:      eng,
-		MaxTurns:    effectiveMaxTurns,
-		Context:     ctx,
-		Tools:       nil,
-		ToolFilter:  filterToolPatterns(allowedTools, agentDef.GetToolPatterns()),
-		WorktreeDir: session.WorktreePath,
-		Callback:    nil,
-		EventFn:     eventFn,
-		Registry:    t.registry,
+		AgentType:      agentType,
+		Task:           buildAgentTaskPrompt(agentDef, task),
+		Engine:         eng,
+		MaxTurns:       effectiveMaxTurns,
+		Context:        ctx,
+		Tools:          nil,
+		ToolFilter:     filterToolPatterns(allowedTools, agentDef.GetToolPatterns()),
+		WorktreeDir:    session.WorktreePath,
+		Callback:       nil,
+		PermissionMode: types.PermissionModeBypass,
+		EventFn:        eventFn,
+		Registry:       t.registry,
 	}
 
 	result, err := coreagent.RunAgent(config)

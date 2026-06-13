@@ -115,8 +115,9 @@ type ClientConfig struct {
     // ── Features ──────────────────────────────────────────────────────────
     EnableMemory    bool // long-term memory (project/user/cross-session), default true
     MemoryFailFast  bool // return error if memory init fails (default false)
-    EnableHooks     bool // lifecycle hooks, default true
-    EnableMonitoring bool // Prometheus metrics, default true
+    EnableHooks            bool // lifecycle hooks, default true
+    EnableMonitoring       bool // Prometheus metrics, default true
+    DisableTitleGeneration bool // disable background session title generation (default false)
 
     // ── MCP ───────────────────────────────────────────────────────────────
     MCPServers []MCPServerConfig // MCP servers to connect on startup
@@ -130,6 +131,7 @@ type ClientConfig struct {
     RuntimeEventFn  func(RuntimeEvent)   // structured engine events (turns, tools, permissions, …)
     ProgressFn      func(ToolProgress)   // tool execution progress
     PromptFn        PromptFn             // user input callback (headless: return empty string)
+    OnSessionTitled func(id SessionID, title string) // callback when AI auto-generates a session title
 
     // ── Prompt customization ──────────────────────────────────────────────
     SystemPromptTemplate string       // replace default system prompt

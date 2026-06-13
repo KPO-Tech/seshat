@@ -149,6 +149,14 @@ func (t *SpawnAgentTool) Call(
 		StartedAtMs:   nowMs(),
 	})
 
+	var agentEventFn func(types.RuntimeEvent)
+	if emitter, ok := ctx.Value(types.RuntimeEventEmitterKey).(func(types.RuntimeEvent)); ok && emitter != nil {
+		agentEventFn = func(event types.RuntimeEvent) {
+			event.AgentToolUseID = callID
+			emitter(event)
+		}
+	}
+
 	config := &coreagent.RunConfig{
 		AgentType: agentType,
 		Task:      prompt,
@@ -163,12 +171,35 @@ func (t *SpawnAgentTool) Call(
 		// bypass permissions so tools are not stuck waiting for an interactive
 		// prompt after the parent's turn context has been canceled.
 		PermissionMode: types.PermissionModeBypass,
+		EventFn:        agentEventFn,
 	}
 
 	ag, err := t.manager.StartAgent(config)
 	if err != nil {
 		return tool.NewErrorResult(fmt.Errorf("spawn_agent failed: %w", err)), nil
 	}
+
+	// Spawn a background goroutine that blocks on ag.Wait() and notifies the TUI
+	// when the subagent completes its task, marking the spawn_agent tool as done.
+	go func() {
+		ag.Wait()
+		if emitter, ok := ctx.Value(types.RuntimeEventEmitterKey).(func(types.RuntimeEvent)); ok && emitter != nil {
+			status := "completed"
+			if ag.Status == coreagent.AgentStatusFailed {
+				status = "failed"
+			}
+			emitter(types.RuntimeEvent{
+				Type:      types.RuntimeEventTypeToolProgress,
+				Timestamp: time.Now(),
+				ToolProgress: &types.ToolProgress{
+					ToolUseID: callID,
+					ToolName:  "spawn_agent",
+					Stage:     types.ToolProgressStage(status),
+					Metadata:  map[string]any{"subagent_finished": true},
+				},
+			})
+		}
+	}()
 
 	// Emit spawn.end — mirrors Codex CollabAgentSpawnEndEvent.
 	emitAgentEvent(ctx, types.RuntimeEventTypeAgentSpawnEnd, &types.AgentRuntimeEvent{
@@ -210,8 +241,9 @@ func emitAgentEvent(ctx context.Context, eventType types.RuntimeEventType, paylo
 		return
 	}
 	emitter(types.RuntimeEvent{
-		Type:       eventType,
-		Timestamp:  time.Now(),
-		AgentEvent: payload,
+		Type:           eventType,
+		Timestamp:      time.Now(),
+		AgentToolUseID: payload.CallID,
+		AgentEvent:     payload,
 	})
 }

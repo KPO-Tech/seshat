@@ -268,6 +268,23 @@ func AllProvidersInfo() map[types.APIProvider]ProviderInfo {
 					Capabilities: model.Capabilities{Vision: true, FunctionCalling: true, Streaming: true, PromptCaching: true}},
 			},
 		},
+		types.APIProviderKimi: {
+			Name:         "kimi",
+			DisplayName:  "Kimi (Moonshot AI)",
+			Description:  "Direct API - Kimi/Moonshot models (OpenAI-compatible)",
+			AuthType:     "api_key",
+			AuthTypes:    []string{"api_key"},
+			SupportsCVMM: true,
+			SupportsPC:   false,
+			Models: []ModelInfo{
+				{Identifier: "moonshot-v1-128k", ContextWindow: 131072, MaxOutput: 32768, DefaultTemperature: 0.7, Description: "Moonshot V1 128K — Flagship long-context model. Ideal for analysing long documents and codebases.",
+					Capabilities: model.Capabilities{Vision: false, FunctionCalling: true, Streaming: true}},
+				{Identifier: "moonshot-v1-32k", ContextWindow: 32768, MaxOutput: 16384, DefaultTemperature: 0.7, Description: "Moonshot V1 32K — Balanced context window. Strong general-purpose coding and chat.",
+					Capabilities: model.Capabilities{FunctionCalling: true, Streaming: true}},
+				{Identifier: "moonshot-v1-8k", ContextWindow: 8192, MaxOutput: 8192, DefaultTemperature: 0.7, Description: "Moonshot V1 8K — Fastest and cheapest Kimi model. Best for high-throughput tasks.",
+					Capabilities: model.Capabilities{FunctionCalling: true, Streaming: true}},
+			},
+		},
 		types.APIProviderWorkersAI: {
 			Name:         "workers-ai",
 			DisplayName:  "Cloudflare Workers AI",
@@ -337,6 +354,8 @@ func ResolveProviderFromString(s string) types.APIProvider {
 		return types.APIProviderDeepSeek
 	case "opencode", "opencode-zen", "opencode_zen":
 		return types.APIProviderOpenCode
+	case "kimi", "moonshot", "moonshot-ai", "moonshotai":
+		return types.APIProviderKimi
 	default:
 		return types.APIProviderAnthropic
 	}

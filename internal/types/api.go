@@ -57,6 +57,9 @@ const (
 
 	// OpenCode Zen - Curated model gateway (OpenAI-compatible)
 	APIProviderOpenCode APIProvider = "opencode"
+
+	// Kimi (Moonshot AI) - Direct API (OpenAI-compatible)
+	APIProviderKimi APIProvider = "kimi"
 )
 
 // ModelIdentifier uniquely identifies a model

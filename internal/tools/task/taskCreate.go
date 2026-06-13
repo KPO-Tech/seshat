@@ -80,12 +80,19 @@ func (t *TaskCreateTool) Call(ctx context.Context, input tool.CallInput, permiss
 		metadata = m
 	}
 
-	task, err := GlobalTaskStore().CreateTask(subject, description, activeForm, metadata)
+	sessionID, err := resolveTaskSessionID(input)
+	if err != nil {
+		return tool.CallResult{Error: err}, nil
+	}
+
+	task, err := GlobalTaskStore().CreateTask(ctx, sessionID, subject, description, activeForm, metadata)
 	if err != nil {
 		return tool.CallResult{
 			Error: fmt.Errorf("failed to create task: %w", err),
 		}, nil
 	}
+
+	emitTaskRuntimeEvent(ctx, sessionID, "create", task)
 
 	output := map[string]any{
 		"task": map[string]any{

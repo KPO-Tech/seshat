@@ -14,9 +14,9 @@ const (
 
 // Search hints
 const (
-	SearchHintTaskStop   = "kill a running background task"
-	SearchHintTaskList   = "list all background tasks"
-	SearchHintTaskGet    = "get details of a background task by ID"
+	SearchHintTaskStop   = "stop tracking a task or kill a background task"
+	SearchHintTaskList   = "list tracked tasks or background tasks"
+	SearchHintTaskGet    = "get details of a tracked task or background task by ID"
 	SearchHintTaskOutput = "read output from a background task"
 	SearchHintTaskCreate = "create a task in the task list"
 	SearchHintTaskUpdate = "update a task in the task list"
@@ -25,39 +25,54 @@ const (
 // Tool descriptions
 const (
 	ToolDescriptionTaskStop = `
-Stops a running background task by its ID.
+Stop tracking a session task, or stop a running background task by its ID.
+
+Default behavior:
+- If the ID matches a session task, the tool stops tracking that task first
+- If no session task matches, it falls back to background runtime tasks
 
 Use this tool when:
-- You need to terminate a long-running background task
+- A tracked execution step is no longer relevant and should be removed
+- A long-running background task must be terminated
 - A monitored command is stuck or taking too long
-- You want to stop a task started with Monitor tool
 
-The tool requires:
-- task_id: The ID of the task to stop (returned from Monitor or Bash background)
-
-Returns success/failure status with details about the stopped task.
+Parameters:
+- task_id: The ID of the task to stop
+- taskType (optional): 'todo' or 'background' to force one mode
 `
 
 	ToolDescriptionTaskList = `
-List all running background tasks.
+List tracked session tasks and/or background runtime tasks.
+
+Default behavior:
+- If the current session already has tracked tasks, the tool defaults to listing those tasks
+- Otherwise it defaults to listing running background tasks
+
+Parameters:
+- listType: 'todo', 'background', or 'all'
+- status: for todo tasks use 'all', 'running', or 'completed'; for background tasks use 'running' or 'completed'
 
 Use this tool to:
-- See what background tasks are currently running
-- Check the status of Monitor or background Bash tasks
-- Identify tasks that can be stopped with TaskStop
-
-Returns a list of tasks with their ID, command, status, and start time.
+- Inspect the current session task checklist
+- Review tracked execution progress
+- Check running background jobs when needed
 `
 
 	ToolDescriptionTaskGet = `
-Get detailed information about a specific background task by its ID.
+Get detailed information about a specific tracked task or background task by its ID.
+
+Default behavior:
+- If the ID matches a session task, the tool returns the tracked task details
+- Otherwise it falls back to background runtime task details
 
 Use this tool to:
-- Get full details of a running or completed background task
-- Check command, status, start/end times, and exit code
-- Monitor progress of a specific task
+- Inspect the full details of a tracked execution task
+- Review description, owner, dependencies, and timestamps
+- Check command/status/exit details for a background task when relevant
 
-Returns task details including command, status, timestamps, and exit code.
+Parameters:
+- task_id: The ID of the task to inspect
+- taskType (optional): 'todo' or 'background' to force one mode
 `
 
 	ToolDescriptionTaskOutput = `

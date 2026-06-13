@@ -61,6 +61,8 @@ type (
 	Role              = types.Role
 	RuntimeEvent      = types.RuntimeEvent
 	RuntimeEventType  = types.RuntimeEventType
+	PlanRuntimeEvent  = types.PlanRuntimeEvent
+	TaskRuntimeEvent  = types.TaskRuntimeEvent
 
 	// Lifecycle hooks
 	HookEvent        = types.HookEvent
@@ -138,6 +140,7 @@ const (
 	APIProviderVertex     = types.APIProviderVertex
 	APIProviderWorkersAI  = types.APIProviderWorkersAI
 	APIProviderZAi        = types.APIProviderZAi
+	APIProviderKimi       = types.APIProviderKimi
 
 	ExecutionModeExecute         = modes.ExecutionModeExecute
 	ExecutionModePlan            = modes.ExecutionModePlan
@@ -182,11 +185,15 @@ const (
 	RetentionTemporary = storage.RetentionTemporary
 	RetentionSession   = storage.RetentionSession
 
-	RuntimeEventTypeTurnStarted   = types.RuntimeEventTypeTurnStarted
-	RuntimeEventTypeTurnCompleted = types.RuntimeEventTypeTurnCompleted
-	RuntimeEventTypeTurnFailed    = types.RuntimeEventTypeTurnFailed
-	RuntimeEventTypeResponseChunk = types.RuntimeEventTypeResponseChunk
-	RuntimeEventTypeToolProgress  = types.RuntimeEventTypeToolProgress
+	RuntimeEventTypeTurnStarted          = types.RuntimeEventTypeTurnStarted
+	RuntimeEventTypeTurnCompleted        = types.RuntimeEventTypeTurnCompleted
+	RuntimeEventTypeTurnFailed           = types.RuntimeEventTypeTurnFailed
+	RuntimeEventTypeResponseChunk        = types.RuntimeEventTypeResponseChunk
+	RuntimeEventTypeToolProgress         = types.RuntimeEventTypeToolProgress
+	RuntimeEventTypePlanSubmitted        = types.RuntimeEventTypePlanSubmitted
+	RuntimeEventTypePlanStatusChanged    = types.RuntimeEventTypePlanStatusChanged
+	RuntimeEventTypeExecutionModeChanged = types.RuntimeEventTypeExecutionModeChanged
+	RuntimeEventTypeTaskChanged          = types.RuntimeEventTypeTaskChanged
 
 	// HookEvent constants — lifecycle events emitted throughout the engine.
 	HookEventSessionStart       = types.HookEventSessionStart

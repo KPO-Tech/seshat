@@ -4,6 +4,8 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"strings"
+	"time"
 
 	"github.com/EngineerProjects/nexus-engine/internal/execution"
 	"github.com/EngineerProjects/nexus-engine/internal/hooks"
@@ -48,6 +50,9 @@ type Engine struct {
 	promptFn             types.PromptFn
 	memoryService        *memory.Service
 	browserManager       browsercore.Manager
+	// onSessionTitled, when set, is called once after the first completed turn
+	// with the AI-generated session title.
+	onSessionTitled func(sessionID types.SessionID, title string)
 }
 
 // NewEngine creates a new query engine.
@@ -224,4 +229,61 @@ func (e *Engine) memoryContext() string {
 		return ""
 	}
 	return e.memoryService.Context()
+}
+
+// SetOnSessionTitled registers a callback that is invoked once — after the
+// first turn of a session completes — with the AI-generated session title.
+// Passing nil disables the feature.
+func (e *Engine) SetOnSessionTitled(fn func(types.SessionID, string)) {
+	e.onSessionTitled = fn
+}
+
+// titleSystemPrompt is the system prompt used for session title generation.
+const titleSystemPrompt = `You generate ultra-short session titles.
+Rules:
+- Maximum 6 words
+- No quotes, no punctuation at the end
+- Match the language of the user message
+- Be specific and descriptive, not generic (avoid words like "Chat", "Question", "Discussion")
+- Reply with ONLY the title, nothing else`
+
+// generateTitleAsync calls the LLM in a background goroutine to produce a
+// short session title from the first user message and then invokes the
+// onSessionTitled callback with the result.
+func (e *Engine) generateTitleAsync(sessionID types.SessionID, firstUserMsg string) {
+	if e.apiClient == nil || e.onSessionTitled == nil {
+		return
+	}
+	const maxInputRunes = 500
+	runes := []rune(firstUserMsg)
+	if len(runes) > maxInputRunes {
+		firstUserMsg = string(runes[:maxInputRunes])
+	}
+	req := types.APIRequest{
+		Model:        e.config.Model,
+		MaxTokens:    50,
+		Stream:       false,
+		SystemPrompt: titleSystemPrompt,
+		Messages: []types.Message{
+			types.UserMessage("title-req", firstUserMsg),
+		},
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+	resp, err := e.apiClient.CreateMessage(ctx, req)
+	if err != nil || resp == nil {
+		return
+	}
+	// Extract the text from the first content block.
+	title := ""
+	for _, block := range resp.Content {
+		if t, ok := block.(types.TextContent); ok {
+			title = strings.TrimSpace(t.Text)
+			break
+		}
+	}
+	if title == "" {
+		return
+	}
+	e.onSessionTitled(sessionID, title)
 }

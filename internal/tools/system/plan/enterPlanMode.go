@@ -3,6 +3,7 @@ package plan
 import (
 	"context"
 	"fmt"
+	"time"
 
 	"github.com/EngineerProjects/nexus-engine/internal/modes"
 	"github.com/EngineerProjects/nexus-engine/internal/modes/execution"
@@ -90,6 +91,15 @@ func (t *EnterPlanModeTool) Call(
 
 	// Update runtime-only plan state for this session.
 	execution.EnterPlanMode(sessionID, t.agentID)
+
+	if emitter, ok := ctx.Value(types.RuntimeEventEmitterKey).(func(types.RuntimeEvent)); ok && emitter != nil {
+		emitter(types.RuntimeEvent{
+			Type:          types.RuntimeEventTypeExecutionModeChanged,
+			SessionID:     sessionID,
+			Timestamp:     time.Now().UTC(),
+			ExecutionMode: string(modes.ExecutionModePlan),
+		})
+	}
 
 	// Compute plan file path so the model knows where its plan will be saved.
 	planFilePath := execution.GetPlanFilePath(sessionID, t.agentID)
@@ -206,6 +216,8 @@ func (t *EnterPlanModeTool) resolveSessionID(input tool.CallInput) (types.Sessio
 
 // EnterPlanModePrompt is the system prompt for the EnterPlanMode tool.
 const EnterPlanModePrompt = `Use this tool before implementation when the task requires analysis and user alignment before you touch any file.
+
+If the user explicitly asks you to enter plan mode, call ` + "`enter_plan_mode`" + ` before continuing with analysis or implementation.
 
 ## Enter plan mode when
 

@@ -90,9 +90,10 @@ func (db *DB) ListCredentialKeys(ctx context.Context) ([]string, error) {
 
 // ─── Encryption helpers ────────────────────────────────────────────────────────
 
-// loadOrCreateEncryptionKey returns the 32-byte AES key from
-// ~/.config/nexus/secret.key, creating and writing it with mode 0600 on first use.
-// Falls back to migrating the legacy ~/.nexus_secret key on first run.
+// loadOrCreateEncryptionKey returns the 32-byte AES key from the runtime root
+// secret.key file (for the TUI this defaults to ~/.config/nexus-tui/secret.key),
+// creating and writing it with mode 0600 on first use. Falls back to migrating
+// the legacy ~/.nexus_secret key on first run.
 func loadOrCreateEncryptionKey() ([]byte, error) {
 	path, err := encryptionKeyPath()
 	if err != nil {

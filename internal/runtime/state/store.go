@@ -58,6 +58,21 @@ func (s *Store) LoadSession(sessionID types.SessionID) (*types.SessionMetadata, 
 	return s.backend.LoadSession(sessionID)
 }
 
+// UpdateSessionTitle atomically updates only the Title field of a session's
+// persisted metadata. It is safe to call concurrently with other operations.
+func (s *Store) UpdateSessionTitle(sessionID types.SessionID, title string) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	metadata, err := s.backend.LoadSession(sessionID)
+	if err != nil {
+		return fmt.Errorf("load session for title update: %w", err)
+	}
+	metadata.Title = title
+	metadata.UpdatedAt = time.Now()
+	return s.backend.SaveSession(sessionID, metadata)
+}
+
 // DeleteSession deletes a session from disk
 func (s *Store) DeleteSession(sessionID types.SessionID) error {
 	s.mu.Lock()
@@ -334,6 +349,7 @@ func (s *Store) GetSessionInfo(sessionID types.SessionID) (*SessionInfo, error) 
 		UpdatedAt:   metadata.UpdatedAt.Unix(),
 		TotalTurns:  metadata.TotalTurns,
 		TotalTokens: metadata.TotalTokens,
+		Title:       metadata.Title,
 	}
 	if metadata.Additional != nil {
 		if ct, ok := metadata.Additional["canonical_transcript"].(map[string]any); ok {

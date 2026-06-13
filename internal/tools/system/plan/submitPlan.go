@@ -5,9 +5,9 @@ import (
 	"fmt"
 	"regexp"
 	"strings"
-	"time"
 
 	"github.com/EngineerProjects/nexus-engine/internal/modes"
+	execution "github.com/EngineerProjects/nexus-engine/internal/modes/execution"
 	tool "github.com/EngineerProjects/nexus-engine/internal/tools/registry"
 	"github.com/EngineerProjects/nexus-engine/internal/tools/schema"
 	"github.com/EngineerProjects/nexus-engine/internal/types"
@@ -24,6 +24,7 @@ type SubmitPlanOutput struct {
 	Filename string `json:"filename"`
 	Version  int    `json:"version"`
 	Status   string `json:"status"`
+	Content  string `json:"-"`
 }
 
 // SubmitPlanTool implements submit_plan.
@@ -116,6 +117,10 @@ func (t *SubmitPlanTool) Call(
 	planID, _ := input.Parsed["plan_id"].(string)
 
 	filename := buildFilename(slug)
+	execution.SetPlanSlug(sessionID, slug)
+	if err := execution.SetPlan(sessionID, t.agentID, content); err != nil {
+		return tool.NewErrorResult(fmt.Errorf("failed to write plan file: %w", err)), nil
+	}
 
 	id, version, err := t.persistFn(ctx, planID, string(sessionID), t.userID, slug, filename, content)
 	if err != nil {
@@ -133,6 +138,7 @@ func (t *SubmitPlanTool) Call(
 				Filename: filename,
 				Status:   "pending",
 				Version:  version,
+				Content:  content,
 			},
 		})
 	}
@@ -143,6 +149,7 @@ func (t *SubmitPlanTool) Call(
 		Filename: filename,
 		Version:  version,
 		Status:   "pending",
+		Content:  content,
 	}
 
 	msg := fmt.Sprintf(`Plan submitted successfully.
@@ -234,8 +241,7 @@ func sanitizeSlug(s string) string {
 }
 
 func buildFilename(slug string) string {
-	now := time.Now()
-	return fmt.Sprintf("%s_%s.md", slug, now.Format("2006_01_02_15_04"))
+	return slug + ".md"
 }
 
 // SubmitPlanPrompt is the system prompt for the SubmitPlan tool.

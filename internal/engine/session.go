@@ -51,8 +51,12 @@ func (e *Engine) NewSessionFromState(
 	metadata *types.SessionMetadata,
 	messages []types.Message,
 ) (*Session, error) {
-	_ = ctx
-	createdFresh := metadata == nil
+	// createdFresh is true when creating a brand-new session:
+	// - metadata is nil (classic NewSession path), OR
+	// - sessionID is empty (SDK CreateSession path: metadata with Title but no ID).
+	// Both cases require an immediate store write so LoadSession works before
+	// the first SubmitMessage.
+	createdFresh := metadata == nil || sessionID == ""
 	if sessionID == "" {
 		sessionID = types.NewSessionID(generateID())
 	}
@@ -129,6 +133,11 @@ func (e *Engine) NewSessionFromState(
 		runtimeEventQueue: execution.NewRuntimeEventQueue(execution.DefaultRuntimeEventQueueCapacity),
 	}
 
+	// createdFresh is true when the caller is creating a brand-new session:
+	// - metadata was nil (classic NewSession path), OR
+	// - sessionID was empty (SDK path that passes pre-built metadata but no ID).
+	// In both cases the store entry must be written immediately so that
+	// LoadSession can succeed before the first SubmitMessage.
 	if createdFresh && e.sessionStore != nil {
 		if err := e.sessionStore.SaveSessionState(sessionID, metadata, nil, messageCopy); err != nil {
 			return nil, fmt.Errorf("failed to persist new session: %w", err)
@@ -214,6 +223,10 @@ func (s *Session) submitWithMessage(ctx context.Context, userMsg types.Message, 
 	}
 
 	turnCtx, cancel := context.WithCancel(ctx)
+	emitter := func(event types.RuntimeEvent) {
+		s.emitRuntimeEvent(event)
+	}
+	turnCtx = context.WithValue(turnCtx, types.RuntimeEventEmitterKey, emitter)
 	s.mu.Lock()
 	s.cancelFn = cancel
 	s.mu.Unlock()
@@ -255,6 +268,16 @@ func (s *Session) submitWithMessage(ctx context.Context, userMsg types.Message, 
 		return nil, fmt.Errorf("failed to persist session state after turn: %w", err)
 	}
 	s.rememberToolUsage(loopResult.ToolUses, loopResult.ToolResults)
+
+	// After the very first completed turn, kick off async title generation.
+	// We capture the first user message from persistedMessages (which includes
+	// it) so we don't have to scan the growing messages slice later.
+	if s.state.Metadata != nil && s.state.Metadata.TotalTurns == 1 {
+		if firstText := firstUserMessageText(persistedMessages); firstText != "" {
+			sid := s.state.SessionID
+			go s.engine.generateTitleAsync(sid, firstText)
+		}
+	}
 
 	response := &SessionResponse{
 		Messages:    s.state.CloneMessages(),
@@ -342,4 +365,24 @@ func (s *Session) enforceMaxTurns() error {
 		return fmt.Errorf("session turn limit reached: completed %d turns (max %d)", s.state.TurnNumber, maxTurns)
 	}
 	return nil
+}
+
+// firstUserMessageText returns the text of the first user message in msgs,
+// truncated to 500 runes. Returns "" if no user message is found.
+func firstUserMessageText(msgs []types.Message) string {
+	for _, msg := range msgs {
+		if msg.Role != types.RoleUser {
+			continue
+		}
+		for _, block := range msg.Content {
+			if t, ok := block.(types.TextContent); ok && t.Text != "" {
+				runes := []rune(t.Text)
+				if len(runes) > 500 {
+					return string(runes[:500])
+				}
+				return t.Text
+			}
+		}
+	}
+	return ""
 }

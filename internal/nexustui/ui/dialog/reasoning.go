@@ -1,0 +1,343 @@
+package dialog
+
+import (
+	"errors"
+	"strings"
+
+	"charm.land/bubbles/v2/help"
+	"charm.land/bubbles/v2/key"
+	"charm.land/bubbles/v2/textinput"
+	tea "charm.land/bubbletea/v2"
+	"charm.land/lipgloss/v2"
+	"github.com/EngineerProjects/nexus-engine/internal/nexustui/config"
+	"github.com/EngineerProjects/nexus-engine/internal/nexustui/ui/common"
+	"github.com/EngineerProjects/nexus-engine/internal/nexustui/ui/list"
+	"github.com/EngineerProjects/nexus-engine/internal/nexustui/ui/styles"
+	uv "github.com/charmbracelet/ultraviolet"
+	"github.com/sahilm/fuzzy"
+)
+
+const (
+	// ReasoningID is the identifier for the reasoning effort dialog.
+	ReasoningID              = "reasoning"
+	reasoningDialogMaxWidth  = settingsCardMaxWidth
+	reasoningDialogMaxHeight = settingsCardMaxHeight
+)
+
+// Reasoning represents a dialog for selecting reasoning effort.
+type Reasoning struct {
+	com   *common.Common
+	help  help.Model
+	list  *list.FilterableList
+	input textinput.Model
+
+	keyMap struct {
+		Select   key.Binding
+		Next     key.Binding
+		Previous key.Binding
+		UpDown   key.Binding
+		Back     key.Binding
+		Close    key.Binding
+	}
+}
+
+// ReasoningItem represents a reasoning effort list item.
+type ReasoningItem struct {
+	*list.Versioned
+	effort    string
+	title     string
+	isCurrent bool
+	t         *styles.Styles
+	m         fuzzy.Match
+	cache     map[int]string
+	focused   bool
+}
+
+// Finished implements list.Item. Reasoning items are render-stable
+// outside of explicit SetFocused / SetMatch.
+func (r *ReasoningItem) Finished() bool {
+	return true
+}
+
+var (
+	_ Dialog   = (*Reasoning)(nil)
+	_ ListItem = (*ReasoningItem)(nil)
+)
+
+// NewReasoning creates a new reasoning effort dialog.
+func NewReasoning(com *common.Common) (*Reasoning, error) {
+	r := &Reasoning{com: com}
+
+	help := help.New()
+	help.Styles = com.Styles.DialogHelpStyles()
+	r.help = help
+
+	r.list = list.NewFilterableList()
+	r.list.Focus()
+
+	r.input = textinput.New()
+	r.input.SetVirtualCursor(false)
+	r.input.Placeholder = "Type to filter"
+	r.input.SetStyles(com.Styles.TextInput)
+	r.input.Focus()
+
+	r.keyMap.Select = key.NewBinding(
+		key.WithKeys("enter", "ctrl+y"),
+		key.WithHelp("enter", "confirm"),
+	)
+	r.keyMap.Next = key.NewBinding(
+		key.WithKeys("down", "ctrl+n"),
+		key.WithHelp("↓", "next item"),
+	)
+	r.keyMap.Previous = key.NewBinding(
+		key.WithKeys("up", "ctrl+p"),
+		key.WithHelp("↑", "previous item"),
+	)
+	r.keyMap.UpDown = key.NewBinding(
+		key.WithKeys("up", "down"),
+		key.WithHelp("↑/↓", "choose"),
+	)
+	r.keyMap.Back = key.NewBinding(key.WithKeys("left"), key.WithHelp("←", "back"))
+	r.keyMap.Close = CloseKey
+
+	if err := r.setReasoningItems(); err != nil {
+		return nil, err
+	}
+
+	return r, nil
+}
+
+// ID implements Dialog.
+func (r *Reasoning) ID() string {
+	return ReasoningID
+}
+
+// HandleMsg implements [Dialog].
+func (r *Reasoning) HandleMsg(msg tea.Msg) Action {
+	switch msg := msg.(type) {
+	case tea.KeyPressMsg:
+		switch {
+		case key.Matches(msg, r.keyMap.Back):
+			return ActionOpenDialog{DialogID: CommandsID}
+		case key.Matches(msg, r.keyMap.Close):
+			return ActionClose{}
+		case key.Matches(msg, r.keyMap.Previous):
+			r.list.Focus()
+			if r.list.IsSelectedFirst() {
+				r.list.SelectLast()
+				r.list.ScrollToBottom()
+				break
+			}
+			r.list.SelectPrev()
+			r.list.ScrollToSelected()
+		case key.Matches(msg, r.keyMap.Next):
+			r.list.Focus()
+			if r.list.IsSelectedLast() {
+				r.list.SelectFirst()
+				r.list.ScrollToTop()
+				break
+			}
+			r.list.SelectNext()
+			r.list.ScrollToSelected()
+		case key.Matches(msg, r.keyMap.Select):
+			selectedItem := r.list.SelectedItem()
+			if selectedItem == nil {
+				break
+			}
+			reasoningItem, ok := selectedItem.(*ReasoningItem)
+			if !ok {
+				break
+			}
+			return ActionSelectReasoningEffort{Effort: reasoningItem.effort}
+		default:
+			var cmd tea.Cmd
+			r.input, cmd = r.input.Update(msg)
+			value := r.input.Value()
+			r.list.SetFilter(value)
+			r.list.ScrollToTop()
+			r.list.SetSelected(0)
+			return ActionCmd{cmd}
+		}
+	}
+	return nil
+}
+
+// Cursor returns the cursor position relative to the dialog.
+func (r *Reasoning) Cursor() *tea.Cursor {
+	return InputCursor(r.com.Styles, r.input.Cursor())
+}
+
+// Draw implements [Dialog].
+func (r *Reasoning) Draw(scr uv.Screen, area uv.Rectangle) *tea.Cursor {
+	t := r.com.Styles
+	width := max(0, min(reasoningDialogMaxWidth, area.Dx()-t.Dialog.View.GetHorizontalBorderSize()))
+	innerWidth := width - t.Dialog.View.GetHorizontalFrameSize()
+	inputW := max(0, innerWidth-t.Dialog.InputPrompt.GetHorizontalFrameSize()-1)
+
+	r.input.SetWidth(inputW)
+	r.help.SetWidth(innerWidth)
+
+	titleH := t.Dialog.Title.GetVerticalFrameSize() + titleContentHeight
+	inputH := t.Dialog.InputPrompt.GetVerticalFrameSize() + inputContentHeight
+	helpH := t.Dialog.HelpView.GetVerticalFrameSize()
+	viewFrameH := t.Dialog.View.GetVerticalFrameSize()
+	listMarginH := t.Dialog.List.GetVerticalMargins()
+	const subBlock = 3
+	const sepAbove = 1
+	overhead := titleH + inputH + subBlock + sepAbove + helpH + viewFrameH + listMarginH
+
+	r.list.SetSize(innerWidth, 9999)
+	measuredContentH := r.list.TotalHeight()
+	maxTermH := max(0, area.Dy()-t.Dialog.View.GetVerticalBorderSize())
+	height := max(overhead+1, min(reasoningDialogMaxHeight, min(maxTermH, overhead+measuredContentH)))
+	r.list.SetSize(innerWidth, max(1, height-overhead))
+
+	sep := t.Header.Separator.Render(strings.Repeat("─", innerWidth))
+
+	rc := NewRenderContext(t, width)
+	orange := lipgloss.NewStyle().Bold(true).Foreground(t.Logo.FieldColor)
+	rc.Parts = []string{rc.TitleStyle.Render(orange.Render("Settings  ›  Commands  ›  Reasoning Effort"))}
+
+	rc.AddPart(t.Dialog.InputPrompt.Render(r.input.View()))
+	rc.AddPart(sep)
+	rc.AddPart(t.Dialog.SecondaryText.Render("  choose a reasoning effort level"))
+	rc.Parts = append(rc.Parts, "")
+
+	visibleCount := len(r.list.FilteredItems())
+	if r.list.Height() >= visibleCount {
+		r.list.ScrollToTop()
+	} else {
+		r.list.ScrollToSelected()
+	}
+
+	rc.AddPart(t.Dialog.List.Height(r.list.Height()).Render(r.list.Render()))
+	rc.Parts = append(rc.Parts, sep)
+	rc.Help = r.help.View(r)
+
+	view := rc.Render()
+	cur := r.Cursor()
+	DrawCenterCursor(scr, area, view, cur)
+	return cur
+}
+
+// ShortHelp implements [help.KeyMap].
+func (r *Reasoning) ShortHelp() []key.Binding {
+	return []key.Binding{
+		r.keyMap.UpDown,
+		r.keyMap.Select,
+		r.keyMap.Back,
+		r.keyMap.Close,
+	}
+}
+
+// FullHelp implements [help.KeyMap].
+func (r *Reasoning) FullHelp() [][]key.Binding {
+	m := [][]key.Binding{}
+	slice := []key.Binding{
+		r.keyMap.Select,
+		r.keyMap.Next,
+		r.keyMap.Previous,
+		r.keyMap.Back,
+		r.keyMap.Close,
+	}
+	for i := 0; i < len(slice); i += 4 {
+		end := min(i+4, len(slice))
+		m = append(m, slice[i:end])
+	}
+	return m
+}
+
+func (r *Reasoning) setReasoningItems() error {
+	cfg := r.com.Config()
+	agentCfg, ok := cfg.Agents[config.AgentCoder]
+	if !ok {
+		return errors.New("agent configuration not found")
+	}
+
+	selectedModel := cfg.Models[agentCfg.Model]
+	model := cfg.GetModelByType(agentCfg.Model)
+	if model == nil {
+		return errors.New("model configuration not found")
+	}
+
+	if len(model.ReasoningLevels) == 0 {
+		return errors.New("no reasoning levels available")
+	}
+
+	currentEffort := selectedModel.ReasoningEffort
+	if currentEffort == "" {
+		currentEffort = model.DefaultReasoningEffort
+	}
+
+	items := make([]list.FilterableItem, 0, len(model.ReasoningLevels))
+	selectedIndex := 0
+	for i, effort := range model.ReasoningLevels {
+		item := &ReasoningItem{
+			Versioned: list.NewVersioned(),
+			effort:    effort,
+			title:     common.FormatReasoningEffort(effort),
+			isCurrent: effort == currentEffort,
+			t:         r.com.Styles,
+		}
+		items = append(items, item)
+		if effort == currentEffort {
+			selectedIndex = i
+		}
+	}
+
+	r.list.SetItems(items...)
+	r.list.SetSelected(selectedIndex)
+	r.list.ScrollToSelected()
+	return nil
+}
+
+// Filter returns the filter value for the reasoning item.
+func (r *ReasoningItem) Filter() string {
+	return r.title
+}
+
+// ID returns the unique identifier for the reasoning effort.
+func (r *ReasoningItem) ID() string {
+	return r.effort
+}
+
+// SetFocused sets the focus state of the reasoning item.
+func (r *ReasoningItem) SetFocused(focused bool) {
+	if r.focused == focused {
+		return
+	}
+	r.cache = nil
+	r.focused = focused
+	if r.Versioned != nil {
+		r.Bump()
+	}
+}
+
+// SetMatch sets the fuzzy match for the reasoning item.
+func (r *ReasoningItem) SetMatch(m fuzzy.Match) {
+	if sameFuzzyMatch(r.m, m) {
+		return
+	}
+	r.cache = nil
+	r.m = m
+	if r.Versioned != nil {
+		r.Bump()
+	}
+}
+
+// Render returns the string representation of the reasoning item.
+func (r *ReasoningItem) Render(width int) string {
+	info := ""
+	if r.isCurrent {
+		info = "current"
+	}
+	styles := ListItemStyles{
+		ItemBlurred: r.t.Dialog.NormalItem,
+		ItemFocused: r.t.Dialog.SelectedItem.
+			Background(lipgloss.Color(settingsCardSelectedBg)).
+			Foreground(r.t.Dialog.NormalItem.GetForeground()),
+		InfoTextBlurred: r.t.Dialog.ListItem.InfoBlurred,
+		InfoTextFocused: r.t.Dialog.ListItem.InfoFocused,
+	}
+	return renderItem(styles, r.title, info, r.focused, width, r.cache, &r.m)
+}

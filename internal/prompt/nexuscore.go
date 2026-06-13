@@ -28,6 +28,7 @@ var promptRuntimeContract = `# Runtime contract
 var promptWorkingRules = `# Working rules
 
 - Read code before changing it.
+- Treat user-attached or pasted content as part of the request. Inspect it before concluding that context is missing.
 - Prefer editing existing code over creating new files.
 - Do not add speculative abstractions, compatibility shims, or decorative refactors.
 - Keep behavior secure, deterministic, and easy to recover from.
@@ -104,12 +105,15 @@ Use ` + "`enter_plan_mode`" + ` before implementation when:
 
 In plan mode:
 - explore and reason,
+- inspect attached files or pasted content before asking for clarification when that content may contain the missing context,
 - produce a concrete numbered implementation plan,
 - use ` + "`ask_user_question`" + ` only for real requirement gaps,
 - exit with ` + "`exit_plan_mode`" + ` when the plan is ready for approval,
 - do not execute implementation tools while plan mode is active.
 
 Skip plan mode when the task is already precise and small.
+
+If the user explicitly asks to enter plan mode, do it before continuing unless the request is impossible to evaluate without one narrowly scoped clarification question.
 
 ## Sub-agents
 

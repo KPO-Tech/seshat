@@ -20,7 +20,7 @@ type TaskInfo struct {
 	ExitCode  int    `json:"exitCode,omitempty"`
 }
 
-// TaskListTool implements the TaskList tool for listing background tasks
+// TaskListTool implements the TaskList tool for listing todo and background tasks.
 type TaskListTool struct{}
 
 // NewTaskListTool creates a new TaskList tool
@@ -35,7 +35,7 @@ func (t *TaskListTool) Definition() tool.Definition {
 		DisplayName: "TaskList",
 		SearchHint:  SearchHintTaskList,
 		Description: ToolDescriptionTaskList,
-		Category:    "process",
+		Category:    "task",
 		Metadata:    taskSurfaceMetadata(),
 		InputSchema: schema.FromMap(map[string]any{
 			"type": "object",
@@ -48,7 +48,7 @@ func (t *TaskListTool) Definition() tool.Definition {
 				"listType": map[string]any{
 					"type":        "string",
 					"enum":        []string{"background", "todo", "all"},
-					"description": "Type of tasks to list: 'background' (running processes), 'todo' (task list), or 'all'. Default is 'background'.",
+					"description": "Type of tasks to list: 'todo' (session task list), 'background' (running processes), or 'all'. Defaults intelligently based on available session tasks.",
 				},
 			},
 		}),
@@ -62,19 +62,47 @@ func (t *TaskListTool) Call(ctx context.Context, input tool.CallInput, permissio
 		parsed = make(map[string]any)
 	}
 
-	// Get status filter (default: running)
-	statusFilter := "running"
-	if s, ok := parsed["status"].(string); ok {
-		statusFilter = s
+	sessionID := resolveOptionalTaskSessionID(input)
+	hasTodoTasks := false
+	if sessionID != "" {
+		if tasks, err := GlobalTaskStore().ListTasks(ctx, sessionID); err == nil && len(tasks) > 0 {
+			hasTodoTasks = true
+		}
 	}
 
-	// Get list type - "background" (default), "todo", or "all"
-	listType := "background"
+	listType := ""
 	if lt, ok := parsed["listType"].(string); ok {
 		listType = lt
 	}
+	if listType == "" {
+		if hasTodoTasks {
+			listType = "todo"
+		} else {
+			listType = "background"
+		}
+	}
+
+	statusFilter := ""
+	if s, ok := parsed["status"].(string); ok {
+		statusFilter = s
+	}
+	if statusFilter == "" {
+		if listType == "todo" || listType == "all" {
+			statusFilter = "all"
+		} else {
+			statusFilter = "running"
+		}
+	}
+
+	if listType == "todo" && sessionID == "" {
+		return tool.CallResult{Error: fmt.Errorf("session ID is required for todo task listing")}, nil
+	}
 
 	result := make([]map[string]any, 0)
+	metadata := taskListRenderMetadata{
+		ListType:     listType,
+		StatusFilter: statusFilter,
+	}
 
 	// List background tasks
 	if listType == "background" || listType == "all" {
@@ -125,14 +153,25 @@ func (t *TaskListTool) Call(ctx context.Context, input tool.CallInput, permissio
 			}
 
 			result = append(result, taskInfo)
+			metadata.BackgroundTasks = append(metadata.BackgroundTasks, taskListBackgroundRenderItem{
+				ID:      task.ID,
+				Command: task.Command,
+				Status:  taskStatus,
+			})
 		}
 	}
 
 	// List todo-style tasks
 	if listType == "todo" || listType == "all" {
-		todoTasks := GlobalTaskStore().ListTasks()
+		todoTasks, err := GlobalTaskStore().ListTasks(ctx, sessionID)
+		if err != nil {
+			return tool.CallResult{Error: err}, nil
+		}
 
 		for _, task := range todoTasks {
+			if task.Status == TaskStatusDeleted {
+				metadata.DeletedCount++
+			}
 			// Apply filter
 			if statusFilter == "running" && task.Status != TaskStatusInProgress {
 				continue
@@ -156,6 +195,15 @@ func (t *TaskListTool) Call(ctx context.Context, input tool.CallInput, permissio
 			}
 
 			result = append(result, taskInfo)
+			if task.Status != TaskStatusDeleted {
+				metadata.TodoTasks = append(metadata.TodoTasks, taskListTodoRenderItem{
+					ID:         task.ID,
+					Subject:    task.Subject,
+					Status:     task.Status,
+					ActiveForm: task.ActiveForm,
+					Owner:      task.Owner,
+				})
+			}
 		}
 	}
 
@@ -164,8 +212,12 @@ func (t *TaskListTool) Call(ctx context.Context, input tool.CallInput, permissio
 		"count": len(result),
 	}
 
+	metadata.Count = len(result)
 	return tool.CallResult{
 		Data: output,
+		Metadata: &tool.ResultMetadata{Additional: map[string]any{
+			"task_list": metadata,
+		}},
 	}, nil
 }
 
