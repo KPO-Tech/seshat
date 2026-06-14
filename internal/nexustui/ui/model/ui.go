@@ -783,14 +783,17 @@ func (m *UI) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			if req.IsCustomText {
 				// "Other" follow-up: redirect the next textarea submit.
 				m.askUserCustomTextID = req.ID
-				m.setState(m.state, uiFocusEditor)
+				m.focus = uiFocusEditor
+				m.chat.Blur()
 				m.textarea.Placeholder = "Type your answer and press Enter…"
 				if cmd := m.textarea.Focus(); cmd != nil {
 					cmds = append(cmds, cmd)
 				}
 			} else {
 				if m.chat.ActivateAskUserQuestion(req) {
-					m.setState(m.state, uiFocusMain)
+					m.focus = uiFocusMain
+					m.textarea.Blur()
+					m.chat.Focus()
 					if cmd := m.chat.ScrollToSelectedAndAnimate(); cmd != nil {
 						cmds = append(cmds, cmd)
 					}
@@ -2333,6 +2336,12 @@ func (m *UI) handleKeyPressMsg(msg tea.KeyPressMsg) tea.Cmd {
 				}
 			}
 		case uiFocusMain:
+			// Let the focused interactive item consume the key first (e.g. ask_user_question
+			// option picker). Only fall through to chat scroll/select if not consumed.
+			if ok, cmd := m.chat.HandleKeyMsg(msg); ok {
+				cmds = append(cmds, cmd)
+				break
+			}
 			switch {
 			case key.Matches(msg, m.keyMap.Tab):
 				if m.hasSidebarTasks() {
@@ -2418,11 +2427,7 @@ func (m *UI) handleKeyPressMsg(msg tea.KeyPressMsg) tea.Cmd {
 				}
 				m.chat.SelectLast()
 			default:
-				if ok, cmd := m.chat.HandleKeyMsg(msg); ok {
-					cmds = append(cmds, cmd)
-				} else {
-					handleGlobalKeys(msg)
-				}
+				handleGlobalKeys(msg)
 			}
 		case uiFocusSidebar:
 			switch {
