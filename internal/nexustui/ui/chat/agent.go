@@ -707,16 +707,19 @@ func (s *SpawnAgentToolRenderContext) RenderTool(sty *styles.Styles, width int, 
 		return joinToolParts(header, earlyState)
 	}
 
+	bodyWidth := cappedWidth - toolBodyLeftPaddingTotal
 	prompt := strings.ReplaceAll(params.Prompt, "\n", " ")
 	taskTag := sty.Tool.AgentTaskTag.Render("Task")
 	taskTagWidth := lipgloss.Width(taskTag)
-	remainingWidth := min(cappedWidth-taskTagWidth-3, maxTextWidth-taskTagWidth-3)
-	promptText := sty.Tool.AgentPrompt.Width(remainingWidth).Render(prompt)
-
+	promptWidth := min(bodyWidth-taskTagWidth-1, maxTextWidth-taskTagWidth-1)
+	if promptWidth < 1 {
+		promptWidth = 1
+	}
+	promptText := sty.Tool.AgentPrompt.Width(promptWidth).Render(prompt)
 	taskLine := lipgloss.JoinHorizontal(lipgloss.Left, taskTag, " ", promptText)
 
-	var parts []string
-	parts = append(parts, header, "", taskLine)
+	var bodyParts []string
+	bodyParts = append(bodyParts, taskLine)
 
 	// When done, show agent_id + status.
 	if opts.HasResult() {
@@ -737,11 +740,12 @@ func (s *SpawnAgentToolRenderContext) RenderTool(sty *styles.Styles, width int, 
 			if out.Status != "" {
 				idLine += "  " + sty.Tool.StateWaiting.Render("("+out.Status+")")
 			}
-			parts = append(parts, "", idLine)
+			bodyParts = append(bodyParts, "", idLine)
 		}
 	}
 
-	return lipgloss.JoinVertical(lipgloss.Left, parts...)
+	body := sty.Tool.Body.Render(strings.Join(bodyParts, "\n"))
+	return joinToolParts(header, body)
 }
 
 // -----------------------------------------------------------------------------

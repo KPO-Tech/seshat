@@ -2,6 +2,7 @@ package chat
 
 import (
 	"encoding/json"
+	"fmt"
 	"strings"
 
 	"github.com/EngineerProjects/nexus-engine/internal/nexustui/message"
@@ -26,8 +27,7 @@ func NewBrowserToolMessageItem(
 	return newBaseToolMessageItem(sty, toolCall, result, &BrowserToolRenderContext{}, canceled)
 }
 
-// BrowserToolRenderContext renders browser_* tool messages with a generic
-// handler that extracts the most meaningful display param per tool name.
+// BrowserToolRenderContext renders browser_* tool messages.
 type BrowserToolRenderContext struct{}
 
 // browserDisplayName returns the human-readable label for a browser tool.
@@ -70,84 +70,120 @@ func browserDisplayName(toolName string) string {
 	case "browser_wait":
 		return "Browser Wait"
 	default:
-		// Fallback: humanize "browser_foo_bar" → "Foo Bar"
 		name := strings.TrimPrefix(toolName, "browser_")
 		return humanizedToolName(name)
 	}
 }
 
-// browserExtractParam parses the tool input JSON and returns the most
-// meaningful display parameter (URL, selector, key, text, …).
-func browserExtractParam(toolName string, inputJSON string, cappedWidth int) []string {
+// browserInputParam extracts the primary display parameter from the tool input.
+func browserInputParam(toolName string, inputJSON string, maxLen int) string {
 	var raw map[string]any
 	if err := json.Unmarshal([]byte(inputJSON), &raw); err != nil {
-		return nil
+		return ""
 	}
 
-	maxParam := cappedWidth / 2
-
-	getString := func(key string) string {
+	str := func(key string) string {
 		if v, ok := raw[key].(string); ok && v != "" {
-			return ansi.Truncate(v, maxParam, "…")
+			return ansi.Truncate(v, maxLen, "…")
 		}
 		return ""
 	}
 
 	switch toolName {
 	case "browser_open", "browser_navigate":
-		if url := getString("url"); url != "" {
-			return []string{url}
-		}
+		return str("url")
 	case "browser_click":
-		if el := getString("element_id"); el != "" {
-			return []string{el}
-		}
+		return str("element_id")
 	case "browser_type":
-		var params []string
-		if el := getString("element_id"); el != "" {
-			params = append(params, el)
+		if el := str("element_id"); el != "" {
+			return el
 		}
-		if text := getString("text"); text != "" {
-			params = append(params, ansi.Truncate(text, maxParam, "…"))
-		}
-		return params
+		return str("text")
 	case "browser_press":
-		if key := getString("key"); key != "" {
-			return []string{key}
-		}
+		return str("key")
 	case "browser_scroll":
-		if dir := getString("direction"); dir != "" {
-			if amt, ok := raw["amount"].(float64); ok && amt != 0 {
-				return []string{dir, formatBrowserAmount(int(amt))}
-			}
-			return []string{dir}
+		dir := str("direction")
+		if amt, ok := raw["amount"].(float64); ok && amt > 0 && dir != "" {
+			return fmt.Sprintf("%s %s", dir, formatBrowserAmount(int(amt)))
 		}
+		return dir
 	case "browser_search_content":
-		if q := getString("query"); q != "" {
-			return []string{q}
-		}
+		return str("query")
 	case "browser_select_page", "browser_close_page":
-		if pid := getString("page_id"); pid != "" {
-			return []string{pid}
-		}
+		return str("page_id")
 	case "browser_extract":
-		if sel := getString("selector"); sel != "" {
-			return []string{sel}
-		}
-	case "browser_screenshot":
-		if pid := getString("page_id"); pid != "" {
-			return []string{pid}
-		}
-	case "browser_snapshot":
-		if pid := getString("page_id"); pid != "" {
-			return []string{pid}
-		}
+		return str("selector")
+	case "browser_screenshot", "browser_snapshot":
+		return str("page_id")
 	case "browser_wait":
-		if dur := getString("duration"); dur != "" {
-			return []string{dur}
+		if dur := str("duration"); dur != "" {
+			return dur
+		}
+		return str("condition")
+	}
+	return ""
+}
+
+// browserResultParam extracts a more specific display parameter from the result
+// content, replacing or augmenting the input param for tools where the result
+// provides better context (URL after navigation, counts for list tools).
+func browserResultParam(toolName, content string, maxLen int) string {
+	if content == "" {
+		return ""
+	}
+
+	// For content/capture tools, extract the URL from the formatted result.
+	switch toolName {
+	case "browser_snapshot", "browser_extract", "browser_screenshot":
+		for _, line := range strings.SplitN(content, "\n", 8) {
+			line = strings.TrimSpace(line)
+			if url, ok := strings.CutPrefix(line, "URL: "); ok && url != "" {
+				return ansi.Truncate(url, maxLen, "…")
+			}
+		}
+
+	// For list tools, count the entries.
+	case "browser_list_pages":
+		n := strings.Count(content, "\n- ")
+		if strings.HasPrefix(content, "- ") {
+			n++
+		}
+		if n > 0 {
+			return fmt.Sprintf("%d pages", n)
+		}
+	case "browser_network_list":
+		n := strings.Count(content, "\n- ")
+		if strings.HasPrefix(content, "- ") {
+			n++
+		}
+		if n > 0 {
+			return fmt.Sprintf("%d requests", n)
+		}
+	case "browser_list_downloads":
+		n := strings.Count(content, "\n- ")
+		if strings.HasPrefix(content, "- ") {
+			n++
+		}
+		if n > 0 {
+			return fmt.Sprintf("%d downloads", n)
 		}
 	}
-	return nil
+	return ""
+}
+
+// browserSuccessNoBody returns true for tools where a successful result needs
+// no body — the header already communicates the outcome.
+func browserSuccessNoBody(toolName string, result *message.ToolResult) bool {
+	if result == nil || result.IsError {
+		return false
+	}
+	switch toolName {
+	case "browser_open", "browser_navigate",
+		"browser_click", "browser_type", "browser_press", "browser_scroll", "browser_wait",
+		"browser_select_page", "browser_close_page":
+		return true
+	}
+	return false
 }
 
 func formatBrowserAmount(n int) string {
@@ -169,7 +205,21 @@ func (b *BrowserToolRenderContext) RenderTool(sty *styles.Styles, width int, opt
 		return pendingTool(sty, displayName, opts.Anim, opts.Compact)
 	}
 
-	headerParams := browserExtractParam(opts.ToolCall.Name, opts.ToolCall.Input, cappedWidth)
+	maxParam := cappedWidth / 2
+	param := browserInputParam(opts.ToolCall.Name, opts.ToolCall.Input, maxParam)
+
+	// For certain tools, the result provides a better/more specific header param.
+	if opts.HasResult() {
+		if rp := browserResultParam(opts.ToolCall.Name, opts.Result.Content, maxParam); rp != "" {
+			param = rp
+		}
+	}
+
+	var headerParams []string
+	if param != "" {
+		headerParams = []string{param}
+	}
+
 	header := toolHeader(sty, opts.Status, displayName, cappedWidth, opts.Compact, headerParams...)
 	if opts.Compact {
 		return header
@@ -179,7 +229,7 @@ func (b *BrowserToolRenderContext) RenderTool(sty *styles.Styles, width int, opt
 		return joinToolParts(header, earlyState)
 	}
 
-	if opts.HasEmptyResult() {
+	if opts.HasEmptyResult() || browserSuccessNoBody(opts.ToolCall.Name, opts.Result) {
 		return header
 	}
 
