@@ -17,6 +17,14 @@ func TestCommandPolicyAsksForDangerousCommand(t *testing.T) {
 	}
 }
 
+func TestCommandPolicyAsksForSafeAbsoluteTmpRemoval(t *testing.T) {
+	policy := NewDefaultCommandPolicy()
+	result := policy.Evaluate("rm -rf /tmp/nexus-scratch")
+	if result.Decision != DecisionAsk {
+		t.Fatalf("expected ask, got %s", result.Decision)
+	}
+}
+
 func TestCommandPolicyDeniesExplicitlyForbiddenCommand(t *testing.T) {
 	policy := NewDefaultCommandPolicy()
 	result := policy.Evaluate("rm -rf /")

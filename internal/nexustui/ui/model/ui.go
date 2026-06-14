@@ -2592,9 +2592,9 @@ func (m *UI) Draw(scr uv.Screen, area uv.Rectangle) *tea.Cursor {
 			// +1 = left border character │ before textarea text.
 			cur.X += m.layout.editor.Min.X + 1
 			// editor.Min.Y = screen row where the editor area starts.
-			// +1 = the leading empty line from strings.Join(["", box, ""], "\n").
-			// +1 = the top border row ┌───┐.
-			cur.Y += m.layout.editor.Min.Y + 2
+			// Add any attachment rows rendered above the input box, then offset by
+			// the top border row ┌───┐ so the cursor lands on the textarea text.
+			cur.Y += m.layout.editor.Min.Y + m.editorAttachmentsHeight(m.layout.editor.Dx()) + 1
 			return cur
 		}
 	}
@@ -3428,11 +3428,19 @@ func (m *UI) renderEditorView(width int) string {
 		Width(boxWidth).
 		Render(m.textarea.View())
 
-	return strings.Join([]string{
-		attachmentsView,
-		box,
-		"",
-	}, "\n")
+	parts := make([]string, 0, 3)
+	if attachmentsView != "" {
+		parts = append(parts, attachmentsView)
+	}
+	parts = append(parts, box, "")
+	return strings.Join(parts, "\n")
+}
+
+func (m *UI) editorAttachmentsHeight(width int) int {
+	if len(m.attachments.List()) == 0 {
+		return 0
+	}
+	return lipgloss.Height(m.attachments.Render(width))
 }
 
 // cacheSidebarLogo renders and caches the sidebar logo at the specified width.

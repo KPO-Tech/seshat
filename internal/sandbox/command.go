@@ -33,6 +33,7 @@ var shellWrappers = [][]string{
 //   - Evaluate:    deny/ask/allow based on danger fragments and command type
 type CommandPolicy struct {
 	denyFragments []string
+	denyPatterns  []*regexp.Regexp
 	askCommands   map[string]bool
 }
 
@@ -40,10 +41,12 @@ func NewDefaultCommandPolicy() *CommandPolicy {
 	return &CommandPolicy{
 		// Hard-deny fragments: commands that must never run regardless of mode.
 		denyFragments: []string{
-			"rm -rf /",
-			"rm -rf /*",
 			"dd if=/dev/zero",
 			"mkfs",
+		},
+		denyPatterns: []*regexp.Regexp{
+			regexp.MustCompile(`(?i)\brm\b[^|&;]*\s+-[^\s]*[rf][^\s]*\s+/(\s|$)`),
+			regexp.MustCompile(`(?i)\brm\b[^|&;]*\s+-[^\s]*[rf][^\s]*\s+/\*(\s|$)`),
 		},
 		// Ask commands: the bare command name requires explicit approval.
 		askCommands: map[string]bool{
@@ -127,7 +130,15 @@ func (p *CommandPolicy) evaluateComposed(composed string) DecisionResult {
 
 // evaluateSingle checks a single (non-composed, non-wrapper) command.
 func (p *CommandPolicy) evaluateSingle(command string) DecisionResult {
-	// 1. Deny fragments — hardcoded catastrophic patterns
+	// 1. Deny fragments/patterns — hardcoded catastrophic patterns
+	for _, pattern := range p.denyPatterns {
+		if pattern.MatchString(command) {
+			return DecisionResult{
+				Decision: DecisionDeny,
+				Reason:   "command matches deny rule: " + pattern.String(),
+			}
+		}
+	}
 	for _, fragment := range p.denyFragments {
 		if strings.Contains(command, fragment) {
 			return DecisionResult{

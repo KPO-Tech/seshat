@@ -66,6 +66,31 @@ var DangerousDirectories = []string{
 	".gnupg",
 }
 
+// protectedSystemRemovalPrefixes are system trees that must never be removed,
+// even with explicit approval. These are intentionally narrower than "all
+// direct children of /" so paths like /tmp or /projects can still flow to the
+// normal permission prompt.
+var protectedSystemRemovalPrefixes = []string{
+	"/bin",
+	"/boot",
+	"/dev",
+	"/etc",
+	"/lib",
+	"/lib64",
+	"/proc",
+	"/root",
+	"/run",
+	"/sbin",
+	"/sys",
+	"/usr",
+	"/var",
+}
+
+var protectedSystemRemovalExactPaths = []string{
+	"/",
+	"/home",
+}
+
 // IsDangerousFile checks if a file path points to a dangerous file.
 func IsDangerousFile(path string) bool {
 	baseName := strings.ToLower(filepath.Base(path))
@@ -112,6 +137,27 @@ func isPathInDirectory(pathParts, dirParts []string) bool {
 	return false
 }
 
+func matchingProtectedSystemRemovalExactPath(path string) string {
+	clean := filepath.Clean(path)
+	for _, exact := range protectedSystemRemovalExactPaths {
+		if clean == filepath.Clean(exact) {
+			return exact
+		}
+	}
+	return ""
+}
+
+func matchingProtectedSystemRemovalPrefix(path string) string {
+	clean := filepath.Clean(path)
+	for _, prefix := range protectedSystemRemovalPrefixes {
+		root := filepath.Clean(prefix)
+		if clean == root || strings.HasPrefix(clean, root+string(filepath.Separator)) {
+			return prefix
+		}
+	}
+	return ""
+}
+
 // CheckDangerousRemovalPath checks if a removal path is dangerous.
 // Aligned with OpenClaude's checkDangerousRemovalPaths (pathValidation.ts:331-367).
 func CheckDangerousRemovalPath(path string, cwd string) error {
@@ -144,17 +190,11 @@ func checkAbsoluteRemovalPath(absPath string) error {
 		return fmt.Errorf("dangerous removal path: home directory")
 	}
 
-	// On Unix, check for direct children of root
-	if runtime.GOOS != "windows" {
-		if strings.HasPrefix(absPath, "/") {
-			// Get the path after root
-			afterRoot := strings.TrimPrefix(absPath, "/")
-			parts := strings.Split(afterRoot, string(filepath.Separator))
-			if len(parts) == 1 && parts[0] != "" {
-				// Direct child of root (e.g., /usr, /tmp, /etc)
-				return fmt.Errorf("dangerous removal path: direct child of root directory")
-			}
-		}
+	if exact := matchingProtectedSystemRemovalExactPath(absPath); exact != "" {
+		return fmt.Errorf("dangerous removal path: protected system path %s", exact)
+	}
+	if prefix := matchingProtectedSystemRemovalPrefix(absPath); prefix != "" {
+		return fmt.Errorf("dangerous removal path: protected system path prefix %s", prefix)
 	}
 
 	// On Windows, check for drive root

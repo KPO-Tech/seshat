@@ -70,12 +70,13 @@ func TestAgentTool_runAgent_NilEngine_ReturnsError(t *testing.T) {
 	result := a.runAgent(nil, "general", "do something", 1, nil, nil) //nolint:staticcheck
 	if result == nil {
 		t.Fatal("expected non-nil RunResult, got nil")
-	}
-	if result.Success {
-		t.Error("expected Success=false when engine is nil")
-	}
-	if result.Error == "" {
-		t.Error("expected non-empty Error when engine is nil")
+	} else {
+		if result.Success {
+			t.Error("expected Success=false when engine is nil")
+		}
+		if result.Error == "" {
+			t.Error("expected non-empty Error when engine is nil")
+		}
 	}
 }
 
@@ -86,12 +87,13 @@ func TestAgentTool_runForkAgent_NilEngine_ReturnsError(t *testing.T) {
 	result := a.runForkAgent(nil, "general", "do something", 1, nil, nil, nil) //nolint:staticcheck
 	if result == nil {
 		t.Fatal("expected non-nil RunResult, got nil")
-	}
-	if result.Success {
-		t.Error("expected Success=false when engine is nil")
-	}
-	if result.Error == "" {
-		t.Error("expected non-empty Error when engine is nil")
+	} else {
+		if result.Success {
+			t.Error("expected Success=false when engine is nil")
+		}
+		if result.Error == "" {
+			t.Error("expected non-empty Error when engine is nil")
+		}
 	}
 }
 
