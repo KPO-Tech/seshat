@@ -295,6 +295,76 @@ func parseWebSearchContent(content string) []webSearchHit {
 	return hits
 }
 
+// -----------------------------------------------------------------------------
+// Read Document URL Tool
+// -----------------------------------------------------------------------------
+
+// ReadDocumentURLToolMessageItem represents a read_document_url tool call.
+type ReadDocumentURLToolMessageItem struct {
+	*baseToolMessageItem
+}
+
+var _ ToolMessageItem = (*ReadDocumentURLToolMessageItem)(nil)
+
+// NewReadDocumentURLToolMessageItem creates a new [ReadDocumentURLToolMessageItem].
+func NewReadDocumentURLToolMessageItem(
+	sty *styles.Styles,
+	toolCall message.ToolCall,
+	result *message.ToolResult,
+	canceled bool,
+) ToolMessageItem {
+	return newBaseToolMessageItem(sty, toolCall, result, &ReadDocumentURLToolRenderContext{}, canceled)
+}
+
+// ReadDocumentURLToolRenderContext renders read_document_url tool messages.
+type ReadDocumentURLToolRenderContext struct{}
+
+type readDocumentURLParams struct {
+	URL      string `json:"url"`
+	SavePath string `json:"save_path,omitempty"`
+	Prompt   string `json:"prompt,omitempty"`
+}
+
+// RenderTool implements the [ToolRenderer] interface.
+func (r *ReadDocumentURLToolRenderContext) RenderTool(sty *styles.Styles, width int, opts *ToolRenderOpts) string {
+	cappedWidth := cappedToolWidth(width)
+	if opts.IsPending() {
+		return pendingTool(sty, "Read Document", opts.Anim, opts.Compact)
+	}
+
+	var params readDocumentURLParams
+	if err := json.Unmarshal([]byte(opts.ToolCall.Input), &params); err != nil {
+		return invalidInputContent(sty, opts, "Read Document", cappedWidth)
+	}
+
+	headerParams := []string{params.URL}
+	if params.SavePath != "" {
+		headerParams = append(headerParams, "→ "+params.SavePath)
+	}
+
+	header := toolHeader(sty, opts.Status, "Read Document", cappedWidth, opts.Compact, headerParams...)
+	if opts.Compact {
+		return header
+	}
+
+	if earlyState, ok := toolEarlyStateContent(sty, opts, cappedWidth); ok {
+		return joinToolParts(header, earlyState)
+	}
+
+	if opts.HasEmptyResult() {
+		return header
+	}
+
+	bodyWidth := cappedWidth - toolBodyLeftPaddingTotal
+	content := toolOutputMarkdownContent(sty, opts.Result.Content, cappedWidth, opts.ExpandedContent)
+	if params.Prompt != "" {
+		prompt := sty.Tool.WebFetchPrompt.Render("↳ " + ansi.Truncate(params.Prompt, bodyWidth-2, "…"))
+		promptBody := sty.Tool.Body.Render(prompt)
+		return joinToolParts(header, strings.Join([]string{promptBody, content}, "\n"))
+	}
+	return joinToolParts(header, content)
+}
+
 // renderWebSearchHits renders a compact list of search hits with title, URL, and description.
 func renderWebSearchHits(sty *styles.Styles, hits []webSearchHit, width int, expanded bool) string {
 	maxVisible := webSearchMaxVisible

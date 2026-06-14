@@ -488,3 +488,124 @@ func (s *SourcegraphToolRenderContext) RenderTool(sty *styles.Styles, width int,
 	body := sty.Tool.Body.Render(toolOutputPlainContent(sty, opts.Result.Content, bodyWidth, opts.ExpandedContent))
 	return joinToolParts(header, body)
 }
+
+// -----------------------------------------------------------------------------
+// Tool Search Tool
+// -----------------------------------------------------------------------------
+
+// ToolSearchToolMessageItem represents a tool_search tool call.
+type ToolSearchToolMessageItem struct {
+	*baseToolMessageItem
+}
+
+var _ ToolMessageItem = (*ToolSearchToolMessageItem)(nil)
+
+// NewToolSearchToolMessageItem creates a new [ToolSearchToolMessageItem].
+func NewToolSearchToolMessageItem(
+	sty *styles.Styles,
+	toolCall message.ToolCall,
+	result *message.ToolResult,
+	canceled bool,
+) ToolMessageItem {
+	return newBaseToolMessageItem(sty, toolCall, result, &ToolSearchToolRenderContext{}, canceled)
+}
+
+// ToolSearchToolRenderContext renders tool_search tool messages.
+type ToolSearchToolRenderContext struct{}
+
+type toolSearchParams struct {
+	Query      string `json:"query"`
+	MaxResults int    `json:"max_results,omitempty"`
+}
+
+type toolSearchOutput struct {
+	Query   string `json:"query"`
+	Matches []struct {
+		Name       string `json:"name"`
+		SearchHint string `json:"search_hint,omitempty"`
+		Category   string `json:"category,omitempty"`
+		IsMCP      bool   `json:"is_mcp"`
+	} `json:"matches"`
+	TotalTools int `json:"total_tools"`
+	Scored     int `json:"scored"`
+}
+
+const toolSearchMaxVisible = 6
+
+// RenderTool implements the [ToolRenderer] interface.
+func (t *ToolSearchToolRenderContext) RenderTool(sty *styles.Styles, width int, opts *ToolRenderOpts) string {
+	cappedWidth := cappedToolWidth(width)
+	if opts.IsPending() {
+		return pendingTool(sty, "Tool Search", opts.Anim, opts.Compact)
+	}
+
+	var params toolSearchParams
+	if err := json.Unmarshal([]byte(opts.ToolCall.Input), &params); err != nil {
+		return invalidInputContent(sty, opts, "Tool Search", cappedWidth)
+	}
+
+	headerParams := []string{params.Query}
+
+	var out toolSearchOutput
+	hasParsed := false
+	if opts.HasResult() && opts.Result.Content != "" {
+		if err := json.Unmarshal([]byte(opts.Result.Content), &out); err == nil {
+			hasParsed = true
+			n := len(out.Matches)
+			noun := "results"
+			if n == 1 {
+				noun = "result"
+			}
+			headerParams = append(headerParams, fmt.Sprintf("%d %s", n, noun))
+		}
+	}
+
+	header := toolHeader(sty, opts.Status, "Tool Search", cappedWidth, opts.Compact, headerParams...)
+	if opts.Compact {
+		return header
+	}
+
+	if earlyState, ok := toolEarlyStateContent(sty, opts, cappedWidth); ok {
+		return joinToolParts(header, earlyState)
+	}
+
+	if opts.HasEmptyResult() || !hasParsed || len(out.Matches) == 0 {
+		return header
+	}
+
+	bodyWidth := cappedWidth - toolBodyLeftPaddingTotal
+	maxVisible := toolSearchMaxVisible
+	if opts.ExpandedContent {
+		maxVisible = len(out.Matches)
+	}
+	shown := min(maxVisible, len(out.Matches))
+
+	var rows []string
+	for i := 0; i < shown; i++ {
+		m := out.Matches[i]
+		name := sty.Tool.ResultItemName.Render(m.Name)
+		if m.IsMCP {
+			name = sty.Tool.MCPName.Render("mcp") + " " + name
+		}
+		if m.SearchHint != "" {
+			hint := sty.Tool.ResultItemDesc.Render(" · " + m.SearchHint)
+			nameW := lipgloss.Width(name)
+			hintW := bodyWidth - nameW - 1
+			if hintW > 10 {
+				hint = sty.Tool.ResultItemDesc.Render(" · " + m.SearchHint[:min(len(m.SearchHint), hintW-3)])
+				if len(m.SearchHint) > hintW-3 {
+					hint += sty.Tool.ResultItemDesc.Render("…")
+				}
+			}
+			rows = append(rows, name+hint)
+		} else {
+			rows = append(rows, name)
+		}
+	}
+	if remaining := len(out.Matches) - shown; remaining > 0 {
+		rows = append(rows, sty.Tool.ResultTruncation.Render(fmt.Sprintf("… +%d more", remaining)))
+	}
+
+	body := sty.Tool.Body.Render(strings.Join(rows, "\n"))
+	return joinToolParts(header, body)
+}

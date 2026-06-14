@@ -2,6 +2,7 @@ package chat
 
 import (
 	"encoding/json"
+	"fmt"
 	"strings"
 
 	tea "charm.land/bubbletea/v2"
@@ -355,4 +356,152 @@ func (r *AgenticFetchToolRenderContext) RenderTool(sty *styles.Styles, width int
 	}
 
 	return result
+}
+
+// -----------------------------------------------------------------------------
+// List Agents Tool
+// -----------------------------------------------------------------------------
+
+// ListAgentsToolMessageItem represents a list_agents tool call.
+type ListAgentsToolMessageItem struct {
+	*baseToolMessageItem
+}
+
+var _ ToolMessageItem = (*ListAgentsToolMessageItem)(nil)
+
+// NewListAgentsToolMessageItem creates a new [ListAgentsToolMessageItem].
+func NewListAgentsToolMessageItem(
+	sty *styles.Styles,
+	toolCall message.ToolCall,
+	result *message.ToolResult,
+	canceled bool,
+) ToolMessageItem {
+	return newBaseToolMessageItem(sty, toolCall, result, &ListAgentsToolRenderContext{}, canceled)
+}
+
+// ListAgentsToolRenderContext renders list_agents tool messages.
+type ListAgentsToolRenderContext struct{}
+
+type listAgentsMeta struct {
+	Count int `json:"count"`
+}
+
+// RenderTool implements the [ToolRenderer] interface.
+func (l *ListAgentsToolRenderContext) RenderTool(sty *styles.Styles, width int, opts *ToolRenderOpts) string {
+	cappedWidth := cappedToolWidth(width)
+	if opts.IsPending() {
+		return pendingTool(sty, "List Agents", opts.Anim, opts.Compact)
+	}
+
+	var params struct {
+		FilterStatus string `json:"filter_status,omitempty"`
+	}
+	_ = json.Unmarshal([]byte(opts.ToolCall.Input), &params)
+
+	headerParams := []string{}
+	if params.FilterStatus != "" {
+		headerParams = append(headerParams, params.FilterStatus)
+	}
+
+	var meta listAgentsMeta
+	if opts.HasResult() && opts.Result.Metadata != "" {
+		_ = json.Unmarshal([]byte(opts.Result.Metadata), &meta)
+	}
+	if opts.HasResult() {
+		noun := "agents"
+		if meta.Count == 1 {
+			noun = "agent"
+		}
+		headerParams = append(headerParams, fmt.Sprintf("%d %s", meta.Count, noun))
+	}
+
+	header := toolHeader(sty, opts.Status, "List Agents", cappedWidth, opts.Compact, headerParams...)
+	if opts.Compact {
+		return header
+	}
+
+	if earlyState, ok := toolEarlyStateContent(sty, opts, cappedWidth); ok {
+		return joinToolParts(header, earlyState)
+	}
+
+	if opts.HasEmptyResult() {
+		return header
+	}
+
+	bodyWidth := cappedWidth - toolBodyLeftPaddingTotal
+	body := sty.Tool.Body.Render(toolOutputPlainContent(sty, opts.Result.Content, bodyWidth, opts.ExpandedContent))
+	return joinToolParts(header, body)
+}
+
+// -----------------------------------------------------------------------------
+// Resume Agent Tool
+// -----------------------------------------------------------------------------
+
+// ResumeAgentToolMessageItem represents a resume_agent tool call.
+type ResumeAgentToolMessageItem struct {
+	*baseToolMessageItem
+}
+
+var _ ToolMessageItem = (*ResumeAgentToolMessageItem)(nil)
+
+// NewResumeAgentToolMessageItem creates a new [ResumeAgentToolMessageItem].
+func NewResumeAgentToolMessageItem(
+	sty *styles.Styles,
+	toolCall message.ToolCall,
+	result *message.ToolResult,
+	canceled bool,
+) ToolMessageItem {
+	return newBaseToolMessageItem(sty, toolCall, result, &ResumeAgentToolRenderContext{}, canceled)
+}
+
+// ResumeAgentToolRenderContext renders resume_agent tool messages.
+type ResumeAgentToolRenderContext struct{}
+
+type resumeAgentParams struct {
+	SessionID string `json:"session_id,omitempty"`
+	AgentID   string `json:"agent_id,omitempty"`
+	Task      string `json:"task"`
+	Async     bool   `json:"async,omitempty"`
+}
+
+// RenderTool implements the [ToolRenderer] interface.
+func (r *ResumeAgentToolRenderContext) RenderTool(sty *styles.Styles, width int, opts *ToolRenderOpts) string {
+	cappedWidth := cappedToolWidth(width)
+	if opts.IsPending() {
+		return pendingTool(sty, "Resume Agent", opts.Anim, opts.Compact)
+	}
+
+	var params resumeAgentParams
+	_ = json.Unmarshal([]byte(opts.ToolCall.Input), &params)
+
+	ref := params.AgentID
+	if ref == "" {
+		ref = params.SessionID
+	}
+
+	var headerParams []string
+	if ref != "" {
+		headerParams = append(headerParams, ref)
+	}
+	if params.Task != "" {
+		task := strings.ReplaceAll(params.Task, "\n", " ")
+		headerParams = append(headerParams, task)
+	}
+
+	header := toolHeader(sty, opts.Status, "Resume Agent", cappedWidth, opts.Compact, headerParams...)
+	if opts.Compact {
+		return header
+	}
+
+	if earlyState, ok := toolEarlyStateContent(sty, opts, cappedWidth); ok {
+		return joinToolParts(header, earlyState)
+	}
+
+	if opts.HasEmptyResult() {
+		return header
+	}
+
+	bodyWidth := cappedWidth - toolBodyLeftPaddingTotal
+	body := sty.Tool.Body.Render(toolOutputMarkdownContent(sty, opts.Result.Content, bodyWidth, opts.ExpandedContent))
+	return joinToolParts(header, body)
 }

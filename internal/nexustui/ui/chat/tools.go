@@ -276,6 +276,20 @@ func NewToolMessageItem(
 		item = NewReferencesToolMessageItem(sty, toolCall, result, canceled)
 	case tools.LSPRestartToolName:
 		item = NewLSPRestartToolMessageItem(sty, toolCall, result, canceled)
+	case "read_document_url":
+		item = NewReadDocumentURLToolMessageItem(sty, toolCall, result, canceled)
+	case "tool_search":
+		item = NewToolSearchToolMessageItem(sty, toolCall, result, canceled)
+	case "list_agents":
+		item = NewListAgentsToolMessageItem(sty, toolCall, result, canceled)
+	case "resume_agent":
+		item = NewResumeAgentToolMessageItem(sty, toolCall, result, canceled)
+	case "notebook_edit":
+		item = NewNotebookEditToolMessageItem(sty, toolCall, result, canceled)
+	case "mcp_list_resources":
+		item = NewMCPListResourcesToolMessageItem(sty, toolCall, result, canceled)
+	case "mcp_read_resource":
+		item = NewMCPReadResourceToolMessageItem(sty, toolCall, result, canceled)
 	default:
 		if IsDockerMCPTool(toolCall.Name) {
 			item = NewDockerMCPToolMessageItem(sty, toolCall, result, canceled)
