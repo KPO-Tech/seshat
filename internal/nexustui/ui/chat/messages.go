@@ -323,17 +323,17 @@ func (a *AssistantInfoItem) renderContent(width int) string {
 	if finishData == nil {
 		return ""
 	}
-	finishTime := time.Unix(finishData.Time, 0)
+	finishTime := time.UnixMilli(finishData.Time)
 	duration := finishTime.Sub(a.lastUserMessageTime)
 
 	doneLabel := a.sty.Messages.DoneLabel.Render("done")
 	dot := a.sty.Messages.MsgTimestamp.Render(" · ")
-	dur := a.sty.Messages.MsgTimestamp.Render(duration.String())
+	dur := a.sty.Messages.MsgTimestamp.Render(duration.Round(time.Second).String())
 
-	left := doneLabel + dot + dur
-	dotsW := max(0, width-lipgloss.Width(left))
+	head := doneLabel + dot
+	dotsW := max(0, width-lipgloss.Width(head)-lipgloss.Width(dur))
 	dots := a.sty.Messages.DoneDots.Render(strings.Repeat("·", dotsW))
-	return left + dots
+	return head + dots + dur
 }
 
 // maxTextWidth is the maximum width for tool/diff content blocks.

@@ -98,7 +98,7 @@ func (a *AskUserToolMessageItem) HandleKeyEvent(key tea.KeyMsg) (bool, tea.Cmd) 
 			a.Bump()
 		}
 		return true, nil
-	case " ":
+	case "space":
 		if req.MultiSelect && len(a.selections) > a.cursor {
 			a.selections[a.cursor] = !a.selections[a.cursor]
 			a.clearCache()
