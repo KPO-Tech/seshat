@@ -1034,14 +1034,16 @@ func isAlwaysSafeTool(name string) bool {
 	switch name {
 	case
 		// File read-only
-		"read_file", "grep", "glob", "tree",
+		"read_file", "grep", "glob", "tree", "list_directory",
 		// Web read-only
 		"web_search", "web_fetch", "web_crawl", "web_map",
 		"scholarly_search", "wikipedia",
 		// MCP read-only
 		"mcp_list_resources", "mcp_read_resource",
 		// Utility / introspection
-		"tool_search", "lsp", "docx", "monitor", "skill":
+		"tool_search", "lsp", "docx", "monitor", "skill",
+		// User interaction (never destructive — agent explicitly needs human input)
+		"ask_user_question":
 		return true
 	}
 	return false

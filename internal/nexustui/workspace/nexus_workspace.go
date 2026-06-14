@@ -1609,7 +1609,10 @@ func (w *NexusWorkspace) PromptFn(ctx context.Context, req sdk.PromptRequest) (s
 	toolName, _ := req.Metadata["tool_name"].(string)
 	toolUseID, _ := req.Metadata["tool_use_id"].(string)
 
-	if toolName == tuiTools.AskUserToolName {
+	// Route interactive ask_user_question prompts (Choice/Text) to the dedicated
+	// bubble. PromptTypeConfirm is a permission check — fall through to permBroker.
+	if toolName == tuiTools.AskUserToolName &&
+		(req.Type == types.PromptTypeChoice || req.Type == types.PromptTypeText) {
 		return w.promptAskUser(ctx, req, toolUseID)
 	}
 
