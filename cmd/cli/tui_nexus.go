@@ -50,6 +50,7 @@ func runNexusTUI(ctx context.Context, options runtimeOptions, initialSessionID s
 		ws.OnChunk,
 		ws.OnRuntimeEvent,
 		ws.OnSessionTitled,
+		ws.PlanStore(),
 	)
 	if err != nil {
 		return err

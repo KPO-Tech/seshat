@@ -75,6 +75,7 @@ type NexusWorkspace struct {
 	permBroker    *pubsub.Broker[permission.PermissionRequest]
 	planBroker    *pubsub.Broker[planreview.Submission]
 	askUserBroker *pubsub.Broker[tuiTools.AskUserRequest]
+	planStore     *memPlanStore
 	sessStore     map[string]session.Session
 	sessionsMu    sync.RWMutex
 
@@ -145,11 +146,19 @@ func NewNexusWorkspace(client *sdk.Client, workDir, modelStr string) *NexusWorks
 		permBroker:    pubsub.NewBroker[permission.PermissionRequest](),
 		planBroker:    pubsub.NewBroker[planreview.Submission](),
 		askUserBroker: pubsub.NewBroker[tuiTools.AskUserRequest](),
+		planStore:     newMemPlanStore(),
 	}
 	w.debounce = newMsgDebounce(33*time.Millisecond, func(msg message.Message, sessID string) {
 		w.publishMsg(pubsub.UpdatedEvent, sessID, msg)
 	})
 	return w
+}
+
+// PlanStore returns the workspace's plan persistence backend. Use this to
+// inject the same store into the initial sdk.ClientConfig created outside
+// the workspace (e.g. cmd/cli/tui_nexus.go).
+func (w *NexusWorkspace) PlanStore() sdk.PlanStore {
+	return w.planStore
 }
 
 // ─── Subscribe / event fan-out ────────────────────────────────────────────────
@@ -782,6 +791,7 @@ func (w *NexusWorkspace) UpdateAgentModel(ctx context.Context) error {
 		ProviderConfig:    provCfg,
 		EnableMonitoring:  enableMonitoring,
 		Monitoring:        w.monitoring,
+		PlanStore:         w.planStore,
 	})
 	if err != nil {
 		return fmt.Errorf("rebuild SDK client: %w", err)
