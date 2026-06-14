@@ -273,10 +273,10 @@ Vérifie surtout le **live tail** : pendant l'exécution du subagent, la section
 ```
 Utilise explicitement le tool "agent" (sous-agent inline) pour exécuter la tâche suivante :
 
-  Explore le répertoire internal/ du projet courant.
+  Explore le répertoire examples/ du projet courant.
   1. Liste son contenu avec list_directory
   2. Lis le fichier README.md à la racine avec read_file
-  3. Lance une recherche grep avec pattern "func New" dans internal/
+  3. Lance une recherche grep avec pattern "func New" dans examples/
   4. Retourne un résumé de 3 lignes de ce que tu as trouvé
 
 Le but est de générer au moins 4 tool calls imbriqués pour tester l'affichage live.

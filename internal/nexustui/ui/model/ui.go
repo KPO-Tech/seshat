@@ -1453,8 +1453,8 @@ func (m *UI) updateSessionMessage(msg message.Message) tea.Cmd {
 func (m *UI) handleChildSessionMessage(event pubsub.Event[message.Message]) tea.Cmd {
 	var cmds []tea.Cmd
 
-	// Only process messages with tool calls or results.
-	if len(event.Payload.ToolCalls()) == 0 && len(event.Payload.ToolResults()) == 0 {
+	isStreaming := strings.HasSuffix(event.Payload.ID, "_streaming")
+	if !isStreaming && len(event.Payload.ToolCalls()) == 0 && len(event.Payload.ToolResults()) == 0 {
 		return nil
 	}
 
@@ -1467,18 +1467,12 @@ func (m *UI) handleChildSessionMessage(event pubsub.Event[message.Message]) tea.
 
 	// Find the parent agent tool item.
 	var agentItem chat.NestedToolContainer
-	for i := 0; i < m.chat.Len(); i++ {
-		item := m.chat.MessageItem(toolCallID)
-		if item == nil {
-			continue
-		}
+	item := m.chat.MessageItem(toolCallID)
+	if item != nil {
 		if agent, ok := item.(chat.NestedToolContainer); ok {
 			if toolMessageItem, ok := item.(chat.ToolMessageItem); ok {
 				if toolMessageItem.ToolCall().ID == toolCallID {
-					// Verify this agent belongs to the correct parent message.
-					// We can't directly check parentMessageID on the item, so we trust the session parsing.
 					agentItem = agent
-					break
 				}
 			}
 		}
@@ -1486,6 +1480,20 @@ func (m *UI) handleChildSessionMessage(event pubsub.Event[message.Message]) tea.
 
 	if agentItem == nil {
 		return nil
+	}
+
+	if isStreaming {
+		if reporter, ok := agentItem.(chat.SubAgentLiveReporter); ok {
+			reasoning := event.Payload.ReasoningContent().Thinking
+			content := event.Payload.Content().Text
+			reporter.SetSubAgentStreaming(reasoning, content)
+		}
+		if m.chat.Follow() {
+			if cmd := m.chat.ScrollToBottomAndAnimate(); cmd != nil {
+				cmds = append(cmds, cmd)
+			}
+		}
+		return tea.Sequence(cmds...)
 	}
 
 	// Get existing nested tools.
@@ -2615,16 +2623,7 @@ func (m *UI) View() tea.View {
 	canvas := uv.NewScreenBuffer(m.width, m.height)
 	v.Cursor = m.Draw(canvas, canvas.Bounds())
 
-	content := strings.ReplaceAll(canvas.Render(), "\r\n", "\n") // normalize newlines
-	contentLines := strings.Split(content, "\n")
-	for i, line := range contentLines {
-		// Trim trailing spaces for concise rendering
-		contentLines[i] = strings.TrimRight(line, " ")
-	}
-
-	content = strings.Join(contentLines, "\n")
-
-	v.Content = content
+	v.Content = strings.ReplaceAll(canvas.Render(), "\r\n", "\n") // normalize newlines
 	if m.progressBarEnabled && m.sendProgressBar && m.isAgentBusy() {
 		// HACK: use a random percentage to prevent ghostty from hiding it
 		// after a timeout.

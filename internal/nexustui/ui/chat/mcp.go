@@ -32,7 +32,7 @@ type MCPToolRenderContext struct{}
 
 // RenderTool implements the [ToolRenderer] interface.
 func (b *MCPToolRenderContext) RenderTool(sty *styles.Styles, width int, opts *ToolRenderOpts) string {
-	cappedWidth := cappedToolWidth(width)
+	cappedWidth := width
 	toolNameParts := strings.SplitN(opts.ToolCall.Name, "_", 3)
 	if len(toolNameParts) != 3 {
 		return toolErrorContent(sty, &message.ToolResult{Content: "Invalid tool name"}, cappedWidth)
@@ -104,7 +104,7 @@ type MCPListResourcesToolRenderContext struct{}
 
 // RenderTool implements the [ToolRenderer] interface.
 func (m *MCPListResourcesToolRenderContext) RenderTool(sty *styles.Styles, width int, opts *ToolRenderOpts) string {
-	cappedWidth := cappedToolWidth(width)
+	cappedWidth := width
 	if opts.IsPending() {
 		return pendingTool(sty, "MCP Resources", opts.Anim, opts.Compact)
 	}
@@ -153,7 +153,7 @@ type MCPReadResourceToolRenderContext struct{}
 
 // RenderTool implements the [ToolRenderer] interface.
 func (m *MCPReadResourceToolRenderContext) RenderTool(sty *styles.Styles, width int, opts *ToolRenderOpts) string {
-	cappedWidth := cappedToolWidth(width)
+	cappedWidth := width
 	if opts.IsPending() {
 		return pendingTool(sty, "MCP Read Resource", opts.Anim, opts.Compact)
 	}

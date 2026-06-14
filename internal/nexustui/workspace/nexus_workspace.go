@@ -47,6 +47,11 @@ import (
 	"github.com/google/uuid"
 )
 
+type subAgentStreamState struct {
+	reasoning string
+	content   string
+}
+
 // Verify compile-time that NexusWorkspace implements Workspace.
 var _ Workspace = (*NexusWorkspace)(nil)
 
@@ -54,6 +59,10 @@ var _ Workspace = (*NexusWorkspace)(nil)
 // It keeps an in-memory message store and publishes pubsub events that the
 // nexustui UI consumes to render the conversation.
 type NexusWorkspace struct {
+	// Subagent streaming state
+	subAgentStreams   map[string]*subAgentStreamState
+	subAgentStreamsMu sync.Mutex
+
 	// SDK layer
 	client  *sdk.Client
 	workDir string
@@ -135,18 +144,19 @@ type NexusWorkspace struct {
 // modelStr is the "provider:model" string shown in the UI header.
 func NewNexusWorkspace(client *sdk.Client, workDir, modelStr string) *NexusWorkspace {
 	w := &NexusWorkspace{
-		client:        client,
-		workDir:       workDir,
-		model:         modelStr,
-		msgStore:      make(map[string][]message.Message),
-		sessStore:     make(map[string]session.Session),
-		liveExecModes: make(map[string]string),
-		sessBroker:    pubsub.NewBroker[session.Session](),
-		msgBroker:     pubsub.NewBroker[message.Message](),
-		permBroker:    pubsub.NewBroker[permission.PermissionRequest](),
-		planBroker:    pubsub.NewBroker[planreview.Submission](),
-		askUserBroker: pubsub.NewBroker[tuiTools.AskUserRequest](),
-		planStore:     newMemPlanStore(),
+		client:          client,
+		workDir:         workDir,
+		model:           modelStr,
+		subAgentStreams: make(map[string]*subAgentStreamState),
+		msgStore:        make(map[string][]message.Message),
+		sessStore:       make(map[string]session.Session),
+		liveExecModes:   make(map[string]string),
+		sessBroker:      pubsub.NewBroker[session.Session](),
+		msgBroker:       pubsub.NewBroker[message.Message](),
+		permBroker:      pubsub.NewBroker[permission.PermissionRequest](),
+		planBroker:      pubsub.NewBroker[planreview.Submission](),
+		askUserBroker:   pubsub.NewBroker[tuiTools.AskUserRequest](),
+		planStore:       newMemPlanStore(),
 	}
 	w.debounce = newMsgDebounce(33*time.Millisecond, func(msg message.Message, sessID string) {
 		w.publishMsg(pubsub.UpdatedEvent, sessID, msg)
@@ -1441,6 +1451,11 @@ func (w *NexusWorkspace) OnRuntimeEvent(ev sdk.RuntimeEvent) {
 		w.handleSubAgentToolProgress(ev.AgentToolUseID, ev.ToolProgress)
 	}
 
+	// Sub-agent response chunks: forward streaming reasoning and text.
+	if ev.AgentToolUseID != "" && ev.Type == sdk.RuntimeEventTypeResponseChunk && ev.Chunk != nil {
+		w.handleSubAgentResponseChunk(ev.AgentToolUseID, ev.Chunk)
+	}
+
 	switch ev.Type {
 	case sdk.RuntimeEventTypeTaskChanged:
 		sessionID := string(ev.SessionID)
@@ -1551,6 +1566,52 @@ func (w *NexusWorkspace) handleSubAgentToolProgress(agentToolUseID string, tp *s
 
 	msg := message.Message{
 		ID:        "sub-" + tp.ToolUseID,
+		SessionID: childSessionID,
+		Parts:     parts,
+	}
+	w.msgBroker.Publish(pubsub.UpdatedEvent, msg)
+}
+
+func (w *NexusWorkspace) handleSubAgentResponseChunk(agentToolUseID string, chunk *sdk.ResponseChunk) {
+	if chunk == nil {
+		return
+	}
+
+	w.subAgentStreamsMu.Lock()
+	state, ok := w.subAgentStreams[agentToolUseID]
+	if !ok {
+		state = &subAgentStreamState{}
+		w.subAgentStreams[agentToolUseID] = state
+	}
+
+	switch chunk.Type {
+	case sdk.ResponseChunkTypeContentBlockStart:
+		// Reset text and thinking buffers when starting a content block
+		state.reasoning = ""
+		state.content = ""
+	case sdk.ResponseChunkTypeContentBlockDelta:
+		switch chunk.DeltaType {
+		case "text_delta", "":
+			state.content += chunk.Delta
+		case "thinking_delta":
+			state.reasoning += chunk.Delta
+		}
+	}
+	reasoning := state.reasoning
+	content := state.content
+	w.subAgentStreamsMu.Unlock()
+
+	childSessionID := ":" + agentToolUseID
+	var parts []message.ContentPart
+	if reasoning != "" {
+		parts = append(parts, message.ReasoningContent{Thinking: reasoning})
+	}
+	if content != "" {
+		parts = append(parts, message.TextContent{Text: content})
+	}
+
+	msg := message.Message{
+		ID:        agentToolUseID + "_streaming",
 		SessionID: childSessionID,
 		Parts:     parts,
 	}

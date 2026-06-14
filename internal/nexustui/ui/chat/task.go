@@ -91,7 +91,7 @@ type taskStopToolMetadata struct {
 }
 
 func (t *TaskListToolRenderContext) RenderTool(sty *styles.Styles, width int, opts *ToolRenderOpts) string {
-	cappedWidth := cappedToolWidth(width)
+	cappedWidth := width
 	if opts.IsPending() {
 		return pendingTool(sty, "Task List", opts.Anim, opts.Compact)
 	}
@@ -130,7 +130,7 @@ func (t *TaskListToolRenderContext) RenderTool(sty *styles.Styles, width int, op
 }
 
 func (t *TaskGetToolRenderContext) RenderTool(sty *styles.Styles, width int, opts *ToolRenderOpts) string {
-	cappedWidth := cappedToolWidth(width)
+	cappedWidth := width
 	if opts.IsPending() {
 		return pendingTool(sty, "Task Get", opts.Anim, opts.Compact)
 	}
@@ -197,7 +197,7 @@ func (t *TaskGetToolRenderContext) RenderTool(sty *styles.Styles, width int, opt
 }
 
 func (t *TaskStopToolRenderContext) RenderTool(sty *styles.Styles, width int, opts *ToolRenderOpts) string {
-	cappedWidth := cappedToolWidth(width)
+	cappedWidth := width
 	if opts.IsPending() {
 		return pendingTool(sty, "Task Stop", opts.Anim, opts.Compact)
 	}

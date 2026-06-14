@@ -161,7 +161,7 @@ type askUserRenderContext struct {
 // RenderTool implements [ToolRenderer].
 func (r *askUserRenderContext) RenderTool(sty *styles.Styles, width int, opts *ToolRenderOpts) string {
 	a := r.item
-	cappedWidth := cappedToolWidth(width)
+	cappedWidth := width
 
 	// Still waiting for the agent to begin — show the pending spinner.
 	if !a.waitingForUser && a.activeReq == nil && !opts.HasResult() && len(a.history) == 0 {

@@ -353,6 +353,24 @@ func RunAgent(config *RunConfig) (*RunResult, error) {
 			break
 		}
 
+		// If a goal is active, stop if the goal is completed or budget is exhausted.
+		if config.GoalStore != nil && config.GoalSessionID != "" {
+			if g, ok := config.GoalStore.Get(config.GoalSessionID); ok && goal.IsFinal(g.Status) {
+				break
+			}
+		}
+
+		// Stop if the turn completed naturally (end_turn) and no active goal remains.
+		hasActiveGoal := false
+		if config.GoalStore != nil && config.GoalSessionID != "" {
+			if g, ok := config.GoalStore.Get(config.GoalSessionID); ok && g.Status == goal.StatusActive {
+				hasActiveGoal = !g.IsOverBudget()
+			}
+		}
+		if resp.StopReason == types.StopReasonEndTurn && !hasActiveGoal {
+			break
+		}
+
 		// If we are on the last allowed turn, stop regardless.
 		if turn >= maxTurns {
 			break

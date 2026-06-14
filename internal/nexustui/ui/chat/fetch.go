@@ -38,7 +38,7 @@ type FetchToolRenderContext struct{}
 
 // RenderTool implements the [ToolRenderer] interface.
 func (f *FetchToolRenderContext) RenderTool(sty *styles.Styles, width int, opts *ToolRenderOpts) string {
-	cappedWidth := cappedToolWidth(width)
+	cappedWidth := width
 	if opts.IsPending() {
 		return pendingTool(sty, "Fetch", opts.Anim, opts.Compact)
 	}
@@ -113,7 +113,7 @@ type WebFetchToolRenderContext struct{}
 
 // RenderTool implements the [ToolRenderer] interface.
 func (w *WebFetchToolRenderContext) RenderTool(sty *styles.Styles, width int, opts *ToolRenderOpts) string {
-	cappedWidth := cappedToolWidth(width)
+	cappedWidth := width
 	if opts.IsPending() {
 		return pendingTool(sty, "Web Fetch", opts.Anim, opts.Compact)
 	}
@@ -195,7 +195,7 @@ const webSearchMaxVisible = 5
 
 // RenderTool implements the [ToolRenderer] interface.
 func (w *WebSearchToolRenderContext) RenderTool(sty *styles.Styles, width int, opts *ToolRenderOpts) string {
-	cappedWidth := cappedToolWidth(width)
+	cappedWidth := width
 	if opts.IsPending() {
 		return pendingTool(sty, "Web Search", opts.Anim, opts.Compact)
 	}
@@ -327,7 +327,7 @@ type readDocumentURLParams struct {
 
 // RenderTool implements the [ToolRenderer] interface.
 func (r *ReadDocumentURLToolRenderContext) RenderTool(sty *styles.Styles, width int, opts *ToolRenderOpts) string {
-	cappedWidth := cappedToolWidth(width)
+	cappedWidth := width
 	if opts.IsPending() {
 		return pendingTool(sty, "Read Document", opts.Anim, opts.Compact)
 	}

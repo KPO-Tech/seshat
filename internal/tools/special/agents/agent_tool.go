@@ -440,6 +440,9 @@ func (t *AgentTool) runAgent(ctx context.Context, agentType, task string, maxTur
 		PermissionMode: types.PermissionModeBypass,
 		EventFn:        eventFn,
 		Registry:       t.registry,
+		ContinuationMessage: func(_ int, _ string) string {
+			return "If you have completed all steps of the assigned task, return your final answer now. If there is still work remaining, continue with the next step."
+		},
 	}
 
 	result, err := t.executeRunConfig(subCtx, config)
@@ -509,7 +512,18 @@ func (t *AgentTool) FormatResult(data any) string {
 // BackfillInput enriches input
 func (t *AgentTool) BackfillInput(ctx context.Context, input map[string]any) map[string]any {
 	if input["maxTurns"] == nil {
-		input["maxTurns"] = coreagent.DefaultMaxTurns
+		// Resolve the effective default for the requested agent type so the
+		// displayed value matches what the runner will actually use.
+		agentType, _ := input["type"].(string)
+		if agentType == "" {
+			agentType, _ = input["agent_type"].(string)
+		}
+		def := t.resolveAgentDef(agentType)
+		if def != nil && def.MaxTurns > 0 {
+			input["maxTurns"] = def.MaxTurns
+		} else {
+			input["maxTurns"] = coreagent.DefaultSubAgentMaxTurns
+		}
 	}
 	return input
 }
@@ -736,6 +750,9 @@ func (t *AgentTool) runForkAgent(ctx context.Context, agentType, task string, ma
 		PermissionMode:   types.PermissionModeBypass,
 		EventFn:          eventFn,
 		Registry:         t.registry,
+		ContinuationMessage: func(_ int, _ string) string {
+			return "If you have completed all steps of the assigned task, return your final answer now. If there is still work remaining, continue with the next step."
+		},
 	}
 
 	result, err := t.executeRunConfig(subCtx, config)

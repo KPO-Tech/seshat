@@ -39,7 +39,7 @@ type ViewToolRenderContext struct{}
 
 // RenderTool implements the [ToolRenderer] interface.
 func (v *ViewToolRenderContext) RenderTool(sty *styles.Styles, width int, opts *ToolRenderOpts) string {
-	cappedWidth := cappedToolWidth(width)
+	cappedWidth := width
 	if opts.IsPending() {
 		return pendingTool(sty, "Read File", opts.Anim, opts.Compact)
 	}
@@ -116,7 +116,7 @@ type WriteToolRenderContext struct{}
 
 // RenderTool implements the [ToolRenderer] interface.
 func (w *WriteToolRenderContext) RenderTool(sty *styles.Styles, width int, opts *ToolRenderOpts) string {
-	cappedWidth := cappedToolWidth(width)
+	cappedWidth := width
 	if opts.IsPending() {
 		return pendingTool(sty, "Write File", opts.Anim, opts.Compact)
 	}
@@ -333,7 +333,7 @@ type RemoveFileToolRenderContext struct{}
 
 // RenderTool implements the [ToolRenderer] interface.
 func (r *RemoveFileToolRenderContext) RenderTool(sty *styles.Styles, width int, opts *ToolRenderOpts) string {
-	cappedWidth := cappedToolWidth(width)
+	cappedWidth := width
 	if opts.IsPending() {
 		return pendingTool(sty, "Remove File", opts.Anim, opts.Compact)
 	}
@@ -385,7 +385,7 @@ type CreateDirectoryToolRenderContext struct{}
 
 // RenderTool implements the [ToolRenderer] interface.
 func (c *CreateDirectoryToolRenderContext) RenderTool(sty *styles.Styles, width int, opts *ToolRenderOpts) string {
-	cappedWidth := cappedToolWidth(width)
+	cappedWidth := width
 	if opts.IsPending() {
 		return pendingTool(sty, "Create Directory", opts.Anim, opts.Compact)
 	}
@@ -437,7 +437,7 @@ type GetFileMetadataToolRenderContext struct{}
 
 // RenderTool implements the [ToolRenderer] interface.
 func (g *GetFileMetadataToolRenderContext) RenderTool(sty *styles.Styles, width int, opts *ToolRenderOpts) string {
-	cappedWidth := cappedToolWidth(width)
+	cappedWidth := width
 	if opts.IsPending() {
 		return pendingTool(sty, "File Metadata", opts.Anim, opts.Compact)
 	}
@@ -489,7 +489,7 @@ type ApplyPatchToolRenderContext struct{}
 
 // RenderTool implements the [ToolRenderer] interface.
 func (a *ApplyPatchToolRenderContext) RenderTool(sty *styles.Styles, width int, opts *ToolRenderOpts) string {
-	cappedWidth := cappedToolWidth(width)
+	cappedWidth := width
 	if opts.IsPending() {
 		return pendingTool(sty, "Apply Patch", opts.Anim, opts.Compact)
 	}
@@ -647,7 +647,7 @@ type DownloadToolRenderContext struct{}
 
 // RenderTool implements the [ToolRenderer] interface.
 func (d *DownloadToolRenderContext) RenderTool(sty *styles.Styles, width int, opts *ToolRenderOpts) string {
-	cappedWidth := cappedToolWidth(width)
+	cappedWidth := width
 	if opts.IsPending() {
 		return pendingTool(sty, "Download", opts.Anim, opts.Compact)
 	}

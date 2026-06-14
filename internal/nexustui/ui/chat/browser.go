@@ -162,7 +162,7 @@ func formatBrowserAmount(n int) string {
 
 // RenderTool implements the [ToolRenderer] interface.
 func (b *BrowserToolRenderContext) RenderTool(sty *styles.Styles, width int, opts *ToolRenderOpts) string {
-	cappedWidth := cappedToolWidth(width)
+	cappedWidth := width
 	displayName := browserDisplayName(opts.ToolCall.Name)
 
 	if opts.IsPending() {

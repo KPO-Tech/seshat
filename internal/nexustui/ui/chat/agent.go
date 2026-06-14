@@ -8,7 +8,6 @@ import (
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
 	"charm.land/lipgloss/v2/tree"
-	"github.com/EngineerProjects/nexus-engine/internal/nexustui/agent/tools"
 	"github.com/EngineerProjects/nexus-engine/internal/nexustui/message"
 	"github.com/EngineerProjects/nexus-engine/internal/nexustui/ui/anim"
 	"github.com/EngineerProjects/nexus-engine/internal/nexustui/ui/styles"
@@ -25,11 +24,19 @@ type NestedToolContainer interface {
 	AddNestedTool(tool ToolMessageItem)
 }
 
+// SubAgentLiveReporter is an interface for tool items that can report live streaming reasoning and content of their sub-agent.
+type SubAgentLiveReporter interface {
+	SetSubAgentStreaming(reasoning, content string)
+	SubAgentStreaming() (reasoning, content string)
+}
+
 // AgentToolMessageItem is a message item that represents an agent tool call.
 type AgentToolMessageItem struct {
 	*baseToolMessageItem
 
-	nestedTools []ToolMessageItem
+	nestedTools       []ToolMessageItem
+	subAgentReasoning string
+	subAgentContent   string
 }
 
 var (
@@ -119,45 +126,58 @@ func (a *AgentToolMessageItem) AddNestedTool(tool ToolMessageItem) {
 	a.Bump()
 }
 
+func (a *AgentToolMessageItem) SetSubAgentStreaming(reasoning, content string) {
+	a.subAgentReasoning = reasoning
+	a.subAgentContent = content
+	a.clearCache()
+	a.Bump()
+}
+
+func (a *AgentToolMessageItem) SubAgentStreaming() (reasoning, content string) {
+	return a.subAgentReasoning, a.subAgentContent
+}
+
+func getWrappedTailLines(text string, width, maxLines int) string {
+	text = strings.TrimSpace(text)
+	if text == "" {
+		return ""
+	}
+	// Wrap first
+	wrapped := lipgloss.NewStyle().Width(width).Render(text)
+	// Split and tail
+	lines := strings.Split(wrapped, "\n")
+	if len(lines) <= maxLines {
+		return wrapped
+	}
+	return strings.Join(lines[len(lines)-maxLines:], "\n")
+}
+
 // renderNestedAgentBlock is the shared renderer for agent and agentic_fetch.
 //
 // Layout while running:
 //
-//	● Agent / Agentic Fetch  [header]
-//	  <tagLabel>  [prompt]
-//	  ├ ✓ Tool A  ...         compact history
-//	  ├ ✓ Tool B  ...
-//	  ├ ● Tool C  ...         currently running (compact)
+//	● Agent / Agentic Fetch (prompt summary)  [header]
+//	    ├─ ✓ Tool A  ...         compact history (max 5 visible, rest collapsed)
+//	    ├─ ✓ Tool B  ...
+//	    ├─ ● Tool C  ...         currently running (compact)
 //
-//	  ✓ Tool B  ...           last completed tool — full non-compact render
-//	    output line 1
-//	    output line 2
+//	    ✓ Tool B  ...           last completed tool — full non-compact render
+//	      output line 1
+//	      output line 2
 //
-//	  ⠋ ...                   spinner
+//	    ⠋ ...                   spinner
 //
 // When done: compact tree + result body (no live section).
 func renderNestedAgentBlock(
 	sty *styles.Styles,
 	header string,
-	tagStyle lipgloss.Style,
-	tagLabel string,
-	prompt string,
 	nestedTools []ToolMessageItem,
+	subAgentReasoning string,
+	subAgentContent string,
 	opts *ToolRenderOpts,
 	cappedWidth int,
 ) string {
-	tag := tagStyle.Render(tagLabel)
-	tagWidth := lipgloss.Width(tag)
-	remainingWidth := min(cappedWidth-tagWidth-3, maxTextWidth-tagWidth-3)
-
-	promptText := sty.Tool.AgentPrompt.Width(remainingWidth).Render(prompt)
-	headerBlock := lipgloss.JoinVertical(
-		lipgloss.Left,
-		header,
-		"",
-		lipgloss.JoinHorizontal(lipgloss.Left, tag, " ", promptText),
-	)
-
+	remainingWidth := max(20, cappedWidth-7)
 	isRunning := !opts.HasResult() && !opts.IsCanceled()
 
 	// Find the last completed nested tool for the live preview.
@@ -173,22 +193,82 @@ func renderNestedAgentBlock(
 		}
 	}
 
-	// Compact history tree — all nested tools.
-	childTree := tree.Root(headerBlock)
-	for _, tool := range nestedTools {
-		childTree.Child(tool.Render(remainingWidth))
+	// Compact history tree — limit to last 5 nested tools.
+	childTree := tree.Root(header)
+	const maxVisibleTools = 5
+	if len(nestedTools) > maxVisibleTools {
+		collapsedCount := len(nestedTools) - maxVisibleTools
+		collapsedText := sty.Tool.ContentTruncation.Render(fmt.Sprintf("… (%d tools collapsed)", collapsedCount))
+		childTree.Child(collapsedText)
+
+		for _, tool := range nestedTools[collapsedCount:] {
+			childTree.Child(tool.Render(remainingWidth))
+		}
+	} else {
+		for _, tool := range nestedTools {
+			childTree.Child(tool.Render(remainingWidth))
+		}
 	}
 
 	var parts []string
-	parts = append(parts, childTree.Enumerator(roundedEnumerator(2, tagWidth-5)).String())
+	parts = append(parts, childTree.Enumerator(roundedEnumerator(4, 2)).String())
 
-	// Live preview: last completed tool rendered in full (non-compact).
+	// Live preview: last completed tool rendered in full (non-compact), indented by 4 spaces.
 	if liveIdx >= 0 {
-		parts = append(parts, "", nestedTools[liveIdx].RenderPreview(cappedWidth))
+		preview := indentString(nestedTools[liveIdx].RenderPreview(max(20, cappedWidth-4)), 4)
+		parts = append(parts, "", preview)
 	}
 
 	if isRunning {
-		parts = append(parts, "", opts.Anim.Render())
+		hasStreamingTail := false
+		var tailParts []string
+
+		trimmedReasoning := strings.TrimSpace(subAgentReasoning)
+		trimmedContent := strings.TrimSpace(subAgentContent)
+
+		// Calculate available width for the tail
+		tailWidth := cappedWidth - toolBodyLeftPaddingTotal - 2 - 4 // subtract left border & padding & indentation
+
+		// Prioritize streaming content over reasoning
+		if trimmedContent != "" {
+			tail := getWrappedTailLines(trimmedContent, tailWidth, 3)
+			if tail != "" {
+				prefix := sty.Tool.StateWaiting.Render("✍ Generating:")
+				leftBorderColor := sty.Messages.ThinkingBox.GetBorderLeftForeground()
+				borderStyle := lipgloss.NewStyle().
+					Border(lipgloss.NormalBorder(), false, false, false, true).
+					BorderForeground(leftBorderColor).
+					PaddingLeft(1)
+
+				indentedTail := borderStyle.Render(tail)
+				tailParts = append(tailParts, prefix, indentedTail)
+				hasStreamingTail = true
+			}
+		} else if trimmedReasoning != "" {
+			tail := getWrappedTailLines(trimmedReasoning, tailWidth, 3)
+			if tail != "" {
+				prefix := sty.Tool.StateWaiting.Render("💭 Thinking:")
+				leftBorderColor := sty.Messages.ThinkingBox.GetBorderLeftForeground()
+				borderStyle := lipgloss.NewStyle().
+					Border(lipgloss.NormalBorder(), false, false, false, true).
+					BorderForeground(leftBorderColor).
+					PaddingLeft(1)
+
+				reasoningStyle := sty.Tool.AgentPrompt
+				reasoningTail := reasoningStyle.Italic(true).Render(tail)
+				indentedTail := borderStyle.Render(reasoningTail)
+				tailParts = append(tailParts, prefix, indentedTail)
+				hasStreamingTail = true
+			}
+		}
+
+		if hasStreamingTail {
+			parts = append(parts, "")
+			tailBlock := indentString(lipgloss.JoinVertical(lipgloss.Left, tailParts...), 4)
+			parts = append(parts, tailBlock)
+		}
+
+		parts = append(parts, "", indentString(opts.Anim.Render(), 4))
 	}
 
 	result := lipgloss.JoinVertical(lipgloss.Left, parts...)
@@ -200,6 +280,112 @@ func renderNestedAgentBlock(
 	return result
 }
 
+func getPromptHeaderSummary(prompt string) string {
+	prompt = strings.TrimSpace(prompt)
+	if prompt == "" {
+		return ""
+	}
+	lines := strings.Split(prompt, "\n")
+	var selected []string
+	for _, line := range lines {
+		trimmed := strings.TrimSpace(line)
+		if trimmed != "" {
+			selected = append(selected, trimmed)
+			if len(selected) == 2 {
+				break
+			}
+		}
+	}
+	if len(selected) == 0 {
+		return ""
+	}
+	summary := strings.Join(selected, " ")
+
+	// Count total non-empty lines to decide if we append "..."
+	nonEmptyCount := 0
+	for _, line := range lines {
+		if strings.TrimSpace(line) != "" {
+			nonEmptyCount++
+		}
+	}
+	if nonEmptyCount > len(selected) {
+		summary += "..."
+	}
+	return summary
+}
+
+func indentString(text string, spaces int) string {
+	if text == "" {
+		return ""
+	}
+	indent := strings.Repeat(" ", spaces)
+	lines := strings.Split(text, "\n")
+	for i, line := range lines {
+		if line != "" {
+			lines[i] = indent + line
+		} else {
+			lines[i] = indent
+		}
+	}
+	return strings.Join(lines, "\n")
+}
+
+type agentParams struct {
+	Type      string `json:"type"`
+	AgentType string `json:"agent_type"`
+	Task      string `json:"task"`
+	Prompt    string `json:"prompt"`
+}
+
+func extractPromptFromInput(input string) string {
+	input = strings.TrimSpace(input)
+	if input == "" {
+		return ""
+	}
+	var params agentParams
+	if err := json.Unmarshal([]byte(input), &params); err == nil {
+		if params.Task != "" {
+			return params.Task
+		}
+		if params.Prompt != "" {
+			return params.Prompt
+		}
+	}
+	var str string
+	if err := json.Unmarshal([]byte(input), &str); err == nil && str != "" {
+		return str
+	}
+	var m map[string]any
+	if err := json.Unmarshal([]byte(input), &m); err == nil {
+		for k, v := range m {
+			kLower := strings.ToLower(k)
+			if strings.Contains(kLower, "prompt") || strings.Contains(kLower, "task") {
+				if s, ok := v.(string); ok && s != "" {
+					return s
+				}
+			}
+		}
+	}
+	if !strings.HasPrefix(input, "{") && !strings.HasPrefix(input, "[") {
+		return input
+	}
+	return ""
+}
+
+func getAgentDisplayName(input string) string {
+	var params agentParams
+	if err := json.Unmarshal([]byte(input), &params); err == nil {
+		agentType := params.Type
+		if agentType == "" {
+			agentType = params.AgentType
+		}
+		if agentType != "" {
+			return humanizedToolName(agentType) + " Agent"
+		}
+	}
+	return "Agent"
+}
+
 // AgentToolRenderContext renders agent tool messages.
 type AgentToolRenderContext struct {
 	agent *AgentToolMessageItem
@@ -207,24 +393,28 @@ type AgentToolRenderContext struct {
 
 // RenderTool implements the [ToolRenderer] interface.
 func (r *AgentToolRenderContext) RenderTool(sty *styles.Styles, width int, opts *ToolRenderOpts) string {
-	cappedWidth := cappedToolWidth(width)
-	if !opts.ToolCall.Finished && !opts.IsCanceled() && len(r.agent.nestedTools) == 0 {
-		return pendingTool(sty, "Agent", opts.Anim, opts.Compact)
+	cappedWidth := width
+	displayName := getAgentDisplayName(opts.ToolCall.Input)
+
+	if !opts.ToolCall.Finished && !opts.IsCanceled() && len(r.agent.nestedTools) == 0 && r.agent.subAgentReasoning == "" && r.agent.subAgentContent == "" {
+		return pendingTool(sty, displayName, opts.Anim, opts.Compact)
 	}
 
-	var params tools.AgentParams
-	_ = json.Unmarshal([]byte(opts.ToolCall.Input), &params)
+	prompt := extractPromptFromInput(opts.ToolCall.Input)
+	promptSummary := getPromptHeaderSummary(prompt)
+	var toolParams []string
+	if promptSummary != "" {
+		toolParams = append(toolParams, promptSummary)
+	}
 
-	header := toolHeader(sty, opts.Status, "Agent", cappedWidth, opts.Compact)
+	header := toolHeader(sty, opts.Status, displayName, cappedWidth, opts.Compact, toolParams...)
 	if opts.Compact {
 		return header
 	}
 
 	return renderNestedAgentBlock(
 		sty, header,
-		sty.Tool.AgentTaskTag, "Task",
-		strings.ReplaceAll(params.Prompt, "\n", " "),
-		r.agent.nestedTools, opts, cappedWidth,
+		r.agent.nestedTools, r.agent.subAgentReasoning, r.agent.subAgentContent, opts, cappedWidth,
 	)
 }
 
@@ -236,7 +426,9 @@ func (r *AgentToolRenderContext) RenderTool(sty *styles.Styles, width int, opts 
 type AgenticFetchToolMessageItem struct {
 	*baseToolMessageItem
 
-	nestedTools []ToolMessageItem
+	nestedTools       []ToolMessageItem
+	subAgentReasoning string
+	subAgentContent   string
 }
 
 var (
@@ -311,6 +503,17 @@ func (a *AgenticFetchToolMessageItem) AddNestedTool(tool ToolMessageItem) {
 	a.Bump()
 }
 
+func (a *AgenticFetchToolMessageItem) SetSubAgentStreaming(reasoning, content string) {
+	a.subAgentReasoning = reasoning
+	a.subAgentContent = content
+	a.clearCache()
+	a.Bump()
+}
+
+func (a *AgenticFetchToolMessageItem) SubAgentStreaming() (reasoning, content string) {
+	return a.subAgentReasoning, a.subAgentContent
+}
+
 // AgenticFetchToolRenderContext renders agentic fetch tool messages.
 type AgenticFetchToolRenderContext struct {
 	fetch *AgenticFetchToolMessageItem
@@ -324,17 +527,29 @@ type agenticFetchParams struct {
 
 // RenderTool implements the [ToolRenderer] interface.
 func (r *AgenticFetchToolRenderContext) RenderTool(sty *styles.Styles, width int, opts *ToolRenderOpts) string {
-	cappedWidth := cappedToolWidth(width)
-	if !opts.ToolCall.Finished && !opts.IsCanceled() && len(r.fetch.nestedTools) == 0 {
+	cappedWidth := width
+	if !opts.ToolCall.Finished && !opts.IsCanceled() && len(r.fetch.nestedTools) == 0 && r.fetch.subAgentReasoning == "" && r.fetch.subAgentContent == "" {
 		return pendingTool(sty, "Agentic Fetch", opts.Anim, opts.Compact)
 	}
 
 	var params agenticFetchParams
 	_ = json.Unmarshal([]byte(opts.ToolCall.Input), &params)
 
+	prompt := params.Prompt
+	if prompt == "" {
+		prompt = extractPromptFromInput(opts.ToolCall.Input)
+	}
+
 	var toolParams []string
 	if params.URL != "" {
 		toolParams = append(toolParams, params.URL)
+	}
+	if summary := getPromptHeaderSummary(prompt); summary != "" {
+		if len(toolParams) == 0 {
+			toolParams = append(toolParams, summary)
+		} else {
+			toolParams = append(toolParams, "prompt", summary)
+		}
 	}
 	header := toolHeader(sty, opts.Status, "Agentic Fetch", cappedWidth, opts.Compact, toolParams...)
 	if opts.Compact {
@@ -343,9 +558,7 @@ func (r *AgenticFetchToolRenderContext) RenderTool(sty *styles.Styles, width int
 
 	return renderNestedAgentBlock(
 		sty, header,
-		sty.Tool.AgenticFetchPromptTag, "Prompt",
-		strings.ReplaceAll(params.Prompt, "\n", " "),
-		r.fetch.nestedTools, opts, cappedWidth,
+		r.fetch.nestedTools, r.fetch.subAgentReasoning, r.fetch.subAgentContent, opts, cappedWidth,
 	)
 }
 
@@ -379,7 +592,7 @@ type listAgentsMeta struct {
 
 // RenderTool implements the [ToolRenderer] interface.
 func (l *ListAgentsToolRenderContext) RenderTool(sty *styles.Styles, width int, opts *ToolRenderOpts) string {
-	cappedWidth := cappedToolWidth(width)
+	cappedWidth := width
 	if opts.IsPending() {
 		return pendingTool(sty, "List Agents", opts.Anim, opts.Compact)
 	}
@@ -465,7 +678,7 @@ type spawnAgentOutput struct {
 
 // RenderTool implements the [ToolRenderer] interface.
 func (s *SpawnAgentToolRenderContext) RenderTool(sty *styles.Styles, width int, opts *ToolRenderOpts) string {
-	cappedWidth := cappedToolWidth(width)
+	cappedWidth := width
 	if opts.IsPending() {
 		return pendingTool(sty, "Spawn Agent", opts.Anim, opts.Compact)
 	}
@@ -562,7 +775,7 @@ type sendAgentMessageInput struct {
 
 // RenderTool implements the [ToolRenderer] interface.
 func (s *SendAgentMessageToolRenderContext) RenderTool(sty *styles.Styles, width int, opts *ToolRenderOpts) string {
-	cappedWidth := cappedToolWidth(width)
+	cappedWidth := width
 	if opts.IsPending() {
 		return pendingTool(sty, "Send Message", opts.Anim, opts.Compact)
 	}
@@ -632,7 +845,7 @@ type waitAgentInput struct {
 
 // RenderTool implements the [ToolRenderer] interface.
 func (w *WaitAgentToolRenderContext) RenderTool(sty *styles.Styles, width int, opts *ToolRenderOpts) string {
-	cappedWidth := cappedToolWidth(width)
+	cappedWidth := width
 	if opts.IsPending() {
 		return pendingTool(sty, "Wait Agent", opts.Anim, opts.Compact)
 	}
@@ -688,7 +901,7 @@ type CloseAgentToolRenderContext struct{}
 
 // RenderTool implements the [ToolRenderer] interface.
 func (c *CloseAgentToolRenderContext) RenderTool(sty *styles.Styles, width int, opts *ToolRenderOpts) string {
-	cappedWidth := cappedToolWidth(width)
+	cappedWidth := width
 	if opts.IsPending() {
 		return pendingTool(sty, "Close Agent", opts.Anim, opts.Compact)
 	}
@@ -739,7 +952,7 @@ type resumeAgentParams struct {
 
 // RenderTool implements the [ToolRenderer] interface.
 func (r *ResumeAgentToolRenderContext) RenderTool(sty *styles.Styles, width int, opts *ToolRenderOpts) string {
-	cappedWidth := cappedToolWidth(width)
+	cappedWidth := width
 	if opts.IsPending() {
 		return pendingTool(sty, "Resume Agent", opts.Anim, opts.Compact)
 	}

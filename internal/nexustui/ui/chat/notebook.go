@@ -71,7 +71,7 @@ type notebookEditOutput struct {
 
 // RenderTool implements the [ToolRenderer] interface.
 func (n *NotebookEditToolRenderContext) RenderTool(sty *styles.Styles, width int, opts *ToolRenderOpts) string {
-	cappedWidth := cappedToolWidth(width)
+	cappedWidth := width
 	if opts.IsPending() {
 		return pendingTool(sty, "Notebook Edit", opts.Anim, opts.Compact)
 	}
@@ -161,7 +161,7 @@ type notebookCreateOutput struct {
 }
 
 func (n *NotebookCreateToolRenderContext) RenderTool(sty *styles.Styles, width int, opts *ToolRenderOpts) string {
-	cappedWidth := cappedToolWidth(width)
+	cappedWidth := width
 	if opts.IsPending() {
 		return pendingTool(sty, "Create Notebook", opts.Anim, opts.Compact)
 	}
@@ -220,7 +220,7 @@ type notebookWriteOutput struct {
 }
 
 func (n *NotebookWriteToolRenderContext) RenderTool(sty *styles.Styles, width int, opts *ToolRenderOpts) string {
-	cappedWidth := cappedToolWidth(width)
+	cappedWidth := width
 	if opts.IsPending() {
 		return pendingTool(sty, "Write Notebook", opts.Anim, opts.Compact)
 	}

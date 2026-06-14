@@ -781,9 +781,7 @@ func TestAsync_ErrorPropagation(t *testing.T) {
 
 func TestBrowseAgentIsRegistered(t *testing.T) {
 	agent := GetBuiltInAgentByType(AgentTypeBrowse)
-	if agent == nil {
-		t.Fatalf("expected browse agent to be registered")
-	}
+	require.NotNil(t, agent, "expected browse agent to be registered")
 	if agent.AgentType != AgentTypeBrowse {
 		t.Fatalf("expected browse agent type %q, got %q", AgentTypeBrowse, agent.AgentType)
 	}
@@ -791,9 +789,7 @@ func TestBrowseAgentIsRegistered(t *testing.T) {
 
 func TestBrowseAgentToolSurfaceIsReadOnlyResearchFocused(t *testing.T) {
 	agent := GetBuiltInAgentByType(AgentTypeBrowse)
-	if agent == nil {
-		t.Fatalf("expected browse agent to be registered")
-	}
+	require.NotNil(t, agent, "expected browse agent to be registered")
 
 	allowed := make(map[string]bool, len(agent.Tools))
 	for _, tool := range agent.Tools {
