@@ -18,12 +18,23 @@ type Context struct {
 }
 
 // ResolvePath resolves a candidate path according to the current execution context.
+// When a WorkspaceRoot is configured, relative paths are anchored to the root and
+// validated to stay inside it. Absolute paths bypass workspace containment so the
+// user can approve writes to /tmp or other out-of-workspace directories — the
+// FilesystemPolicy dangerous-prefix check still applies downstream.
 func (c Context) ResolvePath(path string) (string, error) {
 	if strings.TrimSpace(path) == "" {
 		return "", fmt.Errorf("path is required")
 	}
 
 	if strings.TrimSpace(c.WorkspaceRoot) != "" {
+		if filepath.IsAbs(path) {
+			abs, err := filepath.Abs(filepath.Clean(path))
+			if err != nil {
+				return "", fmt.Errorf("resolve path %q: %w", path, err)
+			}
+			return abs, nil
+		}
 		return workspace.Resolve(path, c.WorkspaceRoot)
 	}
 

@@ -112,6 +112,16 @@ type LSPermissionsParams struct {
 	Ignore []string
 }
 
+// NotebookEditPermissionsParams holds the params for a notebook_edit permission request.
+type NotebookEditPermissionsParams struct {
+	NotebookPath string
+	CellID       string
+	CellType     string
+	EditMode     string
+	OldContent   string // full notebook JSON before edit (may be empty if file is new)
+	NewSource    string // the new_source being written into the cell
+}
+
 // --- Tool input param structs (used by chat UI to deserialise tool call JSON) ---
 
 // BashParams holds the input for a bash tool call.

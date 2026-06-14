@@ -488,6 +488,21 @@ func (p *Permissions) renderHeader(contentWidth int) string {
 		if filePath != "" {
 			lines = append(lines, p.renderKeyValue("File", fsext.PrettyPath(filePath), contentWidth))
 		}
+	case "notebook_edit":
+		if params, ok := p.permission.Params.(tools.NotebookEditPermissionsParams); ok {
+			if params.NotebookPath != "" {
+				lines = append(lines, p.renderKeyValue("File", fsext.PrettyPath(params.NotebookPath), contentWidth))
+			}
+			mode := params.EditMode
+			if mode == "" {
+				mode = "replace"
+			}
+			cellRef := mode
+			if params.CellID != "" {
+				cellRef = "cell " + params.CellID + " · " + mode
+			}
+			lines = append(lines, p.renderKeyValue("Edit", cellRef, contentWidth))
+		}
 	case tools.LSToolName:
 		if params, ok := p.permission.Params.(tools.LSPermissionsParams); ok {
 			lines = append(lines, p.renderKeyValue("Directory", fsext.PrettyPath(params.Path), contentWidth))
@@ -555,6 +570,8 @@ func (p *Permissions) renderContent(width int) string {
 		return p.renderViewContent(width)
 	case tools.LSToolName:
 		return p.renderLSContent(width)
+	case "notebook_edit":
+		return p.renderNotebookEditContent(width)
 	default:
 		return p.renderDefaultContent(width)
 	}
@@ -703,6 +720,45 @@ func (p *Permissions) renderLSContent(width int) string {
 		content += fmt.Sprintf("\nIgnore patterns: %s", strings.Join(params.Ignore, ", "))
 	}
 
+	return p.renderContentPanel(content, width)
+}
+
+func (p *Permissions) renderNotebookEditContent(width int) string {
+	params, ok := p.permission.Params.(tools.NotebookEditPermissionsParams)
+	if !ok {
+		return ""
+	}
+
+	mode := params.EditMode
+	if mode == "" {
+		mode = "replace"
+	}
+
+	// Delete: nothing to preview.
+	if mode == "delete" {
+		cell := "cell"
+		if params.CellID != "" {
+			cell = "cell " + params.CellID
+		}
+		return p.renderContentPanel("Deleting "+cell, width)
+	}
+
+	if params.NewSource == "" {
+		return ""
+	}
+
+	// Choose syntax highlight language from cell type.
+	lang := "cell.py"
+	switch params.CellType {
+	case "markdown":
+		lang = "cell.md"
+	}
+
+	t := p.com.Styles
+	content := params.NewSource
+	if highlighted, err := common.SyntaxHighlight(t, content, lang, t.Dialog.Permissions.ParamsBg); err == nil {
+		content = highlighted
+	}
 	return p.renderContentPanel(content, width)
 }
 

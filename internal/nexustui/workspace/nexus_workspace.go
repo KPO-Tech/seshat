@@ -1609,6 +1609,22 @@ func buildToolPermissionParams(toolName string, input map[string]any) any {
 			URL:    str("url"),
 			Prompt: str("prompt"),
 		}
+	case "notebook_edit":
+		notebookPath := str("notebook_path")
+		var oldContent string
+		if notebookPath != "" {
+			if data, err := os.ReadFile(notebookPath); err == nil {
+				oldContent = string(data)
+			}
+		}
+		return tuiTools.NotebookEditPermissionsParams{
+			NotebookPath: notebookPath,
+			CellID:       str("cell_id"),
+			CellType:     str("cell_type"),
+			EditMode:     str("edit_mode"),
+			OldContent:   oldContent,
+			NewSource:    str("new_source"),
+		}
 	}
 	return nil
 }
@@ -1639,6 +1655,18 @@ func (w *NexusWorkspace) PromptFn(ctx context.Context, req sdk.PromptRequest) (s
 
 	params := buildToolPermissionParams(toolName, toolInput)
 
+	// Use the actual target file/directory path for display when available,
+	// falling back to the working directory if no file path is present.
+	displayPath := workDir
+	if toolInput != nil {
+		for _, key := range []string{"file_path", "notebook_path", "path", "url"} {
+			if v, ok := toolInput[key].(string); ok && v != "" {
+				displayPath = v
+				break
+			}
+		}
+	}
+
 	permID := uuid.New().String()
 	permReq := permission.PermissionRequest{
 		ID:          permID,
@@ -1646,7 +1674,7 @@ func (w *NexusWorkspace) PromptFn(ctx context.Context, req sdk.PromptRequest) (s
 		ToolName:    toolName,
 		Description: req.Message,
 		Action:      string(req.Type),
-		Path:        workDir,
+		Path:        displayPath,
 		Params:      params,
 	}
 
