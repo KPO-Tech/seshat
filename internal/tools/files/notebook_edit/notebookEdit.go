@@ -155,10 +155,22 @@ func (t *Tool) Call(ctx context.Context, input tool.CallInput, permissionCheck t
 func (t *Tool) editNotebook(fullPath string, input *Input) (Output, error) {
 	originalContent, err := os.ReadFile(fullPath)
 	if err != nil {
-		if os.IsNotExist(err) {
+		if !os.IsNotExist(err) {
+			return Output{Error: fmt.Sprintf("Failed to read notebook: %v", err), NotebookPath: fullPath}, nil
+		}
+		// File does not exist: only insert mode can create a new notebook.
+		editMode := input.EditMode
+		if editMode == "" {
+			editMode = EditModeReplace
+		}
+		if editMode != EditModeInsert {
 			return Output{Error: "Notebook file does not exist.", NotebookPath: fullPath}, nil
 		}
-		return Output{Error: fmt.Sprintf("Failed to read notebook: %v", err), NotebookPath: fullPath}, nil
+		// Ensure parent directory exists, then delegate to insert on an empty notebook.
+		if mkErr := os.MkdirAll(filepath.Dir(fullPath), 0o755); mkErr != nil {
+			return Output{Error: fmt.Sprintf("Failed to create directory: %v", mkErr), NotebookPath: fullPath}, nil
+		}
+		originalContent = emptyNotebookJSON()
 	}
 
 	var notebook fileReadTool.Notebook
@@ -419,4 +431,25 @@ func formatOutput(output Output) string {
 	}
 
 	return builder.String()
+}
+
+// emptyNotebookJSON returns a minimal valid nbformat 4 notebook as JSON bytes.
+// Used when insert mode is called on a non-existent file.
+func emptyNotebookJSON() []byte {
+	return []byte(`{
+ "cells": [],
+ "metadata": {
+  "kernelspec": {
+   "display_name": "Python 3",
+   "language": "python",
+   "name": "python3"
+  },
+  "language_info": {
+   "name": "python",
+   "version": "3.8.0"
+  }
+ },
+ "nbformat": 4,
+ "nbformat_minor": 5
+}`)
 }
