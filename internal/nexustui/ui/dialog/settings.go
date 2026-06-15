@@ -388,7 +388,7 @@ func (s *Settings) handleWebSearchKey(msg tea.KeyPressMsg) Action {
 	case key.Matches(msg, s.keyMap.Select):
 		if item := s.webSearchList.SelectedItem(); item != nil {
 			if wi, ok := item.(*settingsWebSearchItem); ok {
-				if wi.providerID == "auto" || wi.providerID == "ddg" {
+				if wi.providerID == "auto" {
 					return ActionSelectWebSearchProvider{ProviderID: wi.providerID}
 				}
 				return ActionOpenWebSearchConfig{ProviderID: wi.providerID}
@@ -1002,14 +1002,12 @@ func (s *Settings) infoWebSearch() []string {
 	muted := t.Sidebar.WorkingDir
 	return []string{
 		"",
-		accent.Render("  Current provider:") + "  " + muted.Render("DuckDuckGo  (built-in · no API key required)"),
-		"",
 		muted.Render("  Web search is available to all agents via the web_search tool."),
-		muted.Render("  DuckDuckGo is used by default and requires no configuration."),
+		muted.Render("  Configure a provider below to enable search."),
 		"",
-		accent.Render("  Coming soon:"),
-		muted.Render("    Brave Search, Tavily, and SerpAPI — configure a premium provider"),
-		muted.Render("    for better results and higher rate limits."),
+		accent.Render("  Providers:"),
+		muted.Render("    Tavily, Exa, Jina, LangSearch — API key required"),
+		muted.Render("    SearXNG — self-hosted, no third-party key required"),
 		"",
 		muted.Render("  Press esc or ← to go back."),
 	}
@@ -1528,13 +1526,12 @@ type webSearchProviderOption struct {
 
 func defaultWebSearchProviders() []webSearchProviderOption {
 	return []webSearchProviderOption{
-		{id: "auto", name: "Auto", desc: "try configured providers in priority order, then DuckDuckGo"},
+		{id: "auto", name: "Auto", desc: "try configured providers in priority order"},
 		{id: "tavily", name: "Tavily", desc: "API key required"},
 		{id: "exa", name: "Exa", desc: "API key required"},
 		{id: "jina", name: "Jina", desc: "API key required"},
 		{id: "langsearch", name: "LangSearch", desc: "API key required"},
 		{id: "searxng", name: "SearXNG", desc: "Base URL required"},
-		{id: "ddg", name: "DuckDuckGo", desc: "built-in fallback, no API key"},
 	}
 }
 
@@ -1548,7 +1545,7 @@ func currentWebSearchProviderID() string {
 
 func webSearchConfigured(providerID string) bool {
 	switch strings.ToLower(strings.TrimSpace(providerID)) {
-	case "auto", "ddg":
+	case "auto":
 		return true
 	case "tavily":
 		return strings.TrimSpace(os.Getenv("TAVILY_API_KEY")) != ""

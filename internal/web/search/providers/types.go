@@ -36,7 +36,6 @@ const (
 	ProviderModeAuto       ProviderMode = "auto"
 	ProviderModeCustom     ProviderMode = "custom"
 	ProviderModeTavily     ProviderMode = "tavily"
-	ProviderModeDuckDuckGo ProviderMode = "ddg"
 	ProviderModeSearXNG    ProviderMode = "searxng"
 	ProviderModeJina       ProviderMode = "jina"
 	ProviderModeExa        ProviderMode = "exa"
@@ -54,7 +53,6 @@ func IsValidMode(mode string) bool {
 		"auto":       true,
 		"custom":     true,
 		"tavily":     true,
-		"ddg":        true,
 		"searxng":    true,
 		"jina":       true,
 		"exa":        true,

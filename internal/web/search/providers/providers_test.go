@@ -25,7 +25,6 @@ func (p stubProvider) Search(input SearchInput) (ProviderOutput, error) {
 
 func TestGetProviderChainAutoPrefersConfiguredAPIsBeforeBestEffortProviders(t *testing.T) {
 	chain := GetProviderChain(ProviderModeAuto, []SearchProvider{
-		stubProvider{name: "ddg", configured: true},
 		stubProvider{name: "searxng", configured: true},
 		stubProvider{name: "exa", configured: true},
 		stubProvider{name: "tavily", configured: true},
@@ -37,7 +36,7 @@ func TestGetProviderChainAutoPrefersConfiguredAPIsBeforeBestEffortProviders(t *t
 		got = append(got, provider.Name())
 	}
 
-	want := []string{"tavily", "exa", "jina", "searxng", "ddg"}
+	want := []string{"tavily", "exa", "jina", "searxng"}
 	if len(got) != len(want) {
 		t.Fatalf("unexpected chain length: got %d want %d (%v)", len(got), len(want), got)
 	}
@@ -48,14 +47,14 @@ func TestGetProviderChainAutoPrefersConfiguredAPIsBeforeBestEffortProviders(t *t
 	}
 }
 
-func TestRunSearchAutoFallsBackFromEmptyBestEffortProvider(t *testing.T) {
+func TestRunSearchAutoFallsBackFromEmptySearXNGResult(t *testing.T) {
 	output, err := RunSearch(SearchInput{Query: "nexus ai"}, []SearchProvider{
 		stubProvider{
-			name:       "ddg",
+			name:       "searxng",
 			configured: true,
 			output: ProviderOutput{
 				Hits:         nil,
-				ProviderName: "duckduckgo",
+				ProviderName: "searxng",
 			},
 		},
 		stubProvider{
@@ -89,11 +88,11 @@ func TestRunSearchAutoDoesNotFallbackFromEmptyAPISearchResult(t *testing.T) {
 			},
 		},
 		stubProvider{
-			name:       "ddg",
+			name:       "searxng",
 			configured: true,
 			output: ProviderOutput{
 				Hits:         []SearchHit{{Title: "Fallback", URL: "https://example.com"}},
-				ProviderName: "duckduckgo",
+				ProviderName: "searxng",
 			},
 		},
 	}, ProviderModeAuto)

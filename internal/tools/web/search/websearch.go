@@ -15,7 +15,7 @@ import (
 
 const SearchHint = "search the web for current information"
 
-const ToolDescription = `Search the web for current information using a configured search provider. Supports multiple providers (Tavily, Exa, Jina, SearXNG, DuckDuckGo) with automatic fallback. Use WEB_SEARCH_PROVIDER to select a specific provider.
+const ToolDescription = `Search the web for current information using a configured search provider. Supports multiple providers (Tavily, Exa, Jina, LangSearch, SearXNG) with automatic fallback. Use WEB_SEARCH_PROVIDER to select a specific provider.
 
 Use this tool when you need current or external information that is not reliably available from repository state alone.
 
