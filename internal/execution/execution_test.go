@@ -25,12 +25,13 @@ func TestBrowserProgressForPageResult(t *testing.T) {
 	}))
 	if progress == nil {
 		t.Fatal("expected browser progress")
-	}
-	if progress.Metadata["event_kind"] != "browser" {
-		t.Fatalf("unexpected metadata: %+v", progress.Metadata)
-	}
-	if progress.Metadata["page_id"] != "page-1" {
-		t.Fatalf("unexpected page id: %+v", progress.Metadata)
+	} else {
+		if progress.Metadata["event_kind"] != "browser" {
+			t.Fatalf("unexpected metadata: %+v", progress.Metadata)
+		}
+		if progress.Metadata["page_id"] != "page-1" {
+			t.Fatalf("unexpected page id: %+v", progress.Metadata)
+		}
 	}
 }
 
@@ -42,12 +43,13 @@ func TestBrowserProgressForSnapshotResult(t *testing.T) {
 	}))
 	if progress == nil {
 		t.Fatal("expected browser progress")
-	}
-	if progress.Metadata["text_length"] != 5 {
-		t.Fatalf("unexpected text length: %+v", progress.Metadata)
-	}
-	if progress.Metadata["element_count"] != 1 {
-		t.Fatalf("unexpected element count: %+v", progress.Metadata)
+	} else {
+		if progress.Metadata["text_length"] != 5 {
+			t.Fatalf("unexpected text length: %+v", progress.Metadata)
+		}
+		if progress.Metadata["element_count"] != 1 {
+			t.Fatalf("unexpected element count: %+v", progress.Metadata)
+		}
 	}
 }
 

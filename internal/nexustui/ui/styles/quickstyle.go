@@ -337,6 +337,7 @@ func quickStyle(o quickStyleOpts) Styles {
 	// thinking box interior matches the page and no extra fill is visible.
 	plainBg := hex(o.bgBase)
 	plainFg := hex(o.fgMoreSubtle)
+	headingFg := hex(o.fgSubtle) // slightly lighter than body, no hue — headings stay readable without competing with agent text
 	s.QuietMarkdown = ansi.StyleConfig{
 		Document: ansi.StyleBlock{
 			StylePrimitive: ansi.StylePrimitive{
@@ -358,35 +359,36 @@ func quickStyle(o quickStyleOpts) Styles {
 		Heading: ansi.StyleBlock{
 			StylePrimitive: ansi.StylePrimitive{
 				BlockSuffix:     "\n",
-				Bold:            new(true),
-				Color:           hex(o.warning),
+				Bold:            new(false),
+				Color:           headingFg,
 				BackgroundColor: plainBg,
 			},
 		},
 		H1: ansi.StyleBlock{
 			StylePrimitive: ansi.StylePrimitive{
-				Bold:            new(true),
-				Color:           hex(o.accent),
+				Bold:            new(false),
+				Color:           headingFg,
 				BackgroundColor: plainBg,
 			},
 		},
 		H2: ansi.StyleBlock{
 			StylePrimitive: ansi.StylePrimitive{
-				Bold:            new(true),
-				Color:           hex(o.primary),
+				Bold:            new(false),
+				Color:           headingFg,
 				BackgroundColor: plainBg,
 			},
 		},
 		H3: ansi.StyleBlock{
 			StylePrimitive: ansi.StylePrimitive{
-				Bold:            new(true),
-				Color:           hex(o.warning),
+				Bold:            new(false),
+				Color:           headingFg,
 				BackgroundColor: plainBg,
 			},
 		},
 		H4: ansi.StyleBlock{
 			StylePrimitive: ansi.StylePrimitive{
-				Color:           hex(o.warningSubtle),
+				Bold:            new(false),
+				Color:           headingFg,
 				BackgroundColor: plainBg,
 			},
 		},
@@ -595,8 +597,8 @@ func quickStyle(o quickStyleOpts) Styles {
 	s.Tool.IconError = base.Foreground(o.error).SetString(ToolError)
 	s.Tool.IconCancelled = muted.SetString(ToolPending)
 
-	s.Tool.NameNormal = base.Foreground(o.info)
-	s.Tool.NameNested = base.Foreground(o.info)
+	s.Tool.NameNormal = base.Foreground(charmtone.Tang)
+	s.Tool.NameNested = base.Foreground(charmtone.Tang)
 
 	s.Tool.ParamMain = subtle
 	s.Tool.ParamKey = subtle
@@ -608,7 +610,7 @@ func quickStyle(o quickStyleOpts) Styles {
 	s.Tool.ContentCodeLine = base.Background(o.bgBase).PaddingLeft(2)
 	s.Tool.ContentCodeTruncation = muted.Background(o.bgBase).PaddingLeft(2)
 	s.Tool.ContentCodeBg = o.bgBase
-	s.Tool.Body = base.PaddingLeft(2)
+	s.Tool.Body = base.PaddingLeft(4)
 
 	// Deprecated - kept for backward compatibility
 	s.Tool.ContentBg = muted.Background(o.bgBase)
@@ -685,6 +687,15 @@ func quickStyle(o quickStyleOpts) Styles {
 	s.Tool.ResultTruncation = lipgloss.NewStyle().Foreground(o.fgMostSubtle)
 	s.Tool.ResultItemName = lipgloss.NewStyle().Foreground(o.fgBase)
 	s.Tool.ResultItemDesc = lipgloss.NewStyle().Foreground(o.fgMostSubtle)
+	s.Tool.ResultAdded = lipgloss.NewStyle().Foreground(o.success)
+	s.Tool.ResultDeleted = lipgloss.NewStyle().Foreground(o.destructive)
+	s.Tool.ResultMoved = lipgloss.NewStyle().Foreground(o.accent)
+	s.Tool.WebSearchURL = lipgloss.NewStyle().Foreground(o.info)
+	s.Tool.WebFetchPrompt = lipgloss.NewStyle().Foreground(o.fgMostSubtle)
+	s.Tool.AskUserCursor = lipgloss.NewStyle().Foreground(o.accent)
+	s.Tool.AskUserOptionFocused = lipgloss.NewStyle().Foreground(o.fgBase)
+	s.Tool.AskUserFooter = lipgloss.NewStyle().Foreground(o.fgMostSubtle)
+	s.Tool.AskUserHistory = lipgloss.NewStyle().Foreground(o.fgSubtle)
 
 	// Buttons
 	s.Button.Focused = lipgloss.NewStyle().Foreground(o.onPrimary).Background(o.secondary)

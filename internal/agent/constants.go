@@ -17,14 +17,14 @@ const AgentTypeBrowse = "browse"
 const AgentTypePlan = "plan"
 const AgentTypeVerify = "verify"
 
-// DefaultMaxTurns is the turn limit for top-level agents run via the agent tool.
-// 200 matches OpenClaude's fork limit and allows complex multi-step tasks to
-// complete without hitting an artificial ceiling.
-const DefaultMaxTurns = 200
+// DefaultMaxTurns is the fallback turn limit used only when no agent definition
+// provides a MaxTurns value. Agent definitions (GeneralPurposeAgent, ExploreAgent,
+// etc.) each declare their own MaxTurns which takes priority over this constant.
+const DefaultMaxTurns = 50
 
-// DefaultSubAgentMaxTurns is the turn limit for sub-agents spawned by another
-// agent. Same as top-level: sub-agents can also receive complex delegated tasks.
-const DefaultSubAgentMaxTurns = 200
+// DefaultSubAgentMaxTurns is the fallback turn limit for sub-agents when the
+// agent definition provides no MaxTurns. Agent definition values take priority.
+const DefaultSubAgentMaxTurns = 20
 
 // MaxSubAgentDepth is the default maximum spawn depth allowed before an agent
 // tool call is rejected. Prevents infinite delegation chains (A→B→C→…).

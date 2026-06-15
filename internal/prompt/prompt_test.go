@@ -312,18 +312,19 @@ func TestStageSectionKnownStagesReturnSection(t *testing.T) {
 			s := stageSection(stage, nil)
 			if s == nil {
 				t.Fatalf("expected non-nil section for stage %q", stage)
-			}
-			if s.Name != "stage_overlay" {
-				t.Errorf("expected section name 'stage_overlay', got %q", s.Name)
-			}
-			if s.Cacheable {
-				t.Error("stage overlay sections must not be cacheable")
-			}
-			if !s.Enabled {
-				t.Error("stage overlay section must be enabled")
-			}
-			if strings.TrimSpace(s.Content) == "" {
-				t.Error("stage overlay content must not be empty")
+			} else {
+				if s.Name != "stage_overlay" {
+					t.Errorf("expected section name 'stage_overlay', got %q", s.Name)
+				}
+				if s.Cacheable {
+					t.Error("stage overlay sections must not be cacheable")
+				}
+				if !s.Enabled {
+					t.Error("stage overlay section must be enabled")
+				}
+				if strings.TrimSpace(s.Content) == "" {
+					t.Error("stage overlay content must not be empty")
+				}
 			}
 		})
 	}
@@ -337,8 +338,7 @@ func TestStageSectionOverrideWinsOverDefault(t *testing.T) {
 	})
 	if s == nil {
 		t.Fatal("expected non-nil section")
-	}
-	if s.Content != overrideText {
+	} else if s.Content != overrideText {
 		t.Errorf("expected override content %q, got %q", overrideText, s.Content)
 	}
 }
@@ -350,8 +350,7 @@ func TestStageSectionEmptyOverrideFallsBackToDefault(t *testing.T) {
 	})
 	if s == nil {
 		t.Fatal("expected non-nil section")
-	}
-	if !strings.Contains(s.Content, "plan mode") {
+	} else if !strings.Contains(s.Content, "plan mode") {
 		t.Errorf("expected built-in plan overlay content, got %q", s.Content)
 	}
 }

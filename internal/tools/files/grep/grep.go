@@ -2,6 +2,7 @@ package grep
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"os"
 	"os/exec"
@@ -318,9 +319,19 @@ func (g *Tool) IsReadOnly(input map[string]any) bool {
 func (g *Tool) IsEnabled() bool { return true }
 
 // FormatResult serialises the tool output into the tool_result content string.
+// For content mode, returns the matching lines directly so both the LLM and
+// the TUI receive readable grep output rather than a raw Go map string.
 func (g *Tool) FormatResult(data any) string {
 	if s, ok := data.(string); ok {
 		return s
+	}
+	if m, ok := data.(map[string]any); ok {
+		if content, ok := m["content"].(string); ok && content != "" {
+			return content
+		}
+		if b, err := json.Marshal(m); err == nil {
+			return string(b)
+		}
 	}
 	return fmt.Sprintf("%v", data)
 }
@@ -350,7 +361,7 @@ func (g *Tool) doGrep(
 	if err != nil {
 		// If ripgrep not found, return error
 		if strings.Contains(err.Error(), "executable file not found") {
-			return nil, fmt.Errorf("ripgrep (rg) not found. Please install ripgrep: https://github.com/BurntSushi/ripgrep")
+			return nil, shared.RipgrepNotFoundError()
 		}
 		// If no matches found, that's ok - return empty results
 		if exitError, ok := err.(*exec.ExitError); ok && exitError.ExitCode() == 1 {

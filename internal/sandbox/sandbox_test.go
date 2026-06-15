@@ -17,6 +17,14 @@ func TestCommandPolicyAsksForDangerousCommand(t *testing.T) {
 	}
 }
 
+func TestCommandPolicyAsksForSafeAbsoluteTmpRemoval(t *testing.T) {
+	policy := NewDefaultCommandPolicy()
+	result := policy.Evaluate("rm -rf /tmp/nexus-scratch")
+	if result.Decision != DecisionAsk {
+		t.Fatalf("expected ask, got %s", result.Decision)
+	}
+}
+
 func TestCommandPolicyDeniesExplicitlyForbiddenCommand(t *testing.T) {
 	policy := NewDefaultCommandPolicy()
 	result := policy.Evaluate("rm -rf /")
@@ -42,12 +50,32 @@ func TestFilesystemPolicyAllowsWorkspaceRead(t *testing.T) {
 	}
 }
 
-func TestFilesystemPolicyRejectsWorkspaceEscape(t *testing.T) {
+func TestFilesystemPolicyAllowsAbsolutePathOutsideWorkspace(t *testing.T) {
+	// Absolute paths are no longer hard-blocked by workspace containment.
+	// The user approves out-of-workspace access via the permission dialog;
+	// dangerous-prefix blocking (writeDeniedPrefixes) still applies for writes.
 	tmp := t.TempDir()
 	policy := NewDefaultFilesystemPolicy()
-	_, err := policy.EvaluatePath(Context{WorkspaceRoot: tmp}, "/etc/passwd", AccessRead)
-	if err == nil {
-		t.Fatal("expected workspace escape to fail")
+	decision, err := policy.EvaluatePath(Context{WorkspaceRoot: tmp}, "/etc/passwd", AccessRead)
+	if err != nil {
+		t.Fatalf("EvaluatePath: %v", err)
+	}
+	// /etc is not in readDeniedPrefixes, so the decision must be Allow.
+	if decision.Decision != DecisionAllow {
+		t.Errorf("expected allow for absolute path outside workspace, got %s: %s", decision.Decision, decision.Reason)
+	}
+}
+
+func TestFilesystemPolicyStillDeniesWriteToProtectedEtc(t *testing.T) {
+	// Even with workspace relaxation, /etc writes must stay blocked.
+	tmp := t.TempDir()
+	policy := NewDefaultFilesystemPolicy()
+	decision, err := policy.EvaluatePath(Context{WorkspaceRoot: tmp}, "/etc/passwd", AccessWrite)
+	if err != nil {
+		t.Fatalf("EvaluatePath: %v", err)
+	}
+	if decision.Decision != DecisionDeny {
+		t.Errorf("expected deny for /etc write, got %s", decision.Decision)
 	}
 }
 

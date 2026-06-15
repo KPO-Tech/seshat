@@ -16,6 +16,7 @@ import (
 	"github.com/EngineerProjects/nexus-engine/internal/nexustui/stringext"
 	"github.com/EngineerProjects/nexus-engine/internal/nexustui/ui/common"
 	"github.com/EngineerProjects/nexus-engine/internal/nexustui/ui/styles"
+	read "github.com/EngineerProjects/nexus-engine/internal/tools/files/read"
 	uv "github.com/charmbracelet/ultraviolet"
 )
 
@@ -324,6 +325,42 @@ func (p *Permissions) hasDiffView() bool {
 	switch p.permission.ToolName {
 	case tools.EditToolName, tools.WriteToolName, tools.MultiEditToolName:
 		return true
+	case tools.NotebookEditToolName:
+		params, ok := p.permission.Params.(tools.NotebookEditPermissionsParams)
+		if !ok {
+			return false
+		}
+		mode := params.EditMode
+		if mode == "" {
+			mode = "replace"
+		}
+		return mode == "delete" && params.OldContent != ""
+	}
+	return false
+}
+
+func (p *Permissions) hasApplyPatchView() bool {
+	return p.permission.ToolName == tools.ApplyPatchToolName
+}
+
+func (p *Permissions) hasNotebookPreviewView() bool {
+	switch p.permission.ToolName {
+	case tools.NotebookCreateToolName:
+		params, ok := p.permission.Params.(tools.NotebookCreatePermissionsParams)
+		return ok && len(params.Cells) > 0
+	case tools.NotebookWriteToolName:
+		params, ok := p.permission.Params.(tools.NotebookWritePermissionsParams)
+		return ok && len(params.Cells) > 0
+	case tools.NotebookEditToolName:
+		params, ok := p.permission.Params.(tools.NotebookEditPermissionsParams)
+		if !ok {
+			return false
+		}
+		mode := params.EditMode
+		if mode == "" {
+			mode = "replace"
+		}
+		return mode != "delete" && strings.TrimSpace(params.NewSource) != ""
 	}
 	return false
 }
@@ -354,13 +391,14 @@ func (p *Permissions) Draw(scr uv.Screen, area uv.Rectangle) *tea.Cursor {
 	forceFullscreen := area.Dx() <= minWindowWidth || area.Dy() <= minWindowHeight
 
 	// Calculate dialog dimensions based on fullscreen state and content type.
+	wideLayout := p.hasDiffView() || p.hasNotebookPreviewView()
 	var width, maxHeight int
 	if forceFullscreen || (p.fullscreen && p.hasDiffView()) {
 		// Use nearly full window for fullscreen.
 		width = area.Dx()
 		maxHeight = area.Dy()
-	} else if p.hasDiffView() {
-		// Wide for side-by-side diffs, capped for readability.
+	} else if wideLayout {
+		// Wide for side-by-side diffs and notebook previews.
 		width = min(int(float64(area.Dx())*diffSizeRatio), diffMaxWidth)
 		maxHeight = int(float64(area.Dy()) * diffSizeRatio)
 	} else {
@@ -388,9 +426,9 @@ func (p *Permissions) Draw(scr uv.Screen, area uv.Rectangle) *tea.Cursor {
 	renderedContent := p.renderContent(contentWidth)
 	contentHeight := lipgloss.Height(renderedContent)
 
-	// For non-diff views, shrink dialog to fit content if it's smaller than max.
+	// For simple views, shrink dialog to fit content if it's smaller than max.
 	var availableHeight int
-	if !p.hasDiffView() && !forceFullscreen {
+	if !wideLayout && !forceFullscreen {
 		fixedHeight := headerHeight + buttonsHeight + helpHeight + frameHeight
 		neededHeight := fixedHeight + contentHeight
 		if neededHeight < maxHeight {
@@ -484,10 +522,49 @@ func (p *Permissions) renderHeader(contentWidth int) string {
 		if filePath != "" {
 			lines = append(lines, p.renderKeyValue("File", fsext.PrettyPath(filePath), contentWidth))
 		}
+	case tools.NotebookEditToolName:
+		if params, ok := p.permission.Params.(tools.NotebookEditPermissionsParams); ok {
+			if params.NotebookPath != "" {
+				lines = append(lines, p.renderKeyValue("File", fsext.PrettyPath(params.NotebookPath), contentWidth))
+			}
+			mode := params.EditMode
+			if mode == "" {
+				mode = "replace"
+			}
+			cellRef := mode
+			if params.CellID != "" {
+				cellRef = "cell " + params.CellID + " · " + mode
+			}
+			lines = append(lines, p.renderKeyValue("Edit", cellRef, contentWidth))
+		}
+	case tools.NotebookCreateToolName:
+		if params, ok := p.permission.Params.(tools.NotebookCreatePermissionsParams); ok {
+			if params.NotebookPath != "" {
+				lines = append(lines, p.renderKeyValue("File", fsext.PrettyPath(params.NotebookPath), contentWidth))
+			}
+			lines = append(lines, p.renderKeyValue("Kernel", params.Kernel, contentWidth))
+			if params.CellCount > 0 {
+				lines = append(lines, p.renderKeyValue("Cells", fmt.Sprintf("%d", params.CellCount), contentWidth))
+			}
+		}
+	case tools.NotebookWriteToolName:
+		if params, ok := p.permission.Params.(tools.NotebookWritePermissionsParams); ok {
+			if params.NotebookPath != "" {
+				lines = append(lines, p.renderKeyValue("File", fsext.PrettyPath(params.NotebookPath), contentWidth))
+			}
+			lines = append(lines, p.renderKeyValue("Kernel", params.Kernel, contentWidth))
+			action := "create"
+			if params.OldContent != "" {
+				action = "overwrite"
+			}
+			lines = append(lines, p.renderKeyValue("Action", fmt.Sprintf("%s · %d cells", action, params.CellCount), contentWidth))
+		}
 	case tools.LSToolName:
 		if params, ok := p.permission.Params.(tools.LSPermissionsParams); ok {
 			lines = append(lines, p.renderKeyValue("Directory", fsext.PrettyPath(params.Path), contentWidth))
 		}
+	case tools.ApplyPatchToolName:
+		// File count is embedded in Description; no single path to display.
 	}
 
 	return lipgloss.JoinVertical(lipgloss.Left, lines...)
@@ -537,6 +614,8 @@ func (p *Permissions) renderContent(width int) string {
 		return p.renderWriteContent(width)
 	case tools.MultiEditToolName:
 		return p.renderMultiEditContent(width)
+	case tools.ApplyPatchToolName:
+		return p.renderApplyPatchContent(width)
 	case tools.DownloadToolName:
 		return p.renderDownloadContent(width)
 	case tools.FetchToolName:
@@ -547,9 +626,23 @@ func (p *Permissions) renderContent(width int) string {
 		return p.renderViewContent(width)
 	case tools.LSToolName:
 		return p.renderLSContent(width)
+	case tools.NotebookEditToolName:
+		return p.renderNotebookEditContent(width)
+	case tools.NotebookCreateToolName:
+		return p.renderNotebookCreateContent(width)
+	case tools.NotebookWriteToolName:
+		return p.renderNotebookWriteContent(width)
 	default:
 		return p.renderDefaultContent(width)
 	}
+}
+
+func (p *Permissions) renderApplyPatchContent(width int) string {
+	content := strings.TrimSpace(p.permission.Description)
+	if content == "" {
+		return ""
+	}
+	return p.renderContentPanel(content, width)
 }
 
 func (p *Permissions) renderBashContent(width int) string {
@@ -558,7 +651,13 @@ func (p *Permissions) renderBashContent(width int) string {
 		return ""
 	}
 
-	return p.renderContentPanel(params.Command, width)
+	t := p.com.Styles
+	content := params.Command
+	if highlighted, err := common.SyntaxHighlight(t, content, "command.sh", t.Dialog.Permissions.ParamsBg); err == nil {
+		content = highlighted
+	}
+
+	return p.renderContentPanel(content, width)
 }
 
 func (p *Permissions) renderEditContent(contentWidth int) string {
@@ -682,6 +781,206 @@ func (p *Permissions) renderLSContent(width int) string {
 	}
 
 	return p.renderContentPanel(content, width)
+}
+
+func (p *Permissions) renderNotebookEditContent(width int) string {
+	params, ok := p.permission.Params.(tools.NotebookEditPermissionsParams)
+	if !ok {
+		return ""
+	}
+
+	mode := params.EditMode
+	if mode == "" {
+		mode = "replace"
+	}
+
+	if mode == "delete" {
+		if updatedContent, ok := renderNotebookDeletePreview(params.OldContent, params.CellID); ok {
+			return p.renderDiff(params.NotebookPath, params.OldContent, updatedContent, width)
+		}
+		cell := "cell"
+		if params.CellID != "" {
+			cell = "cell " + params.CellID
+		}
+		return p.renderContentPanel("Deleting "+cell, width)
+	}
+
+	if params.NewSource == "" {
+		return ""
+	}
+
+	cellType := params.CellType
+	if cellType == "" {
+		cellType = "code"
+	}
+	return p.renderNotebookCells(width, notebookCellLanguage(cellType, "python"), []tools.NotebookCellPreview{{
+		CellType: cellType,
+		Source:   params.NewSource,
+	}})
+}
+
+func (p *Permissions) renderNotebookCreateContent(width int) string {
+	params, ok := p.permission.Params.(tools.NotebookCreatePermissionsParams)
+	if !ok {
+		return ""
+	}
+	if len(params.Cells) == 0 {
+		content := fmt.Sprintf("New %s notebook", params.Language)
+		if params.CellCount > 0 {
+			content += fmt.Sprintf(" with %d initial cells", params.CellCount)
+		}
+		return p.renderContentPanel(content, width)
+	}
+	return p.renderNotebookCells(width, params.Language, params.Cells)
+}
+
+func (p *Permissions) renderNotebookWriteContent(width int) string {
+	params, ok := p.permission.Params.(tools.NotebookWritePermissionsParams)
+	if !ok {
+		return ""
+	}
+	if len(params.Cells) == 0 {
+		action := "Create"
+		if params.OldContent != "" {
+			action = "Overwrite"
+		}
+		content := fmt.Sprintf("%s %s notebook · %d cells", action, params.Language, params.CellCount)
+		return p.renderContentPanel(content, width)
+	}
+	return p.renderNotebookCells(width, params.Language, params.Cells)
+}
+
+func (p *Permissions) renderNotebookCells(width int, resolvedLang string, cells []tools.NotebookCellPreview) string {
+	if len(cells) == 0 {
+		return ""
+	}
+	var sections []string
+	for i, cell := range cells {
+		sections = append(sections, p.renderNotebookCell(width, i, cell, resolvedLang))
+	}
+	return strings.Join(sections, "\n\n")
+}
+
+func (p *Permissions) renderNotebookCell(width int, idx int, cell tools.NotebookCellPreview, resolvedLang string) string {
+	cellType := strings.ToLower(strings.TrimSpace(cell.CellType))
+	if cellType == "" {
+		cellType = "code"
+	}
+	cellTitle := "Code"
+	if cellType == "markdown" {
+		cellTitle = "Markdown"
+	}
+	label := p.com.Styles.Dialog.Permissions.KeyText.Render(fmt.Sprintf("%s Cell %d", cellTitle, idx+1))
+
+	panelStyle := p.com.Styles.Dialog.ContentPanel
+	innerWidth := max(1, width-panelStyle.GetHorizontalFrameSize())
+	content := p.renderNotebookCellContent(innerWidth, tools.NotebookCellPreview{
+		CellType: cellType,
+		Source:   cell.Source,
+	}, resolvedLang)
+
+	return lipgloss.JoinVertical(lipgloss.Left, label, p.renderContentPanel(content, width))
+}
+
+func (p *Permissions) renderNotebookCellContent(width int, cell tools.NotebookCellPreview, resolvedLang string) (result string) {
+	if strings.TrimSpace(cell.Source) == "" {
+		return p.com.Styles.Dialog.Permissions.ValueText.Render("(empty cell)")
+	}
+
+	if strings.EqualFold(cell.CellType, "markdown") {
+		return p.renderNotebookMarkdownCell(width, cell.Source)
+	}
+
+	lang := "cell." + notebookCellLanguage(cell.CellType, resolvedLang)
+	highlighted, err := common.SyntaxHighlight(p.com.Styles, cell.Source, lang, p.com.Styles.Dialog.Permissions.ParamsBg)
+	if err != nil {
+		return cell.Source
+	}
+	return highlighted
+}
+
+func (p *Permissions) renderNotebookMarkdownCell(width int, content string) string {
+	highlighted, err := common.SyntaxHighlight(
+		p.com.Styles,
+		content,
+		"cell.md",
+		p.com.Styles.Dialog.Permissions.ParamsBg,
+	)
+	if err != nil {
+		return content
+	}
+	return highlighted
+}
+
+func notebookCellLanguage(cellType, resolvedLang string) string {
+	if resolvedLang != "" {
+		switch strings.ToLower(resolvedLang) {
+		case "python", "python3", "ipython3":
+			return "py"
+		case "r":
+			return "r"
+		case "julia":
+			return "jl"
+		case "javascript", "js":
+			return "js"
+		case "typescript", "ts":
+			return "ts"
+		case "markdown":
+			return "md"
+		}
+	}
+	if strings.EqualFold(cellType, "markdown") {
+		return "md"
+	}
+	return "py"
+}
+
+func renderNotebookDeletePreview(oldContent, cellID string) (string, bool) {
+	if oldContent == "" || strings.TrimSpace(cellID) == "" {
+		return "", false
+	}
+
+	var nb read.Notebook
+	if err := json.Unmarshal([]byte(oldContent), &nb); err != nil {
+		return "", false
+	}
+
+	idx := findNotebookCellIndex(&nb, cellID)
+	if idx < 0 || idx >= len(nb.Cells) {
+		return "", false
+	}
+
+	copy(nb.Cells[idx:], nb.Cells[idx+1:])
+	nb.Cells = nb.Cells[:len(nb.Cells)-1]
+
+	updated, err := json.MarshalIndent(nb, "", " ")
+	if err != nil {
+		return "", false
+	}
+	return string(updated), true
+}
+
+func findNotebookCellIndex(nb *read.Notebook, cellID string) int {
+	for i, cell := range nb.Cells {
+		if cell.ID == cellID {
+			return i
+		}
+	}
+	if idx := parseNotebookCellID(cellID); idx != nil && *idx >= 0 && *idx < len(nb.Cells) {
+		return *idx
+	}
+	return -1
+}
+
+func parseNotebookCellID(cellID string) *int {
+	var idx int
+	if _, err := fmt.Sscanf(cellID, "cell-%d", &idx); err == nil {
+		return &idx
+	}
+	if _, err := fmt.Sscanf(cellID, "%d", &idx); err == nil {
+		return &idx
+	}
+	return nil
 }
 
 func (p *Permissions) renderDefaultContent(width int) string {

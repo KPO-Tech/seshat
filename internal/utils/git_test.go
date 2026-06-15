@@ -11,8 +11,7 @@ func TestDetect_WithGitRepo(t *testing.T) {
 	gitCtx := Detect(tempDir)
 	if gitCtx == nil {
 		t.Fatal("Detect should return a Context, not nil")
-	}
-	if gitCtx.IsGit {
+	} else if gitCtx.IsGit {
 		t.Fatal("directory should not be a git repo initially")
 	}
 
@@ -33,15 +32,16 @@ func TestDetect_WithGitRepo(t *testing.T) {
 	gitCtx = Detect(tempDir)
 	if gitCtx == nil {
 		t.Fatal("git context should not be nil for a git repo")
-	}
-	if !gitCtx.IsGit {
-		t.Fatal("should detect as git repo")
-	}
-	if gitCtx.Root == "" {
-		t.Fatal("git root should not be empty for a git repo")
-	}
+	} else {
+		if !gitCtx.IsGit {
+			t.Fatal("should detect as git repo")
+		}
+		if gitCtx.Root == "" {
+			t.Fatal("git root should not be empty for a git repo")
+		}
 
-	t.Logf("Detected git root: %s, branch: %s", gitCtx.Root, gitCtx.Branch)
+		t.Logf("Detected git root: %s, branch: %s", gitCtx.Root, gitCtx.Branch)
+	}
 }
 
 func TestDetect_NoGitRepo(t *testing.T) {
@@ -50,12 +50,13 @@ func TestDetect_NoGitRepo(t *testing.T) {
 	gitCtx := Detect(tempDir)
 	if gitCtx == nil {
 		t.Fatal("Detect should return a Context, not nil")
-	}
-	if gitCtx.IsGit {
-		t.Fatal("directory should not be detected as git repo")
-	}
-	if gitCtx.Root != "" {
-		t.Fatal("git root should be empty for non-git directory")
+	} else {
+		if gitCtx.IsGit {
+			t.Fatal("directory should not be detected as git repo")
+		}
+		if gitCtx.Root != "" {
+			t.Fatal("git root should be empty for non-git directory")
+		}
 	}
 }
 
@@ -79,12 +80,13 @@ func TestDetect_CustomBranch(t *testing.T) {
 	gitCtx := Detect(tempDir)
 	if gitCtx == nil {
 		t.Fatal("git context should not be nil for git repo")
-	}
-	if !gitCtx.IsGit {
-		t.Fatal("should detect as git repo")
-	}
+	} else {
+		if !gitCtx.IsGit {
+			t.Fatal("should detect as git repo")
+		}
 
-	t.Logf("Detected git root: %s, branch: %s", gitCtx.Root, gitCtx.Branch)
+		t.Logf("Detected git root: %s, branch: %s", gitCtx.Root, gitCtx.Branch)
+	}
 }
 
 func TestFindGitRoot(t *testing.T) {

@@ -56,7 +56,7 @@ Guidelines:
 - NEVER create files unless they're absolutely necessary.
 - NEVER proactively create documentation files unless explicitly requested.`
 		},
-		MaxTurns: 50,
+		MaxTurns: 20,
 	}
 
 	// ExploreAgent is the explore agent (read-only)
@@ -83,7 +83,7 @@ Guidelines:
 - Document your findings clearly
 - Use multiple search strategies to find relevant code`
 		},
-		MaxTurns: 30,
+		MaxTurns: 12,
 	}
 
 	// BrowseAgent is the deep research agent for external/web investigation.

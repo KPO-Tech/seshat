@@ -369,6 +369,21 @@ type Styles struct {
 		ResultTruncation lipgloss.Style // "… and N more" truncation line
 		ResultItemName   lipgloss.Style // Item name (left column in result lists)
 		ResultItemDesc   lipgloss.Style // Item description (right column)
+
+		// File mutation status colors (apply_patch, write_file, edit_file).
+		ResultAdded   lipgloss.Style // Added file (green)
+		ResultDeleted lipgloss.Style // Deleted file (red/destructive)
+		ResultMoved   lipgloss.Style // Moved/renamed file (accent)
+
+		// Web search / web fetch
+		WebSearchURL   lipgloss.Style // Search result URL (info blue)
+		WebFetchPrompt lipgloss.Style // Fetch prompt context line (subtle)
+
+		// Ask user question
+		AskUserCursor        lipgloss.Style // ▶ focused option cursor (accent)
+		AskUserOptionFocused lipgloss.Style // focused option label (bright)
+		AskUserFooter        lipgloss.Style // keyboard hint line (most subtle)
+		AskUserHistory       lipgloss.Style // answered Q→A history lines (subtle)
 	}
 
 	// Dialog styles

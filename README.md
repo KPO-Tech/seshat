@@ -356,13 +356,57 @@ nexus-engine is the headless runtime — no users, no billing, no access control
 
 ## 🛠️ Development
 
+### First-time setup
+
 ```bash
-make build       # build CLI and gRPC binaries to bin/
-make test        # run all tests
-make test-race   # run tests with race detector
-make lint        # golangci-lint
-make hooks       # install git pre-commit hooks (run once after cloning)
+# Linux / macOS — installs all dependencies, builds, wires git hooks
+make setup
+
+# Windows (PowerShell — make is not available by default on Windows)
+powershell -ExecutionPolicy Bypass -File scripts\setup.ps1
 ```
+
+`make setup` handles everything: Go version check, ripgrep, uv, Python venv with docling-serve, and the final build.
+
+### Daily commands
+
+```bash
+make build         # build CLI and gRPC binaries to bin/
+make test          # run all tests
+make test-race     # run tests with race detector
+make lint          # golangci-lint
+make fmt           # gofmt
+make hooks         # (re-)install git pre-commit hooks
+make install-deps  # install ripgrep only (included in make setup)
+make install-python  # install/update the Python venv + docling-serve only
+make start-docling   # start docling-serve manually (auto-started by nexus chat)
+```
+
+### Runtime data directory
+
+Nexus stores sessions, config, and the Python venv under a platform-appropriate directory:
+
+| OS | Default path |
+|---|---|
+| Linux | `~/.config/nexus-cli/` (respects `$XDG_CONFIG_HOME`) |
+| macOS | `~/.config/nexus-cli/` |
+| Windows | `%APPDATA%\nexus-cli\` |
+
+Override with `NEXUS_RUNTIME_ROOT=/your/path nexus chat`.
+
+### Runtime dependencies
+
+> **ripgrep** — the `glob` and `grep` tools require [`ripgrep`](https://github.com/BurntSushi/ripgrep) (`rg`). Included in `make setup`; install separately with `make install-deps`.
+
+> **docling-serve** (optional) — enables the `read_document_url` tool for PDF/DOCX conversion. Included in `make setup` via `uv` (no system Python required). Nexus auto-starts it on launch when installed.
+
+### OS compatibility
+
+> **Linux** — primary development and testing platform. Fully supported.
+>
+> **macOS** — code is written to support macOS and basic testing has been done, but **macOS support is not yet fully validated**. If you hit an issue, please [open a report](https://github.com/EngineerProjects/nexus-engine/issues).
+>
+> **Windows** — PowerShell setup script included and paths are handled (`%APPDATA%`), but **Windows support has not been tested yet**. Contributions and test reports welcome.
 
 See [`CONTRIBUTING.md`](./CONTRIBUTING.md) for the full contribution guide.
 

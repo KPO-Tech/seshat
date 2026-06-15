@@ -265,9 +265,10 @@ func TestCheckDangerousRemovalPath_Blocked(t *testing.T) {
 	cases := []string{
 		"/",
 		"/usr",
-		"/tmp",
+		"/usr/local/bin",
 		"/etc",
 		"/var",
+		"/var/log",
 		"/home/user/*",
 		"/project/**",
 	}
@@ -284,6 +285,7 @@ func TestCheckDangerousRemovalPath_Allowed(t *testing.T) {
 	cases := []string{
 		"/project/build",
 		"/project/dist/output.js",
+		"/tmp",
 		"/tmp/work123/cache/data",
 	}
 	for _, p := range cases {

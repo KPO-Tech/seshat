@@ -36,10 +36,21 @@ func New(root string) (*Context, error) {
 	return &Context{Root: abs}, nil
 }
 
-// Resolve resolves rel against the workspace root and validates the result.
+// Resolve resolves rel against the workspace root.
+// Relative paths are anchored to the workspace root and validated to stay inside it.
+// Absolute paths are resolved as-is — the caller (sandbox FilesystemPolicy) handles
+// dangerous-prefix blocking; workspace containment is not enforced for absolute paths
+// so that the user can explicitly approve writes to /tmp or other out-of-workspace dirs.
 func (c *Context) Resolve(rel string) (string, error) {
 	if c == nil {
 		return "", fmt.Errorf("workspace context is not configured")
+	}
+	if filepath.IsAbs(rel) {
+		abs, err := filepath.Abs(filepath.Clean(rel))
+		if err != nil {
+			return "", fmt.Errorf("resolve path %q: %w", rel, err)
+		}
+		return abs, nil
 	}
 	return Resolve(rel, c.Root)
 }

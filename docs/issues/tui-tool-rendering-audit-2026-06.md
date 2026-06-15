@@ -44,6 +44,20 @@ The canonical runtime sources are:
 - [x] Normal truncation behavior stays enabled for write/edit style outputs; the transcript is not globally forced into wrapping mode.
 - [x] The tool-ordering streaming fix is compatible with this roadmap: tool items stay inline, but post-tool assistant synthesis now lands in the correct place.
 - [x] `enter_plan_mode` and `exit_plan_mode` are now hidden from the chat transcript, and the header reflects the real execution mode (`execute` / `plan` / `pair`).
+- [x] `request_permissions` is now hidden from the chat transcript; the permission modal is the sole UX surface.
+- [x] `enter_worktree` and `exit_worktree` are now hidden from the transcript. Header displays `⎇ <path>` when a worktree is active. `exit_worktree` now always prompts (`Ask`) instead of silently denying via `CheckPermissions`.
+- [x] `rm -rf *` default permission rule changed from `Deny` to `Ask` — destructive shell commands now always surface the permission dialog instead of being silently blocked.
+- [x] Tool name color changed from Malibu blue (`#00A4FF`) to Tang orange (`#FF985A`) to match the logo palette.
+- [x] Tool body content indentation increased from 2 to 4 spaces to visually anchor body content under the tool name.
+- [x] All tool body content now uses muted grey (`ContentText` / `ContentLine`) so tool output sits below agent conclusion text in the visual hierarchy. `glob`, `grep`, and `list_directory` compact renderers were aligned to this rule (previously `glob` and `grep` used bright `fgBase` for filenames).
+- [x] `glob`, `grep`, and `list_directory` now have dedicated compact renderers: pattern/path + counts in the header, file/match lists in the body with `+N more` truncation and expand/collapse support.
+- [x] `read_file` success body is now fully silent — removed "Content hidden in transcript" line. Only errors surface a body. Skill-backed read and image reads are exceptions and keep their body.
+- [x] `remove_file`, `create_directory`, `get_file_metadata` now have dedicated quiet renderers: header-only on success; error body on failure. They were previously falling through to `GenericToolMessageItem` which echoed the raw result text (`"Removed: /path"`, `"Directory created: /path"`, JSON blob).
+- [x] Permission panel `PromptFn` now builds typed params structs (`WritePermissionsParams`, `EditPermissionsParams`, `BashPermissionsParams`, etc.) from the raw `tool_input` metadata. Previously `Params` was always `nil`, causing every dialog type-assertion to fail and the content area to be empty.
+- [x] `write_file` permission dialog now shows a real diff: old content is read from disk before the write, new content is the incoming `content` param. `edit_file` permission dialog shows a diff of `old_string` → `new_string`.
+- [x] `edit_file` chat diff now renders correctly. The edit tool stores the original file under `"original_file"` (not `"old_content"`); `extractEditDiffContent()` reads the correct key and computes `newContent` via string replacement, producing the full red/green diff.
+- [x] Permission panel `renderBashContent` now syntax-highlights the bash command via `SyntaxHighlight("command.sh")` before wrapping it in the content panel.
+- [x] Notebook permission panels now have dedicated typed previews. `notebook_write` and `notebook_create` render notebook cells visually in the modal, using the same wide layout as file write/edit diffs when cells are present. `notebook_edit` renders markdown/code previews for non-delete edits and shows a full notebook diff for cell deletions in both the permission panel and the chat transcript.
 
 ## Cross-Cutting Product Rules
 
@@ -68,8 +82,8 @@ These tools should not produce normal transcript tool items. Their effect should
 | `submit_plan` | `artifact`, `header` | Planned | Prefer plan artifact / review state over a normal tool bubble. |
 | `task_create`, `task_update` | `compact task panel` | Done | Hidden from transcript. Session-scoped task state is persisted and rendered in the compact `Tasks` panel. |
 | `task_list`, `task_get`, `task_stop` | `chat`, `compact task panel` | Done | Visible in chat as compact inspection/control tools. The compact `Tasks` panel is the current source of truth for task progress in the main chat layout. |
-| `enter_worktree`, `exit_worktree` | `header`, `workspace chrome` | Planned | Should update displayed workspace root / worktree state, not clutter chat. |
-| `request_permissions` | `modal` | Planned | Permission request already has dedicated UX; transcript bubble should not be primary. |
+| `enter_worktree`, `exit_worktree` | `header`, `workspace chrome` | Done | Hidden from transcript. Header displays `⎇ <worktree-path>` when a worktree is active, reading live from the worktree session registry. Path clears automatically on `exit_worktree`. |
+| `request_permissions` | `modal` | Done | Hidden from transcript. The permission modal/panel is the sole UX surface for this tool. |
 
 ### `submit_plan` long-term roadmap
 
@@ -193,9 +207,9 @@ These tools should remain visible in the transcript, but only as summaries. The 
 
 | Tool(s) | Surface | State | Notes |
 |---|---|---|---|
-| `read_file` | `chat` | Done | Show file path plus line-range / partial-read metadata; hide file contents inline. |
+| `read_file` | `chat` | Done | Header-only on success (file path, optional line range in header params). No body text — not even "Content hidden". Image and skill-backed reads still show their body. |
 | `read_document_url` | `chat` | Planned | Same philosophy as `read_file`: source URL + conversion/read summary, not full extracted body. |
-| `get_file_metadata` | `chat` | Planned | Keep size, type, timestamps, permissions; no verbose JSON dump. |
+| `get_file_metadata` | `chat` | Done | Header-only on success (path in header param). JSON blob suppressed. Errors still surface a body. |
 | `browser_snapshot`, `browser_extract` | `chat` | Planned | Summarize what was captured and from which page; hide large extraction bodies by default. |
 | `browser_network_list`, `browser_list_downloads`, `browser_list_pages`, `browser_search_content` | `chat` | Planned | Show counts, active page, matched items, and key identifiers only. |
 | `list_agents` | `chat` | Planned | If it stays in chat at all, render agent count and brief status summaries instead of raw payload. |
@@ -209,11 +223,11 @@ These tools should stay visible in chat, but the transcript item should be inten
 
 | Tool(s) | Surface | State | Notes |
 |---|---|---|---|
-| `list_directory` | `chat` | Open | Candidate compact treatment: path, item count, maybe first few entries. Full raw listing probably too noisy. |
-| `glob` | `chat` | Planned | Compact summary with pattern, root path, match count, optional short preview. |
-| `grep` | `chat` | Planned | Compact summary with pattern, file count, hit count, and a few top matches. |
-| `web_search` | `chat` | Planned | Keep the search visible, but prefer query + result count + top hits over raw payload. |
-| `web_fetch` | `chat` | Planned | Show URL, status, content type, and maybe short snippet; do not flood transcript. |
+| `list_directory` | `chat` | Done | Compact renderer: path + item count in header; dir/file list with right-aligned sizes, `+N more` truncation, expand/collapse. Entries use muted grey (`ContentText`) to match bash output style. |
+| `glob` | `chat` | Done | Compact renderer: pattern + file count in header; file path list (max 8, then `+N more`), expand/collapse. File paths use muted grey (`ContentText`). |
+| `grep` | `chat` | Done | Compact renderer: pattern (+ include filter) + file count + match count in header; `file:match` lines (max 6, then `+N more`), expand/collapse. File part uses `ContentText`, match body uses `ResultItemDesc`. |
+| `web_search` | `chat` | Done | Header: query + `N results` count (from `additional.result_count` metadata). Body: structured hit list — number (dim) + title (`ResultItemName`) + URL (`WebSearchURL` info-blue) + description (`ResultItemDesc` dim). Max 5 hits visible; `+N more` truncation, expand/collapse. |
+| `web_fetch` | `chat` | Done | Header: URL. Body: prompt shown as a subtle `↳ …` context line (`WebFetchPrompt`), then fetched content as rendered markdown with normal truncation/expand. `WebFetchParams` now includes `Prompt` and `RenderMode` fields. |
 | `browser_open`, `browser_navigate`, `browser_select_page`, `browser_close_page` | `chat` | Planned | Navigation state changes are useful, but should be one-line or near one-line items. |
 | `browser_click`, `browser_type`, `browser_press`, `browser_scroll`, `browser_wait` | `chat` | Planned | Compact action log, not full dumps. |
 | `close_agent`, `wait_agent`, `send_agent_message` | `chat` | Planned | Compact event-style rendering unless a richer multi-agent panel supersedes it. |
@@ -229,17 +243,18 @@ These tools are meaningful execution steps and should stay visibly represented a
 
 | Tool(s) | Surface | State | Notes |
 |---|---|---|---|
-| `bash` | `chat` | Planned | Keep rich renderer. Important for execution auditability. |
+| `bash` | `chat` | Done | Rich renderer. Header shows first line of command + `(+N lines)` for multi-line scripts. Output body uses `toolOutputCodeContent` (line numbers, JSON auto-detection via `bashOutputLang`). Empty output shows a styled `(no output)` indicator instead of a bare header. |
 | `write_stdin` | `chat` | Planned | Treat as a compact or rich shell continuation event under the shell family. |
-| `job_output`, `job_kill` | `chat` | Planned | Already shell-adjacent; keep visible. |
-| `write_file`, `edit_file`, `apply_patch`, `notebook_edit` | `chat` | Planned | Keep diff-oriented rendering with current truncation/expand behavior. |
-| `create_directory`, `remove_file` | `chat` | Planned | Mutation events should remain explicit in chat. |
+| `job_output` | `chat` | Done | Shell output renderer via `renderJobTool`: line numbers + JSON auto-detection (same `bashOutputLang` path as bash). `(no output)` indicator when the job produced nothing. |
+| `job_kill` | `chat` | Done | Quiet pattern: header-only on success (✓ icon communicates the result); error body on failure. No longer routes through `renderJobTool`. |
+| `write_file`, `edit_file`, `apply_patch`, `notebook_edit`, `notebook_create`, `notebook_write` | `chat` | Done | `write_file`: renders new content (markdown-interpreted for `.md`, syntax-highlighted otherwise). `edit_file`: full red/green diff via `extractEditDiffContent`. `apply_patch`: file list with semantic color per operation (+ green / ~ grey / - red / → teal). `notebook_edit`: code/markdown preview for non-delete edits and full notebook diff for deletes. `notebook_create`: header-only success, error body when creation fails. `notebook_write`: action + cell count in header with first-cell preview in the body. |
+| `create_directory`, `remove_file` | `chat` | Done | Header-only on success (path in header param); error body on failure. Raw result text (`"Directory created: …"`, `"Removed: …"`) is suppressed. |
 | `docx` | `chat` | Planned | File-generation style tool; visible result is useful. |
 | `agent`, `spawn_agent`, `resume_agent` | `chat` | Planned | Multi-agent orchestration deserves dedicated rendering, not generic JSON blobs. |
 | `generate_image`, `tts`, `stt`, `code_complete` | `chat` | Planned | Result is user-visible and worth a richer item, even if renderer stays simple at first. |
 | `lsp` | `chat` | Planned | The generic LSP payload is too vague today; needs a proper status/result renderer. |
 | `monitor` | `chat` | Planned | Should read as a tracked background-execution item, close to shell/task UX. |
-| `ask_user_question` | `chat` | Planned | User-facing question flow deserves dedicated rich UX: explicit prompt, choice list, and free-form answer path. |
+| `ask_user_question` | `chat` | Done | Inline interactive bubble with ↑↓ navigation, Space multi-select, Enter confirm; history shows past Q→As; "Other" routes to editor for free-text; `askUserBroker` in workspace wires the full flow. |
 
 ## Category E — Generic For Now, Revisit Later
 
@@ -279,7 +294,7 @@ This is the complete canonical inventory to categorize future work against.
 - `write_file`
 - `edit_file`
 - `apply_patch`
-- `notebook_edit`
+- notebook tool family (`notebook_edit`, `notebook_create`, `notebook_write`)
 - `docx`
 
 ### Web and browser
@@ -362,7 +377,7 @@ These names still appear in legacy TUI code or config, but they are not part of 
 
 | Legacy name | Status | Notes |
 |---|---|---|
-| `todos` | Legacy | Old transcript/task concept. Should be replaced by the `task_*` family and sidebar work. |
+| `todos` | Removed | Renderer, constants (`TodosToolName`, `TodosParams`, `TodosResponseMetadata`), and config entry removed. `FormatTodosList` and helpers retained in `todos.go` as shared utilities used by `task.go` and `pills.go`. |
 | `multi_edit` | Legacy | TUI still has a renderer, but canonical runtime centers on `apply_patch`, `edit_file`, and `write_file`. |
 | `download` | Legacy | Not part of the current builtin registry. |
 | `fetch` | Legacy | Superseded by `web_fetch` and `read_document_url` depending on intent. |

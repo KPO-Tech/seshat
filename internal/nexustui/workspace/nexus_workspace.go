@@ -39,12 +39,18 @@ import (
 	"github.com/EngineerProjects/nexus-engine/internal/nexustui/session"
 	"github.com/EngineerProjects/nexus-engine/internal/nexustui/skills"
 	internalproviders "github.com/EngineerProjects/nexus-engine/internal/providers"
+	worktreePkg "github.com/EngineerProjects/nexus-engine/internal/tools/special/worktree"
 	tasktool "github.com/EngineerProjects/nexus-engine/internal/tools/task"
 	"github.com/EngineerProjects/nexus-engine/internal/types"
 	"github.com/EngineerProjects/nexus-engine/pkg/runtimepath"
 	"github.com/EngineerProjects/nexus-engine/pkg/sdk"
 	"github.com/google/uuid"
 )
+
+type subAgentStreamState struct {
+	reasoning string
+	content   string
+}
 
 // Verify compile-time that NexusWorkspace implements Workspace.
 var _ Workspace = (*NexusWorkspace)(nil)
@@ -53,6 +59,10 @@ var _ Workspace = (*NexusWorkspace)(nil)
 // It keeps an in-memory message store and publishes pubsub events that the
 // nexustui UI consumes to render the conversation.
 type NexusWorkspace struct {
+	// Subagent streaming state
+	subAgentStreams   map[string]*subAgentStreamState
+	subAgentStreamsMu sync.Mutex
+
 	// SDK layer
 	client  *sdk.Client
 	workDir string
@@ -69,12 +79,14 @@ type NexusWorkspace struct {
 	msgMu    sync.RWMutex
 	msgStore map[string][]message.Message // complete message list per session
 
-	sessBroker *pubsub.Broker[session.Session]
-	msgBroker  *pubsub.Broker[message.Message]
-	permBroker *pubsub.Broker[permission.PermissionRequest]
-	planBroker *pubsub.Broker[planreview.Submission]
-	sessStore  map[string]session.Session
-	sessionsMu sync.RWMutex
+	sessBroker    *pubsub.Broker[session.Session]
+	msgBroker     *pubsub.Broker[message.Message]
+	permBroker    *pubsub.Broker[permission.PermissionRequest]
+	planBroker    *pubsub.Broker[planreview.Submission]
+	askUserBroker *pubsub.Broker[tuiTools.AskUserRequest]
+	planStore     *memPlanStore
+	sessStore     map[string]session.Session
+	sessionsMu    sync.RWMutex
 
 	// tea.Program for Subscribe
 	programMu sync.Mutex
@@ -110,6 +122,10 @@ type NexusWorkspace struct {
 	// PromptFn blocks on the channel; Grant/Deny send the response.
 	pendingPerms sync.Map // map[string]chan sdk.PromptResponse
 
+	// pendingAskUser maps AskUserRequest.ID → resolution channel.
+	// PromptFn (ask_user path) blocks on the channel; AnswerAskUser sends the response.
+	pendingAskUser sync.Map // map[string]chan types.PromptResponse
+
 	// Provider registry — populated by DetectProviders() at startup.
 	providerKeys     sync.Map // providerID → apiKey string (empty string = no key needed)
 	providerBaseURLs sync.Map // providerID → editable/test base URL override
@@ -128,21 +144,31 @@ type NexusWorkspace struct {
 // modelStr is the "provider:model" string shown in the UI header.
 func NewNexusWorkspace(client *sdk.Client, workDir, modelStr string) *NexusWorkspace {
 	w := &NexusWorkspace{
-		client:        client,
-		workDir:       workDir,
-		model:         modelStr,
-		msgStore:      make(map[string][]message.Message),
-		sessStore:     make(map[string]session.Session),
-		liveExecModes: make(map[string]string),
-		sessBroker:    pubsub.NewBroker[session.Session](),
-		msgBroker:     pubsub.NewBroker[message.Message](),
-		permBroker:    pubsub.NewBroker[permission.PermissionRequest](),
-		planBroker:    pubsub.NewBroker[planreview.Submission](),
+		client:          client,
+		workDir:         workDir,
+		model:           modelStr,
+		subAgentStreams: make(map[string]*subAgentStreamState),
+		msgStore:        make(map[string][]message.Message),
+		sessStore:       make(map[string]session.Session),
+		liveExecModes:   make(map[string]string),
+		sessBroker:      pubsub.NewBroker[session.Session](),
+		msgBroker:       pubsub.NewBroker[message.Message](),
+		permBroker:      pubsub.NewBroker[permission.PermissionRequest](),
+		planBroker:      pubsub.NewBroker[planreview.Submission](),
+		askUserBroker:   pubsub.NewBroker[tuiTools.AskUserRequest](),
+		planStore:       newMemPlanStore(),
 	}
 	w.debounce = newMsgDebounce(33*time.Millisecond, func(msg message.Message, sessID string) {
 		w.publishMsg(pubsub.UpdatedEvent, sessID, msg)
 	})
 	return w
+}
+
+// PlanStore returns the workspace's plan persistence backend. Use this to
+// inject the same store into the initial sdk.ClientConfig created outside
+// the workspace (e.g. cmd/cli/tui_nexus.go).
+func (w *NexusWorkspace) PlanStore() sdk.PlanStore {
+	return w.planStore
 }
 
 // ─── Subscribe / event fan-out ────────────────────────────────────────────────
@@ -185,6 +211,14 @@ func (w *NexusWorkspace) Subscribe(p *tea.Program) {
 			p.Send(ev)
 		}
 	}()
+
+	// Fan out ask_user_question events.
+	go func() {
+		ch := w.askUserBroker.Subscribe(ctx)
+		for ev := range ch {
+			p.Send(ev)
+		}
+	}()
 }
 
 func (w *NexusWorkspace) Shutdown() {
@@ -192,6 +226,7 @@ func (w *NexusWorkspace) Shutdown() {
 	w.msgBroker.Shutdown()
 	w.permBroker.Shutdown()
 	w.planBroker.Shutdown()
+	w.askUserBroker.Shutdown()
 	if w.client != nil {
 		_ = w.client.Close()
 	}
@@ -207,6 +242,20 @@ func (w *NexusWorkspace) ExecutionMode() string {
 		return mode
 	}
 	return string(w.session.GetExecutionMode())
+}
+
+func (w *NexusWorkspace) WorktreePath() string {
+	w.sessMu.Lock()
+	sess := w.session
+	w.sessMu.Unlock()
+	if sess == nil {
+		return ""
+	}
+	wt := worktreePkg.GetSession(types.SessionID(sess.GetID()))
+	if wt == nil {
+		return ""
+	}
+	return wt.WorktreePath
 }
 
 // ─── Sessions ─────────────────────────────────────────────────────────────────
@@ -752,6 +801,7 @@ func (w *NexusWorkspace) UpdateAgentModel(ctx context.Context) error {
 		ProviderConfig:    provCfg,
 		EnableMonitoring:  enableMonitoring,
 		Monitoring:        w.monitoring,
+		PlanStore:         w.planStore,
 	})
 	if err != nil {
 		return fmt.Errorf("rebuild SDK client: %w", err)
@@ -1396,6 +1446,16 @@ func (w *NexusWorkspace) OnProgress(p sdk.ToolProgress) {
 // OnRuntimeEvent forwards structured runtime events that need dedicated TUI
 // surfaces outside the normal transcript.
 func (w *NexusWorkspace) OnRuntimeEvent(ev sdk.RuntimeEvent) {
+	// Sub-agent tool progress: forward nested tool calls to the live tail.
+	if ev.AgentToolUseID != "" && ev.ToolProgress != nil {
+		w.handleSubAgentToolProgress(ev.AgentToolUseID, ev.ToolProgress)
+	}
+
+	// Sub-agent response chunks: forward streaming reasoning and text.
+	if ev.AgentToolUseID != "" && ev.Type == sdk.RuntimeEventTypeResponseChunk && ev.Chunk != nil {
+		w.handleSubAgentResponseChunk(ev.AgentToolUseID, ev.Chunk)
+	}
+
 	switch ev.Type {
 	case sdk.RuntimeEventTypeTaskChanged:
 		sessionID := string(ev.SessionID)
@@ -1428,6 +1488,134 @@ func (w *NexusWorkspace) OnRuntimeEvent(ev sdk.RuntimeEvent) {
 		}
 		w.planBroker.PublishMustDeliver(context.Background(), pubsub.CreatedEvent, submission)
 	}
+}
+
+// handleSubAgentToolProgress synthesises a child-session message from a
+// sub-agent ToolProgress event and publishes it to msgBroker so that
+// handleChildSessionMessage in ui.go can update the agent's live-tail tree.
+func (w *NexusWorkspace) handleSubAgentToolProgress(agentToolUseID string, tp *sdk.ToolProgress) {
+	if tp.ToolUseID == "" || tp.ToolName == "" {
+		return
+	}
+
+	// ":<agentToolUseID>" passes ParseAgentToolSessionID (splits on ":") and
+	// yields toolCallID = agentToolUseID so the agent item can be looked up.
+	childSessionID := ":" + agentToolUseID
+
+	var parts []message.ContentPart
+
+	switch tp.Stage {
+	case sdk.ToolProgressStageRunning:
+		var inputStr string
+		if inp, ok := tp.Metadata["tool_input"]; ok {
+			if data, err := json.Marshal(inp); err == nil {
+				inputStr = string(data)
+			}
+		}
+		parts = []message.ContentPart{
+			message.ToolCall{
+				ID:       tp.ToolUseID,
+				Name:     tp.ToolName,
+				Input:    inputStr,
+				Finished: false,
+			},
+		}
+
+	case sdk.ToolProgressStageCompleted:
+		var content string
+		if c, ok := tp.Metadata["content"]; ok {
+			content, _ = c.(string)
+		}
+		parts = []message.ContentPart{
+			message.ToolCall{
+				ID:       tp.ToolUseID,
+				Name:     tp.ToolName,
+				Finished: true,
+			},
+			message.ToolResult{
+				ToolCallID: tp.ToolUseID,
+				Name:       tp.ToolName,
+				Content:    content,
+			},
+		}
+
+	case sdk.ToolProgressStageFailed:
+		content := tp.Message
+		if c, ok := tp.Metadata["content"]; ok {
+			if s, _ := c.(string); s != "" {
+				content = s
+			}
+		}
+		parts = []message.ContentPart{
+			message.ToolCall{
+				ID:       tp.ToolUseID,
+				Name:     tp.ToolName,
+				Finished: true,
+			},
+			message.ToolResult{
+				ToolCallID: tp.ToolUseID,
+				Name:       tp.ToolName,
+				Content:    content,
+				IsError:    true,
+			},
+		}
+
+	default:
+		return
+	}
+
+	msg := message.Message{
+		ID:        "sub-" + tp.ToolUseID,
+		SessionID: childSessionID,
+		Parts:     parts,
+	}
+	w.msgBroker.Publish(pubsub.UpdatedEvent, msg)
+}
+
+func (w *NexusWorkspace) handleSubAgentResponseChunk(agentToolUseID string, chunk *sdk.ResponseChunk) {
+	if chunk == nil {
+		return
+	}
+
+	w.subAgentStreamsMu.Lock()
+	state, ok := w.subAgentStreams[agentToolUseID]
+	if !ok {
+		state = &subAgentStreamState{}
+		w.subAgentStreams[agentToolUseID] = state
+	}
+
+	switch chunk.Type {
+	case sdk.ResponseChunkTypeContentBlockStart:
+		// Reset text and thinking buffers when starting a content block
+		state.reasoning = ""
+		state.content = ""
+	case sdk.ResponseChunkTypeContentBlockDelta:
+		switch chunk.DeltaType {
+		case "text_delta", "":
+			state.content += chunk.Delta
+		case "thinking_delta":
+			state.reasoning += chunk.Delta
+		}
+	}
+	reasoning := state.reasoning
+	content := state.content
+	w.subAgentStreamsMu.Unlock()
+
+	childSessionID := ":" + agentToolUseID
+	var parts []message.ContentPart
+	if reasoning != "" {
+		parts = append(parts, message.ReasoningContent{Thinking: reasoning})
+	}
+	if content != "" {
+		parts = append(parts, message.TextContent{Text: content})
+	}
+
+	msg := message.Message{
+		ID:        agentToolUseID + "_streaming",
+		SessionID: childSessionID,
+		Parts:     parts,
+	}
+	w.msgBroker.Publish(pubsub.UpdatedEvent, msg)
 }
 
 // OnSessionTitled updates the session title in our local store.
@@ -1495,19 +1683,200 @@ func (w *NexusWorkspace) OnSessionTitled(id sdk.SessionID, title string) {
 	w.sessionsMu.Unlock()
 }
 
-// PromptFn blocks the SDK agent goroutine until the UI resolves the permission dialog.
-// The UI calls PermissionGrant/PermissionDeny which unblock this via pendingPerms.
+// buildToolPermissionParams constructs the typed permission params struct for a tool
+// from its raw input map. Returns nil for tools with no typed params.
+func buildToolPermissionParams(toolName string, input map[string]any) any {
+	if input == nil {
+		return nil
+	}
+	str := func(key string) string {
+		s, _ := input[key].(string)
+		return s
+	}
+	intVal := func(key string) int {
+		switch v := input[key].(type) {
+		case int:
+			return v
+		case float64:
+			return int(v)
+		}
+		return 0
+	}
+	notebookCells := func() []tuiTools.NotebookCellPreview {
+		rawCells, ok := input["cells"].([]any)
+		if !ok || len(rawCells) == 0 {
+			return nil
+		}
+		cells := make([]tuiTools.NotebookCellPreview, 0, len(rawCells))
+		for _, raw := range rawCells {
+			cellMap, ok := raw.(map[string]any)
+			if !ok {
+				continue
+			}
+			cell := tuiTools.NotebookCellPreview{}
+			if cellType, ok := cellMap["cell_type"].(string); ok {
+				cell.CellType = cellType
+			}
+			if source, ok := cellMap["source"].(string); ok {
+				cell.Source = source
+			}
+			cells = append(cells, cell)
+		}
+		return cells
+	}
+
+	switch toolName {
+	case tuiTools.WriteToolName:
+		filePath := str("file_path")
+		var oldContent string
+		if filePath != "" {
+			if data, err := os.ReadFile(filePath); err == nil {
+				oldContent = string(data)
+			}
+		}
+		return tuiTools.WritePermissionsParams{
+			FilePath:   filePath,
+			OldContent: oldContent,
+			NewContent: str("content"),
+		}
+	case tuiTools.EditToolName:
+		return tuiTools.EditPermissionsParams{
+			FilePath:   str("file_path"),
+			OldContent: str("old_string"),
+			NewContent: str("new_string"),
+		}
+	case tuiTools.MultiEditToolName:
+		return tuiTools.MultiEditPermissionsParams{
+			FilePath: str("file_path"),
+		}
+	case tuiTools.BashToolName:
+		return tuiTools.BashPermissionsParams{
+			Command:     str("command"),
+			Description: str("description"),
+		}
+	case tuiTools.ViewToolName:
+		return tuiTools.ViewPermissionsParams{
+			FilePath: str("file_path"),
+			Offset:   intVal("offset"),
+			Limit:    intVal("limit"),
+		}
+	case tuiTools.LSToolName:
+		return tuiTools.LSPermissionsParams{
+			Path: str("path"),
+		}
+	case tuiTools.DownloadToolName:
+		return tuiTools.DownloadPermissionsParams{
+			URL:      str("url"),
+			FilePath: str("file_path"),
+			Timeout:  intVal("timeout"),
+		}
+	case tuiTools.FetchToolName:
+		return tuiTools.FetchPermissionsParams{
+			URL: str("url"),
+		}
+	case tuiTools.AgenticFetchToolName:
+		return tuiTools.AgenticFetchPermissionsParams{
+			URL:    str("url"),
+			Prompt: str("prompt"),
+		}
+	case tuiTools.NotebookEditToolName:
+		notebookPath := str("notebook_path")
+		var oldContent string
+		if notebookPath != "" {
+			if data, err := os.ReadFile(notebookPath); err == nil {
+				oldContent = string(data)
+			}
+		}
+		return tuiTools.NotebookEditPermissionsParams{
+			NotebookPath: notebookPath,
+			CellID:       str("cell_id"),
+			CellType:     str("cell_type"),
+			EditMode:     str("edit_mode"),
+			OldContent:   oldContent,
+			NewSource:    str("new_source"),
+		}
+	case tuiTools.NotebookCreateToolName:
+		kernel := str("kernel")
+		if kernel == "" {
+			kernel = "python3"
+		}
+		language := str("language")
+		if language == "" {
+			language = "python"
+		}
+		cells := notebookCells()
+		return tuiTools.NotebookCreatePermissionsParams{
+			NotebookPath: str("notebook_path"),
+			Kernel:       kernel,
+			Language:     language,
+			CellCount:    len(cells),
+			Cells:        cells,
+		}
+	case tuiTools.NotebookWriteToolName:
+		notebookPath := str("notebook_path")
+		var oldContent string
+		if notebookPath != "" {
+			if data, err := os.ReadFile(notebookPath); err == nil {
+				oldContent = string(data)
+			}
+		}
+		kernel := str("kernel")
+		if kernel == "" {
+			kernel = "python3"
+		}
+		language := str("language")
+		if language == "" {
+			language = "python"
+		}
+		cells := notebookCells()
+		return tuiTools.NotebookWritePermissionsParams{
+			NotebookPath: notebookPath,
+			Kernel:       kernel,
+			Language:     language,
+			CellCount:    len(cells),
+			Cells:        cells,
+			OldContent:   oldContent,
+		}
+	}
+	return nil
+}
+
+// PromptFn blocks the SDK agent goroutine until the UI resolves the prompt.
+// ask_user_question prompts route to askUserBroker; all others go to permBroker.
 func (w *NexusWorkspace) PromptFn(ctx context.Context, req sdk.PromptRequest) (sdk.PromptResponse, error) {
-	// Yolo mode: auto-allow without showing the dialog.
+	toolName, _ := req.Metadata["tool_name"].(string)
+	toolUseID, _ := req.Metadata["tool_use_id"].(string)
+
+	// Route interactive ask_user_question prompts (Choice/Text) to the dedicated
+	// bubble. PromptTypeConfirm is a permission check — fall through to permBroker.
+	if toolName == tuiTools.AskUserToolName &&
+		(req.Type == types.PromptTypeChoice || req.Type == types.PromptTypeText) {
+		return w.promptAskUser(ctx, req, toolUseID)
+	}
+
+	// Yolo mode: auto-allow permission dialogs without showing them.
 	if w.permSkip.Load() {
 		return sdk.PromptResponse{Value: true}, nil
 	}
 
-	toolName, _ := req.Metadata["tool_name"].(string)
-	toolUseID, _ := req.Metadata["tool_use_id"].(string)
 	workDir, _ := req.Metadata["working_directory"].(string)
 	if workDir == "" {
 		workDir = w.workDir
+	}
+	toolInput, _ := req.Metadata["tool_input"].(map[string]any)
+
+	params := buildToolPermissionParams(toolName, toolInput)
+
+	// Use the actual target file/directory path for display when available,
+	// falling back to the working directory if no file path is present.
+	displayPath := workDir
+	if toolInput != nil {
+		for _, key := range []string{"file_path", "notebook_path", "path", "url"} {
+			if v, ok := toolInput[key].(string); ok && v != "" {
+				displayPath = v
+				break
+			}
+		}
 	}
 
 	permID := uuid.New().String()
@@ -1517,7 +1886,8 @@ func (w *NexusWorkspace) PromptFn(ctx context.Context, req sdk.PromptRequest) (s
 		ToolName:    toolName,
 		Description: req.Message,
 		Action:      string(req.Type),
-		Path:        workDir,
+		Path:        displayPath,
+		Params:      params,
 	}
 
 	// Register the resolution channel before publishing (avoids race with fast UI).
@@ -1535,6 +1905,59 @@ func (w *NexusWorkspace) PromptFn(ctx context.Context, req sdk.PromptRequest) (s
 		w.pendingPerms.Delete(permID)
 		return sdk.PromptResponse{Cancelled: true}, ctx.Err()
 	}
+}
+
+// promptAskUser handles ask_user_question prompts by publishing to askUserBroker
+// and blocking until the user answers (or context is cancelled).
+func (w *NexusWorkspace) promptAskUser(ctx context.Context, req sdk.PromptRequest, toolUseID string) (sdk.PromptResponse, error) {
+	header, _ := req.Metadata["header"].(string)
+	multiSelect, _ := req.Metadata["multiSelect"].(bool)
+	isCustomText := req.Type == types.PromptTypeText
+
+	id := uuid.New().String()
+
+	askReq := tuiTools.AskUserRequest{
+		ID:           id,
+		ToolCallID:   toolUseID,
+		Question:     req.Message,
+		Header:       header,
+		MultiSelect:  multiSelect,
+		IsCustomText: isCustomText,
+	}
+
+	if !isCustomText {
+		for _, opt := range req.Options {
+			askReq.Options = append(askReq.Options, tuiTools.AskUserOption{
+				Label:       opt.Label,
+				Value:       fmt.Sprintf("%v", opt.Value),
+				Description: opt.Description,
+			})
+		}
+	}
+
+	ch := make(chan sdk.PromptResponse, 1)
+	w.pendingAskUser.Store(id, ch)
+
+	w.askUserBroker.Publish(pubsub.CreatedEvent, askReq)
+
+	select {
+	case resp := <-ch:
+		return resp, nil
+	case <-ctx.Done():
+		w.pendingAskUser.Delete(id)
+		return sdk.PromptResponse{Cancelled: true}, ctx.Err()
+	}
+}
+
+// AnswerAskUser resolves a pending ask_user_question prompt.
+func (w *NexusWorkspace) AnswerAskUser(id, value string) bool {
+	v, ok := w.pendingAskUser.LoadAndDelete(id)
+	if !ok {
+		return false
+	}
+	ch := v.(chan sdk.PromptResponse)
+	ch <- sdk.PromptResponse{Value: value}
+	return true
 }
 
 // ─── Internal helpers ─────────────────────────────────────────────────────────

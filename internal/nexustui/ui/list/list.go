@@ -119,19 +119,19 @@ func (l *List) AtBottom() bool {
 		return true
 	}
 
-	// Calculate the height from offsetIdx to the end.
+	// Calculate the height from offsetIdx to the end, accounting for the
+	// partial scroll into the first item (offsetLine).
 	var totalHeight int
 	for idx := l.offsetIdx; idx < len(l.items); idx++ {
-		if totalHeight > l.height {
-			// No need to calculate further, we're already past the viewport height
-			return false
-		}
 		item := l.getItem(idx)
 		itemHeight := item.height
 		if l.gap > 0 && idx > l.offsetIdx {
 			itemHeight += l.gap
 		}
 		totalHeight += itemHeight
+		if totalHeight-l.offsetLine > l.height {
+			return false
+		}
 	}
 
 	return totalHeight-l.offsetLine <= l.height

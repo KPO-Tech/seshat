@@ -43,12 +43,13 @@ func TestBrowserRuntimeEventFromProgressForSnapshot(t *testing.T) {
 	})
 	if event == nil {
 		t.Fatal("expected browser runtime event")
-	}
-	if event.Type != types.RuntimeEventTypeBrowserSnapshot {
-		t.Fatalf("unexpected event type: %s", event.Type)
-	}
-	if event.Browser == nil || event.Browser.PageID != "page-1" {
-		t.Fatalf("unexpected browser payload: %+v", event.Browser)
+	} else {
+		if event.Type != types.RuntimeEventTypeBrowserSnapshot {
+			t.Fatalf("unexpected event type: %s", event.Type)
+		}
+		if event.Browser == nil || event.Browser.PageID != "page-1" {
+			t.Fatalf("unexpected browser payload: %+v", event.Browser)
+		}
 	}
 }
 

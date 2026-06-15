@@ -604,9 +604,7 @@ func TestHandleDenialLimitExceeded_Interactive(t *testing.T) {
 
 	if result == nil {
 		t.Fatal("expected non-nil result")
-	}
-
-	if result.Behavior != types.PermissionBehaviorAsk {
+	} else if result.Behavior != types.PermissionBehaviorAsk {
 		t.Errorf("expected Ask behavior in interactive mode, got %v", result.Behavior)
 	}
 }
@@ -622,13 +620,13 @@ func TestHandleDenialLimitExceeded_Headless(t *testing.T) {
 
 	if result == nil {
 		t.Fatal("expected non-nil result")
-	}
-
-	if result.Behavior != types.PermissionBehaviorDeny {
-		t.Errorf("expected Deny behavior in headless mode, got %v", result.Behavior)
-	}
-	if result.Reason != "Agent aborted: too many classifier denials in headless mode" {
-		t.Errorf("expected abort message, got %s", result.Reason)
+	} else {
+		if result.Behavior != types.PermissionBehaviorDeny {
+			t.Errorf("expected Deny behavior in headless mode, got %v", result.Behavior)
+		}
+		if result.Reason != "Agent aborted: too many classifier denials in headless mode" {
+			t.Errorf("expected abort message, got %s", result.Reason)
+		}
 	}
 }
 

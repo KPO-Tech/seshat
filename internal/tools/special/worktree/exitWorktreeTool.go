@@ -206,10 +206,6 @@ func (t *ExitWorktreeTool) ValidateInput(ctx context.Context, input map[string]a
 
 // CheckPermissions checks tool permissions
 func (t *ExitWorktreeTool) CheckPermissions(ctx context.Context, input map[string]any, toolCtx tool.ToolUseContext) types.PermissionResult {
-	action, _ := input["action"].(string)
-	if action == "remove" {
-		return types.PermissionResult{Behavior: types.PermissionBehaviorDeny}
-	}
 	return types.PermissionResult{Behavior: types.PermissionBehaviorAsk}
 }
 

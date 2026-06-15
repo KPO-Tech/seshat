@@ -1,31 +1,54 @@
 package tools
 
-import "github.com/EngineerProjects/nexus-engine/internal/nexustui/session"
-
 // Tool name constants matching SDK builtin names where applicable.
 // These are used by the permission dialog and chat UI to render tool-specific UI.
 const (
-	BashToolName         = "bash"
-	EditToolName         = "edit_file"
-	WriteToolName        = "write_file"
-	MultiEditToolName    = "multi_edit"
-	ViewToolName         = "read_file"
-	DownloadToolName     = "download"
-	FetchToolName        = "fetch"
-	AgenticFetchToolName = "agentic_fetch"
-	LSToolName           = "list_directory"
-	JobOutputToolName    = "job_output"
-	JobKillToolName      = "job_kill"
-	GlobToolName         = "glob"
-	GrepToolName         = "grep"
-	SourcegraphToolName  = "sourcegraph"
-	WebFetchToolName     = "web_fetch"
-	WebSearchToolName    = "web_search"
-	TodosToolName        = "todos"
-	AgentToolName        = "agent"
+	BashToolName            = "bash"
+	EditToolName            = "edit_file"
+	WriteToolName           = "write_file"
+	MultiEditToolName       = "multi_edit"
+	ApplyPatchToolName      = "apply_patch"
+	ViewToolName            = "read_file"
+	RemoveFileToolName      = "remove_file"
+	CreateDirectoryToolName = "create_directory"
+	GetFileMetadataToolName = "get_file_metadata"
+	DownloadToolName        = "download"
+	FetchToolName           = "fetch"
+	AgenticFetchToolName    = "agentic_fetch"
+	LSToolName              = "list_directory"
+	JobOutputToolName       = "job_output"
+	JobKillToolName         = "job_kill"
+	GlobToolName            = "glob"
+	GrepToolName            = "grep"
+	SourcegraphToolName     = "sourcegraph"
+	WebFetchToolName        = "web_fetch"
+	WebSearchToolName       = "web_search"
+	AgentToolName           = "agent"
+	AskUserToolName         = "ask_user_question"
+	NotebookEditToolName    = "notebook_edit"
+	NotebookCreateToolName  = "notebook_create"
+	NotebookWriteToolName   = "notebook_write"
 
 	BashNoOutput = "<no output>"
 )
+
+// AskUserOption mirrors an option in an ask_user_question prompt.
+type AskUserOption struct {
+	Label       string `json:"label"`
+	Value       string `json:"value"`
+	Description string `json:"description,omitempty"`
+}
+
+// AskUserRequest is published to the askUserBroker for each question the agent asks.
+type AskUserRequest struct {
+	ID           string          `json:"id"`
+	ToolCallID   string          `json:"tool_call_id"`
+	Question     string          `json:"question"`
+	Header       string          `json:"header"`
+	Options      []AskUserOption `json:"options"`
+	MultiSelect  bool            `json:"multi_select"`
+	IsCustomText bool            `json:"is_custom_text"`
+}
 
 // AgentParams holds the input for an agent tool call.
 type AgentParams struct {
@@ -92,6 +115,41 @@ type LSPermissionsParams struct {
 	Ignore []string
 }
 
+// NotebookEditPermissionsParams holds the params for a notebook_edit permission request.
+type NotebookEditPermissionsParams struct {
+	NotebookPath string
+	CellID       string
+	CellType     string
+	EditMode     string
+	OldContent   string // full notebook JSON before edit (may be empty if file is new)
+	NewSource    string // the new_source being written into the cell
+}
+
+// NotebookCreatePermissionsParams holds the params for a notebook_create permission request.
+type NotebookCreatePermissionsParams struct {
+	NotebookPath string
+	Kernel       string
+	Language     string
+	CellCount    int
+	Cells        []NotebookCellPreview
+}
+
+// NotebookCellPreview is a lightweight notebook cell payload for permission previews.
+type NotebookCellPreview struct {
+	CellType string
+	Source   string
+}
+
+// NotebookWritePermissionsParams holds the params for a notebook_write permission request.
+type NotebookWritePermissionsParams struct {
+	NotebookPath string
+	Kernel       string
+	Language     string
+	CellCount    int
+	Cells        []NotebookCellPreview
+	OldContent   string // existing file content when overwriting
+}
+
 // --- Tool input param structs (used by chat UI to deserialise tool call JSON) ---
 
 // BashParams holds the input for a bash tool call.
@@ -139,7 +197,9 @@ type FetchParams struct {
 
 // WebFetchParams holds the input for a web_fetch tool call.
 type WebFetchParams struct {
-	URL string `json:"url"`
+	URL        string `json:"url"`
+	Prompt     string `json:"prompt,omitempty"`
+	RenderMode string `json:"render_mode,omitempty"`
 }
 
 // WebSearchParams holds the input for a web_search tool call.
@@ -159,21 +219,6 @@ type MultiEditResponseMetadata struct {
 	NewContent   string `json:"new_content,omitempty"`
 	EditsFailed  []any  `json:"edits_failed,omitempty"`
 	EditsApplied int    `json:"edits_applied,omitempty"`
-}
-
-// TodosParams holds the input for a todos tool call.
-type TodosParams struct {
-	Todos []session.Todo `json:"todos"`
-}
-
-// TodosResponseMetadata holds the metadata returned by a todos tool call.
-type TodosResponseMetadata struct {
-	IsNew         bool           `json:"is_new,omitempty"`
-	JustStarted   string         `json:"just_started,omitempty"`
-	Total         int            `json:"total,omitempty"`
-	Completed     int            `json:"completed,omitempty"`
-	Todos         []session.Todo `json:"todos,omitempty"`
-	JustCompleted []session.Todo `json:"just_completed,omitempty"`
 }
 
 // ViewResourceSkill is the resource type for skill-backed file views.
@@ -221,6 +266,27 @@ type EditResponseMetadata struct {
 type MultiEditParams struct {
 	FilePath string `json:"file_path"`
 	Edits    []any  `json:"edits,omitempty"`
+}
+
+// ApplyPatchParams holds the input for an apply_patch tool call.
+type ApplyPatchParams struct {
+	Patch string `json:"patch"`
+}
+
+// RemoveFileParams holds the input for a remove_file tool call.
+type RemoveFileParams struct {
+	Path      string `json:"path"`
+	Recursive bool   `json:"recursive,omitempty"`
+}
+
+// CreateDirectoryParams holds the input for a create_directory tool call.
+type CreateDirectoryParams struct {
+	Path string `json:"path"`
+}
+
+// GetFileMetadataParams holds the input for a get_file_metadata tool call.
+type GetFileMetadataParams struct {
+	Path string `json:"path"`
 }
 
 // DownloadParams holds the input for a download tool call.

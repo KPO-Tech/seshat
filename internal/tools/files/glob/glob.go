@@ -362,7 +362,7 @@ func (g *Tool) doGlob(ctx context.Context, searchDir string, pattern string) ([]
 	if err != nil {
 		// If ripgrep not found, return error
 		if strings.Contains(err.Error(), "executable file not found") {
-			return nil, fmt.Errorf("ripgrep (rg) not found. Please install ripgrep: https://github.com/BurntSushi/ripgrep")
+			return nil, shared.RipgrepNotFoundError()
 		}
 		// If no matches found, that's ok - return empty results
 		if exitError, ok := err.(*exec.ExitError); ok && exitError.ExitCode() == 1 {

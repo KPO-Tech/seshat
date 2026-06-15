@@ -137,6 +137,7 @@ func newClient(
 	chunkFn func(sdk.ResponseChunk),
 	runtimeEventFn func(sdk.RuntimeEvent),
 	titledFn func(sdk.SessionID, string),
+	planStore sdk.PlanStore,
 ) (*sdk.Client, error) {
 	// Load pre_tool_use hooks from config if any are defined.
 	var preToolHooks []sdk.PreToolHookConfig
@@ -197,6 +198,7 @@ func newClient(
 		Monitoring:              options.Monitoring,
 		RAGService:              options.RAGService,
 		ProviderConfig:          providerConfig,
+		PlanStore:               planStore,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("create SDK client: %w", err)

@@ -5,18 +5,15 @@ import (
 	"fmt"
 	"os"
 	"os/signal"
-	"path/filepath"
 
 	"github.com/EngineerProjects/nexus-engine/pkg/runtimepath"
 )
 
 func main() {
-	// Pin the CLI runtime root to ~/.config/nexus-cli, isolated from the
-	// nexus-product backend (~/.config/nexus). NEXUS_RUNTIME_ROOT takes precedence.
+	// Pin the CLI runtime root to the platform config dir (nexus-cli),
+	// isolated from the nexus-product backend (nexus). NEXUS_RUNTIME_ROOT takes precedence.
 	if os.Getenv(runtimepath.EnvRuntimeRoot) == "" {
-		if home, err := os.UserHomeDir(); err == nil {
-			os.Setenv(runtimepath.EnvRuntimeRoot, filepath.Join(home, ".config", "nexus-cli"))
-		}
+		os.Setenv(runtimepath.EnvRuntimeRoot, runtimepath.DefaultConfigDir("nexus-cli"))
 	}
 
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt)

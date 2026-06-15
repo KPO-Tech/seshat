@@ -109,8 +109,7 @@ func TestLookupSkill_FilePriorityOverBundled(t *testing.T) {
 	}
 	if skill == nil {
 		t.Fatal("expected skill 'greet', got nil")
-	}
-	if skill.Source == SourceBundled {
+	} else if skill.Source == SourceBundled {
 		t.Errorf("expected file-based skill to win, got bundled skill (description: %q)", skill.Description)
 	}
 
@@ -146,8 +145,7 @@ func TestLookupSkill_BundledFallback(t *testing.T) {
 	}
 	if skill == nil {
 		t.Fatal("expected bundled skill 'only-bundled', got nil")
-	}
-	if skill.Source != SourceBundled {
+	} else if skill.Source != SourceBundled {
 		t.Errorf("expected bundled source, got %q", skill.Source)
 	}
 }

@@ -6,6 +6,7 @@ import (
 
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
+	agenttools "github.com/EngineerProjects/nexus-engine/internal/nexustui/agent/tools"
 	"github.com/EngineerProjects/nexus-engine/internal/nexustui/ui/anim"
 	"github.com/EngineerProjects/nexus-engine/internal/nexustui/ui/chat"
 	"github.com/EngineerProjects/nexus-engine/internal/nexustui/ui/common"
@@ -508,6 +509,23 @@ func (m *Chat) isSelectable(index int) bool {
 	}
 	_, ok := item.(list.Focusable)
 	return ok
+}
+
+// ActivateAskUserQuestion finds the ask_user_question item by tool call ID,
+// activates its interactive question UI, and selects it in the list.
+// Returns true if the item was found and activated.
+func (m *Chat) ActivateAskUserQuestion(req agenttools.AskUserRequest) bool {
+	idx, ok := m.idInxMap[req.ToolCallID]
+	if !ok {
+		return false
+	}
+	item, ok := m.list.ItemAt(idx).(chat.AskUserActivatable)
+	if !ok {
+		return false
+	}
+	item.ActivateQuestion(req)
+	m.list.SetSelected(idx)
+	return true
 }
 
 // SetSelected sets the selected message index in the chat list.

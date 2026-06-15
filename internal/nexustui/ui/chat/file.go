@@ -5,10 +5,12 @@ import (
 	"fmt"
 	"strings"
 
+	"charm.land/lipgloss/v2"
 	"github.com/EngineerProjects/nexus-engine/internal/nexustui/agent/tools"
 	"github.com/EngineerProjects/nexus-engine/internal/nexustui/fsext"
 	"github.com/EngineerProjects/nexus-engine/internal/nexustui/message"
 	"github.com/EngineerProjects/nexus-engine/internal/nexustui/ui/styles"
+	"github.com/charmbracelet/x/ansi"
 )
 
 // -----------------------------------------------------------------------------
@@ -37,7 +39,7 @@ type ViewToolRenderContext struct{}
 
 // RenderTool implements the [ToolRenderer] interface.
 func (v *ViewToolRenderContext) RenderTool(sty *styles.Styles, width int, opts *ToolRenderOpts) string {
-	cappedWidth := cappedToolWidth(width)
+	cappedWidth := width
 	if opts.IsPending() {
 		return pendingTool(sty, "Read File", opts.Anim, opts.Compact)
 	}
@@ -81,43 +83,11 @@ func (v *ViewToolRenderContext) RenderTool(sty *styles.Styles, width int, opts *
 		return joinToolParts(header, body)
 	}
 
-	summary := buildViewToolSummary(params, opts.Result.Content)
-	if summary == "" {
-		return header
+	// On error show the error; success is silent (content is for the AI, not the UI).
+	if opts.Result.IsError {
+		return joinToolParts(header, toolErrorContent(sty, opts.Result, cappedWidth))
 	}
-
-	bodyWidth := cappedWidth - toolBodyLeftPaddingTotal
-	body := sty.Tool.Body.Render(toolOutputPlainContent(sty, summary, bodyWidth, opts.ExpandedContent))
-	return joinToolParts(header, body)
-}
-
-func buildViewToolSummary(params tools.ViewParams, content string) string {
-	var lines []string
-
-	if summary := extractReadFileLinesSummary(content); summary != "" {
-		lines = append(lines, summary)
-	} else {
-		if params.Offset > 0 && params.Limit > 0 {
-			lines = append(lines, fmt.Sprintf("Lines requested: %d-%d", params.Offset, params.Offset+params.Limit-1))
-		} else if params.Offset > 0 {
-			lines = append(lines, fmt.Sprintf("Starting from line %d", params.Offset))
-		} else if params.Limit > 0 {
-			lines = append(lines, fmt.Sprintf("Requested up to %d lines", params.Limit))
-		}
-	}
-
-	lines = append(lines, "Content hidden in transcript")
-	return strings.Join(lines, "\n")
-}
-
-func extractReadFileLinesSummary(content string) string {
-	for _, line := range strings.Split(content, "\n") {
-		trimmed := strings.TrimSpace(line)
-		if strings.HasPrefix(trimmed, "Lines:") {
-			return trimmed
-		}
-	}
-	return ""
+	return header
 }
 
 // -----------------------------------------------------------------------------
@@ -146,7 +116,7 @@ type WriteToolRenderContext struct{}
 
 // RenderTool implements the [ToolRenderer] interface.
 func (w *WriteToolRenderContext) RenderTool(sty *styles.Styles, width int, opts *ToolRenderOpts) string {
-	cappedWidth := cappedToolWidth(width)
+	cappedWidth := width
 	if opts.IsPending() {
 		return pendingTool(sty, "Write File", opts.Anim, opts.Compact)
 	}
@@ -180,9 +150,15 @@ func (w *WriteToolRenderContext) RenderTool(sty *styles.Styles, width int, opts 
 		return joinToolParts(header, toolErrorContent(sty, opts.Result, cappedWidth))
 	}
 
-	// Render code content with syntax highlighting.
+	// Render content: interpreted markdown for .md files, syntax-highlighted code otherwise.
 	if params.Content != "" {
-		body := toolOutputCodeContent(sty, params.FilePath, params.Content, 0, cappedWidth, opts.ExpandedContent)
+		bodyWidth := cappedWidth - toolBodyLeftPaddingTotal
+		var body string
+		if isMarkdownPath(params.FilePath) {
+			body = sty.Tool.Body.Render(toolOutputMarkdownContent(sty, params.Content, bodyWidth, opts.ExpandedContent))
+		} else {
+			body = toolOutputCodeContent(sty, params.FilePath, params.Content, 0, cappedWidth, opts.ExpandedContent)
+		}
 		return joinToolParts(header, body)
 	}
 
@@ -239,14 +215,14 @@ func (e *EditToolRenderContext) RenderTool(sty *styles.Styles, width int, opts *
 	}
 
 	// Get diff content from metadata.
-	var meta tools.EditResponseMetadata
-	if err := json.Unmarshal([]byte(opts.Result.Metadata), &meta); err != nil {
+	oldContent, newContent := extractEditDiffContent(opts.Result.Metadata)
+	if oldContent == "" && newContent == "" {
 		bodyWidth := width - toolBodyLeftPaddingTotal
 		body := sty.Tool.Body.Render(toolOutputPlainContent(sty, opts.Result.Content, bodyWidth, opts.ExpandedContent))
 		return joinToolParts(header, body)
 	}
 
-	diff := toolOutputDiffContent(sty, file, meta.OldContent, meta.NewContent, width, opts.ExpandedContent)
+	diff := toolOutputDiffContent(sty, file, oldContent, newContent, width, opts.ExpandedContent)
 
 	// On error (e.g. denied permission), show error above the diff.
 	if opts.Result.IsError {
@@ -332,6 +308,320 @@ func (m *MultiEditToolRenderContext) RenderTool(sty *styles.Styles, width int, o
 }
 
 // -----------------------------------------------------------------------------
+// Remove File Tool
+// -----------------------------------------------------------------------------
+
+// RemoveFileToolMessageItem is a message item that represents a remove_file tool call.
+type RemoveFileToolMessageItem struct {
+	*baseToolMessageItem
+}
+
+var _ ToolMessageItem = (*RemoveFileToolMessageItem)(nil)
+
+// NewRemoveFileToolMessageItem creates a new [RemoveFileToolMessageItem].
+func NewRemoveFileToolMessageItem(
+	sty *styles.Styles,
+	toolCall message.ToolCall,
+	result *message.ToolResult,
+	canceled bool,
+) ToolMessageItem {
+	return newBaseToolMessageItem(sty, toolCall, result, &RemoveFileToolRenderContext{}, canceled)
+}
+
+// RemoveFileToolRenderContext renders remove_file tool messages.
+type RemoveFileToolRenderContext struct{}
+
+// RenderTool implements the [ToolRenderer] interface.
+func (r *RemoveFileToolRenderContext) RenderTool(sty *styles.Styles, width int, opts *ToolRenderOpts) string {
+	cappedWidth := width
+	if opts.IsPending() {
+		return pendingTool(sty, "Remove File", opts.Anim, opts.Compact)
+	}
+
+	var params tools.RemoveFileParams
+	if err := json.Unmarshal([]byte(opts.ToolCall.Input), &params); err != nil {
+		return invalidInputContent(sty, opts, "Remove File", cappedWidth)
+	}
+
+	path := fsext.PrettyPath(params.Path)
+	header := toolHeader(sty, opts.Status, "Remove File", cappedWidth, opts.Compact, path)
+	if opts.Compact {
+		return header
+	}
+
+	if earlyState, ok := toolEarlyStateContent(sty, opts, cappedWidth); ok {
+		return joinToolParts(header, earlyState)
+	}
+
+	if !opts.HasResult() || !opts.Result.IsError {
+		return header
+	}
+	return joinToolParts(header, toolErrorContent(sty, opts.Result, cappedWidth))
+}
+
+// -----------------------------------------------------------------------------
+// Create Directory Tool
+// -----------------------------------------------------------------------------
+
+// CreateDirectoryToolMessageItem is a message item that represents a create_directory tool call.
+type CreateDirectoryToolMessageItem struct {
+	*baseToolMessageItem
+}
+
+var _ ToolMessageItem = (*CreateDirectoryToolMessageItem)(nil)
+
+// NewCreateDirectoryToolMessageItem creates a new [CreateDirectoryToolMessageItem].
+func NewCreateDirectoryToolMessageItem(
+	sty *styles.Styles,
+	toolCall message.ToolCall,
+	result *message.ToolResult,
+	canceled bool,
+) ToolMessageItem {
+	return newBaseToolMessageItem(sty, toolCall, result, &CreateDirectoryToolRenderContext{}, canceled)
+}
+
+// CreateDirectoryToolRenderContext renders create_directory tool messages.
+type CreateDirectoryToolRenderContext struct{}
+
+// RenderTool implements the [ToolRenderer] interface.
+func (c *CreateDirectoryToolRenderContext) RenderTool(sty *styles.Styles, width int, opts *ToolRenderOpts) string {
+	cappedWidth := width
+	if opts.IsPending() {
+		return pendingTool(sty, "Create Directory", opts.Anim, opts.Compact)
+	}
+
+	var params tools.CreateDirectoryParams
+	if err := json.Unmarshal([]byte(opts.ToolCall.Input), &params); err != nil {
+		return invalidInputContent(sty, opts, "Create Directory", cappedWidth)
+	}
+
+	path := fsext.PrettyPath(params.Path)
+	header := toolHeader(sty, opts.Status, "Create Directory", cappedWidth, opts.Compact, path)
+	if opts.Compact {
+		return header
+	}
+
+	if earlyState, ok := toolEarlyStateContent(sty, opts, cappedWidth); ok {
+		return joinToolParts(header, earlyState)
+	}
+
+	if !opts.HasResult() || !opts.Result.IsError {
+		return header
+	}
+	return joinToolParts(header, toolErrorContent(sty, opts.Result, cappedWidth))
+}
+
+// -----------------------------------------------------------------------------
+// Get File Metadata Tool
+// -----------------------------------------------------------------------------
+
+// GetFileMetadataToolMessageItem is a message item that represents a get_file_metadata tool call.
+type GetFileMetadataToolMessageItem struct {
+	*baseToolMessageItem
+}
+
+var _ ToolMessageItem = (*GetFileMetadataToolMessageItem)(nil)
+
+// NewGetFileMetadataToolMessageItem creates a new [GetFileMetadataToolMessageItem].
+func NewGetFileMetadataToolMessageItem(
+	sty *styles.Styles,
+	toolCall message.ToolCall,
+	result *message.ToolResult,
+	canceled bool,
+) ToolMessageItem {
+	return newBaseToolMessageItem(sty, toolCall, result, &GetFileMetadataToolRenderContext{}, canceled)
+}
+
+// GetFileMetadataToolRenderContext renders get_file_metadata tool messages.
+type GetFileMetadataToolRenderContext struct{}
+
+// RenderTool implements the [ToolRenderer] interface.
+func (g *GetFileMetadataToolRenderContext) RenderTool(sty *styles.Styles, width int, opts *ToolRenderOpts) string {
+	cappedWidth := width
+	if opts.IsPending() {
+		return pendingTool(sty, "File Metadata", opts.Anim, opts.Compact)
+	}
+
+	var params tools.GetFileMetadataParams
+	if err := json.Unmarshal([]byte(opts.ToolCall.Input), &params); err != nil {
+		return invalidInputContent(sty, opts, "File Metadata", cappedWidth)
+	}
+
+	path := fsext.PrettyPath(params.Path)
+	header := toolHeader(sty, opts.Status, "File Metadata", cappedWidth, opts.Compact, path)
+	if opts.Compact {
+		return header
+	}
+
+	if earlyState, ok := toolEarlyStateContent(sty, opts, cappedWidth); ok {
+		return joinToolParts(header, earlyState)
+	}
+
+	if !opts.HasResult() || !opts.Result.IsError {
+		return header
+	}
+	return joinToolParts(header, toolErrorContent(sty, opts.Result, cappedWidth))
+}
+
+// -----------------------------------------------------------------------------
+// Apply Patch Tool
+// -----------------------------------------------------------------------------
+
+// ApplyPatchToolMessageItem is a message item that represents an apply_patch tool call.
+type ApplyPatchToolMessageItem struct {
+	*baseToolMessageItem
+}
+
+var _ ToolMessageItem = (*ApplyPatchToolMessageItem)(nil)
+
+// NewApplyPatchToolMessageItem creates a new [ApplyPatchToolMessageItem].
+func NewApplyPatchToolMessageItem(
+	sty *styles.Styles,
+	toolCall message.ToolCall,
+	result *message.ToolResult,
+	canceled bool,
+) ToolMessageItem {
+	return newBaseToolMessageItem(sty, toolCall, result, &ApplyPatchToolRenderContext{}, canceled)
+}
+
+// ApplyPatchToolRenderContext renders apply_patch tool messages.
+type ApplyPatchToolRenderContext struct{}
+
+// RenderTool implements the [ToolRenderer] interface.
+func (a *ApplyPatchToolRenderContext) RenderTool(sty *styles.Styles, width int, opts *ToolRenderOpts) string {
+	cappedWidth := width
+	if opts.IsPending() {
+		return pendingTool(sty, "Apply Patch", opts.Anim, opts.Compact)
+	}
+
+	var fileLines []string
+	var added, updated, deleted, moved int
+	if opts.HasResult() && opts.Result.Content != "" {
+		added, updated, deleted, moved, fileLines = parseApplyPatchResult(opts.Result.Content)
+	}
+
+	total := added + updated + deleted + moved
+	headerParams := []string{}
+	if opts.HasResult() {
+		if total > 0 {
+			s := "files"
+			if total == 1 {
+				s = "file"
+			}
+			headerParams = append(headerParams, fmt.Sprintf("%d %s", total, s))
+		} else if opts.Result.IsError {
+			headerParams = append(headerParams, "failed")
+		}
+	}
+
+	header := toolHeader(sty, opts.Status, "Apply Patch", cappedWidth, opts.Compact, headerParams...)
+	if opts.Compact {
+		return header
+	}
+
+	if earlyState, ok := toolEarlyStateContent(sty, opts, cappedWidth); ok {
+		return joinToolParts(header, earlyState)
+	}
+
+	if len(fileLines) == 0 {
+		return header
+	}
+
+	bodyWidth := cappedWidth - toolBodyLeftPaddingTotal
+	body := renderApplyPatchFileList(sty, fileLines, bodyWidth)
+	return joinToolParts(header, sty.Tool.Body.Render(body))
+}
+
+// parseApplyPatchResult parses the text returned by formatSummary into counts and lines.
+// Lines follow "Added: path", "Updated: path", "Deleted: path", "Moved: path" format.
+func parseApplyPatchResult(content string) (added, updated, deleted, moved int, lines []string) {
+	for _, line := range strings.Split(strings.TrimSpace(content), "\n") {
+		line = strings.TrimSpace(line)
+		if line == "" || line == "Patch applied (no files changed)." {
+			continue
+		}
+		lines = append(lines, line)
+		switch {
+		case strings.HasPrefix(line, "Added:"):
+			added++
+		case strings.HasPrefix(line, "Updated:"):
+			updated++
+		case strings.HasPrefix(line, "Deleted:"):
+			deleted++
+		case strings.HasPrefix(line, "Moved:"):
+			moved++
+		}
+	}
+	return
+}
+
+// renderApplyPatchFileList renders each file change line with semantic color.
+func renderApplyPatchFileList(sty *styles.Styles, lines []string, width int) string {
+	var out []string
+	for _, line := range lines {
+		var sigil string
+		var labelStyle lipgloss.Style
+		var path string
+		switch {
+		case strings.HasPrefix(line, "Added: "):
+			sigil = "+"
+			labelStyle = sty.Tool.ResultAdded
+			path = fsext.PrettyPath(strings.TrimPrefix(line, "Added: "))
+		case strings.HasPrefix(line, "Updated: "):
+			sigil = "~"
+			labelStyle = sty.Tool.ContentText
+			path = fsext.PrettyPath(strings.TrimPrefix(line, "Updated: "))
+		case strings.HasPrefix(line, "Deleted: "):
+			sigil = "-"
+			labelStyle = sty.Tool.ResultDeleted
+			path = fsext.PrettyPath(strings.TrimPrefix(line, "Deleted: "))
+		case strings.HasPrefix(line, "Moved: "):
+			sigil = "→"
+			labelStyle = sty.Tool.ResultMoved
+			path = strings.TrimPrefix(line, "Moved: ")
+		default:
+			out = append(out, sty.Tool.ContentText.Render(ansi.Truncate(line, width, "…")))
+			continue
+		}
+		sigilStr := labelStyle.Render(sigil)
+		pathStr := sty.Tool.ContentText.Render(ansi.Truncate(path, width-len(sigil)-1, "…"))
+		out = append(out, sigilStr+" "+pathStr)
+	}
+	return strings.Join(out, "\n")
+}
+
+// extractEditDiffContent reads the raw metadata JSON from an edit_file result and
+// returns the full file content before the edit (oldContent) and after (newContent).
+// The edit tool stores the original file under "original_file" and the replaced
+// snippet under "old_string"/"new_string", so newContent is computed by applying
+// the replacement to the original file.
+func extractEditDiffContent(metadataJSON string) (oldContent, newContent string) {
+	var raw map[string]any
+	if err := json.Unmarshal([]byte(metadataJSON), &raw); err != nil {
+		return "", ""
+	}
+	oldContent, _ = raw["original_file"].(string)
+	oldString, _ := raw["old_string"].(string)
+	newString, _ := raw["new_string"].(string)
+	replaceAll, _ := raw["replace_all"].(bool)
+
+	if oldContent != "" && oldString != "" {
+		count := 1
+		if replaceAll {
+			count = -1
+		}
+		newContent = strings.Replace(oldContent, oldString, newString, count)
+	}
+	return
+}
+
+// isMarkdownPath reports whether the file path has a markdown extension.
+func isMarkdownPath(path string) bool {
+	lower := strings.ToLower(path)
+	return strings.HasSuffix(lower, ".md") || strings.HasSuffix(lower, ".markdown")
+}
+
+// -----------------------------------------------------------------------------
 // Download Tool
 // -----------------------------------------------------------------------------
 
@@ -357,7 +647,7 @@ type DownloadToolRenderContext struct{}
 
 // RenderTool implements the [ToolRenderer] interface.
 func (d *DownloadToolRenderContext) RenderTool(sty *styles.Styles, width int, opts *ToolRenderOpts) string {
-	cappedWidth := cappedToolWidth(width)
+	cappedWidth := width
 	if opts.IsPending() {
 		return pendingTool(sty, "Download", opts.Anim, opts.Compact)
 	}

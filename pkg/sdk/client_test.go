@@ -231,7 +231,8 @@ func TestAskCompletesStreamingMultiToolMonoRun(t *testing.T) {
 				{"type": "message_stop"},
 			})
 		default:
-			t.Fatalf("unexpected sdk provider request %d", requests)
+			payloadBytes, _ := json.Marshal(payload)
+			t.Fatalf("unexpected sdk provider request %d: %s", requests, string(payloadBytes))
 		}
 	}))
 	defer server.Close()
@@ -360,7 +361,8 @@ func TestAskEmitsStructuredRuntimeEvents(t *testing.T) {
 				{"type": "message_stop"},
 			})
 		default:
-			t.Fatalf("unexpected sdk provider request %d", requests)
+			payloadBytes, _ := json.Marshal(payload)
+			t.Fatalf("unexpected sdk provider request %d: %s", requests, string(payloadBytes))
 		}
 	}))
 	defer server.Close()
@@ -528,7 +530,8 @@ func TestAskCompletesOpenAIMonoRun(t *testing.T) {
 			})
 			_, _ = fmt.Fprint(w, "data: [DONE]\n\n")
 		default:
-			t.Fatalf("unexpected openai provider request %d", requests)
+			payloadBytes, _ := json.Marshal(payload)
+			t.Fatalf("unexpected openai provider request %d: %s", requests, string(payloadBytes))
 		}
 	}))
 	defer server.Close()
@@ -635,7 +638,8 @@ func TestAskStreamsResponseChunksToHost(t *testing.T) {
 			})
 			_, _ = fmt.Fprint(w, "data: [DONE]\n\n")
 		default:
-			t.Fatalf("unexpected openai provider request %d", requests)
+			payloadBytes, _ := json.Marshal(payload)
+			t.Fatalf("unexpected openai provider request %d: %s", requests, string(payloadBytes))
 		}
 	}))
 	defer server.Close()
@@ -952,7 +956,8 @@ func TestAskCompletesOllamaMonoRun(t *testing.T) {
 				{"message": map[string]any{"content": "done"}},
 			})
 		default:
-			t.Fatalf("unexpected ollama provider request %d", requests)
+			payloadBytes, _ := json.Marshal(payload)
+			t.Fatalf("unexpected ollama provider request %d: %s", requests, string(payloadBytes))
 		}
 	}))
 	defer server.Close()

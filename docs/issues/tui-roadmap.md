@@ -93,11 +93,26 @@ This note tracks the current UX progress of the Nexus CLI TUI and the next inter
 - Fix: global quit check added at the top of `handleKey`, before all state-specific blocks.
 - Status: done
 
+### 15. `ask_user_question` inline interactive bubble
+- New tool renderer with keyboard-driven option picker (↑↓ navigate, Space multi-select, Enter confirm).
+- `askUserBroker` in workspace routes `PromptTypeChoice`/`PromptTypeText` to the TUI; `PromptTypeConfirm` stays on `permBroker`.
+- `ask_user_question` and `list_directory` added to `isAlwaysSafeTool` — no permission dialog for these.
+- Batch questions: each Q→A pair is shown in history inside the same bubble.
+- "Other" option routes focus to the editor for free-text input.
+- Bug fixed: Space key registered as `case "space":` not `case " ":` (ultraviolet `KeySpace.String()` → `"space"`).
+- Status: done
+
+### 16. Timer and auto-scroll bug fixes
+- **Timer**: `Finish.Time` and `Message.CreatedAt` are both milliseconds (`UnixMilli()`), but `renderContent` and `NewAssistantInfoItem` were calling `time.Unix(x, 0)` → duration 1000× too large (87 s shown as 24h5m6s). Fixed with `time.UnixMilli(x)` + `.Round(time.Second)`.
+- **"done" footer layout**: was `done · 3.2s·············`; changed to `done · ················ 3.2s` (dots fill middle, time anchors right).
+- **`AtBottom()` bug**: early-exit `totalHeight > l.height` did not subtract `offsetLine`, so the function returned `false` when at the bottom of a tall item → `ScrollBy(positive)` never re-enabled `follow` mode → auto-scroll resume after user scroll was broken. Fixed by moving the check to after accumulating each item's height: `totalHeight - offsetLine > height`.
+- Status: done
+
 ---
 
 ## In Progress / Next
 
-### 15. Tool row compression (high priority)
+### 16. Tool row compression (high priority)
 **Problem**: rows are verbose and noisy.
 - Current: `► ⊞ ✓ Task Create done Tool task_create completed (49ms)`
 - Target: `✓ TaskCreate  #1780…  (49ms)`
@@ -122,7 +137,7 @@ Status: planned
 
 ---
 
-### 16. Plan mode state tracking + enter/exit tool rows
+### 17. Plan mode state tracking + enter/exit tool rows
 **Problem**: `enter_plan_mode` and `exit_plan_mode` appear as tool rows in the chat — they are state transitions, not user-visible actions.
 
 **Changes**:
@@ -134,7 +149,7 @@ Status: planned
 
 ---
 
-### 17. Task list display (replaces task tool rows)
+### 18. Task list display (replaces task tool rows)
 **Problem**: `task_create` × N and `task_update` × N appear as individual rows with no structure. The user can't see the plan progress at a glance.
 
 **Design**:
@@ -149,7 +164,7 @@ Status: planned
 
 ---
 
-### 18. Plan file overlay (plan mode review flow)
+### 19. Plan file overlay (plan mode review flow)
 **Background**: When Claude is in plan mode, a system prompt forces it to write a detailed markdown plan file before proceeding. This overlay intercepts that file and presents it for review.
 
 **Plan file location** (finalized):
@@ -188,20 +203,20 @@ Status: planned
 
 ---
 
-### 19. Text overflow with sidebar open (bug)
+### 20. Text overflow with sidebar open (bug)
 **Problem**: When the right-side details panel is open, some chat text is truncated at the right edge instead of wrapping.
 **Likely cause**: `chatW` calculation in `viewChat()` does not propagate correctly to all text renderers when the sidebar is open.
 Status: planned (low effort)
 
 ---
 
-### 20. Context percentage and model capacity visibility
+### 21. Context percentage and model capacity visibility
 - Once model context capacity is reliably available, show `31% context` in the footer or header.
 - Status: planned
 
 ---
 
-### 21. Manual compaction trigger
+### 22. Manual compaction trigger
 - A dedicated "Compact Context" action (settings hub + optional `ctrl+l`).
 - Do not fake this with a normal prompt — it must be a real engine operation once exposed.
 - Status: planned
@@ -210,11 +225,11 @@ Status: planned (low effort)
 
 ## Implementation Order
 
-1. Tool row compression (15) — most visible, standalone change
-2. Plan mode state tracking (16) — prerequisite for 17 and 18
-3. Task list display (17) — depends on 16
-4. Plan file overlay (18) — depends on 16; needs plan file pattern decision
-5. Text overflow fix (19) — quick bug fix, any time
+1. Tool row compression (16) — most visible, standalone change
+2. Plan mode state tracking (17) — prerequisite for 18 and 19
+3. Task list display (18) — depends on 17
+4. Plan file overlay (19) — depends on 17; needs plan file pattern decision
+5. Text overflow fix (20) — quick bug fix, any time
 6. Context percentage (20) — needs upstream data
 
 ## Reference

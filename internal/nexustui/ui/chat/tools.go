@@ -55,6 +55,9 @@ type ToolMessageItem interface {
 	SetMessageID(id string)
 	SetStatus(status ToolStatus)
 	Status() ToolStatus
+	// RenderPreview renders the tool non-compact without cache or prefix.
+	// Used by agent renderers to embed a live output section.
+	RenderPreview(width int) string
 }
 
 // Compactable is an interface for tool items that can render in a compacted mode.
@@ -218,6 +221,7 @@ func NewToolMessageItem(
 	result *message.ToolResult,
 	canceled bool,
 ) ToolMessageItem {
+	toolCall = normalizeSubagentToolCall(toolCall)
 	var item ToolMessageItem
 	switch toolCall.Name {
 	case tools.BashToolName:
@@ -228,12 +232,20 @@ func NewToolMessageItem(
 		item = NewJobKillToolMessageItem(sty, toolCall, result, canceled)
 	case tools.ViewToolName:
 		item = NewViewToolMessageItem(sty, toolCall, result, canceled)
+	case tools.RemoveFileToolName:
+		item = NewRemoveFileToolMessageItem(sty, toolCall, result, canceled)
+	case tools.CreateDirectoryToolName:
+		item = NewCreateDirectoryToolMessageItem(sty, toolCall, result, canceled)
+	case tools.GetFileMetadataToolName:
+		item = NewGetFileMetadataToolMessageItem(sty, toolCall, result, canceled)
 	case tools.WriteToolName:
 		item = NewWriteToolMessageItem(sty, toolCall, result, canceled)
 	case tools.EditToolName:
 		item = NewEditToolMessageItem(sty, toolCall, result, canceled)
 	case tools.MultiEditToolName:
 		item = NewMultiEditToolMessageItem(sty, toolCall, result, canceled)
+	case tools.ApplyPatchToolName:
+		item = NewApplyPatchToolMessageItem(sty, toolCall, result, canceled)
 	case tools.GlobToolName:
 		item = NewGlobToolMessageItem(sty, toolCall, result, canceled)
 	case tools.GrepToolName:
@@ -256,8 +268,8 @@ func NewToolMessageItem(
 		item = NewWebFetchToolMessageItem(sty, toolCall, result, canceled)
 	case tools.WebSearchToolName:
 		item = NewWebSearchToolMessageItem(sty, toolCall, result, canceled)
-	case tools.TodosToolName:
-		item = NewTodosToolMessageItem(sty, toolCall, result, canceled)
+	case tools.AskUserToolName:
+		item = NewAskUserToolMessageItem(sty, toolCall, result, canceled)
 	case taskTool.ToolNameTaskList:
 		item = NewTaskListToolMessageItem(sty, toolCall, result, canceled)
 	case taskTool.ToolNameTaskGet:
@@ -268,17 +280,131 @@ func NewToolMessageItem(
 		item = NewReferencesToolMessageItem(sty, toolCall, result, canceled)
 	case tools.LSPRestartToolName:
 		item = NewLSPRestartToolMessageItem(sty, toolCall, result, canceled)
+	case "read_document_url":
+		item = NewReadDocumentURLToolMessageItem(sty, toolCall, result, canceled)
+	case "tool_search":
+		item = NewToolSearchToolMessageItem(sty, toolCall, result, canceled)
+	case "list_agents":
+		item = NewListAgentsToolMessageItem(sty, toolCall, result, canceled)
+	case "resume_agent":
+		item = NewResumeAgentToolMessageItem(sty, toolCall, result, canceled)
+	case tools.NotebookEditToolName:
+		item = NewNotebookEditToolMessageItem(sty, toolCall, result, canceled)
+	case tools.NotebookCreateToolName:
+		item = NewNotebookCreateToolMessageItem(sty, toolCall, result, canceled)
+	case tools.NotebookWriteToolName:
+		item = NewNotebookWriteToolMessageItem(sty, toolCall, result, canceled)
+	case "mcp_list_resources":
+		item = NewMCPListResourcesToolMessageItem(sty, toolCall, result, canceled)
+	case "mcp_read_resource":
+		item = NewMCPReadResourceToolMessageItem(sty, toolCall, result, canceled)
+	case "spawn_agent":
+		item = NewSpawnAgentToolMessageItem(sty, toolCall, result, canceled)
+	case "send_agent_message":
+		item = NewSendAgentMessageToolMessageItem(sty, toolCall, result, canceled)
+	case "wait_agent":
+		item = NewWaitAgentToolMessageItem(sty, toolCall, result, canceled)
+	case "close_agent":
+		item = NewCloseAgentToolMessageItem(sty, toolCall, result, canceled)
 	default:
 		if IsDockerMCPTool(toolCall.Name) {
 			item = NewDockerMCPToolMessageItem(sty, toolCall, result, canceled)
 		} else if strings.HasPrefix(toolCall.Name, "mcp_") {
 			item = NewMCPToolMessageItem(sty, toolCall, result, canceled)
+		} else if strings.HasPrefix(toolCall.Name, "browser_") {
+			item = NewBrowserToolMessageItem(sty, toolCall, result, canceled)
 		} else {
 			item = NewGenericToolMessageItem(sty, toolCall, result, canceled)
 		}
 	}
 	item.SetMessageID(messageID)
 	return item
+}
+
+func normalizeSubagentToolCall(tc message.ToolCall) message.ToolCall {
+	name := tc.Name
+	// Strip prefix like "default_api:" or similar
+	if idx := strings.Index(name, ":"); idx >= 0 {
+		name = name[idx+1:]
+	}
+
+	// Try to unmarshal the input JSON
+	var inputMap map[string]any
+	_ = json.Unmarshal([]byte(tc.Input), &inputMap)
+	if inputMap == nil {
+		inputMap = make(map[string]any)
+	}
+
+	switch name {
+	case "run_command":
+		tc.Name = tools.BashToolName // "bash"
+		if cmd, ok := inputMap["CommandLine"].(string); ok {
+			inputMap["command"] = cmd
+		}
+
+	case "view_file":
+		tc.Name = tools.ViewToolName // "read_file"
+		if path, ok := inputMap["AbsolutePath"].(string); ok {
+			inputMap["file_path"] = path
+		}
+
+	case "write_to_file":
+		tc.Name = tools.WriteToolName // "write_file"
+		if path, ok := inputMap["TargetFile"].(string); ok {
+			inputMap["file_path"] = path
+		}
+
+	case "list_dir":
+		tc.Name = tools.LSToolName // "list_directory"
+		if path, ok := inputMap["DirectoryPath"].(string); ok {
+			inputMap["path"] = path
+		}
+
+	case "grep_search":
+		tc.Name = tools.GrepToolName // "grep"
+		if path, ok := inputMap["SearchPath"].(string); ok {
+			inputMap["path"] = path
+		}
+		if query, ok := inputMap["Query"].(string); ok {
+			inputMap["pattern"] = query
+		}
+
+	case "search_web":
+		tc.Name = tools.WebSearchToolName // "web_search"
+
+	case "read_url_content":
+		tc.Name = tools.WebFetchToolName // "web_fetch"
+
+	case "send_message":
+		tc.Name = "send_agent_message"
+		if rec, ok := inputMap["Recipient"].(string); ok {
+			inputMap["agent_id"] = rec
+		}
+
+	case "invoke_subagent":
+		tc.Name = "spawn_agent"
+		if subs, ok := inputMap["Subagents"].([]any); ok && len(subs) > 0 {
+			if firstSub, ok := subs[0].(map[string]any); ok {
+				if prompt, ok := firstSub["Prompt"].(string); ok {
+					inputMap["prompt"] = prompt
+				}
+				if role, ok := firstSub["Role"].(string); ok {
+					inputMap["role"] = role
+				}
+				if typeName, ok := firstSub["TypeName"].(string); ok {
+					inputMap["agent_type"] = typeName
+				}
+			}
+		}
+	}
+
+	// Re-marshal modified input map back to tc.Input
+	if len(inputMap) > 0 {
+		if data, err := json.Marshal(inputMap); err == nil {
+			tc.Input = string(data)
+		}
+	}
+	return tc
 }
 
 // SetCompact implements the Compactable interface.
@@ -326,9 +452,16 @@ func (t *baseToolMessageItem) Animate(msg anim.StepMsg) tea.Cmd {
 
 // RawRender implements [MessageItem].
 func (t *baseToolMessageItem) RawRender(width int) string {
-	toolItemWidth := width - MessageLeftPaddingTotal
-	if t.hasCappedWidth {
+	var toolItemWidth int
+	if t.isCompact {
+		// Compact mode uses sty.Messages.ToolCallCompact which has no padding
+		// or border (zero visual prefix width). The full width is available for
+		// the single-line header — no subtraction needed.
+		toolItemWidth = max(0, width)
+	} else if t.hasCappedWidth {
 		toolItemWidth = cappedToolWidth(width)
+	} else {
+		toolItemWidth = width - MessageLeftPaddingTotal
 	}
 
 	content, height, ok := t.getCachedRender(toolItemWidth)
@@ -405,7 +538,11 @@ func (t *baseToolMessageItem) ToolCall() message.ToolCall {
 
 // SetToolCall sets the tool call associated with this message item.
 func (t *baseToolMessageItem) SetToolCall(tc message.ToolCall) {
-	t.toolCall = tc
+	normalized := normalizeSubagentToolCall(tc)
+	if normalized.Input == "" && t.toolCall.Input != "" {
+		normalized.Input = t.toolCall.Input
+	}
+	t.toolCall = normalized
 	t.clearCache()
 	t.Bump()
 }
@@ -442,6 +579,24 @@ func (t *baseToolMessageItem) SetStatus(status ToolStatus) {
 // Status returns the current tool status.
 func (t *baseToolMessageItem) Status() ToolStatus {
 	return t.status
+}
+
+// RenderPreview renders the tool non-compact without cache or prefix.
+// Bypasses isCompact so the caller gets the full content view regardless
+// of the tool's stored compact state. The caller is responsible for passing
+// the correct available width — no additional capping is applied here.
+func (t *baseToolMessageItem) RenderPreview(width int) string {
+	// Apply capping once here; RenderTool implementations must NOT re-cap.
+	toolItemWidth := cappedToolWidth(width)
+	return t.toolRenderer.RenderTool(t.sty, toolItemWidth, &ToolRenderOpts{
+		ToolCall:        t.toolCall,
+		Result:          t.result,
+		Anim:            t.anim,
+		Status:          t.computeStatus(),
+		Compact:         false,
+		IsSpinning:      t.isSpinning(),
+		ExpandedContent: t.expandedContent,
+	})
 }
 
 // computeStatus computes the effective status considering the result.
@@ -589,12 +744,31 @@ func toolIcon(sty *styles.Styles, status ToolStatus) string {
 	}
 }
 
+// toolNestedParam renders the primary parameter for a compact/nested tool line.
+// Uses ContentTruncation style (same as "… (N collapsed)") so the path or
+// command is clearly readable but visually subordinate to the tool name.
+// Only the first param is shown — no key=value pairs in compact mode.
+func toolNestedParam(sty *styles.Styles, params []string, width int) string {
+	if len(params) == 0 {
+		return ""
+	}
+	mainParam := params[0]
+	if mainParam == "" {
+		return ""
+	}
+	if width >= 0 {
+		mainParam = ansi.Truncate(mainParam, width, "…")
+	}
+	return sty.Tool.ContentTruncation.Render(mainParam)
+}
+
 // toolParamList formats parameters as "main (key=value, ...)" with truncation.
-// toolParamList formats tool parameters as "main (key=value, ...)" with truncation.
 func toolParamList(sty *styles.Styles, params []string, width int) string {
-	// minSpaceForMainParam is the min space required for the main param
-	// if this is less that the value set we will only show the main param nothing else
-	const minSpaceForMainParam = 30
+	// minSpaceForMainParam is the minimum number of characters needed to display
+	// the main parameter. If less space is available we omit the extra key=value
+	// pairs but still show the (truncated) main param — a path ending with "…"
+	// is far more useful than nothing at all.
+	const minSpaceForMainParam = 10
 	if len(params) == 0 {
 		return ""
 	}
@@ -625,6 +799,9 @@ func toolParamList(sty *styles.Styles, params []string, width int) string {
 }
 
 // toolHeader builds the tool header line: "● ToolName params..."
+// When nested (compact mode inside an agent tree): shows only the primary param
+// styled like the "… (N collapsed)" indicator for clear readability.
+// When not nested (full view): shows all params with key=value pairs.
 func toolHeader(sty *styles.Styles, status ToolStatus, name string, width int, nested bool, params ...string) string {
 	icon := toolIcon(sty, status)
 	nameStyle := sty.Tool.NameNormal
@@ -635,7 +812,12 @@ func toolHeader(sty *styles.Styles, status ToolStatus, name string, width int, n
 	prefix := fmt.Sprintf("%s %s ", icon, toolName)
 	prefixWidth := lipgloss.Width(prefix)
 	remainingWidth := width - prefixWidth
-	paramsStr := toolParamList(sty, params, remainingWidth)
+	var paramsStr string
+	if nested {
+		paramsStr = toolNestedParam(sty, params, remainingWidth)
+	} else {
+		paramsStr = toolParamList(sty, params, remainingWidth)
+	}
 	return prefix + paramsStr
 }
 
@@ -1339,7 +1521,7 @@ func (t *baseToolMessageItem) formatResultForCopy() string {
 		return t.formatWebFetchResultForCopy()
 	case tools.AgentToolName:
 		return t.formatAgentResultForCopy()
-	case tools.DownloadToolName, tools.GrepToolName, tools.GlobToolName, tools.LSToolName, tools.SourcegraphToolName, tools.DiagnosticsToolName, tools.TodosToolName:
+	case tools.DownloadToolName, tools.GrepToolName, tools.GlobToolName, tools.LSToolName, tools.SourcegraphToolName, tools.DiagnosticsToolName:
 		return fmt.Sprintf("```\n%s\n```", t.result.Content)
 	default:
 		return t.result.Content
@@ -1442,22 +1624,19 @@ func (t *baseToolMessageItem) formatEditResultForCopy() string {
 		return ""
 	}
 
-	var meta tools.EditResponseMetadata
-	if json.Unmarshal([]byte(t.result.Metadata), &meta) != nil {
-		return t.result.Content
-	}
+	oldContent, newContent := extractEditDiffContent(t.result.Metadata)
 
 	var params tools.EditParams
 	json.Unmarshal([]byte(t.toolCall.Input), &params)
 
 	var result strings.Builder
 
-	if meta.OldContent != "" || meta.NewContent != "" {
+	if oldContent != "" || newContent != "" {
 		fileName := params.FilePath
 		if fileName != "" {
 			fileName = fsext.PrettyPath(fileName)
 		}
-		diffContent, additions, removals := diff.GenerateDiff(meta.OldContent, meta.NewContent, fileName)
+		diffContent, additions, removals := diff.GenerateDiff(oldContent, newContent, fileName)
 
 		fmt.Fprintf(&result, "Changes: +%d -%d\n", additions, removals)
 		result.WriteString("```diff\n")
@@ -1685,8 +1864,6 @@ func prettifyToolName(name string) string {
 		return "List Directory"
 	case tools.SourcegraphToolName:
 		return "Sourcegraph"
-	case tools.TodosToolName:
-		return "To-Do"
 	case tools.ViewToolName:
 		return "Read File"
 	case tools.WriteToolName:

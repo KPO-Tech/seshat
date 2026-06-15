@@ -104,6 +104,9 @@ type Workspace interface {
 	AgentModel() AgentModel
 	AgentIsReady() bool
 	ExecutionMode() string
+	// WorktreePath returns the active git worktree path for the current session,
+	// or empty string if no worktree is active.
+	WorktreePath() string
 	AgentQueuedPrompts(sessionID string) int
 	AgentQueuedPromptsList(sessionID string) []string
 	AgentClearQueue(sessionID string)
@@ -126,6 +129,10 @@ type Workspace interface {
 	PermissionDeny(perm permission.PermissionRequest) bool
 	PermissionSkipRequests() bool
 	PermissionSetSkipRequests(skip bool)
+
+	// AnswerAskUser resolves a pending ask_user_question prompt.
+	// Returns true if the ID was found and the response delivered.
+	AnswerAskUser(id, value string) bool
 
 	// FileTracker
 	FileTrackerRecordRead(ctx context.Context, sessionID, path string)

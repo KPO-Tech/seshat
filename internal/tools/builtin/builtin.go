@@ -8,7 +8,7 @@ import (
 	fsTool "github.com/EngineerProjects/nexus-engine/internal/tools/files/fs"
 	globTool "github.com/EngineerProjects/nexus-engine/internal/tools/files/glob"
 	grepTool "github.com/EngineerProjects/nexus-engine/internal/tools/files/grep"
-	notebookEditTool "github.com/EngineerProjects/nexus-engine/internal/tools/files/notebook_edit"
+	notebookTool "github.com/EngineerProjects/nexus-engine/internal/tools/files/notebook"
 	patchTool "github.com/EngineerProjects/nexus-engine/internal/tools/files/patch"
 	fileReadTool "github.com/EngineerProjects/nexus-engine/internal/tools/files/read"
 	readURLTool "github.com/EngineerProjects/nexus-engine/internal/tools/files/read_url"
@@ -91,7 +91,9 @@ func RegisterBuiltinToolsWithConfig(reg *tool.Registry, config *Config) error {
 		fsTool.NewGetMetadataTool(config.WorkingDir),
 		fsTool.NewListDirectoryTool(config.WorkingDir),
 		fsTool.NewRemoveTool(config.WorkingDir),
-		notebookEditTool.NewTool(),
+		notebookTool.NewEditTool(),
+		notebookTool.NewCreateTool(),
+		notebookTool.NewWriteTool(),
 		docxTool.NewDocxTool(config.WorkingDir),
 		askUserQuestionTool.NewTool(askUserConfig),
 		webfetchTool.NewTool(webFetchConfig),

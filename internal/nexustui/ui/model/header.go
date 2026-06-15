@@ -163,7 +163,12 @@ func renderHeaderDetails(
 	metadata = dot + metadata
 
 	const dirTrimLimit = 4
-	cwd := fsext.DirTrim(fsext.PrettyPath(com.Workspace.WorkingDir()), dirTrimLimit)
+	var cwd string
+	if wt := com.Workspace.WorktreePath(); wt != "" {
+		cwd = "⎇ " + fsext.DirTrim(fsext.PrettyPath(wt), dirTrimLimit)
+	} else {
+		cwd = fsext.DirTrim(fsext.PrettyPath(com.Workspace.WorkingDir()), dirTrimLimit)
+	}
 	cwd = t.Header.WorkingDir.Render(cwd)
 
 	result := cwd + metadata

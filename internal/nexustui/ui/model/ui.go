@@ -254,6 +254,11 @@ type UI struct {
 	skillCommands  []commands.CustomCommand
 	mcpPrompts     []commands.MCPPrompt
 
+	// askUserCustomTextID is set when an ask_user_question "Other" (free-text) prompt
+	// is pending. The next textarea submit is routed to AnswerAskUser instead of
+	// the agent, then cleared.
+	askUserCustomTextID string
+
 	// forceCompactMode tracks whether compact mode is forced by user toggle
 	forceCompactMode bool
 
@@ -771,6 +776,34 @@ func (m *UI) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				cmds = append(cmds, cmd)
 			}
 		}
+
+	case pubsub.Event[agenttools.AskUserRequest]:
+		if msg.Type == pubsub.CreatedEvent {
+			req := msg.Payload
+			if req.IsCustomText {
+				// "Other" follow-up: redirect the next textarea submit.
+				m.askUserCustomTextID = req.ID
+				m.focus = uiFocusEditor
+				m.chat.Blur()
+				m.textarea.Placeholder = "Type your answer and press Enter…"
+				if cmd := m.textarea.Focus(); cmd != nil {
+					cmds = append(cmds, cmd)
+				}
+			} else {
+				if m.chat.ActivateAskUserQuestion(req) {
+					m.focus = uiFocusMain
+					m.textarea.Blur()
+					m.chat.Focus()
+					if cmd := m.chat.ScrollToSelectedAndAnimate(); cmd != nil {
+						cmds = append(cmds, cmd)
+					}
+				}
+			}
+		}
+
+	case chat.AnswerAskUserMsg:
+		m.com.Workspace.AnswerAskUser(msg.ID, msg.Value)
+
 	case cancelTimerExpiredMsg:
 		m.isCanceling = false
 	case tea.TerminalVersionMsg:
@@ -1066,7 +1099,7 @@ func (m *UI) setSessionMessages(msgs []message.Message) tea.Cmd {
 		case message.Assistant:
 			items = append(items, chat.ExtractMessageItems(m.com.Styles, msg, toolResultMap)...)
 			if msg.FinishPart() != nil && msg.FinishPart().Reason == message.FinishReasonEndTurn {
-				infoItem := chat.NewAssistantInfoItem(m.com.Styles, msg, m.com.Config(), time.Unix(m.lastUserMessageTime, 0))
+				infoItem := chat.NewAssistantInfoItem(m.com.Styles, msg, m.com.Config(), time.UnixMilli(m.lastUserMessageTime))
 				items = append(items, infoItem)
 			}
 		default:
@@ -1195,7 +1228,7 @@ func (m *UI) appendSessionMessage(msg message.Message) tea.Cmd {
 			}
 		}
 		if msg.FinishPart() != nil && msg.FinishPart().Reason == message.FinishReasonEndTurn {
-			infoItem := chat.NewAssistantInfoItem(m.com.Styles, &msg, m.com.Config(), time.Unix(m.lastUserMessageTime, 0))
+			infoItem := chat.NewAssistantInfoItem(m.com.Styles, &msg, m.com.Config(), time.UnixMilli(m.lastUserMessageTime))
 			m.chat.AppendMessages(infoItem)
 			if m.chat.Follow() {
 				if cmd := m.chat.ScrollToBottomAndAnimate(); cmd != nil {
@@ -1339,7 +1372,7 @@ func (m *UI) updateSessionMessage(msg message.Message) tea.Cmd {
 
 	if isEndTurn {
 		if infoItem := m.chat.MessageItem(chat.AssistantInfoID(msg.ID)); infoItem == nil {
-			newInfoItem := chat.NewAssistantInfoItem(m.com.Styles, &msg, m.com.Config(), time.Unix(m.lastUserMessageTime, 0))
+			newInfoItem := chat.NewAssistantInfoItem(m.com.Styles, &msg, m.com.Config(), time.UnixMilli(m.lastUserMessageTime))
 			m.chat.AppendMessages(newInfoItem)
 		}
 	}
@@ -1420,8 +1453,8 @@ func (m *UI) updateSessionMessage(msg message.Message) tea.Cmd {
 func (m *UI) handleChildSessionMessage(event pubsub.Event[message.Message]) tea.Cmd {
 	var cmds []tea.Cmd
 
-	// Only process messages with tool calls or results.
-	if len(event.Payload.ToolCalls()) == 0 && len(event.Payload.ToolResults()) == 0 {
+	isStreaming := strings.HasSuffix(event.Payload.ID, "_streaming")
+	if !isStreaming && len(event.Payload.ToolCalls()) == 0 && len(event.Payload.ToolResults()) == 0 {
 		return nil
 	}
 
@@ -1434,18 +1467,12 @@ func (m *UI) handleChildSessionMessage(event pubsub.Event[message.Message]) tea.
 
 	// Find the parent agent tool item.
 	var agentItem chat.NestedToolContainer
-	for i := 0; i < m.chat.Len(); i++ {
-		item := m.chat.MessageItem(toolCallID)
-		if item == nil {
-			continue
-		}
+	item := m.chat.MessageItem(toolCallID)
+	if item != nil {
 		if agent, ok := item.(chat.NestedToolContainer); ok {
 			if toolMessageItem, ok := item.(chat.ToolMessageItem); ok {
 				if toolMessageItem.ToolCall().ID == toolCallID {
-					// Verify this agent belongs to the correct parent message.
-					// We can't directly check parentMessageID on the item, so we trust the session parsing.
 					agentItem = agent
-					break
 				}
 			}
 		}
@@ -1453,6 +1480,20 @@ func (m *UI) handleChildSessionMessage(event pubsub.Event[message.Message]) tea.
 
 	if agentItem == nil {
 		return nil
+	}
+
+	if isStreaming {
+		if reporter, ok := agentItem.(chat.SubAgentLiveReporter); ok {
+			reasoning := event.Payload.ReasoningContent().Thinking
+			content := event.Payload.Content().Text
+			reporter.SetSubAgentStreaming(reasoning, content)
+		}
+		if m.chat.Follow() {
+			if cmd := m.chat.ScrollToBottomAndAnimate(); cmd != nil {
+				cmds = append(cmds, cmd)
+			}
+		}
+		return tea.Sequence(cmds...)
 	}
 
 	// Get existing nested tools.
@@ -2171,6 +2212,16 @@ func (m *UI) handleKeyPressMsg(msg tea.KeyPressMsg) tea.Cmd {
 					return m.openQuitDialog()
 				}
 
+				// If an ask_user_question "Other" prompt is pending, deliver the
+				// custom text as the answer instead of submitting to the agent.
+				if m.askUserCustomTextID != "" && value != "" {
+					pendingID := m.askUserCustomTextID
+					m.askUserCustomTextID = ""
+					m.textarea.Placeholder = m.readyPlaceholder
+					m.com.Workspace.AnswerAskUser(pendingID, value)
+					return tea.Batch(cmds...)
+				}
+
 				attachments := m.attachments.List()
 				m.attachments.Reset()
 				if len(value) == 0 && !message.ContainsTextAttachment(attachments) {
@@ -2209,7 +2260,12 @@ func (m *UI) handleKeyPressMsg(msg tea.KeyPressMsg) tea.Cmd {
 				prevHeight := m.textarea.Height()
 				m.textarea.InsertRune('\n')
 				m.closeCompletions()
-				cmds = append(cmds, m.updateTextareaWithPrevHeight(msg, prevHeight))
+				// Don't pass the key msg to textarea.Update here: InsertRune already
+				// inserted the newline, and for ctrl+j the msg.Text="\n" would cause
+				// textarea.Update's default branch to insert a second newline.
+				if cmd := m.handleTextareaHeightChange(prevHeight); cmd != nil {
+					cmds = append(cmds, cmd)
+				}
 			case key.Matches(msg, m.keyMap.Editor.HistoryPrev):
 				cmd := m.handleHistoryUp(msg)
 				if cmd != nil {
@@ -2293,6 +2349,12 @@ func (m *UI) handleKeyPressMsg(msg tea.KeyPressMsg) tea.Cmd {
 				}
 			}
 		case uiFocusMain:
+			// Let the focused interactive item consume the key first (e.g. ask_user_question
+			// option picker). Only fall through to chat scroll/select if not consumed.
+			if ok, cmd := m.chat.HandleKeyMsg(msg); ok {
+				cmds = append(cmds, cmd)
+				break
+			}
 			switch {
 			case key.Matches(msg, m.keyMap.Tab):
 				if m.hasSidebarTasks() {
@@ -2378,11 +2440,7 @@ func (m *UI) handleKeyPressMsg(msg tea.KeyPressMsg) tea.Cmd {
 				}
 				m.chat.SelectLast()
 			default:
-				if ok, cmd := m.chat.HandleKeyMsg(msg); ok {
-					cmds = append(cmds, cmd)
-				} else {
-					handleGlobalKeys(msg)
-				}
+				handleGlobalKeys(msg)
 			}
 		case uiFocusSidebar:
 			switch {
@@ -2444,7 +2502,14 @@ func (m *UI) Draw(scr uv.Screen, area uv.Rectangle) *tea.Cursor {
 
 	if m.layout != layout {
 		m.layout = layout
+		prevHeight := m.textarea.Height()
 		m.updateSize()
+		// SetWidth can trigger recalculateHeight which may change textarea.Height.
+		// If so, regenerate the layout once with the correct height.
+		if m.textarea.Height() != prevHeight {
+			m.layout = m.generateLayout(area.Dx(), area.Dy())
+			m.updateSize()
+		}
 	}
 
 	// Clear the screen first
@@ -2547,9 +2612,9 @@ func (m *UI) Draw(scr uv.Screen, area uv.Rectangle) *tea.Cursor {
 			// +1 = left border character │ before textarea text.
 			cur.X += m.layout.editor.Min.X + 1
 			// editor.Min.Y = screen row where the editor area starts.
-			// +1 = the leading empty line from strings.Join(["", box, ""], "\n").
-			// +1 = the top border row ┌───┐.
-			cur.Y += m.layout.editor.Min.Y + 2
+			// Add any attachment rows rendered above the input box, then offset by
+			// the top border row ┌───┐ so the cursor lands on the textarea text.
+			cur.Y += m.layout.editor.Min.Y + m.editorAttachmentsHeight(m.layout.editor.Dx()) + 1
 			return cur
 		}
 	}
@@ -2570,16 +2635,7 @@ func (m *UI) View() tea.View {
 	canvas := uv.NewScreenBuffer(m.width, m.height)
 	v.Cursor = m.Draw(canvas, canvas.Bounds())
 
-	content := strings.ReplaceAll(canvas.Render(), "\r\n", "\n") // normalize newlines
-	contentLines := strings.Split(content, "\n")
-	for i, line := range contentLines {
-		// Trim trailing spaces for concise rendering
-		contentLines[i] = strings.TrimRight(line, " ")
-	}
-
-	content = strings.Join(contentLines, "\n")
-
-	v.Content = content
+	v.Content = strings.ReplaceAll(canvas.Render(), "\r\n", "\n") // normalize newlines
 	if m.progressBarEnabled && m.sendProgressBar && m.isAgentBusy() {
 		// HACK: use a random percentage to prevent ghostty from hiding it
 		// after a timeout.
@@ -3313,13 +3369,13 @@ func (m *UI) completionsPosition() image.Point {
 	cur := m.textarea.Cursor()
 	if cur == nil {
 		return image.Point{
-			X: m.layout.editor.Min.X,
-			Y: m.layout.editor.Min.Y,
+			X: m.layout.editor.Min.X + 1,
+			Y: m.layout.editor.Min.Y + m.editorAttachmentsHeight(m.layout.editor.Dx()) + 1,
 		}
 	}
 	return image.Point{
-		X: cur.X + m.layout.editor.Min.X,
-		Y: m.layout.editor.Min.Y + cur.Y,
+		X: cur.X + m.layout.editor.Min.X + 1,
+		Y: cur.Y + m.layout.editor.Min.Y + m.editorAttachmentsHeight(m.layout.editor.Dx()) + 1,
 	}
 }
 
@@ -3383,11 +3439,19 @@ func (m *UI) renderEditorView(width int) string {
 		Width(boxWidth).
 		Render(m.textarea.View())
 
-	return strings.Join([]string{
-		attachmentsView,
-		box,
-		"",
-	}, "\n")
+	parts := make([]string, 0, 3)
+	if attachmentsView != "" {
+		parts = append(parts, attachmentsView)
+	}
+	parts = append(parts, box, "")
+	return strings.Join(parts, "\n")
+}
+
+func (m *UI) editorAttachmentsHeight(width int) int {
+	if len(m.attachments.List()) == 0 {
+		return 0
+	}
+	return lipgloss.Height(m.attachments.Render(width))
 }
 
 // cacheSidebarLogo renders and caches the sidebar logo at the specified width.

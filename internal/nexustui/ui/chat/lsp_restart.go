@@ -30,7 +30,7 @@ type LSPRestartToolRenderContext struct{}
 
 // RenderTool implements the [ToolRenderer] interface.
 func (r *LSPRestartToolRenderContext) RenderTool(sty *styles.Styles, width int, opts *ToolRenderOpts) string {
-	cappedWidth := cappedToolWidth(width)
+	cappedWidth := width
 	if opts.IsPending() {
 		return pendingTool(sty, "Restart LSP", opts.Anim, opts.Compact)
 	}

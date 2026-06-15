@@ -88,12 +88,41 @@ func TestValidateWorkspaceRejectsAbsolutePathOutsideWorkspace(t *testing.T) {
 	}
 }
 
+func TestValidateWorkspaceAllowsSafeAbsoluteReadPathOutsideWorkspace(t *testing.T) {
+	validator := NewSecurityValidator()
+	if got := validator.ValidateWorkspace("ls -la /tmp", t.TempDir()); got != nil {
+		t.Fatalf("expected safe absolute read path to be allowed, got %v", got)
+	}
+}
+
 func TestValidateWorkspaceAllowsAbsolutePathInsideWorkspace(t *testing.T) {
 	root := t.TempDir()
 	inside := filepath.Join(root, "file.txt")
 	validator := NewSecurityValidator()
 	if got := validator.ValidateWorkspace("cat "+inside, root); got != nil {
 		t.Fatalf("expected workspace path to be allowed, got %v", got)
+	}
+}
+
+func TestValidateWorkspaceAllowsAbsoluteWritePathOutsideWorkspace(t *testing.T) {
+	validator := NewSecurityValidator()
+	if got := validator.ValidateWorkspace("rm -rf /tmp/nexus-scratch", t.TempDir()); got != nil {
+		t.Fatalf("expected safe absolute write path to reach approval flow, got %v", got)
+	}
+}
+
+func TestValidateWorkspaceRejectsProtectedAbsoluteWritePath(t *testing.T) {
+	validator := NewSecurityValidator()
+	if got := validator.ValidateWorkspace("rm -rf /etc/nexus", t.TempDir()); got == nil {
+		t.Fatal("expected protected system write path to be rejected")
+	}
+}
+
+func TestValidateWorkspaceRejectsRelativeRemovalEscape(t *testing.T) {
+	root := t.TempDir()
+	validator := NewSecurityValidator()
+	if got := validator.ValidateWorkspace("rm -rf ../outside", root); got == nil {
+		t.Fatal("expected relative removal path escape to be rejected")
 	}
 }
 
@@ -141,5 +170,41 @@ func TestCheckPermissions_RejectsApplyPatchViaShell(t *testing.T) {
 	}
 	if !strings.Contains(result.Reason, "apply_patch tool") {
 		t.Errorf("reason should mention apply_patch tool, got: %q", result.Reason)
+	}
+}
+
+func TestCheckPermissions_AllowsSafeAbsoluteReadOutsideWorkspace(t *testing.T) {
+	tl := NewTool(DefaultToolConfig())
+	result := tl.CheckPermissions(
+		t.Context(),
+		map[string]any{"command": "ls -la /tmp"},
+		tool.ToolUseContext{},
+	)
+	if result.Behavior != types.PermissionBehaviorAllow && result.Behavior != types.PermissionBehaviorPassthrough {
+		t.Errorf("expected allow/passthrough, got %q (%s)", result.Behavior, result.Reason)
+	}
+}
+
+func TestCheckPermissions_AsksForSafeAbsoluteRemoval(t *testing.T) {
+	tl := NewTool(DefaultToolConfig())
+	result := tl.CheckPermissions(
+		t.Context(),
+		map[string]any{"command": "rm -rf /tmp/nexus-scratch"},
+		tool.ToolUseContext{},
+	)
+	if result.Behavior != types.PermissionBehaviorAsk {
+		t.Errorf("expected Ask, got %q (%s)", result.Behavior, result.Reason)
+	}
+}
+
+func TestCheckPermissions_DeniesProtectedSystemRemoval(t *testing.T) {
+	tl := NewTool(DefaultToolConfig())
+	result := tl.CheckPermissions(
+		t.Context(),
+		map[string]any{"command": "rm -rf /etc/nexus"},
+		tool.ToolUseContext{},
+	)
+	if result.Behavior != types.PermissionBehaviorDeny {
+		t.Errorf("expected Deny, got %q (%s)", result.Behavior, result.Reason)
 	}
 }
