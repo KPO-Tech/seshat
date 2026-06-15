@@ -10,6 +10,7 @@ import (
 	"charm.land/bubbles/v2/help"
 	"charm.land/bubbles/v2/key"
 	"charm.land/bubbles/v2/textinput"
+	"charm.land/bubbles/v2/viewport"
 	tea "charm.land/bubbletea/v2"
 	"charm.land/catwalk/pkg/catwalk"
 	"charm.land/lipgloss/v2"
@@ -39,6 +40,7 @@ const (
 	settingsViewWebSearch
 	settingsViewTools
 	settingsViewMCP
+	settingsViewMCPDetail
 	settingsViewSkills
 )
 
@@ -88,13 +90,15 @@ type Settings struct {
 	toolsInput textinput.Model
 	toolsAll   []workspace.ToolInfo
 
+	// mcp sub-view state
+	mcpList           *list.FilterableList
+	selectedMCPName   string
+	mcpDetailViewport viewport.Model
+
 	// skills sub-view state
 	skillsList  *ToolsList
 	skillsInput textinput.Model
 	skillsAll   []skills.CatalogEntry
-
-	// info sub-views (MCP only) — rendered as text
-	infoLines []string
 
 	keyMap struct {
 		Select, Next, Previous, Back, Close key.Binding
@@ -162,6 +166,13 @@ func NewSettings(com *common.Common) (*Settings, error) {
 	s.toolsInput.Placeholder = "Filter tools..."
 	s.toolsInput.SetStyles(t.TextInput)
 	s.toolsList = newToolsList(t)
+
+	// MCP list.
+	s.mcpList = list.NewFilterableList()
+	s.mcpList.Focus()
+	s.mcpList.SetSelected(0)
+	s.mcpList.SetGap(1)
+	s.mcpDetailViewport = viewport.New()
 
 	// Skills filter input + list.
 	s.skillsInput = textinput.New()
@@ -290,13 +301,14 @@ func (s *Settings) handleSubKey(msg tea.KeyPressMsg) Action {
 		return s.handleWebSearchKey(msg)
 	case settingsViewTools:
 		return s.handleToolsKey(msg)
+	case settingsViewMCP:
+		return s.handleMCPKey(msg)
+	case settingsViewMCPDetail:
+		return s.handleMCPDetailKey(msg)
 	case settingsViewSkills:
 		return s.handleSkillsKey(msg)
-	default:
-		// Info views (MCP): any unhandled key navigates back.
-		s.gotoParent()
-		return nil
 	}
+	return nil
 }
 
 func (s *Settings) handleProvKey(msg tea.KeyPressMsg) Action {
@@ -442,6 +454,43 @@ func (s *Settings) handleToolsKey(msg tea.KeyPressMsg) Action {
 	return nil
 }
 
+func (s *Settings) handleMCPKey(msg tea.KeyPressMsg) Action {
+	switch {
+	case key.Matches(msg, s.keyMap.Previous):
+		if s.mcpList.IsSelectedFirst() {
+			s.mcpList.SelectLast()
+		} else {
+			s.mcpList.SelectPrev()
+		}
+		s.mcpList.ScrollToSelected()
+	case key.Matches(msg, s.keyMap.Next):
+		if s.mcpList.IsSelectedLast() {
+			s.mcpList.SelectFirst()
+		} else {
+			s.mcpList.SelectNext()
+		}
+		s.mcpList.ScrollToSelected()
+	case key.Matches(msg, s.keyMap.Select):
+		if item := s.mcpList.SelectedItem(); item != nil {
+			if mi, ok := item.(*settingsMCPItem); ok {
+				s.selectedMCPName = mi.name
+				s.gotoView(settingsViewMCPDetail)
+			}
+		}
+	}
+	return nil
+}
+
+func (s *Settings) handleMCPDetailKey(msg tea.KeyPressMsg) Action {
+	switch {
+	case key.Matches(msg, s.keyMap.Next):
+		s.mcpDetailViewport.ScrollDown(1)
+	case key.Matches(msg, s.keyMap.Previous):
+		s.mcpDetailViewport.ScrollUp(1)
+	}
+	return nil
+}
+
 func (s *Settings) rebuildToolsList(filter string) {
 	groups := buildToolGroups(s.com.Styles, s.toolsAll)
 	s.toolsList.SetGroups(groups...)
@@ -486,6 +535,99 @@ func (s *Settings) rebuildSkillsList(filter string) {
 	s.skillsList.ScrollToTop()
 }
 
+func (s *Settings) rebuildMCPList() {
+	cfg := s.com.Config()
+	states := s.com.Workspace.MCPGetStates()
+
+	var items []list.FilterableItem
+	if cfg != nil {
+		for _, server := range cfg.MCP.Sorted() {
+			info := states[server.Name]
+			info.Name = server.Name
+			items = append(items, &settingsMCPItem{
+				Versioned: list.NewVersioned(),
+				name:      server.Name,
+				info:      info,
+				t:         s.com.Styles,
+			})
+		}
+	}
+	s.mcpList.SetItems(items...)
+	s.mcpList.ScrollToTop()
+	s.mcpList.Focus()
+	s.mcpList.SetSelected(0)
+}
+
+func (s *Settings) buildMCPDetail(serverName string) string {
+	t := s.com.Styles
+	accent := lipgloss.NewStyle().Foreground(t.Logo.FieldColor).Bold(true)
+	muted := t.Sidebar.WorkingDir
+	bold := lipgloss.NewStyle().Bold(true)
+
+	states := s.com.Workspace.MCPGetStates()
+	info, hasInfo := states[serverName]
+
+	var lines []string
+	lines = append(lines, "")
+	lines = append(lines, accent.Render("  "+serverName))
+	lines = append(lines, "")
+
+	if hasInfo {
+		switch info.State {
+		case mcp.StateConnected:
+			statusStr := fmt.Sprintf("connected · %d tools · %d prompts · %d resources",
+				info.Counts.Tools, info.Counts.Prompts, info.Counts.Resources)
+			connStyle := lipgloss.NewStyle().Foreground(t.ToolCallSuccess.GetForeground())
+			lines = append(lines, muted.Render("  Status  ")+connStyle.Render(statusStr))
+		case mcp.StateStarting:
+			lines = append(lines, muted.Render("  Status  starting…"))
+		case mcp.StateError:
+			errStr := "error"
+			if info.Error != nil {
+				errStr = "error: " + info.Error.Error()
+			}
+			errStyle := lipgloss.NewStyle().Foreground(t.Tool.IconError.GetForeground())
+			lines = append(lines, muted.Render("  Status  ")+errStyle.Render(errStr))
+		case mcp.StateDisabled:
+			lines = append(lines, muted.Render("  Status  disabled"))
+		}
+	} else {
+		lines = append(lines, muted.Render("  Status  offline"))
+	}
+
+	// Tools list for this server.
+	var serverTools []*mcp.Tool
+	for name, tools := range mcp.Tools() {
+		if name == serverName {
+			serverTools = tools
+			break
+		}
+	}
+
+	if len(serverTools) > 0 {
+		lines = append(lines, "")
+		lines = append(lines, accent.Render(fmt.Sprintf("  Tools (%d)", len(serverTools))))
+		for _, tool := range serverTools {
+			lines = append(lines, "")
+			lines = append(lines, bold.Render("    "+tool.Name))
+			if desc := strings.TrimSpace(tool.Description); desc != "" {
+				// Only first line of description.
+				if idx := strings.IndexByte(desc, '\n'); idx >= 0 {
+					desc = desc[:idx]
+				}
+				lines = append(lines, muted.Render("      "+desc))
+			}
+		}
+	} else if hasInfo && info.State == mcp.StateConnected {
+		lines = append(lines, "")
+		lines = append(lines, muted.Render("  No tools available."))
+	}
+
+	lines = append(lines, "")
+	lines = append(lines, muted.Render("  esc or ← to go back"))
+	return strings.Join(lines, "\n")
+}
+
 func (s *Settings) activateSelected() Action {
 	if item := s.rootList.SelectedItem(); item != nil {
 		if si, ok := item.(*settingsSectionItem); ok {
@@ -523,7 +665,11 @@ func (s *Settings) gotoView(v settingsView) {
 		s.toolsInput.Focus()
 		s.rebuildToolsList("")
 	case settingsViewMCP:
-		s.infoLines = s.infoMCP()
+		s.rebuildMCPList()
+	case settingsViewMCPDetail:
+		content := s.buildMCPDetail(s.selectedMCPName)
+		s.mcpDetailViewport.SetContent(content)
+		s.mcpDetailViewport.GotoTop()
 	case settingsViewSkills:
 		entries, _ := s.com.Workspace.ListSkills(context.Background())
 		s.skillsAll = entries
@@ -537,6 +683,8 @@ func (s *Settings) gotoParent() {
 	switch s.view {
 	case settingsViewProvidersLLM, settingsViewWebSearch:
 		s.gotoView(settingsViewProviders)
+	case settingsViewMCPDetail:
+		s.gotoView(settingsViewMCP)
 	default:
 		s.gotoRoot()
 	}
@@ -679,7 +827,7 @@ func (s *Settings) Draw(scr uv.Screen, area uv.Rectangle) *tea.Cursor {
 	switch s.view {
 	case settingsViewRoot, settingsViewProvidersLLM, settingsViewTools, settingsViewSkills:
 		overhead = titleH + inputH + subBlock + sepAbove + helpH + viewFrameH + listMarginH
-	case settingsViewProviders, settingsViewTheme, settingsViewWebSearch:
+	case settingsViewProviders, settingsViewTheme, settingsViewWebSearch, settingsViewMCP:
 		overhead = titleH + subBlock + sepAbove + helpH + viewFrameH + listMarginH
 	default:
 		overhead = titleH + 1 + sepAbove + helpH + viewFrameH
@@ -703,6 +851,11 @@ func (s *Settings) Draw(scr uv.Screen, area uv.Rectangle) *tea.Cursor {
 		s.webSearchList.SetSize(innerW, finalContentH)
 	case settingsViewTools:
 		s.toolsList.SetSize(innerW, finalContentH)
+	case settingsViewMCP:
+		s.mcpList.SetSize(innerW, finalContentH)
+	case settingsViewMCPDetail:
+		s.mcpDetailViewport.SetWidth(innerW)
+		s.mcpDetailViewport.SetHeight(finalContentH)
 	case settingsViewSkills:
 		s.skillsList.SetSize(innerW, finalContentH)
 	}
@@ -769,15 +922,22 @@ func (s *Settings) Draw(scr uv.Screen, area uv.Rectangle) *tea.Cursor {
 		rc.Parts = append(rc.Parts, "")
 		rc.AddPart(t.Dialog.List.Height(s.skillsList.Height()).Render(s.skillsList.Render()))
 
-	default: // MCP — fixed-height info block
-		rc.AddPart(sep)
-		infoFixed := make([]string, finalContentH)
-		for i := range infoFixed {
-			if i < len(s.infoLines) {
-				infoFixed[i] = s.infoLines[i]
-			}
+	case settingsViewMCP:
+		cfg := s.com.Config()
+		serverCount := 0
+		if cfg != nil {
+			serverCount = len(cfg.MCP)
 		}
-		rc.AddPart(lipgloss.NewStyle().Width(innerW).Render(strings.Join(infoFixed, "\n")))
+		rc.AddPart(sep)
+		rc.AddPart(t.Dialog.SecondaryText.Render(
+			fmt.Sprintf("  %d servers — ↑↓ navigate · enter to inspect", serverCount),
+		))
+		rc.Parts = append(rc.Parts, "")
+		rc.AddPart(t.Dialog.List.Height(s.mcpList.Height()).Render(s.mcpList.Render()))
+
+	case settingsViewMCPDetail:
+		rc.AddPart(sep)
+		rc.AddPart(t.Dialog.List.Height(finalContentH).Render(s.mcpDetailViewport.View()))
 	}
 
 	rc.Parts = append(rc.Parts, sep)
@@ -803,6 +963,8 @@ func (s *Settings) viewTitle() string {
 		return "Settings  ›  Tools"
 	case settingsViewMCP:
 		return "Settings  ›  MCP"
+	case settingsViewMCPDetail:
+		return "Settings  ›  MCP  ›  " + s.selectedMCPName
 	case settingsViewSkills:
 		return "Settings  ›  Skills"
 	default:
@@ -896,6 +1058,85 @@ func (s *Settings) infoMCP() []string {
 	return lines
 }
 
+// ─── settingsMCPItem ───────────────────────────────────────────────────────────
+
+type settingsMCPItem struct {
+	*list.Versioned
+	name    string
+	info    mcp.ClientInfo
+	focused bool
+	match   fuzzy.Match
+	t       *styles.Styles
+}
+
+func (i *settingsMCPItem) Filter() string { return i.name }
+func (i *settingsMCPItem) ID() string     { return i.name }
+func (i *settingsMCPItem) Finished() bool { return false }
+
+func (i *settingsMCPItem) SetFocused(f bool) {
+	if i.focused == f {
+		return
+	}
+	i.focused = f
+	i.Bump()
+}
+
+func (i *settingsMCPItem) SetMatch(m fuzzy.Match) {
+	i.match = m
+	i.Bump()
+}
+
+func (i *settingsMCPItem) Render(width int) string {
+	t := i.t
+	style := t.Dialog.NormalItem
+	if i.focused {
+		style = t.Dialog.SelectedItem.
+			Background(lipgloss.Color(settingsCardSelectedBg)).
+			Foreground(t.Dialog.NormalItem.GetForeground())
+	}
+	style = style.Width(width)
+	hpad := style.GetHorizontalPadding()
+	lineWidth := width - hpad
+
+	const prefix = "    "
+	const prefixW = 4
+
+	// Status badge at far right.
+	var statusText string
+	var statusStyle lipgloss.Style
+	switch i.info.State {
+	case mcp.StateConnected:
+		statusStyle = lipgloss.NewStyle().Foreground(t.ToolCallSuccess.GetForeground())
+		if i.info.Counts.Tools > 0 {
+			statusText = fmt.Sprintf("✓ %d tools", i.info.Counts.Tools)
+		} else {
+			statusText = "✓ connected"
+		}
+	case mcp.StateStarting:
+		statusStyle = lipgloss.NewStyle().Foreground(t.Tool.IconPending.GetForeground())
+		statusText = "● starting"
+	case mcp.StateError:
+		statusStyle = lipgloss.NewStyle().Foreground(t.Tool.IconError.GetForeground())
+		statusText = "✗ error"
+	case mcp.StateDisabled:
+		statusStyle = lipgloss.NewStyle().Foreground(t.Sidebar.WorkingDir.GetForeground())
+		statusText = "○ disabled"
+	default:
+		statusStyle = lipgloss.NewStyle().Foreground(t.Sidebar.WorkingDir.GetForeground())
+		statusText = "– offline"
+	}
+	infoText := statusStyle.Render(" "+statusText) + "  "
+	infoWidth := lipgloss.Width(infoText)
+
+	boldOn := ansi.Style{}.Bold().String()
+	boldOff := ansi.Style{}.Normal().String()
+	nameStr := boldOn + i.name + boldOff
+	nameWidth := lipgloss.Width(i.name)
+
+	gap := strings.Repeat(" ", max(0, lineWidth-prefixW-nameWidth-infoWidth))
+	return style.Render(prefix + nameStr + gap + infoText)
+}
+
 // buildSkillGroups converts a flat CatalogEntry slice into sorted toolGroups
 // keyed by source (Built-in, Project, User).
 func buildSkillGroups(t *styles.Styles, entries []skills.CatalogEntry) []toolGroup {
@@ -955,17 +1196,25 @@ func buildSkillGroups(t *styles.Styles, entries []skills.CatalogEntry) []toolGro
 // ─── help.KeyMap ──────────────────────────────────────────────────────────
 
 func (s *Settings) ShortHelp() []key.Binding {
-	if s.view == settingsViewRoot {
+	switch s.view {
+	case settingsViewRoot:
 		return []key.Binding{s.keyMap.Next, s.keyMap.Select, s.keyMap.Close}
+	case settingsViewMCPDetail:
+		return []key.Binding{s.keyMap.Next, s.keyMap.Back}
+	default:
+		return []key.Binding{s.keyMap.Next, s.keyMap.Select, s.keyMap.Back}
 	}
-	return []key.Binding{s.keyMap.Next, s.keyMap.Select, s.keyMap.Back}
 }
 
 func (s *Settings) FullHelp() [][]key.Binding {
-	if s.view == settingsViewRoot {
+	switch s.view {
+	case settingsViewRoot:
 		return [][]key.Binding{{s.keyMap.Next, s.keyMap.Previous, s.keyMap.Select}, {s.keyMap.Close}}
+	case settingsViewMCPDetail:
+		return [][]key.Binding{{s.keyMap.Next, s.keyMap.Previous}, {s.keyMap.Back}}
+	default:
+		return [][]key.Binding{{s.keyMap.Next, s.keyMap.Previous, s.keyMap.Select}, {s.keyMap.Back}}
 	}
-	return [][]key.Binding{{s.keyMap.Next, s.keyMap.Previous, s.keyMap.Select}, {s.keyMap.Back}}
 }
 
 // ─── settingsSectionItem ───────────────────────────────────────────────────
