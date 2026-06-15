@@ -439,6 +439,17 @@ func (c *Config) setDefaults(workingDir, dataDir string) {
 	if c.MCP == nil {
 		c.MCP = make(map[string]MCPConfig)
 	}
+	// Infer MCP type when the field is omitted (common in public configs).
+	for name, m := range c.MCP {
+		if m.Type == "" {
+			if m.Command != "" {
+				m.Type = MCPStdio
+			} else if m.URL != "" {
+				m.Type = MCPHttp
+			}
+			c.MCP[name] = m
+		}
+	}
 	if c.LSP == nil {
 		c.LSP = make(map[string]LSPConfig)
 	}
@@ -785,7 +796,12 @@ func loadFromBytes(configs [][]byte) (*Config, error) {
 		return &Config{}, nil
 	}
 
-	data, err := jsons.Merge(configs)
+	normalized := make([][]byte, len(configs))
+	for i, c := range configs {
+		normalized[i] = normalizeMCPKey(c)
+	}
+
+	data, err := jsons.Merge(normalized)
 	if err != nil {
 		return nil, err
 	}
@@ -794,6 +810,32 @@ func loadFromBytes(configs [][]byte) (*Config, error) {
 		return nil, err
 	}
 	return &config, nil
+}
+
+// normalizeMCPKey renames the "mcpServers" top-level key to "mcp" so that
+// configs following the common Claude/public-MCP convention work without
+// modification. When both keys are present the entries are merged, with
+// "mcp" taking precedence on key collisions.
+func normalizeMCPKey(data []byte) []byte {
+	mcpServers := gjson.GetBytes(data, "mcpServers")
+	if !mcpServers.Exists() {
+		return data
+	}
+	out, err := sjson.DeleteBytes(data, "mcpServers")
+	if err != nil {
+		return data
+	}
+	mcpServers.ForEach(func(key, value gjson.Result) bool {
+		// Only set if not already present under "mcp" (mcp wins on collision).
+		if !gjson.GetBytes(out, "mcp."+key.String()).Exists() {
+			out, err = sjson.SetRawBytes(out, "mcp."+key.String(), []byte(value.Raw))
+		}
+		return err == nil
+	})
+	if err != nil {
+		return data
+	}
+	return out
 }
 
 func hasAWSCredentials(env env.Env) bool {
@@ -889,6 +931,49 @@ func migrateDisableNotifications() {
 			slog.Warn("Failed to write migrated config", "path", path, "error", err)
 		}
 	}
+}
+
+// LoadForMCP loads a minimal ConfigStore suitable for initializing MCP
+// clients. It skips provider configuration and model selection so it succeeds
+// even when no AI provider is set up.
+func LoadForMCP(workingDir string) (*ConfigStore, error) {
+	configPaths := lookupConfigs(workingDir)
+	cfg, loadedPaths, err := loadFromConfigPaths(configPaths)
+	if err != nil {
+		return nil, err
+	}
+	cfg.setDefaults(workingDir, "")
+	e := env.New()
+	resolver := NewShellVariableResolver(e)
+	return &ConfigStore{
+		config:      cfg,
+		workingDir:  workingDir,
+		resolver:    resolver,
+		loadedPaths: loadedPaths,
+	}, nil
+}
+
+// LoadMCPConfig reads and normalizes MCPs from config files without running
+// the full provider-configuration pipeline. Safe to call from a workspace
+// that only needs to display MCP state in the UI.
+func LoadMCPConfig(workingDir string) MCPs {
+	configPaths := lookupConfigs(workingDir)
+	cfg, _, err := loadFromConfigPaths(configPaths)
+	if err != nil || cfg == nil {
+		return nil
+	}
+	// Apply type inference (mirrors the logic in setDefaults).
+	for name, m := range cfg.MCP {
+		if m.Type == "" {
+			if m.Command != "" {
+				m.Type = MCPStdio
+			} else if m.URL != "" {
+				m.Type = MCPHttp
+			}
+			cfg.MCP[name] = m
+		}
+	}
+	return cfg.MCP
 }
 
 func configFileName() string { return fmt.Sprintf("%s.json", appName) }

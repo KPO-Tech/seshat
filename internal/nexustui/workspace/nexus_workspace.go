@@ -112,8 +112,9 @@ type NexusWorkspace struct {
 	submitCancel context.CancelFunc
 
 	// Config (lazily built, mutex-guarded)
-	cfgMu sync.Mutex
-	cfg   *config.Config
+	cfgMu  sync.Mutex
+	cfg    *config.Config
+	mcpCfg config.MCPs
 
 	// Permission: allow-all skip flag
 	permSkip atomic.Bool
@@ -972,9 +973,19 @@ func (w *NexusWorkspace) Config() *config.Config {
 		},
 		Providers: providers,
 		Options:   &config.Options{TUI: &config.TUIOptions{}},
+		MCP:       w.mcpCfg,
 	}
 	w.cfg = cfg
 	return cfg
+}
+
+// SetMCPConfig stores the MCP configuration loaded from nexus.json so it is
+// included in the config returned by Config() and shown in the Settings panel.
+func (w *NexusWorkspace) SetMCPConfig(mcps config.MCPs) {
+	w.cfgMu.Lock()
+	w.mcpCfg = mcps
+	w.cfg = nil // invalidate cached config so next Config() call picks up MCPs
+	w.cfgMu.Unlock()
 }
 
 func (w *NexusWorkspace) WorkingDir() string { return w.workDir }

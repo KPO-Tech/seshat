@@ -3,6 +3,7 @@ package dialog
 import (
 	"context"
 	"fmt"
+	"image/color"
 	"os"
 	"sort"
 	"strings"
@@ -558,7 +559,7 @@ func (s *Settings) rebuildMCPList() {
 	s.mcpList.SetSelected(0)
 }
 
-func (s *Settings) buildMCPDetail(serverName string) string {
+func (s *Settings) buildMCPDetail(serverName string, width int) string {
 	t := s.com.Styles
 	accent := lipgloss.NewStyle().Foreground(t.Logo.FieldColor).Bold(true)
 	muted := t.Sidebar.WorkingDir
@@ -567,9 +568,15 @@ func (s *Settings) buildMCPDetail(serverName string) string {
 	states := s.com.Workspace.MCPGetStates()
 	info, hasInfo := states[serverName]
 
+	// Full-width heading so the orange foreground spans the entire line.
+	heading := accent
+	if width > 0 {
+		heading = accent.Width(width)
+	}
+
 	var lines []string
 	lines = append(lines, "")
-	lines = append(lines, accent.Render("  "+serverName))
+	lines = append(lines, heading.Render("  "+serverName))
 	lines = append(lines, "")
 
 	if hasInfo {
@@ -604,6 +611,13 @@ func (s *Settings) buildMCPDetail(serverName string) string {
 		}
 	}
 
+	const descIndent = "      "
+	const descIndentW = 6
+	descWrapW := width - descIndentW
+	if descWrapW < 20 {
+		descWrapW = 0 // no wrapping if too narrow
+	}
+
 	if len(serverTools) > 0 {
 		lines = append(lines, "")
 		lines = append(lines, accent.Render(fmt.Sprintf("  Tools (%d)", len(serverTools))))
@@ -611,11 +625,19 @@ func (s *Settings) buildMCPDetail(serverName string) string {
 			lines = append(lines, "")
 			lines = append(lines, bold.Render("    "+tool.Name))
 			if desc := strings.TrimSpace(tool.Description); desc != "" {
-				// Only first line of description.
-				if idx := strings.IndexByte(desc, '\n'); idx >= 0 {
+				// First paragraph only.
+				if idx := strings.Index(desc, "\n\n"); idx >= 0 {
 					desc = desc[:idx]
 				}
-				lines = append(lines, muted.Render("      "+desc))
+				desc = strings.ReplaceAll(desc, "\n", " ")
+				if descWrapW > 0 {
+					wrapped := ansi.Wordwrap(desc, descWrapW, "")
+					for _, wline := range strings.Split(wrapped, "\n") {
+						lines = append(lines, muted.Render(descIndent+wline))
+					}
+				} else {
+					lines = append(lines, muted.Render(descIndent+desc))
+				}
 			}
 		}
 	} else if hasInfo && info.State == mcp.StateConnected {
@@ -667,7 +689,7 @@ func (s *Settings) gotoView(v settingsView) {
 	case settingsViewMCP:
 		s.rebuildMCPList()
 	case settingsViewMCPDetail:
-		content := s.buildMCPDetail(s.selectedMCPName)
+		content := s.buildMCPDetail(s.selectedMCPName, s.mcpDetailViewport.Width())
 		s.mcpDetailViewport.SetContent(content)
 		s.mcpDetailViewport.GotoTop()
 	case settingsViewSkills:
@@ -1101,31 +1123,34 @@ func (i *settingsMCPItem) Render(width int) string {
 	const prefix = "    "
 	const prefixW = 4
 
-	// Status badge at far right.
+	// Status badge at far right — use attribute-only ANSI codes (fg reset = \x1b[39m)
+	// so the outer background is unbroken, matching settingsSectionItem's approach.
 	var statusText string
-	var statusStyle lipgloss.Style
+	var statusFg color.Color
 	switch i.info.State {
 	case mcp.StateConnected:
-		statusStyle = lipgloss.NewStyle().Foreground(t.ToolCallSuccess.GetForeground())
+		statusFg = t.ToolCallSuccess.GetForeground()
 		if i.info.Counts.Tools > 0 {
 			statusText = fmt.Sprintf("✓ %d tools", i.info.Counts.Tools)
 		} else {
 			statusText = "✓ connected"
 		}
 	case mcp.StateStarting:
-		statusStyle = lipgloss.NewStyle().Foreground(t.Tool.IconPending.GetForeground())
+		statusFg = t.Tool.IconPending.GetForeground()
 		statusText = "● starting"
 	case mcp.StateError:
-		statusStyle = lipgloss.NewStyle().Foreground(t.Tool.IconError.GetForeground())
+		statusFg = t.Tool.IconError.GetForeground()
 		statusText = "✗ error"
 	case mcp.StateDisabled:
-		statusStyle = lipgloss.NewStyle().Foreground(t.Sidebar.WorkingDir.GetForeground())
+		statusFg = t.Sidebar.WorkingDir.GetForeground()
 		statusText = "○ disabled"
 	default:
-		statusStyle = lipgloss.NewStyle().Foreground(t.Sidebar.WorkingDir.GetForeground())
+		statusFg = t.Sidebar.WorkingDir.GetForeground()
 		statusText = "– offline"
 	}
-	infoText := statusStyle.Render(" "+statusText) + "  "
+	fgOn := ansi.Style{}.ForegroundColor(statusFg).String()
+	fgOff := ansi.Style{}.ForegroundColor(nil).String()
+	infoText := " " + fgOn + statusText + fgOff + "  "
 	infoWidth := lipgloss.Width(infoText)
 
 	boldOn := ansi.Style{}.Bold().String()

@@ -11,6 +11,8 @@ import (
 	tea "charm.land/bubbletea/v2"
 	"github.com/EngineerProjects/nexus-engine/cmd/cli/appdir"
 	"github.com/EngineerProjects/nexus-engine/internal/monitoring"
+	mcptools "github.com/EngineerProjects/nexus-engine/internal/nexustui/agent/tools/mcp"
+	tuiconfig "github.com/EngineerProjects/nexus-engine/internal/nexustui/config"
 	crushcommon "github.com/EngineerProjects/nexus-engine/internal/nexustui/ui/common"
 	uimodel "github.com/EngineerProjects/nexus-engine/internal/nexustui/ui/model"
 	crushws "github.com/EngineerProjects/nexus-engine/internal/nexustui/workspace"
@@ -60,6 +62,12 @@ func runNexusTUI(ctx context.Context, options runtimeOptions, initialSessionID s
 
 	ws := crushws.NewNexusWorkspace(nil, options.WorkingDir, modelStr)
 	ws.SetStartupConfig(options.SQLitePath, options.PermissionMode, options.Monitoring)
+	if mcpStore, err := tuiconfig.LoadForMCP(options.WorkingDir); err == nil {
+		ws.SetMCPConfig(mcpStore.Config().MCP)
+		go mcptools.Initialize(ctx, nil, mcpStore)
+	} else if mcps := tuiconfig.LoadMCPConfig(options.WorkingDir); len(mcps) > 0 {
+		ws.SetMCPConfig(mcps)
+	}
 
 	client, err := newClient(
 		options,
