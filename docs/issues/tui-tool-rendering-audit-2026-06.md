@@ -106,6 +106,7 @@ Done: `monitor` (`monitor.go`), `code_complete` (`fim.go`), `docx` (`docx.go`).
 | Test 11 — MCP & Tool Search | `tool_search`, `mcp_list_resources`, `mcp_read_resource`, `mcp_*` | Renderers implemented; test not run yet. |
 | Test 13 — Global Audit | Full renderer regression | Not run yet. |
 | Test 15 — Goal Tools | `create_goal`, `get_goal`, `update_goal` | Renderers implemented; test not run yet. |
+| Test 16 — Docx, Monitor, Code Complete, LSP | `docx`, `monitor`, `code_complete`, `lsp` | Renderers implemented; test not run yet. |
 
 ---
 

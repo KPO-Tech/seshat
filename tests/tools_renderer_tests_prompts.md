@@ -722,3 +722,140 @@ Exécute ces appels dans cet ordre exact, sans commenter entre les étapes.
 
 Ne fais rien d'autre après l'étape 7.
 ```
+
+---
+
+## 16. DOCX, MONITOR, CODE COMPLETE, LSP
+
+Valide : `docx`, `monitor`, `code_complete`, `lsp`.
+
+### 16a. docx — create, append, replace
+
+```
+Travaille uniquement dans /tmp. Exécute ces appels dans cet ordre exact.
+
+1. docx — créer un nouveau document :
+     document_path: "/tmp/test_nexus.docx"
+     action: "create"
+     content: "Nexus Engine — rapport de test TUI"
+     bold: true
+     font_size: 18
+     alignment: "center"
+     title: "Rapport TUI"
+     author: "Nexus Agent"
+   → attendu : header "✓ Docx  create  ~/test_nexus.docx"
+   → attendu : body = "Message: Document created successfully"
+
+2. docx — ajouter du contenu :
+     document_path: "/tmp/test_nexus.docx"
+     action: "append"
+     content: "Section 1 : le rendu TUI utilise bubbletea et lipgloss."
+     italic: true
+   → attendu : header "✓ Docx  append  ~/test_nexus.docx"
+   → attendu : body = "Message: Content appended successfully"
+
+3. docx — créer un document avec table :
+     document_path: "/tmp/test_table.docx"
+     action: "create"
+     table_data: "Tool\tStatus\tFile\ndocx\tDone\tdocx.go\nmonitor\tDone\tmonitor.go\nlsp\tDone\tlsp_tools.go"
+   → attendu : header "✓ Docx  create  ~/test_table.docx"
+   → attendu : body = "Message: Document created successfully"
+
+4. docx — remplacer le premier paragraphe :
+     document_path: "/tmp/test_nexus.docx"
+     action: "replace"
+     content: "Nexus Engine v2 — rapport de test TUI (mis à jour)"
+   → attendu : header "✓ Docx  replace  ~/test_nexus.docx"
+   → attendu : body = "Message: Content replaced successfully"
+
+Ne fais rien d'autre après l'étape 4.
+```
+
+### 16b. monitor — démarrage en arrière-plan
+
+```
+Exécute ces appels dans cet ordre exact.
+
+1. monitor — surveiller un log en boucle :
+     command: "for i in $(seq 1 5); do echo \"line $i\"; sleep 0.5; done"
+     description: "Génère 5 lignes à 0.5s d'intervalle"
+   → attendu : header "Monitor  for i in $(seq 1 5)…  Génère 5 lignes…"
+   → attendu : body = "Monitor task started with ID: <id>. Output is being streamed to: <file>"
+
+2. monitor — commande plus simple sans description :
+     command: "echo hello && sleep 1 && echo world"
+   → attendu : header "Monitor  echo hello && sleep 1…"
+   → attendu : body = ligne task ID
+
+Ne fais rien d'autre après l'étape 2.
+```
+
+### 16c. code_complete — complétion FIM
+
+```
+Exécute ces appels dans cet ordre exact.
+(Si le tool code_complete n'est pas activé, passe directement à 16d.)
+
+1. code_complete — compléter une fonction Go :
+     prompt: |
+       package main
+
+       import "fmt"
+
+       func fibonacci(n int) int {
+           if n <= 1 {
+               return n
+           }
+   → attendu : header "Code Complete  if n <= 1 {  <provider>/<model>  N tokens"
+   → attendu : body = complétion de la fonction en code Go colorisé
+
+2. code_complete — compléter avec suffix :
+     prompt: |
+       func greet(name string) string {
+           return fmt.Sprintf("Hello,
+     suffix: |
+       ")
+       }
+   → attendu : header "Code Complete  return fmt.Sprintf(…  <provider>/<model>"
+   → attendu : body = fragment de complétion en code colorisé
+
+Ne fais rien d'autre après l'étape 2.
+```
+
+### 16d. lsp — opérations code intelligence
+
+```
+Utilise un fichier Go existant du projet courant pour chaque opération.
+Exécute ces appels dans cet ordre exact.
+(Si gopls n'est pas disponible, les résultats peuvent être vides — vérifie quand même le header.)
+
+1. lsp — symboles du document :
+     operation: "symbols"
+     file_path: "internal/nexustui/ui/chat/tools.go"
+   → attendu : header "✓ LSP  symbols  internal/…/tools.go  Found N symbol(s)"
+   → attendu : aucun body (summary dans le header suffit)
+
+2. lsp — définition d'un symbole :
+     operation: "definition"
+     file_path: "internal/nexustui/ui/chat/tools.go"
+     line: 99
+     column: 6
+   → attendu : header "✓ LSP  definition  internal/…/tools.go:99:6  Found N location(s)"
+   → attendu : aucun body si summary présent
+
+3. lsp — hover sur un identifiant :
+     operation: "hover"
+     file_path: "internal/nexustui/ui/chat/tools.go"
+     line: 99
+     column: 6
+   → attendu : header "✓ LSP  hover  internal/…/tools.go:99:6  <texte hover tronqué>"
+   → attendu : aucun body si summary présent
+
+4. lsp — recherche workspace :
+     operation: "workspace_symbol"
+     file_path: "internal/nexustui/ui/chat/tools.go"
+     query: "ToolMessageItem"
+   → attendu : header "✓ LSP  workspace_symbol  internal/…/tools.go  ToolMessageItem  Found N symbol(s)"
+
+Ne fais rien d'autre après l'étape 4.
+```
