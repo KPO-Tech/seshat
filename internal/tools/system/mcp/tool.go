@@ -165,7 +165,7 @@ func (t *MCPTool) ValidateInput(ctx context.Context, input map[string]any) (map[
 // CheckPermissions checks tool-specific permissions
 func (t *MCPTool) CheckPermissions(ctx context.Context, input map[string]any, toolCtx tool.ToolUseContext) types.PermissionResult {
 	// MCP tool access requires explicit permission
-	return types.PermissionResult{Behavior: types.PermissionBehaviorAsk}
+	return types.PermissionResult{Behavior: types.PermissionBehaviorPassthrough}
 }
 
 // IsConcurrencySafe returns whether the tool can run concurrently

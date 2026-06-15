@@ -147,7 +147,7 @@ func (t *SkillTool) ValidateInput(ctx context.Context, input map[string]any) (ma
 }
 
 func (t *SkillTool) CheckPermissions(ctx context.Context, input map[string]any, toolCtx contract.ToolUseContext) types.PermissionResult {
-	return types.PermissionResult{Behavior: types.PermissionBehaviorAsk}
+	return types.AllowWithInput("", input)
 }
 
 func (t *SkillTool) IsConcurrencySafe(input map[string]any) bool {
