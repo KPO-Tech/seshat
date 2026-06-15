@@ -70,16 +70,16 @@ func (l *LSPRenderContext) RenderTool(sty *styles.Styles, width int, opts *ToolR
 
 	header := toolHeader(sty, opts.Status, displayName, cappedWidth, opts.Compact, headerParams...)
 	if opts.Compact || summary != "" {
-		// When we have a summary in the header, the body adds little value.
 		return header
 	}
 	if earlyState, ok := toolEarlyStateContent(sty, opts, cappedWidth); ok {
 		return joinToolParts(header, earlyState)
 	}
-	if !opts.HasResult() || opts.Result.Content == "" {
+
+	// Body only on error — success result is already summarised in the header.
+	if !opts.HasResult() || !opts.Result.IsError {
 		return header
 	}
-
 	bodyWidth := cappedWidth - toolBodyLeftPaddingTotal
 	body := sty.Tool.Body.Render(toolOutputPlainContent(sty, opts.Result.Content, bodyWidth, opts.ExpandedContent))
 	return joinToolParts(header, body)

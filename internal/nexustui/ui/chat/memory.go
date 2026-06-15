@@ -43,7 +43,7 @@ func renderMemoryEntityList(sty *styles.Styles, entities []memoryEntity, width i
 	var out []string
 	for i := 0; i < shown; i++ {
 		e := entities[i]
-		name := sty.Tool.ResultItemName.Render(e.Name)
+		name := sty.Tool.ContentText.Render(e.Name)
 		meta := ""
 		if e.EntityType != "" {
 			meta += sty.Tool.ResultItemDesc.Render(" (" + e.EntityType + ")")
@@ -75,7 +75,7 @@ func renderMemoryObsResults(sty *styles.Styles, results []memoryObsResult, width
 	var out []string
 	for i := 0; i < shown; i++ {
 		r := results[i]
-		name := sty.Tool.ResultItemName.Render(r.EntityName)
+		name := sty.Tool.ContentText.Render(r.EntityName)
 		meta := ""
 		if n := len(r.AddedObservations); n > 0 {
 			noun := "observations"

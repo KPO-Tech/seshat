@@ -37,7 +37,6 @@ func (m *MonitorRenderContext) RenderTool(sty *styles.Styles, width int, opts *T
 	var headerParams []string
 	cmd := strings.TrimSpace(params.Command)
 	if cmd != "" {
-		// Show first line of command, truncated.
 		firstLine, _, _ := strings.Cut(cmd, "\n")
 		headerParams = append(headerParams, ansi.Truncate(firstLine, 50, "…"))
 	}
@@ -52,12 +51,12 @@ func (m *MonitorRenderContext) RenderTool(sty *styles.Styles, width int, opts *T
 	if earlyState, ok := toolEarlyStateContent(sty, opts, cappedWidth); ok {
 		return joinToolParts(header, earlyState)
 	}
-	if !opts.HasResult() || opts.Result.Content == "" {
+
+	// Background job — no output to show inline. Body only on error.
+	if !opts.HasResult() || !opts.Result.IsError {
 		return header
 	}
 
-	// Content: "Monitor task started with ID: <id>. Output is being streamed to: <file>"
-	// Show as-is — it's already a compact single line.
 	bodyWidth := cappedWidth - toolBodyLeftPaddingTotal
 	body := sty.Tool.Body.Render(toolOutputPlainContent(sty, opts.Result.Content, bodyWidth, opts.ExpandedContent))
 	return joinToolParts(header, body)

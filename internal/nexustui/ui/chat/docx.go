@@ -2,7 +2,6 @@ package chat
 
 import (
 	"encoding/json"
-	"strings"
 
 	"github.com/EngineerProjects/nexus-engine/internal/nexustui/fsext"
 	"github.com/EngineerProjects/nexus-engine/internal/nexustui/message"
@@ -50,32 +49,13 @@ func (d *DocxRenderContext) RenderTool(sty *styles.Styles, width int, opts *Tool
 	if earlyState, ok := toolEarlyStateContent(sty, opts, cappedWidth); ok {
 		return joinToolParts(header, earlyState)
 	}
-	if !opts.HasResult() || opts.Result.Content == "" {
+
+	// Body only on error — on success the header is self-explanatory.
+	if !opts.HasResult() || !opts.Result.IsError {
 		return header
 	}
 
-	// Content format: "Document: ...\nSuccess: ...\nMessage: ...\n[Content:\n...]"
-	// Show only Message + Content lines — skip the Document/Success prefix noise.
-	body := extractDocxBody(sty, opts.Result.Content, cappedWidth-toolBodyLeftPaddingTotal, opts.ExpandedContent)
-	if body == "" {
-		return header
-	}
-	return joinToolParts(header, sty.Tool.Body.Render(body))
-}
-
-// extractDocxBody drops the first two lines ("Document:" / "Success:") and
-// returns the remainder (Message + optional Content block).
-func extractDocxBody(sty *styles.Styles, content string, width int, expanded bool) string {
-	lines := strings.Split(strings.TrimSpace(content), "\n")
-	var kept []string
-	for _, l := range lines {
-		if strings.HasPrefix(l, "Document:") || strings.HasPrefix(l, "Success:") {
-			continue
-		}
-		kept = append(kept, l)
-	}
-	if len(kept) == 0 {
-		return ""
-	}
-	return toolOutputPlainContent(sty, strings.Join(kept, "\n"), width, expanded)
+	bodyWidth := cappedWidth - toolBodyLeftPaddingTotal
+	body := sty.Tool.Body.Render(toolOutputPlainContent(sty, opts.Result.Content, bodyWidth, opts.ExpandedContent))
+	return joinToolParts(header, body)
 }
