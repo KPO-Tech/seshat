@@ -75,13 +75,15 @@ func (c *Client) ConvertBytes(ctx context.Context, data []byte, filename string)
 // ConvertURL fetches and converts a remote document (e.g. an arXiv PDF URL).
 func (c *Client) ConvertURL(ctx context.Context, docURL string) (*ConversionResult, error) {
 	payload, err := json.Marshal(map[string]any{
-		"http_source": map[string]string{"url": docURL},
+		"sources": []map[string]any{
+			{"kind": "http", "url": docURL},
+		},
 	})
 	if err != nil {
 		return nil, fmt.Errorf("marshal url request: %w", err)
 	}
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost,
-		c.baseURL+"/v1alpha/convert/source", bytes.NewReader(payload))
+		c.baseURL+"/v1/convert/source", bytes.NewReader(payload))
 	if err != nil {
 		return nil, fmt.Errorf("build url request: %w", err)
 	}
@@ -107,7 +109,7 @@ func (c *Client) ConvertURL(ctx context.Context, docURL string) (*ConversionResu
 func (c *Client) convert(ctx context.Context, filename string, r io.Reader) (*ConversionResult, error) {
 	var body bytes.Buffer
 	mw := multipart.NewWriter(&body)
-	fw, err := mw.CreateFormFile("file", filename)
+	fw, err := mw.CreateFormFile("files", filename)
 	if err != nil {
 		return nil, fmt.Errorf("create form file: %w", err)
 	}
@@ -117,7 +119,7 @@ func (c *Client) convert(ctx context.Context, filename string, r io.Reader) (*Co
 	mw.Close()
 
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost,
-		c.baseURL+"/v1alpha/convert/source", &body)
+		c.baseURL+"/v1/convert/file", &body)
 	if err != nil {
 		return nil, fmt.Errorf("build request: %w", err)
 	}
