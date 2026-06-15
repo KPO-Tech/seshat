@@ -7,6 +7,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"time"
 
 	tea "charm.land/bubbletea/v2"
 	"github.com/EngineerProjects/nexus-engine/cmd/cli/appdir"
@@ -64,6 +65,7 @@ func runNexusTUI(ctx context.Context, options runtimeOptions, initialSessionID s
 	ws.SetStartupConfig(options.SQLitePath, options.PermissionMode, options.Monitoring)
 	if mcpStore, err := tuiconfig.LoadForMCP(options.WorkingDir); err == nil {
 		ws.SetMCPConfig(mcpStore.Config().MCP)
+		options.MCPServers = nexusMCPToSDK(mcpStore)
 		go mcptools.Initialize(ctx, nil, mcpStore)
 	} else if mcps := tuiconfig.LoadMCPConfig(options.WorkingDir); len(mcps) > 0 {
 		ws.SetMCPConfig(mcps)
@@ -146,4 +148,56 @@ func openCLILogFile() *os.File {
 		return nil
 	}
 	return f
+}
+
+// nexusMCPToSDK converts nexus.json MCP entries into the engine-side
+// MCPServerConfig slice so the agent can discover and call MCP tools.
+func nexusMCPToSDK(store *tuiconfig.ConfigStore) []sdk.MCPServerConfig {
+	r := store.Resolver()
+	cfg := store.Config()
+	out := make([]sdk.MCPServerConfig, 0, len(cfg.MCP))
+	for name, m := range cfg.MCP {
+		if m.Disabled {
+			continue
+		}
+		sc := sdk.MCPServerConfig{Name: name}
+		switch m.Type {
+		case tuiconfig.MCPStdio:
+			sc.Transport = sdk.MCPTransportStdio
+			sc.Command = m.Command
+			sc.Args, _ = m.ResolvedArgs(r)
+			if envSlice, err := m.ResolvedEnv(r); err == nil {
+				sc.Env = envSliceToMap(envSlice)
+			}
+		case tuiconfig.MCPHttp:
+			sc.Transport = sdk.MCPTransportHTTP
+			sc.URL, _ = m.ResolvedURL(r)
+			sc.Headers, _ = m.ResolvedHeaders(r)
+		case tuiconfig.MCPSSE:
+			sc.Transport = sdk.MCPTransportSSE
+			sc.URL, _ = m.ResolvedURL(r)
+			sc.Headers, _ = m.ResolvedHeaders(r)
+		default:
+			continue
+		}
+		if m.Timeout > 0 {
+			sc.Timeout = time.Duration(m.Timeout) * time.Second
+		}
+		out = append(out, sc)
+	}
+	return out
+}
+
+func envSliceToMap(envs []string) map[string]string {
+	if len(envs) == 0 {
+		return nil
+	}
+	m := make(map[string]string, len(envs))
+	for _, entry := range envs {
+		k, v, _ := strings.Cut(entry, "=")
+		if k != "" {
+			m[k] = v
+		}
+	}
+	return m
 }

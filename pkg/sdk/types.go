@@ -85,6 +85,7 @@ type (
 	MCPIntegrationResult   = mcp.IntegrationResult
 	MCPServerConfig        = mcp.ServerConfig
 	MCPServerResult        = mcp.ServerResult
+	MCPTransportType       = mcp.TransportType
 	MonitoringSystem       = monitoring.System
 	RuntimeEventQueue      = execution.RuntimeEventQueue
 	RuntimeEventQueueStats = execution.RuntimeEventQueueStats
@@ -246,4 +247,10 @@ const (
 	PermissionBehaviorDeny        = types.PermissionBehaviorDeny
 	PermissionBehaviorAsk         = types.PermissionBehaviorAsk
 	PermissionBehaviorPassthrough = types.PermissionBehaviorPassthrough
+
+	// MCPTransport constants
+	MCPTransportStdio     MCPTransportType = mcp.TransportTypeStdio
+	MCPTransportHTTP      MCPTransportType = mcp.TransportTypeHTTP
+	MCPTransportSSE       MCPTransportType = mcp.TransportTypeSSE
+	MCPTransportWebSocket MCPTransportType = mcp.TransportTypeWebSocket
 )

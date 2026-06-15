@@ -47,6 +47,10 @@ type runtimeOptions struct {
 	// Set by runInteractive to redirect logs away from stdout/stderr when
 	// running in TUI (alt-screen) mode.
 	Monitoring *sdk.MonitoringSystem
+
+	// MCPServers are the MCP server configs to wire into the SDK client so
+	// the agent can call MCP tools. Populated from nexus.json before newClient().
+	MCPServers []sdk.MCPServerConfig
 }
 
 type runtimeOverrides struct {
@@ -215,6 +219,7 @@ func newClient(
 		ProviderConfig:          providerConfig,
 		PlanStore:               planStore,
 		LongTermMemory:          ltMemory,
+		MCPServers:              options.MCPServers,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("create SDK client: %w", err)

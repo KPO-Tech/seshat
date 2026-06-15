@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"os"
 	"os/exec"
 	"sync"
 	"time"
@@ -73,9 +74,11 @@ func (t *StdioTransport) Start(ctx context.Context) error {
 	// Create command
 	cmd := exec.CommandContext(ctx, t.config.Command, t.config.Args...)
 
-	// Set environment
-	if t.config.Env != nil {
-		env := []string{}
+	// Merge extra env on top of the parent process environment so the child
+	// inherits PATH, HOME, etc. (replacing the entire env would break tools
+	// like uvx and npx that need PATH to resolve executables).
+	if len(t.config.Env) > 0 {
+		env := os.Environ()
 		for k, v := range t.config.Env {
 			env = append(env, fmt.Sprintf("%s=%s", k, v))
 		}
