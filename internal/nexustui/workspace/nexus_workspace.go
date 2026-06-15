@@ -221,6 +221,14 @@ func (w *NexusWorkspace) Subscribe(p *tea.Program) {
 			p.Send(ev)
 		}
 	}()
+
+	// Fan out MCP state-change events so the UI reacts in real time.
+	go func() {
+		ch := mcptools.SubscribeEvents(ctx)
+		for ev := range ch {
+			p.Send(ev)
+		}
+	}()
 }
 
 func (w *NexusWorkspace) Shutdown() {
@@ -520,6 +528,15 @@ func (w *NexusWorkspace) AgentRun(ctx context.Context, sessionID, prompt string,
 			w.busy.Store(false)
 			w.debounce.forceFlush()
 		}()
+
+		// Wait for MCP servers to finish initializing before the first turn
+		// so the engine already has the tools registered. Bounded to avoid
+		// blocking the turn indefinitely if a server is slow.
+		if w.mcpStore != nil {
+			waitCtx, waitCancel := context.WithTimeout(submitCtx, 5*time.Second)
+			_ = mcptools.WaitForInit(waitCtx)
+			waitCancel()
+		}
 
 		var (
 			resp *sdk.SessionResponse

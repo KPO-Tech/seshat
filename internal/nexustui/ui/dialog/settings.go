@@ -649,6 +649,54 @@ func (s *Settings) buildMCPDetail(serverName string, width int) string {
 		lines = append(lines, muted.Render("  No tools available."))
 	}
 
+	// Prompts list for this server.
+	for name, prompts := range mcp.Prompts() {
+		if name != serverName || len(prompts) == 0 {
+			continue
+		}
+		lines = append(lines, "")
+		lines = append(lines, accent.Render(fmt.Sprintf("  Prompts (%d)", len(prompts))))
+		for _, p := range prompts {
+			lines = append(lines, "")
+			lines = append(lines, bold.Render("    "+p.Name))
+			if desc := strings.TrimSpace(p.Description); desc != "" {
+				if descWrapW > 0 {
+					wrapped := ansi.Wordwrap(desc, descWrapW, "")
+					for _, wline := range strings.Split(wrapped, "\n") {
+						lines = append(lines, muted.Render(descIndent+wline))
+					}
+				} else {
+					lines = append(lines, muted.Render(descIndent+desc))
+				}
+			}
+		}
+		break
+	}
+
+	// Resources list for this server.
+	for name, resources := range mcp.Resources() {
+		if name != serverName || len(resources) == 0 {
+			continue
+		}
+		lines = append(lines, "")
+		lines = append(lines, accent.Render(fmt.Sprintf("  Resources (%d)", len(resources))))
+		for _, r := range resources {
+			lines = append(lines, "")
+			lines = append(lines, bold.Render("    "+r.URI))
+			if desc := strings.TrimSpace(r.Description); desc != "" {
+				if descWrapW > 0 {
+					wrapped := ansi.Wordwrap(desc, descWrapW, "")
+					for _, wline := range strings.Split(wrapped, "\n") {
+						lines = append(lines, muted.Render(descIndent+wline))
+					}
+				} else {
+					lines = append(lines, muted.Render(descIndent+desc))
+				}
+			}
+		}
+		break
+	}
+
 	lines = append(lines, "")
 	var hints []string
 	if hasInfo {
