@@ -103,10 +103,12 @@ type Settings struct {
 
 	keyMap struct {
 		Select, Next, Previous, Back, Close key.Binding
+		MCPReconnect, MCPDisable            key.Binding
 	}
 	help help.Model
 
-	windowWidth int
+	mcpDetailLastWidth int
+	windowWidth        int
 }
 
 var _ Dialog = (*Settings)(nil)
@@ -192,6 +194,8 @@ func NewSettings(com *common.Common) (*Settings, error) {
 	s.keyMap.Previous = key.NewBinding(key.WithKeys("up", "ctrl+p"), key.WithHelp("↑", "prev"))
 	s.keyMap.Back = key.NewBinding(key.WithKeys("esc", "alt+esc", "left"), key.WithHelp("esc/←", "back"))
 	s.keyMap.Close = key.NewBinding(key.WithKeys("esc", "alt+esc"), key.WithHelp("esc", "close"))
+	s.keyMap.MCPReconnect = key.NewBinding(key.WithKeys("r"), key.WithHelp("r", "reconnect"))
+	s.keyMap.MCPDisable = key.NewBinding(key.WithKeys("d"), key.WithHelp("d", "disable"))
 
 	h := help.New()
 	h.Styles = t.DialogHelpStyles()
@@ -488,9 +492,9 @@ func (s *Settings) handleMCPDetailKey(msg tea.KeyPressMsg) Action {
 		s.mcpDetailViewport.ScrollDown(1)
 	case key.Matches(msg, s.keyMap.Previous):
 		s.mcpDetailViewport.ScrollUp(1)
-	case msg.String() == "r":
+	case key.Matches(msg, s.keyMap.MCPReconnect):
 		return ActionEnableMCPServer{Name: s.selectedMCPName}
-	case msg.String() == "d":
+	case key.Matches(msg, s.keyMap.MCPDisable):
 		return ActionDisableMCPServer{Name: s.selectedMCPName}
 	}
 	return nil
@@ -615,11 +619,27 @@ func (s *Settings) buildMCPDetail(serverName string, width int) string {
 		}
 	}
 
-	const descIndent = "      "
-	const descIndentW = 6
+	const namePrefix = "  › "
+	const descIndent = "    "
+	const descIndentW = 4
 	descWrapW := width - descIndentW
 	if descWrapW < 20 {
-		descWrapW = 0 // no wrapping if too narrow
+		descWrapW = 0
+	}
+
+	wrapDesc := func(desc string) []string {
+		desc = strings.TrimSpace(desc)
+		if desc == "" {
+			return nil
+		}
+		if idx := strings.Index(desc, "\n\n"); idx >= 0 {
+			desc = desc[:idx]
+		}
+		desc = strings.ReplaceAll(desc, "\n", " ")
+		if descWrapW > 0 {
+			return strings.Split(ansi.Wordwrap(desc, descWrapW, ""), "\n")
+		}
+		return []string{desc}
 	}
 
 	if len(serverTools) > 0 {
@@ -627,21 +647,9 @@ func (s *Settings) buildMCPDetail(serverName string, width int) string {
 		lines = append(lines, accent.Render(fmt.Sprintf("  Tools (%d)", len(serverTools))))
 		for _, tool := range serverTools {
 			lines = append(lines, "")
-			lines = append(lines, bold.Render("    "+tool.Name))
-			if desc := strings.TrimSpace(tool.Description); desc != "" {
-				// First paragraph only.
-				if idx := strings.Index(desc, "\n\n"); idx >= 0 {
-					desc = desc[:idx]
-				}
-				desc = strings.ReplaceAll(desc, "\n", " ")
-				if descWrapW > 0 {
-					wrapped := ansi.Wordwrap(desc, descWrapW, "")
-					for _, wline := range strings.Split(wrapped, "\n") {
-						lines = append(lines, muted.Render(descIndent+wline))
-					}
-				} else {
-					lines = append(lines, muted.Render(descIndent+desc))
-				}
+			lines = append(lines, bold.Render(namePrefix+tool.Name))
+			for _, wline := range wrapDesc(tool.Description) {
+				lines = append(lines, muted.Render(descIndent+wline))
 			}
 		}
 	} else if hasInfo && info.State == mcp.StateConnected {
@@ -658,16 +666,9 @@ func (s *Settings) buildMCPDetail(serverName string, width int) string {
 		lines = append(lines, accent.Render(fmt.Sprintf("  Prompts (%d)", len(prompts))))
 		for _, p := range prompts {
 			lines = append(lines, "")
-			lines = append(lines, bold.Render("    "+p.Name))
-			if desc := strings.TrimSpace(p.Description); desc != "" {
-				if descWrapW > 0 {
-					wrapped := ansi.Wordwrap(desc, descWrapW, "")
-					for _, wline := range strings.Split(wrapped, "\n") {
-						lines = append(lines, muted.Render(descIndent+wline))
-					}
-				} else {
-					lines = append(lines, muted.Render(descIndent+desc))
-				}
+			lines = append(lines, bold.Render(namePrefix+p.Name))
+			for _, wline := range wrapDesc(p.Description) {
+				lines = append(lines, muted.Render(descIndent+wline))
 			}
 		}
 		break
@@ -682,37 +683,15 @@ func (s *Settings) buildMCPDetail(serverName string, width int) string {
 		lines = append(lines, accent.Render(fmt.Sprintf("  Resources (%d)", len(resources))))
 		for _, r := range resources {
 			lines = append(lines, "")
-			lines = append(lines, bold.Render("    "+r.URI))
-			if desc := strings.TrimSpace(r.Description); desc != "" {
-				if descWrapW > 0 {
-					wrapped := ansi.Wordwrap(desc, descWrapW, "")
-					for _, wline := range strings.Split(wrapped, "\n") {
-						lines = append(lines, muted.Render(descIndent+wline))
-					}
-				} else {
-					lines = append(lines, muted.Render(descIndent+desc))
-				}
+			lines = append(lines, bold.Render(namePrefix+r.URI))
+			for _, wline := range wrapDesc(r.Description) {
+				lines = append(lines, muted.Render(descIndent+wline))
 			}
 		}
 		break
 	}
 
 	lines = append(lines, "")
-	var hints []string
-	if hasInfo {
-		switch info.State {
-		case mcp.StateConnected:
-			hints = append(hints, "d disable")
-		case mcp.StateDisabled:
-			hints = append(hints, "r reconnect")
-		case mcp.StateError, mcp.StateStarting:
-			hints = append(hints, "r reconnect", "d disable")
-		}
-	} else {
-		hints = append(hints, "r reconnect")
-	}
-	hints = append(hints, "esc or ← back")
-	lines = append(lines, muted.Render("  "+strings.Join(hints, "  ·  ")))
 	return strings.Join(lines, "\n")
 }
 
@@ -755,8 +734,7 @@ func (s *Settings) gotoView(v settingsView) {
 	case settingsViewMCP:
 		s.rebuildMCPList()
 	case settingsViewMCPDetail:
-		content := s.buildMCPDetail(s.selectedMCPName, s.mcpDetailViewport.Width())
-		s.mcpDetailViewport.SetContent(content)
+		s.mcpDetailLastWidth = 0 // force rebuild in Draw once innerW is known
 		s.mcpDetailViewport.GotoTop()
 	case settingsViewSkills:
 		entries, _ := s.com.Workspace.ListSkills(context.Background())
@@ -944,6 +922,11 @@ func (s *Settings) Draw(scr uv.Screen, area uv.Rectangle) *tea.Cursor {
 	case settingsViewMCPDetail:
 		s.mcpDetailViewport.SetWidth(innerW)
 		s.mcpDetailViewport.SetHeight(finalContentH)
+		if innerW != s.mcpDetailLastWidth {
+			s.mcpDetailLastWidth = innerW
+			content := s.buildMCPDetail(s.selectedMCPName, innerW)
+			s.mcpDetailViewport.SetContent(content)
+		}
 	case settingsViewSkills:
 		s.skillsList.SetSize(innerW, finalContentH)
 	}
@@ -1289,7 +1272,16 @@ func (s *Settings) ShortHelp() []key.Binding {
 	case settingsViewRoot:
 		return []key.Binding{s.keyMap.Next, s.keyMap.Select, s.keyMap.Close}
 	case settingsViewMCPDetail:
-		return []key.Binding{s.keyMap.Next, s.keyMap.Back}
+		bindings := []key.Binding{s.keyMap.Next}
+		states := s.com.Workspace.MCPGetStates()
+		info, hasInfo := states[s.selectedMCPName]
+		if !hasInfo || info.State != mcp.StateConnected {
+			bindings = append(bindings, s.keyMap.MCPReconnect)
+		}
+		if !hasInfo || info.State != mcp.StateDisabled {
+			bindings = append(bindings, s.keyMap.MCPDisable)
+		}
+		return append(bindings, s.keyMap.Back)
 	default:
 		return []key.Binding{s.keyMap.Next, s.keyMap.Select, s.keyMap.Back}
 	}
@@ -1300,7 +1292,16 @@ func (s *Settings) FullHelp() [][]key.Binding {
 	case settingsViewRoot:
 		return [][]key.Binding{{s.keyMap.Next, s.keyMap.Previous, s.keyMap.Select}, {s.keyMap.Close}}
 	case settingsViewMCPDetail:
-		return [][]key.Binding{{s.keyMap.Next, s.keyMap.Previous}, {s.keyMap.Back}}
+		states := s.com.Workspace.MCPGetStates()
+		info, hasInfo := states[s.selectedMCPName]
+		var actions []key.Binding
+		if !hasInfo || info.State != mcp.StateConnected {
+			actions = append(actions, s.keyMap.MCPReconnect)
+		}
+		if !hasInfo || info.State != mcp.StateDisabled {
+			actions = append(actions, s.keyMap.MCPDisable)
+		}
+		return [][]key.Binding{{s.keyMap.Next, s.keyMap.Previous}, append(actions, s.keyMap.Back)}
 	default:
 		return [][]key.Binding{{s.keyMap.Next, s.keyMap.Previous, s.keyMap.Select}, {s.keyMap.Back}}
 	}
