@@ -51,12 +51,8 @@ Done: `list_directory`, `glob`, `grep`, `web_search`, `web_fetch`, `send_agent_m
 | `brief` | Planned | **Priority 1 — See Special Tools.** Primary agent→user output. |
 | `generate_image` | Planned | See **Special Tools**. |
 | `tts`, `stt` | Planned | See **Special Tools**. |
-| `code_complete` | Planned | See **Special Tools**. |
-| `lsp` | Planned | See **Special Tools**. |
-| `monitor` | Planned | See **Special Tools**. |
-| `docx` | Planned | See **Special Tools**. |
 
-Done: `bash`, `job_output`, `job_kill`, `write_file`, `edit_file`, `apply_patch`, `notebook_edit`, `notebook_create`, `notebook_write`, `create_directory`, `remove_file`, `ask_user_question`, `agent`, `spawn_agent`, `browser_screenshot`.
+Done: `bash`, `job_output`, `job_kill`, `write_file`, `edit_file`, `apply_patch`, `notebook_edit`, `notebook_create`, `notebook_write`, `create_directory`, `remove_file`, `ask_user_question`, `agent`, `spawn_agent`, `browser_screenshot`, `docx`, `monitor`, `code_complete`, `lsp`.
 
 ---
 
@@ -92,17 +88,14 @@ All tools below currently fall through to `GenericToolMessageItem`. Listed in im
 
 | Tool | Tool Name | File | What to render |
 |---|---|---|---|
-| lsp | `lsp` | `lsp_tools.go` | Header: `operation` + `file_path:line`. Body: switch on operation → location list / hover markdown / symbol list / call hierarchy. |
 | rag | `rag_search` | `rag.go` | Header: query + corpus_id. Body: scored result list (`score · chunk preview`). |
 | rag | `rag_ingest` | `rag.go` | Header: filename + corpus_id. Body: `N chunks indexed`. Header-only on success. |
 
+Done: `lsp` (`lsp_tools.go`) — header: operation + file:line + summary; body: plain content.
+
 ### Group 4 — Simple
 
-| Tool | Tool Name | File | What to render |
-|---|---|---|---|
-| monitor | `monitor` | `monitor.go` | Header: command (truncated) + description. Body: `task_id` + output file path. |
-| fim | `code_complete` | `fim.go` | Header: last line before cursor + provider. Body: completion in syntax-highlighted code block. |
-| docx | `docx` | `docx.go` | Header: action + document_path. Body: success message or error. |
+Done: `monitor` (`monitor.go`), `code_complete` (`fim.go`), `docx` (`docx.go`).
 
 ---
 

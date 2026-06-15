@@ -320,6 +320,14 @@ func NewToolMessageItem(
 		item = NewGetGoalToolMessageItem(sty, toolCall, result, canceled)
 	case "update_goal":
 		item = NewUpdateGoalToolMessageItem(sty, toolCall, result, canceled)
+	case "docx":
+		item = NewDocxToolMessageItem(sty, toolCall, result, canceled)
+	case "monitor":
+		item = NewMonitorToolMessageItem(sty, toolCall, result, canceled)
+	case "code_complete":
+		item = NewFIMToolMessageItem(sty, toolCall, result, canceled)
+	case "lsp":
+		item = NewLSPToolMessageItem(sty, toolCall, result, canceled)
 	default:
 		if IsDockerMCPTool(toolCall.Name) {
 			item = NewDockerMCPToolMessageItem(sty, toolCall, result, canceled)
