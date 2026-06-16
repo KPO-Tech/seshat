@@ -153,6 +153,24 @@ func (f *ModelsList) SelectLast() (v bool) {
 	return v
 }
 
+// SelectPrevCyclic selects the previous model item, wrapping to the last
+// one if the first is currently selected, and scrolls it into view.
+func (f *ModelsList) SelectPrevCyclic() {
+	if !f.SelectPrev() {
+		f.SelectLast()
+	}
+	f.ScrollToSelected()
+}
+
+// SelectNextCyclic selects the next model item, wrapping to the first one
+// if the last is currently selected, and scrolls it into view.
+func (f *ModelsList) SelectNextCyclic() {
+	if !f.SelectNext() {
+		f.SelectFirst()
+	}
+	f.ScrollToSelected()
+}
+
 // IsSelectedFirst checks if the selected item is the first model item.
 func (f *ModelsList) IsSelectedFirst() bool {
 	originalIndex := f.Selected()

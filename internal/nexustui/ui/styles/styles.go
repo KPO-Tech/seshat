@@ -523,6 +523,10 @@ type Styles struct {
 		Normal  lipgloss.Style
 		Focused lipgloss.Style
 		Match   lipgloss.Style
+		Desc    lipgloss.Style
+		Icon    lipgloss.Style
+		Bar     lipgloss.Style
+		Border  lipgloss.Style
 	}
 
 	// Attachments styles

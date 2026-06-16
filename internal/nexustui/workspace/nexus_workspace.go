@@ -1149,10 +1149,23 @@ func (w *NexusWorkspace) ListTools(ctx context.Context) ([]ToolInfo, error) {
 	return tools, nil
 }
 func (w *NexusWorkspace) ListSkills(_ context.Context) ([]skills.CatalogEntry, error) {
-	cfg := w.Config()
+	// w.Config() returns a lazily-synthesized config (provider/model/MCP
+	// state only) whose Options is never populated with the defaulted
+	// SkillsPaths/DisabledSkills. The fully-loaded config — with
+	// runtimepath-aware defaults applied via setDefaults — lives in
+	// w.mcpStore, so prefer that when available.
+	var cfg *config.Config
+	w.cfgMu.Lock()
+	store := w.mcpStore
+	w.cfgMu.Unlock()
+	if store != nil {
+		cfg = store.Config()
+	} else {
+		cfg = w.Config()
+	}
 	var skillsPaths []string
 	var disabledSkills []string
-	if cfg.Options != nil {
+	if cfg != nil && cfg.Options != nil {
 		skillsPaths = cfg.Options.SkillsPaths
 		disabledSkills = cfg.Options.DisabledSkills
 	}

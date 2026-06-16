@@ -495,11 +495,11 @@ func quickStyle(o quickStyleOpts) Styles {
 	}
 
 	s.Help = help.Styles{
-		ShortKey:       base.Foreground(o.fgMoreSubtle),
+		ShortKey:       base.Foreground(o.primary),
 		ShortDesc:      base.Foreground(o.fgMostSubtle),
 		ShortSeparator: base.Foreground(o.separator),
 		Ellipsis:       base.Foreground(o.separator),
-		FullKey:        base.Foreground(o.fgMoreSubtle),
+		FullKey:        base.Foreground(o.primary),
 		FullDesc:       base.Foreground(o.fgMostSubtle),
 		FullSeparator:  base.Foreground(o.separator),
 	}
@@ -943,9 +943,13 @@ func quickStyle(o quickStyleOpts) Styles {
 	s.Status.ErrorMessage = s.Status.SuccessMessage.Foreground(o.onPrimary).Background(o.error)
 
 	// Completions styles
-	s.Completions.Normal = base.Background(o.bgLessVisible).Foreground(o.fgBase)
-	s.Completions.Focused = base.Background(o.primary).Foreground(o.onPrimary)
+	s.Completions.Normal = base.Foreground(o.fgBase)
+	s.Completions.Focused = base.Background(o.bgMostVisible).Foreground(o.primary).Bold(true)
 	s.Completions.Match = base.Underline(true)
+	s.Completions.Desc = base.Foreground(o.fgSubtle)
+	s.Completions.Icon = base.Foreground(o.fgSubtle)
+	s.Completions.Bar = base.Foreground(o.primary)
+	s.Completions.Border = base.Border(lipgloss.RoundedBorder()).BorderForeground(o.primary)
 
 	// Attachments styles
 	attachmentIconStyle := base.Foreground(o.bgLessVisible).Background(o.success).Padding(0, 1)

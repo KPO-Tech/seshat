@@ -154,6 +154,21 @@ func (l *FileSkillLoader) GetSkillDirCommandsForUser(cwd string, userID string) 
 		}
 	}
 
+	// Some collections are cloned directly under the skills root instead of
+	// under skills/repos/ (e.g. by an older client or a manual checkout).
+	// Treat any other top-level directory there as a collection too, so
+	// skills are found regardless of which layout produced them.
+	reserved := map[string]bool{"managed": true, "user": true, "builtin": true, "repos": true}
+	if entries, err := os.ReadDir(GetSkillsRootPath()); err == nil {
+		for _, e := range entries {
+			if !e.IsDir() || reserved[e.Name()] {
+				continue
+			}
+			collRoot := filepath.Join(GetSkillsRootPath(), e.Name())
+			sources = append(sources, NewCollectionSkillLoader(collRoot, SettingSourceProjectSettings))
+		}
+	}
+
 	for _, source := range sources {
 		loaded, err := source.LoadSkills()
 		if err != nil {

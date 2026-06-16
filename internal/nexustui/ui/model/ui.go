@@ -87,8 +87,8 @@ const sessionDetailsMaxHeight = 20
 // TextareaMaxHeight is the maximum height of the prompt textarea before scrolling.
 const TextareaMaxHeight = 6
 
-// editorHeightMargin accounts for the border top+bottom (2) plus one bottom spacing line (1).
-const editorHeightMargin = 3
+// editorHeightMargin accounts for the textarea box's top+bottom border.
+const editorHeightMargin = 2
 
 // TextareaMinHeight is the minimum height of the prompt textarea.
 const TextareaMinHeight = 1
@@ -222,9 +222,10 @@ type UI struct {
 	// Completions state
 	completions              *completions.Completions
 	completionsOpen          bool
+	completionsTrigger       string // "@" or "/", the character that opened the popup
 	completionsStartIndex    int
 	completionsQuery         string
-	completionsPositionStart image.Point // x,y where user typed '@'
+	completionsPositionStart image.Point // x,y where user typed '@' or '/'
 
 	// Chat components
 	chat *Chat
@@ -316,11 +317,7 @@ func New(com *common.Common, initialSessionID string, continueLast bool) *UI {
 	keyMap := DefaultKeyMap()
 
 	// Completions component
-	comp := completions.New(
-		com.Styles.Completions.Normal,
-		com.Styles.Completions.Focused,
-		com.Styles.Completions.Match,
-	)
+	comp := completions.New(completionsStyles(com.Styles))
 
 	todoSpinner := spinner.New(
 		spinner.WithSpinner(spinner.MiniDot),
@@ -378,7 +375,7 @@ func New(com *common.Common, initialSessionID string, continueLast bool) *UI {
 	ui.onboarding.yesInitializeSelected = true
 
 	desiredState := uiLanding
-	desiredFocus := uiFocusEditor
+	desiredFocus := uiFocusMain
 	if !com.Config().IsConfigured() {
 		desiredState = uiOnboarding
 	} else if n, _ := com.Workspace.ProjectNeedsInitialization(); n {
@@ -387,6 +384,9 @@ func New(com *common.Common, initialSessionID string, continueLast bool) *UI {
 
 	// set initial state
 	ui.setState(desiredState, desiredFocus)
+	if desiredFocus != uiFocusEditor {
+		ui.textarea.Blur()
+	}
 
 	opts := com.Config().Options
 
@@ -643,11 +643,6 @@ func (m *UI) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if dia := m.dialog.Dialog(dialog.CommandsID); dia != nil {
 			if commands, ok := dia.(*dialog.Commands); ok {
 				commands.SetCustomCommands(m.customCommands)
-			}
-		}
-		if dia := m.dialog.Dialog(dialog.SkillsPickerID); dia != nil {
-			if skillsDialog, ok := dia.(*dialog.SkillsPicker); ok {
-				skillsDialog.SetSkills(m.skillCommands)
 			}
 		}
 
@@ -1296,7 +1291,7 @@ func (m *UI) handleSidebarClick(msg tea.MouseClickMsg) bool {
 
 func (m *UI) handleClickFocus(msg tea.MouseClickMsg) (cmd tea.Cmd) {
 	switch {
-	case m.state != uiChat:
+	case m.state != uiChat && m.state != uiLanding:
 		return nil
 	case image.Pt(msg.X, msg.Y).In(m.layout.sidebar):
 		if m.focus != uiFocusSidebar {
@@ -2167,6 +2162,11 @@ func (m *UI) handleKeyPressMsg(msg tea.KeyPressMsg) tea.Cmd {
 						if !msg.KeepOpen {
 							m.closeCompletions()
 						}
+					case completions.SelectionMsg[completions.SkillCompletionValue]:
+						cmds = append(cmds, m.insertSkillCompletion(msg.Value.Name))
+						if !msg.KeepOpen {
+							m.closeCompletions()
+						}
 					case completions.ClosedMsg:
 						m.completionsOpen = false
 					}
@@ -2285,10 +2285,6 @@ func (m *UI) handleKeyPressMsg(msg tea.KeyPressMsg) tea.Cmd {
 				if cmd != nil {
 					cmds = append(cmds, cmd)
 				}
-			case key.Matches(msg, m.keyMap.Editor.Skills) && m.textarea.Value() == "":
-				if cmd := m.openSkillsDialog(); cmd != nil {
-					cmds = append(cmds, cmd)
-				}
 			case key.Matches(msg, m.keyMap.Editor.Commands) && m.textarea.Value() == "":
 				if cmd := m.openCommandsDialog(); cmd != nil {
 					cmds = append(cmds, cmd)
@@ -2299,20 +2295,25 @@ func (m *UI) handleKeyPressMsg(msg tea.KeyPressMsg) tea.Cmd {
 					break
 				}
 
-				// Check for @ trigger before passing to textarea.
+				// Check for a @ or / trigger before passing to textarea.
 				curValue := m.textarea.Value()
 				curIdx := len(curValue)
 
-				// Trigger completions on @.
-				if msg.String() == "@" && !m.completionsOpen {
+				// Trigger completions on @ (files/MCP resources) or / (skills).
+				if !m.completionsOpen && (msg.String() == "@" || msg.String() == "/") {
 					// Only show if beginning of prompt or after whitespace.
 					if curIdx == 0 || (curIdx > 0 && isWhitespace(curValue[curIdx-1])) {
 						m.completionsOpen = true
+						m.completionsTrigger = msg.String()
 						m.completionsQuery = ""
 						m.completionsStartIndex = curIdx
 						m.completionsPositionStart = m.completionsPosition()
-						depth, limit := m.com.Config().Options.TUI.Completions.Limits()
-						cmds = append(cmds, m.completions.Open(depth, limit))
+						if m.completionsTrigger == "@" {
+							depth, limit := m.com.Config().Options.TUI.Completions.Limits()
+							cmds = append(cmds, m.completions.Open(depth, limit))
+						} else {
+							m.completions.SetSkillItems(skillCompletionValues(m.skillCommands))
+						}
 					}
 				}
 
@@ -2329,8 +2330,10 @@ func (m *UI) handleKeyPressMsg(msg tea.KeyPressMsg) tea.Cmd {
 				m.updateHistoryDraft(curValue)
 
 				// After updating textarea, check if we need to filter completions.
-				// Skip filtering on the initial @ keystroke since items are loading async.
-				if m.completionsOpen && msg.String() != "@" {
+				// Skip filtering on the keystroke that just opened it: for @ the
+				// items are still loading async, and skills are unaffected either
+				// way since the query is empty on that keystroke.
+				if m.completionsOpen && msg.String() != m.completionsTrigger {
 					newValue := m.textarea.Value()
 					newIdx := len(newValue)
 
@@ -2343,7 +2346,7 @@ func (m *UI) handleKeyPressMsg(msg tea.KeyPressMsg) tea.Cmd {
 					} else {
 						// Extract current word and filter.
 						word := m.textareaWord()
-						if strings.HasPrefix(word, "@") {
+						if strings.HasPrefix(word, m.completionsTrigger) {
 							m.completionsQuery = word[1:]
 							m.completions.Filter(m.completionsQuery)
 						} else if m.completionsOpen {
@@ -2573,7 +2576,11 @@ func (m *UI) Draw(scr uv.Screen, area uv.Rectangle) *tea.Cursor {
 			x = screenW - w
 		}
 		x = max(0, x)
-		y = max(0, y+1) // Offset for attachments row
+		// Attachments height is already folded into completionsPositionStart
+		// (see completionsPosition); don't shift again here. Max.Y is kept
+		// at exactly positionStart.Y so the popup sits flush above the
+		// input line instead of overlapping it.
+		y = max(0, y)
 
 		completionsView := uv.NewStyledString(m.completions.Render())
 		completionsView.Draw(scr, image.Rectangle{
@@ -2653,7 +2660,6 @@ func (m *UI) View() tea.View {
 func (m *UI) ShortHelp() []key.Binding {
 	var binds []key.Binding
 	k := &m.keyMap
-	tab := k.Tab
 	commands := k.Commands
 
 	switch m.state {
@@ -2671,43 +2677,10 @@ func (m *UI) ShortHelp() []key.Binding {
 			binds = append(binds, cancelBinding)
 		}
 
-		switch m.focus {
-		case uiFocusEditor:
-			// Same shortcuts as the landing page — no tab/skills/commands hints.
-			binds = append(binds, commands, k.Models, k.Editor.Newline)
-		case uiFocusMain:
-			if m.hasSidebarTasks() {
-				tab.SetHelp("tab", "focus tasks")
-			} else {
-				tab.SetHelp("tab", "focus editor")
-			}
-			binds = append(
-				binds,
-				tab,
-				commands,
-				k.Models,
-				k.Chat.UpDown,
-				k.Chat.UpDownOneItem,
-				k.Chat.PageUp,
-				k.Chat.PageDown,
-				k.Chat.Copy,
-			)
-			if m.pillsExpanded && hasIncompleteTodos(m.session.Todos) && m.promptQueue > 0 {
-				binds = append(binds, k.Chat.PillLeft)
-			}
-		case uiFocusSidebar:
-			tab.SetHelp("tab", "focus editor")
-			binds = append(
-				binds,
-				tab,
-				commands,
-				k.Models,
-				k.Chat.UpDown,
-				k.Chat.Home,
-				k.Chat.End,
-				k.Chat.Expand,
-			)
-		}
+		// Always the same compact row, regardless of focus — switching to a
+		// longer focus-specific list (tab/scroll/copy hints) made the
+		// footer visibly grow and shrink as focus changed.
+		binds = append(binds, commands, k.Models, k.Editor.Newline)
 	default:
 		// TODO: other states
 		// if m.session == nil {
@@ -3021,8 +2994,6 @@ func (m *UI) generateLayout(w, h int) uiLayout {
 		layout.Fill(1),
 	).Split(area).Assign(&appRect, &helpRect)
 	appRect.Min.Y += 1
-	appRect.Max.Y -= 1
-	helpRect.Min.Y -= 1
 	appRect.Min.X += 1
 	appRect.Max.X -= 1
 
@@ -3249,6 +3220,7 @@ func (m *UI) yoloPromptFunc(info textarea.PromptInfo) string {
 // closeCompletions closes the completions popup and resets state.
 func (m *UI) closeCompletions() {
 	m.completionsOpen = false
+	m.completionsTrigger = ""
 	m.completionsQuery = ""
 	m.completionsStartIndex = 0
 	m.completions.Close()
@@ -3368,6 +3340,50 @@ func (m *UI) insertMCPResourceCompletion(item completions.ResourceCompletionValu
 	return tea.Batch(heightCmd, resourceCmd)
 }
 
+// completionsStyles maps the app's theme onto the completions popup's
+// style bundle.
+func completionsStyles(t *styles.Styles) completions.Styles {
+	return completions.Styles{
+		ItemStyles: completions.ItemStyles{
+			Normal:  t.Completions.Normal,
+			Focused: t.Completions.Focused,
+			Match:   t.Completions.Match,
+			Desc:    t.Completions.Desc,
+			Icon:    t.Completions.Icon,
+			Bar:     t.Completions.Bar,
+		},
+		Border: t.Completions.Border,
+	}
+}
+
+// skillCompletionValues converts the in-memory skill commands into
+// completion items for the inline "/" popup.
+func skillCompletionValues(cmds []commands.CustomCommand) []completions.SkillCompletionValue {
+	values := make([]completions.SkillCompletionValue, 0, len(cmds))
+	for _, cmd := range cmds {
+		if cmd.Skill == nil {
+			continue
+		}
+		values = append(values, completions.SkillCompletionValue{
+			Name:        cmd.Skill.Name,
+			Description: cmd.Skill.Description,
+		})
+	}
+	return values
+}
+
+// insertSkillCompletion inserts the selected skill's slash command into the
+// textarea, replacing the /query. Unlike files and MCP resources, no
+// attachment is produced — the user can keep typing arguments and send
+// normally.
+func (m *UI) insertSkillCompletion(name string) tea.Cmd {
+	prevHeight := m.textarea.Height()
+	if !m.insertCompletionText("/" + name) {
+		return nil
+	}
+	return m.handleTextareaHeightChange(prevHeight)
+}
+
 // completionsPosition returns the X and Y position for the completions popup.
 func (m *UI) completionsPosition() image.Point {
 	cur := m.textarea.Cursor()
@@ -3436,18 +3452,22 @@ func (m *UI) renderEditorView(width int) string {
 		attachmentsView = m.attachments.Render(width)
 	}
 
+	borderColor := t.Section.Line.GetForeground()
+	if m.focus == uiFocusEditor {
+		borderColor = t.Logo.FieldColor
+	}
 	boxWidth := max(10, width-2)
 	box := lipgloss.NewStyle().
 		Border(lipgloss.NormalBorder()).
-		BorderForeground(t.Section.Line.GetForeground()).
+		BorderForeground(borderColor).
 		Width(boxWidth).
 		Render(m.textarea.View())
 
-	parts := make([]string, 0, 3)
+	parts := make([]string, 0, 2)
 	if attachmentsView != "" {
 		parts = append(parts, attachmentsView)
 	}
-	parts = append(parts, box, "")
+	parts = append(parts, box)
 	return strings.Join(parts, "\n")
 }
 
@@ -3481,7 +3501,7 @@ func (m *UI) refreshStyles() {
 		m.cacheSidebarLogo(m.layout.sidebar.Dx())
 	}
 	m.textarea.SetStyles(t.Editor.Textarea)
-	m.completions.SetStyles(t.Completions.Normal, t.Completions.Focused, t.Completions.Match)
+	m.completions.SetStyles(completionsStyles(t))
 	m.attachments.Renderer().SetStyles(
 		t.Attachments.Normal,
 		t.Attachments.Deleting,
@@ -3736,19 +3756,6 @@ func (m *UI) openSettingsDialog() tea.Cmd {
 		return util.ReportError(err)
 	}
 	m.dialog.OpenDialog(s)
-	return nil
-}
-
-func (m *UI) openSkillsDialog() tea.Cmd {
-	if m.dialog.ContainsDialog(dialog.SkillsPickerID) {
-		m.dialog.BringToFront(dialog.SkillsPickerID)
-		return nil
-	}
-	skillsDialog, err := dialog.NewSkillsPicker(m.com, m.skillCommands)
-	if err != nil {
-		return util.ReportError(err)
-	}
-	m.dialog.OpenDialog(skillsDialog)
 	return nil
 }
 

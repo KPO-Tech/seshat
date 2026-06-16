@@ -23,7 +23,7 @@ Show a summary; hide the raw payload.
 
 | Tool(s) | State | Notes |
 |---|---|---|
-| `nexus_read_skill` | Planned | Skill name + summary; not full body. |
+| `nexus_read_skill` | Impl | Header-only on success (skill name + summary); renderer implemented, validation pending. |
 
 Done: `read_file`, `get_file_metadata`, `read_document_url`, `list_agents`, `memory_search_nodes`, `memory_open_nodes`, `get_goal`, all `browser_*` list/capture tools (`browser_snapshot`, `browser_extract`, `browser_network_list`, `browser_list_downloads`, `browser_list_pages`, `browser_search_content`).
 
@@ -33,7 +33,9 @@ Done: `read_file`, `get_file_metadata`, `read_document_url`, `list_agents`, `mem
 
 | Tool(s) | State | Notes |
 |---|---|---|
-| `nexus_list_skills`, `nexus_validate_skill` | Planned | Count/result rendering. |
+| `skill` | Impl | Header-only on success (skill name + args); body shown on error. Renderer implemented, validation pending. |
+| `nexus_list_skills` | Impl | Markdown table body. Renderer implemented, validation pending. |
+| `nexus_validate_skill` | Impl | Plain-text body always shown (success can still carry warnings). Renderer implemented, validation pending. |
 | `tool_search` | Impl | Renderer implemented; validation pending (test 11). |
 | `mcp_list_resources`, `mcp_read_resource`, `mcp_*` | Impl | Renderers implemented; validation pending (test 11). |
 | `rag_search`, `rag_ingest` | Planned | Counts and identifiers. See **Special Tools**. |
@@ -58,9 +60,7 @@ Done: `bash`, `job_output`, `job_kill`, `write_file`, `edit_file`, `apply_patch`
 
 ## Category E — Generic For Now
 
-| Tool(s) | State | Notes |
-|---|---|---|
-| `skill` | Planned | Depends on how much of skill execution should be surfaced vs hidden. |
+All resolved. No open items.
 
 Done: `browser_get_network_policy`, `browser_set_network_policy`.
 

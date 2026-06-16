@@ -20,6 +20,7 @@ import (
 	"github.com/EngineerProjects/nexus-engine/internal/nexustui/ui/common"
 	"github.com/EngineerProjects/nexus-engine/internal/nexustui/ui/list"
 	"github.com/EngineerProjects/nexus-engine/internal/nexustui/ui/styles"
+	skillsTool "github.com/EngineerProjects/nexus-engine/internal/tools/system/skills"
 	taskTool "github.com/EngineerProjects/nexus-engine/internal/tools/task"
 	"github.com/charmbracelet/x/ansi"
 )
@@ -330,6 +331,14 @@ func NewToolMessageItem(
 		item = NewFIMToolMessageItem(sty, toolCall, result, canceled)
 	case "lsp":
 		item = NewLSPToolMessageItem(sty, toolCall, result, canceled)
+	case skillsTool.SkillToolName:
+		item = NewSkillToolMessageItem(sty, toolCall, result, canceled)
+	case "nexus_list_skills":
+		item = NewNexusListSkillsToolMessageItem(sty, toolCall, result, canceled)
+	case "nexus_read_skill":
+		item = NewNexusReadSkillToolMessageItem(sty, toolCall, result, canceled)
+	case "nexus_validate_skill":
+		item = NewNexusValidateSkillToolMessageItem(sty, toolCall, result, canceled)
 	default:
 		if IsDockerMCPTool(toolCall.Name) {
 			item = NewDockerMCPToolMessageItem(sty, toolCall, result, canceled)

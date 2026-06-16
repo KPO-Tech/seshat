@@ -39,6 +39,10 @@ type toolItem struct {
 	m       fuzzy.Match
 	t       *styles.Styles
 	cache   map[int]string
+	// data carries an optional caller-defined payload (e.g. the full
+	// skills.CatalogEntry behind a skill item) for views that need more
+	// than name/desc once an item is selected.
+	data any
 }
 
 func (i *toolItem) Finished() bool { return true }
@@ -251,6 +255,24 @@ func (l *ToolsList) SelectLast() bool {
 		v = l.List.SelectPrev()
 	}
 	return v
+}
+
+// SelectPrevCyclic selects the previous toolItem, wrapping to the last one
+// if the first is currently selected, and scrolls it into view.
+func (l *ToolsList) SelectPrevCyclic() {
+	if !l.SelectPrev() {
+		l.SelectLast()
+	}
+	l.ScrollToSelected()
+}
+
+// SelectNextCyclic selects the next toolItem, wrapping to the first one if
+// the last is currently selected, and scrolls it into view.
+func (l *ToolsList) SelectNextCyclic() {
+	if !l.SelectNext() {
+		l.SelectFirst()
+	}
+	l.ScrollToSelected()
 }
 
 // IsSelectedFirst reports whether the selection is on the first toolItem.

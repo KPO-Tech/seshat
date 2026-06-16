@@ -1,12 +1,15 @@
 package dialog
 
 import (
+	"cmp"
 	"context"
 	"fmt"
 	"image/color"
 	"os"
+	"path/filepath"
 	"sort"
 	"strings"
+	"sync"
 
 	"charm.land/bubbles/v2/help"
 	"charm.land/bubbles/v2/key"
@@ -17,11 +20,13 @@ import (
 	"charm.land/lipgloss/v2"
 	"github.com/EngineerProjects/nexus-engine/internal/nexustui/agent/tools/mcp"
 	"github.com/EngineerProjects/nexus-engine/internal/nexustui/config"
+	"github.com/EngineerProjects/nexus-engine/internal/nexustui/home"
 	"github.com/EngineerProjects/nexus-engine/internal/nexustui/skills"
 	"github.com/EngineerProjects/nexus-engine/internal/nexustui/ui/common"
 	"github.com/EngineerProjects/nexus-engine/internal/nexustui/ui/list"
 	"github.com/EngineerProjects/nexus-engine/internal/nexustui/ui/styles"
 	"github.com/EngineerProjects/nexus-engine/internal/nexustui/workspace"
+	"github.com/charlievieth/fastwalk"
 	uv "github.com/charmbracelet/ultraviolet"
 	"github.com/charmbracelet/x/ansi"
 	"github.com/sahilm/fuzzy"
@@ -43,6 +48,7 @@ const (
 	settingsViewMCP
 	settingsViewMCPDetail
 	settingsViewSkills
+	settingsViewSkillDetail
 )
 
 const (
@@ -97,9 +103,12 @@ type Settings struct {
 	mcpDetailViewport viewport.Model
 
 	// skills sub-view state
-	skillsList  *ToolsList
-	skillsInput textinput.Model
-	skillsAll   []skills.CatalogEntry
+	skillsList           *ToolsList
+	skillsInput          textinput.Model
+	skillsAll            []skills.CatalogEntry
+	selectedSkill        skills.CatalogEntry
+	skillDetailViewport  viewport.Model
+	skillDetailLastWidth int
 
 	keyMap struct {
 		Select, Next, Previous, Back, Close key.Binding
@@ -183,6 +192,7 @@ func NewSettings(com *common.Common) (*Settings, error) {
 	s.skillsInput.Placeholder = "Filter skills..."
 	s.skillsInput.SetStyles(t.TextInput)
 	s.skillsList = newToolsList(t)
+	s.skillDetailViewport = viewport.New()
 
 	providers, _ := config.Providers(com.Config()) // best-effort; nil on error → empty list
 	s.providers = providers
@@ -258,19 +268,9 @@ func (s *Settings) handleRootKey(msg tea.KeyPressMsg) Action {
 	case key.Matches(msg, s.keyMap.Close):
 		return ActionClose{}
 	case key.Matches(msg, s.keyMap.Previous):
-		if s.rootList.IsSelectedFirst() {
-			s.rootList.SelectLast()
-		} else {
-			s.rootList.SelectPrev()
-		}
-		s.rootList.ScrollToSelected()
+		s.rootList.SelectPrevCyclic()
 	case key.Matches(msg, s.keyMap.Next):
-		if s.rootList.IsSelectedLast() {
-			s.rootList.SelectFirst()
-		} else {
-			s.rootList.SelectNext()
-		}
-		s.rootList.ScrollToSelected()
+		s.rootList.SelectNextCyclic()
 	case key.Matches(msg, s.keyMap.Select):
 		return s.activateSelected()
 	default:
@@ -312,6 +312,8 @@ func (s *Settings) handleSubKey(msg tea.KeyPressMsg) Action {
 		return s.handleMCPDetailKey(msg)
 	case settingsViewSkills:
 		return s.handleSkillsKey(msg)
+	case settingsViewSkillDetail:
+		return s.handleSkillDetailKey(msg)
 	}
 	return nil
 }
@@ -319,19 +321,9 @@ func (s *Settings) handleSubKey(msg tea.KeyPressMsg) Action {
 func (s *Settings) handleProvKey(msg tea.KeyPressMsg) Action {
 	switch {
 	case key.Matches(msg, s.keyMap.Previous):
-		if s.provList.IsSelectedFirst() {
-			s.provList.SelectLast()
-		} else {
-			s.provList.SelectPrev()
-		}
-		s.provList.ScrollToSelected()
+		s.provList.SelectPrevCyclic()
 	case key.Matches(msg, s.keyMap.Next):
-		if s.provList.IsSelectedLast() {
-			s.provList.SelectFirst()
-		} else {
-			s.provList.SelectNext()
-		}
-		s.provList.ScrollToSelected()
+		s.provList.SelectNextCyclic()
 	case key.Matches(msg, s.keyMap.Select):
 		if item := s.provList.SelectedItem(); item != nil {
 			if pi, ok := item.(*settingsProviderItem); ok {
@@ -350,19 +342,9 @@ func (s *Settings) handleProvKey(msg tea.KeyPressMsg) Action {
 func (s *Settings) handleProviderKey(msg tea.KeyPressMsg) Action {
 	switch {
 	case key.Matches(msg, s.keyMap.Previous):
-		if s.providerList.IsSelectedFirst() {
-			s.providerList.SelectLast()
-		} else {
-			s.providerList.SelectPrev()
-		}
-		s.providerList.ScrollToSelected()
+		s.providerList.SelectPrevCyclic()
 	case key.Matches(msg, s.keyMap.Next):
-		if s.providerList.IsSelectedLast() {
-			s.providerList.SelectFirst()
-		} else {
-			s.providerList.SelectNext()
-		}
-		s.providerList.ScrollToSelected()
+		s.providerList.SelectNextCyclic()
 	case key.Matches(msg, s.keyMap.Select):
 		if item := s.providerList.SelectedItem(); item != nil {
 			if si, ok := item.(*settingsSectionItem); ok {
@@ -376,19 +358,9 @@ func (s *Settings) handleProviderKey(msg tea.KeyPressMsg) Action {
 func (s *Settings) handleWebSearchKey(msg tea.KeyPressMsg) Action {
 	switch {
 	case key.Matches(msg, s.keyMap.Previous):
-		if s.webSearchList.IsSelectedFirst() {
-			s.webSearchList.SelectLast()
-		} else {
-			s.webSearchList.SelectPrev()
-		}
-		s.webSearchList.ScrollToSelected()
+		s.webSearchList.SelectPrevCyclic()
 	case key.Matches(msg, s.keyMap.Next):
-		if s.webSearchList.IsSelectedLast() {
-			s.webSearchList.SelectFirst()
-		} else {
-			s.webSearchList.SelectNext()
-		}
-		s.webSearchList.ScrollToSelected()
+		s.webSearchList.SelectNextCyclic()
 	case key.Matches(msg, s.keyMap.Select):
 		if item := s.webSearchList.SelectedItem(); item != nil {
 			if wi, ok := item.(*settingsWebSearchItem); ok {
@@ -405,19 +377,9 @@ func (s *Settings) handleWebSearchKey(msg tea.KeyPressMsg) Action {
 func (s *Settings) handleThemeKey(msg tea.KeyPressMsg) Action {
 	switch {
 	case key.Matches(msg, s.keyMap.Previous):
-		if s.themeList.IsSelectedFirst() {
-			s.themeList.SelectLast()
-		} else {
-			s.themeList.SelectPrev()
-		}
-		s.themeList.ScrollToSelected()
+		s.themeList.SelectPrevCyclic()
 	case key.Matches(msg, s.keyMap.Next):
-		if s.themeList.IsSelectedLast() {
-			s.themeList.SelectFirst()
-		} else {
-			s.themeList.SelectNext()
-		}
-		s.themeList.ScrollToSelected()
+		s.themeList.SelectNextCyclic()
 	case key.Matches(msg, s.keyMap.Select):
 		if item := s.themeList.SelectedItem(); item != nil {
 			if ti, ok := item.(*settingsThemeItem); ok {
@@ -436,19 +398,9 @@ func (s *Settings) handleThemeKey(msg tea.KeyPressMsg) Action {
 func (s *Settings) handleToolsKey(msg tea.KeyPressMsg) Action {
 	switch {
 	case key.Matches(msg, s.keyMap.Previous):
-		if s.toolsList.IsSelectedFirst() {
-			s.toolsList.SelectLast()
-		} else {
-			s.toolsList.SelectPrev()
-		}
-		s.toolsList.ScrollToSelected()
+		s.toolsList.SelectPrevCyclic()
 	case key.Matches(msg, s.keyMap.Next):
-		if s.toolsList.IsSelectedLast() {
-			s.toolsList.SelectFirst()
-		} else {
-			s.toolsList.SelectNext()
-		}
-		s.toolsList.ScrollToSelected()
+		s.toolsList.SelectNextCyclic()
 	default:
 		var cmd tea.Cmd
 		s.toolsInput, cmd = s.toolsInput.Update(msg)
@@ -462,19 +414,9 @@ func (s *Settings) handleToolsKey(msg tea.KeyPressMsg) Action {
 func (s *Settings) handleMCPKey(msg tea.KeyPressMsg) Action {
 	switch {
 	case key.Matches(msg, s.keyMap.Previous):
-		if s.mcpList.IsSelectedFirst() {
-			s.mcpList.SelectLast()
-		} else {
-			s.mcpList.SelectPrev()
-		}
-		s.mcpList.ScrollToSelected()
+		s.mcpList.SelectPrevCyclic()
 	case key.Matches(msg, s.keyMap.Next):
-		if s.mcpList.IsSelectedLast() {
-			s.mcpList.SelectFirst()
-		} else {
-			s.mcpList.SelectNext()
-		}
-		s.mcpList.ScrollToSelected()
+		s.mcpList.SelectNextCyclic()
 	case key.Matches(msg, s.keyMap.Select):
 		if item := s.mcpList.SelectedItem(); item != nil {
 			if mi, ok := item.(*settingsMCPItem); ok {
@@ -512,25 +454,34 @@ func (s *Settings) rebuildToolsList(filter string) {
 func (s *Settings) handleSkillsKey(msg tea.KeyPressMsg) Action {
 	switch {
 	case key.Matches(msg, s.keyMap.Previous):
-		if s.skillsList.IsSelectedFirst() {
-			s.skillsList.SelectLast()
-		} else {
-			s.skillsList.SelectPrev()
-		}
-		s.skillsList.ScrollToSelected()
+		s.skillsList.SelectPrevCyclic()
 	case key.Matches(msg, s.keyMap.Next):
-		if s.skillsList.IsSelectedLast() {
-			s.skillsList.SelectFirst()
-		} else {
-			s.skillsList.SelectNext()
+		s.skillsList.SelectNextCyclic()
+	case key.Matches(msg, s.keyMap.Select):
+		if item := s.skillsList.SelectedItem(); item != nil {
+			if ti, ok := item.(*toolItem); ok {
+				if entry, ok := ti.data.(skills.CatalogEntry); ok {
+					s.selectedSkill = entry
+					s.gotoView(settingsViewSkillDetail)
+				}
+			}
 		}
-		s.skillsList.ScrollToSelected()
 	default:
 		var cmd tea.Cmd
 		s.skillsInput, cmd = s.skillsInput.Update(msg)
 		s.skillsList.SetFilter(s.skillsInput.Value())
 		s.skillsList.SelectFirst()
 		return ActionCmd{cmd}
+	}
+	return nil
+}
+
+func (s *Settings) handleSkillDetailKey(msg tea.KeyPressMsg) Action {
+	switch {
+	case key.Matches(msg, s.keyMap.Next):
+		s.skillDetailViewport.ScrollDown(1)
+	case key.Matches(msg, s.keyMap.Previous):
+		s.skillDetailViewport.ScrollUp(1)
 	}
 	return nil
 }
@@ -565,6 +516,49 @@ func (s *Settings) rebuildMCPList() {
 	s.mcpList.ScrollToTop()
 	s.mcpList.Focus()
 	s.mcpList.SetSelected(0)
+}
+
+// wrapParagraphs reflows free-form text to width, treating blank lines as
+// paragraph breaks and collapsing any other line break (e.g. text that was
+// hard-wrapped at a fixed column in its source file) into a single space
+// before re-wrapping. Without this, source line breaks survive into the
+// rendered output and get wrapped a second time on top of the original
+// ones, producing short ragged fragments instead of clean justified lines.
+func wrapParagraphs(text string, width int) []string {
+	text = strings.TrimSpace(strings.ReplaceAll(text, "\r\n", "\n"))
+	if text == "" {
+		return nil
+	}
+
+	var paragraphs []string
+	var cur []string
+	flush := func() {
+		if len(cur) > 0 {
+			paragraphs = append(paragraphs, strings.Join(cur, " "))
+			cur = nil
+		}
+	}
+	for _, ln := range strings.Split(text, "\n") {
+		if strings.TrimSpace(ln) == "" {
+			flush()
+			continue
+		}
+		cur = append(cur, strings.TrimSpace(ln))
+	}
+	flush()
+
+	var out []string
+	for i, p := range paragraphs {
+		if i > 0 {
+			out = append(out, "")
+		}
+		if width > 0 {
+			out = append(out, strings.Split(ansi.Wordwrap(p, width, ""), "\n")...)
+		} else {
+			out = append(out, p)
+		}
+	}
+	return out
 }
 
 func (s *Settings) buildMCPDetail(serverName string, width int) string {
@@ -621,25 +615,24 @@ func (s *Settings) buildMCPDetail(serverName string, width int) string {
 
 	const namePrefix = "  › "
 	const descIndent = "    "
-	const descIndentW = 5 // 4 left + 1 right margin
+	const descIndentW = 6 // 4 left + 2 right margin, keeps text off the border
 	descWrapW := width - descIndentW
 	if descWrapW < 20 {
 		descWrapW = 0
 	}
 
 	wrapDesc := func(desc string) []string {
-		desc = strings.TrimSpace(desc)
-		if desc == "" {
-			return nil
+		return wrapParagraphs(desc, descWrapW)
+	}
+	appendDesc := func(lines []string, desc string) []string {
+		for _, wline := range wrapDesc(desc) {
+			if wline == "" {
+				lines = append(lines, "")
+				continue
+			}
+			lines = append(lines, muted.Render(descIndent+wline))
 		}
-		if idx := strings.Index(desc, "\n\n"); idx >= 0 {
-			desc = desc[:idx]
-		}
-		desc = strings.ReplaceAll(desc, "\n", " ")
-		if descWrapW > 0 {
-			return strings.Split(ansi.Wordwrap(desc, descWrapW, ""), "\n")
-		}
-		return []string{desc}
+		return lines
 	}
 
 	if len(serverTools) > 0 {
@@ -648,9 +641,7 @@ func (s *Settings) buildMCPDetail(serverName string, width int) string {
 		for _, tool := range serverTools {
 			lines = append(lines, "")
 			lines = append(lines, bold.Render(namePrefix+tool.Name))
-			for _, wline := range wrapDesc(tool.Description) {
-				lines = append(lines, muted.Render(descIndent+wline))
-			}
+			lines = appendDesc(lines, tool.Description)
 		}
 	} else if hasInfo && info.State == mcp.StateConnected {
 		lines = append(lines, "")
@@ -667,9 +658,7 @@ func (s *Settings) buildMCPDetail(serverName string, width int) string {
 		for _, p := range prompts {
 			lines = append(lines, "")
 			lines = append(lines, bold.Render(namePrefix+p.Name))
-			for _, wline := range wrapDesc(p.Description) {
-				lines = append(lines, muted.Render(descIndent+wline))
-			}
+			lines = appendDesc(lines, p.Description)
 		}
 		break
 	}
@@ -684,11 +673,182 @@ func (s *Settings) buildMCPDetail(serverName string, width int) string {
 		for _, r := range resources {
 			lines = append(lines, "")
 			lines = append(lines, bold.Render(namePrefix+r.URI))
-			for _, wline := range wrapDesc(r.Description) {
-				lines = append(lines, muted.Render(descIndent+wline))
-			}
+			lines = appendDesc(lines, r.Description)
 		}
 		break
+	}
+
+	lines = append(lines, "")
+	return strings.Join(lines, "\n")
+}
+
+// skillDirSummary counts bundled files in one directory by extension.
+type skillDirSummary struct {
+	dir   string // relative to the skill root; "" means the skill root itself
+	exts  map[string]int
+	total int
+}
+
+// summarizeSkillFiles walks every file bundled alongside a SKILL.md (the
+// file itself excluded) and groups counts by directory and extension, so a
+// folder with dozens of files collapses into one line like
+// "scripts/  12 files  ·py 8 ·sh 4" instead of one line per file.
+func summarizeSkillFiles(skillDir string) []skillDirSummary {
+	byDir := make(map[string]*skillDirSummary)
+	var order []string
+	var mu sync.Mutex
+
+	// Skills often symlink shared folders (e.g. "scripts" -> "../scripts")
+	// from a collection root. Follow them like the skill discovery walk
+	// does, otherwise they'd be miscounted as extensionless files instead
+	// of being explored.
+	conf := fastwalk.Config{Follow: true, ToSlash: fastwalk.DefaultToSlash()}
+	_ = fastwalk.Walk(&conf, skillDir, func(path string, d os.DirEntry, err error) error {
+		if err != nil {
+			return nil
+		}
+		if d.Type()&os.ModeSymlink != 0 {
+			// A directory symlink's contents are walked separately
+			// (Follow: true); counting the link itself would double-count
+			// it as a phantom extensionless file.
+			if info, statErr := os.Stat(path); statErr == nil && info.IsDir() {
+				return nil
+			}
+		} else if d.IsDir() {
+			return nil
+		}
+		rel, err := filepath.Rel(skillDir, path)
+		if err != nil || rel == "SKILL.md" {
+			return nil
+		}
+		dir := filepath.Dir(rel)
+		if dir == "." {
+			dir = ""
+		}
+		ext := strings.ToLower(filepath.Ext(rel))
+		if ext == "" {
+			ext = "(no ext)"
+		}
+
+		// fastwalk dispatches the callback from multiple goroutines.
+		mu.Lock()
+		s, ok := byDir[dir]
+		if !ok {
+			s = &skillDirSummary{dir: dir, exts: make(map[string]int)}
+			byDir[dir] = s
+			order = append(order, dir)
+		}
+		s.exts[ext]++
+		s.total++
+		mu.Unlock()
+		return nil
+	})
+
+	sort.Strings(order)
+	summaries := make([]skillDirSummary, 0, len(order))
+	for _, dir := range order {
+		summaries = append(summaries, *byDir[dir])
+	}
+	return summaries
+}
+
+// extBreakdown renders a directory's extension counts as "·py 8 ·sh 4",
+// most frequent extension first.
+func extBreakdown(exts map[string]int) string {
+	type kv struct {
+		ext   string
+		count int
+	}
+	pairs := make([]kv, 0, len(exts))
+	for ext, count := range exts {
+		pairs = append(pairs, kv{ext, count})
+	}
+	sort.Slice(pairs, func(i, j int) bool {
+		if pairs[i].count != pairs[j].count {
+			return pairs[i].count > pairs[j].count
+		}
+		return pairs[i].ext < pairs[j].ext
+	})
+	parts := make([]string, 0, len(pairs))
+	for _, p := range pairs {
+		parts = append(parts, fmt.Sprintf("%s %d", p.ext, p.count))
+	}
+	return strings.Join(parts, "  ·")
+}
+
+// buildSkillDetail renders the metadata panel for a single skill: its
+// source/collection, description, on-disk location, and the scripts and
+// reference files bundled alongside its SKILL.md.
+func (s *Settings) buildSkillDetail(entry skills.CatalogEntry, width int) string {
+	t := s.com.Styles
+	accent := lipgloss.NewStyle().Foreground(t.Logo.FieldColor).Bold(true)
+	muted := t.Sidebar.WorkingDir
+	bold := lipgloss.NewStyle().Bold(true)
+
+	heading := accent
+	if width > 0 {
+		heading = accent.Width(width)
+	}
+
+	var lines []string
+	lines = append(lines, "")
+	lines = append(lines, heading.Render("  "+entry.Name))
+	lines = append(lines, "")
+
+	skillDir := filepath.Dir(entry.ID)
+
+	row := func(label, value string) string {
+		return muted.Render("  "+label+"  ") + value
+	}
+	lines = append(lines, row("Group", cmp.Or(entry.Collection, string(entry.Source))))
+	invocable := "no"
+	if entry.UserInvocable {
+		invocable = "yes"
+	}
+	lines = append(lines, row("Invocable", invocable))
+	lines = append(lines, row("Folder", home.Short(skillDir)))
+
+	descWrapW := width - 6 // 4 left indent + 2 right margin, keeps text off the border
+	if descWrapW < 20 {
+		descWrapW = 0
+	}
+	if desc := strings.TrimSpace(entry.Description); desc != "" {
+		lines = append(lines, "")
+		lines = append(lines, accent.Render("  Description"))
+		lines = append(lines, "")
+		for _, wline := range wrapParagraphs(desc, descWrapW) {
+			if wline == "" {
+				lines = append(lines, "")
+				continue
+			}
+			lines = append(lines, muted.Render("    "+wline))
+		}
+	}
+
+	dirs := summarizeSkillFiles(skillDir)
+	totalFiles := 0
+	for _, d := range dirs {
+		totalFiles += d.total
+	}
+
+	if len(dirs) > 0 {
+		lines = append(lines, "")
+		lines = append(lines, accent.Render(fmt.Sprintf("  Bundled files (%d)", totalFiles)))
+		for _, d := range dirs {
+			label := d.dir + "/"
+			if d.dir == "" {
+				label = "(skill root)"
+			}
+			noun := "files"
+			if d.total == 1 {
+				noun = "file"
+			}
+			lines = append(lines, bold.Render("  › "+label)+
+				muted.Render(fmt.Sprintf("  %d %s  ·%s", d.total, noun, extBreakdown(d.exts))))
+		}
+	} else {
+		lines = append(lines, "")
+		lines = append(lines, muted.Render("  No bundled files."))
 	}
 
 	lines = append(lines, "")
@@ -742,6 +902,9 @@ func (s *Settings) gotoView(v settingsView) {
 		s.skillsInput.SetValue("")
 		s.skillsInput.Focus()
 		s.rebuildSkillsList("")
+	case settingsViewSkillDetail:
+		s.skillDetailLastWidth = 0 // force rebuild in Draw once innerW is known
+		s.skillDetailViewport.GotoTop()
 	}
 }
 
@@ -751,6 +914,8 @@ func (s *Settings) gotoParent() {
 		s.gotoView(settingsViewProviders)
 	case settingsViewMCPDetail:
 		s.gotoView(settingsViewMCP)
+	case settingsViewSkillDetail:
+		s.gotoView(settingsViewSkills)
 	default:
 		s.gotoRoot()
 	}
@@ -929,6 +1094,14 @@ func (s *Settings) Draw(scr uv.Screen, area uv.Rectangle) *tea.Cursor {
 		}
 	case settingsViewSkills:
 		s.skillsList.SetSize(innerW, finalContentH)
+	case settingsViewSkillDetail:
+		s.skillDetailViewport.SetWidth(innerW)
+		s.skillDetailViewport.SetHeight(finalContentH)
+		if innerW != s.skillDetailLastWidth {
+			s.skillDetailLastWidth = innerW
+			content := s.buildSkillDetail(s.selectedSkill, innerW)
+			s.skillDetailViewport.SetContent(content)
+		}
 	}
 
 	// ── Build render context ──────────────────────────────────────────────────
@@ -988,10 +1161,14 @@ func (s *Settings) Draw(scr uv.Screen, area uv.Rectangle) *tea.Cursor {
 		rc.AddPart(t.Dialog.InputPrompt.Render(s.skillsInput.View()))
 		rc.AddPart(sep)
 		rc.AddPart(t.Dialog.SecondaryText.Render(
-			fmt.Sprintf("  %d skills — ↑↓ navigate · type to filter", len(s.skillsAll)),
+			fmt.Sprintf("  %d skills — ↑↓ navigate · enter to inspect · type to filter", len(s.skillsAll)),
 		))
 		rc.Parts = append(rc.Parts, "")
 		rc.AddPart(t.Dialog.List.Height(s.skillsList.Height()).Render(s.skillsList.Render()))
+
+	case settingsViewSkillDetail:
+		rc.AddPart(sep)
+		rc.AddPart(t.Dialog.List.Height(finalContentH).Render(s.skillDetailViewport.View()))
 
 	case settingsViewMCP:
 		cfg := s.com.Config()
@@ -1038,6 +1215,8 @@ func (s *Settings) viewTitle() string {
 		return "Settings  ›  MCP  ›  " + s.selectedMCPName
 	case settingsViewSkills:
 		return "Settings  ›  Skills"
+	case settingsViewSkillDetail:
+		return "Settings  ›  Skills  ›  " + s.selectedSkill.Name
 	default:
 		return "Settings"
 	}
@@ -1212,28 +1391,58 @@ func (i *settingsMCPItem) Render(width int) string {
 // buildSkillGroups converts a flat CatalogEntry slice into sorted toolGroups
 // keyed by source (Built-in, Project, User).
 func buildSkillGroups(t *styles.Styles, entries []skills.CatalogEntry) []toolGroup {
+	byCollection := make(map[string][]*toolItem)
 	bySource := make(map[string][]*toolItem)
+	var collectionOrder []string
+	seenCollection := make(map[string]bool)
+
 	for _, entry := range entries {
-		src := string(entry.Source)
-		name := entry.Name
+		name := "  " + entry.Name
 		if entry.UserInvocable {
-			name = "/" + name
+			name = "· " + entry.Name
 		}
-		bySource[src] = append(bySource[src], &toolItem{
+		item := &toolItem{
 			Versioned: list.NewVersioned(),
 			name:      name,
 			desc:      entry.Description,
 			t:         t,
 			cache:     make(map[int]string),
+			data:      entry,
+		}
+		if entry.Collection != "" {
+			if !seenCollection[entry.Collection] {
+				seenCollection[entry.Collection] = true
+				collectionOrder = append(collectionOrder, entry.Collection)
+			}
+			byCollection[entry.Collection] = append(byCollection[entry.Collection], item)
+			continue
+		}
+		bySource[string(entry.Source)] = append(bySource[string(entry.Source)], item)
+	}
+
+	sort.Strings(collectionOrder)
+
+	groups := make([]toolGroup, 0, len(byCollection)+len(bySource))
+	// Skill collections (cloned repos such as "nexus-skills" or "paperasse")
+	// are listed first, alphabetically, each as their own group.
+	for _, name := range collectionOrder {
+		items := byCollection[name]
+		sort.Slice(items, func(i, j int) bool { return items[i].name < items[j].name })
+		groups = append(groups, toolGroup{
+			Versioned: list.NewVersioned(),
+			category:  name,
+			items:     items,
+			t:         t,
 		})
 	}
-	// Emit groups in preferred source order; sort items within each group.
+
+	// Standalone skills (not part of a collection) keep the previous
+	// source-based grouping, emitted in preferred order.
 	preferred := []struct{ key, label string }{
 		{string(skills.SourceSystem), "Built-in"},
 		{string(skills.SourceProject), "Project"},
 		{string(skills.SourceUser), "User"},
 	}
-	groups := make([]toolGroup, 0, len(bySource))
 	seen := make(map[string]bool)
 	for _, p := range preferred {
 		items, ok := bySource[p.key]

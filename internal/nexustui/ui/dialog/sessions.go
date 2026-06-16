@@ -190,20 +190,10 @@ func (s *Session) HandleMsg(msg tea.Msg) Action {
 				s.list.SetItems(sessionItems(s.com.Styles, sessionsModeDeleting, s.sessions...)...)
 			case key.Matches(msg, s.keyMap.Previous):
 				s.list.Focus()
-				if s.list.IsSelectedFirst() {
-					s.list.SelectLast()
-				} else {
-					s.list.SelectPrev()
-				}
-				s.list.ScrollToSelected()
+				s.list.SelectPrevCyclic()
 			case key.Matches(msg, s.keyMap.Next):
 				s.list.Focus()
-				if s.list.IsSelectedLast() {
-					s.list.SelectFirst()
-				} else {
-					s.list.SelectNext()
-				}
-				s.list.ScrollToSelected()
+				s.list.SelectNextCyclic()
 			case key.Matches(msg, s.keyMap.Select):
 				if item := s.list.SelectedItem(); item != nil {
 					sessionItem := item.(*SessionItem)

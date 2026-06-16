@@ -92,7 +92,7 @@ func NewMCPToolMessageItem(
 	result *message.ToolResult,
 	canceled bool,
 ) ToolMessageItem {
-	return newBaseToolMessageItem(sty, toolCall, result, &MCPToolRenderContext{}, canceled)
+	return &MCPToolMessageItem{newBaseToolMessageItem(sty, toolCall, result, &MCPToolRenderContext{}, canceled)}
 }
 
 // MCPToolRenderContext renders generic MCP tool messages.
@@ -181,7 +181,7 @@ func NewMCPListResourcesToolMessageItem(
 	result *message.ToolResult,
 	canceled bool,
 ) ToolMessageItem {
-	return newBaseToolMessageItem(sty, toolCall, result, &MCPListResourcesToolRenderContext{}, canceled)
+	return &MCPListResourcesToolMessageItem{newBaseToolMessageItem(sty, toolCall, result, &MCPListResourcesToolRenderContext{}, canceled)}
 }
 
 // MCPListResourcesToolRenderContext renders mcp_list_resources tool messages.
@@ -228,7 +228,7 @@ func NewMCPReadResourceToolMessageItem(
 	result *message.ToolResult,
 	canceled bool,
 ) ToolMessageItem {
-	return newBaseToolMessageItem(sty, toolCall, result, &MCPReadResourceToolRenderContext{}, canceled)
+	return &MCPReadResourceToolMessageItem{newBaseToolMessageItem(sty, toolCall, result, &MCPReadResourceToolRenderContext{}, canceled)}
 }
 
 // MCPReadResourceToolRenderContext renders mcp_read_resource tool messages.

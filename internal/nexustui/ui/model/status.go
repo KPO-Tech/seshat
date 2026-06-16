@@ -67,12 +67,21 @@ func (s *Status) SetHideHelp(hideHelp bool) {
 	s.hideHelp = hideHelp
 }
 
-// Draw draws the status bar onto the screen.
+// Draw draws the status bar onto the screen. The help/notification row is
+// anchored to the bottom of area rather than the top, so any extra height
+// in the allotted rect (from layout rounding) shows up above the row —
+// where it's invisible against the chat content — instead of as a blank
+// gap below it, at the very bottom of the screen.
 func (s *Status) Draw(scr uv.Screen, area uv.Rectangle) {
+	drawArea := area
 	if !s.hideHelp {
 		helpView := s.com.Styles.Status.Help.Render(s.help.View(s.helpKm))
-		uv.NewStyledString(helpView).Draw(scr, area)
+		if h := lipgloss.Height(helpView); h < area.Dy() {
+			drawArea.Min.Y = area.Max.Y - h
+		}
+		uv.NewStyledString(helpView).Draw(scr, drawArea)
 	}
+	area = drawArea
 
 	// Render notifications
 	if s.msg.IsEmpty() {
