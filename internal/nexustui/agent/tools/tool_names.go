@@ -37,17 +37,27 @@ type AskUserOption struct {
 	Label       string `json:"label"`
 	Value       string `json:"value"`
 	Description string `json:"description,omitempty"`
+	Preview     string `json:"preview,omitempty"`
 }
 
-// AskUserRequest is published to the askUserBroker for each question the agent asks.
+// AskUserQuestion mirrors one question in an ask_user_question survey.
+type AskUserQuestion struct {
+	Question    string          `json:"question"`
+	Header      string          `json:"header"`
+	Options     []AskUserOption `json:"options"`
+	MultiSelect bool            `json:"multi_select"`
+}
+
+// AskUserRequest is published to the askUserBroker for each question set the agent asks.
 type AskUserRequest struct {
-	ID           string          `json:"id"`
-	ToolCallID   string          `json:"tool_call_id"`
-	Question     string          `json:"question"`
-	Header       string          `json:"header"`
-	Options      []AskUserOption `json:"options"`
-	MultiSelect  bool            `json:"multi_select"`
-	IsCustomText bool            `json:"is_custom_text"`
+	ID           string            `json:"id"`
+	ToolCallID   string            `json:"tool_call_id"`
+	Question     string            `json:"question"`
+	Header       string            `json:"header"`
+	Options      []AskUserOption   `json:"options"`
+	MultiSelect  bool              `json:"multi_select"`
+	Questions    []AskUserQuestion `json:"questions,omitempty"`
+	IsCustomText bool              `json:"is_custom_text"`
 }
 
 // AgentParams holds the input for an agent tool call.

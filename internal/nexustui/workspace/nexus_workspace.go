@@ -52,6 +52,10 @@ type subAgentStreamState struct {
 	content   string
 }
 
+type askUserSurveyState struct {
+	Answers map[string]string
+}
+
 // Verify compile-time that NexusWorkspace implements Workspace.
 var _ Workspace = (*NexusWorkspace)(nil)
 
@@ -127,6 +131,10 @@ type NexusWorkspace struct {
 	// pendingAskUser maps AskUserRequest.ID → resolution channel.
 	// PromptFn (ask_user path) blocks on the channel; AnswerAskUser sends the response.
 	pendingAskUser sync.Map // map[string]chan types.PromptResponse
+
+	// askUserSurveyAnswers buffers final wizard answers by tool use ID so the
+	// ask_user tool can keep calling promptFn sequentially without re-showing UI.
+	askUserSurveyAnswers sync.Map // map[string]askUserSurveyState
 
 	// Provider registry — populated by DetectProviders() at startup.
 	providerKeys     sync.Map // providerID → apiKey string (empty string = no key needed)
@@ -2277,43 +2285,152 @@ func (w *NexusWorkspace) PromptFn(ctx context.Context, req sdk.PromptRequest) (s
 // promptAskUser handles ask_user_question prompts by publishing to askUserBroker
 // and blocking until the user answers (or context is cancelled).
 func (w *NexusWorkspace) promptAskUser(ctx context.Context, req sdk.PromptRequest, toolUseID string) (sdk.PromptResponse, error) {
-	header, _ := req.Metadata["header"].(string)
-	multiSelect, _ := req.Metadata["multiSelect"].(bool)
-	isCustomText := req.Type == types.PromptTypeText
-
-	id := uuid.New().String()
-
-	askReq := tuiTools.AskUserRequest{
-		ID:           id,
-		ToolCallID:   toolUseID,
-		Question:     req.Message,
-		Header:       header,
-		MultiSelect:  multiSelect,
-		IsCustomText: isCustomText,
+	askReq, questionIndex, isSurvey, err := buildAskUserRequest(req, toolUseID)
+	if err != nil {
+		return sdk.PromptResponse{Cancelled: true}, err
 	}
-
-	if !isCustomText {
-		for _, opt := range req.Options {
-			askReq.Options = append(askReq.Options, tuiTools.AskUserOption{
-				Label:       opt.Label,
-				Value:       fmt.Sprintf("%v", opt.Value),
-				Description: opt.Description,
-			})
+	if isSurvey && questionIndex > 0 {
+		if resp, ok, err := w.consumeAskUserSurveyAnswer(toolUseID, askReq, questionIndex); ok || err != nil {
+			return resp, err
 		}
 	}
 
+	id := uuid.New().String()
+	askReq.ID = id
+
 	ch := make(chan sdk.PromptResponse, 1)
 	w.pendingAskUser.Store(id, ch)
-
 	w.askUserBroker.Publish(pubsub.CreatedEvent, askReq)
 
 	select {
 	case resp := <-ch:
+		if isSurvey && len(askReq.Questions) > 1 {
+			answers, err := decodeAskUserSurveyAnswers(fmt.Sprintf("%v", resp.Value))
+			if err != nil {
+				return sdk.PromptResponse{Cancelled: true}, err
+			}
+			w.askUserSurveyAnswers.Store(toolUseID, askUserSurveyState{Answers: answers})
+			bufferedResp, ok, err := w.consumeAskUserSurveyAnswer(toolUseID, askReq, questionIndex)
+			if err != nil {
+				return sdk.PromptResponse{Cancelled: true}, err
+			}
+			if !ok {
+				return sdk.PromptResponse{Cancelled: true}, fmt.Errorf("missing buffered ask_user survey answer")
+			}
+			return bufferedResp, nil
+		}
 		return resp, nil
 	case <-ctx.Done():
 		w.pendingAskUser.Delete(id)
 		return sdk.PromptResponse{Cancelled: true}, ctx.Err()
 	}
+}
+
+func buildAskUserRequest(req sdk.PromptRequest, toolUseID string) (tuiTools.AskUserRequest, int, bool, error) {
+	header, _ := req.Metadata["header"].(string)
+	multiSelect, _ := req.Metadata["multiSelect"].(bool)
+	questionIndex := 0
+	if rawIndex, ok := req.Metadata["survey_question_index"]; ok {
+		switch value := rawIndex.(type) {
+		case int:
+			questionIndex = value
+		case float64:
+			questionIndex = int(value)
+		}
+	}
+
+	askReq := tuiTools.AskUserRequest{
+		ToolCallID:   toolUseID,
+		Question:     req.Message,
+		Header:       header,
+		MultiSelect:  multiSelect,
+		IsCustomText: req.Type == types.PromptTypeText,
+	}
+	for _, opt := range req.Options {
+		askReq.Options = append(askReq.Options, tuiTools.AskUserOption{
+			Label:       opt.Label,
+			Value:       fmt.Sprintf("%v", opt.Value),
+			Description: opt.Description,
+		})
+	}
+
+	rawSurvey, _ := req.Metadata["survey_questions_json"].(string)
+	if strings.TrimSpace(rawSurvey) == "" {
+		askReq.Questions = []tuiTools.AskUserQuestion{{
+			Question:    askReq.Question,
+			Header:      askReq.Header,
+			Options:     append([]tuiTools.AskUserOption(nil), askReq.Options...),
+			MultiSelect: askReq.MultiSelect,
+		}}
+		return askReq, questionIndex, false, nil
+	}
+
+	var surveyQuestions []tuiTools.AskUserQuestion
+	if err := json.Unmarshal([]byte(rawSurvey), &surveyQuestions); err != nil {
+		return tuiTools.AskUserRequest{}, 0, false, fmt.Errorf("parse ask_user survey metadata: %w", err)
+	}
+	if len(surveyQuestions) == 0 {
+		return askReq, questionIndex, false, nil
+	}
+	askReq.Questions = normalizeAskUserSurveyQuestions(surveyQuestions)
+	return askReq, questionIndex, true, nil
+}
+
+func normalizeAskUserSurveyQuestions(questions []tuiTools.AskUserQuestion) []tuiTools.AskUserQuestion {
+	for qIndex := range questions {
+		hasOther := false
+		for optIndex := range questions[qIndex].Options {
+			if strings.TrimSpace(questions[qIndex].Options[optIndex].Value) == "" {
+				questions[qIndex].Options[optIndex].Value = questions[qIndex].Options[optIndex].Label
+			}
+			if questions[qIndex].Options[optIndex].Value == "__other__" || strings.EqualFold(questions[qIndex].Options[optIndex].Label, "Other") {
+				hasOther = true
+			}
+		}
+		if !hasOther {
+			questions[qIndex].Options = append(questions[qIndex].Options, tuiTools.AskUserOption{
+				Label:       "Other",
+				Value:       "__other__",
+				Description: "Provide custom input",
+			})
+		}
+	}
+	return questions
+}
+
+func decodeAskUserSurveyAnswers(raw string) (map[string]string, error) {
+	answers := make(map[string]string)
+	if err := json.Unmarshal([]byte(strings.TrimSpace(raw)), &answers); err != nil {
+		return nil, fmt.Errorf("decode ask_user survey answers: %w", err)
+	}
+	if len(answers) == 0 {
+		return nil, fmt.Errorf("decode ask_user survey answers: empty response")
+	}
+	return answers, nil
+}
+
+func (w *NexusWorkspace) consumeAskUserSurveyAnswer(toolUseID string, askReq tuiTools.AskUserRequest, questionIndex int) (sdk.PromptResponse, bool, error) {
+	if questionIndex < 0 || questionIndex >= len(askReq.Questions) {
+		return sdk.PromptResponse{}, false, fmt.Errorf("ask_user survey question index %d out of range", questionIndex)
+	}
+	stored, ok := w.askUserSurveyAnswers.Load(toolUseID)
+	if !ok {
+		return sdk.PromptResponse{}, false, nil
+	}
+	state, ok := stored.(askUserSurveyState)
+	if !ok {
+		w.askUserSurveyAnswers.Delete(toolUseID)
+		return sdk.PromptResponse{}, false, fmt.Errorf("invalid ask_user survey state")
+	}
+	question := askReq.Questions[questionIndex].Question
+	answer, ok := state.Answers[question]
+	if !ok {
+		return sdk.PromptResponse{}, false, fmt.Errorf("missing ask_user survey answer for %q", question)
+	}
+	if questionIndex == len(askReq.Questions)-1 {
+		w.askUserSurveyAnswers.Delete(toolUseID)
+	}
+	return sdk.PromptResponse{Value: answer}, true, nil
 }
 
 // AnswerAskUser resolves a pending ask_user_question prompt.
