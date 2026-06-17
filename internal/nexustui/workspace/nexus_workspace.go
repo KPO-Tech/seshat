@@ -25,6 +25,7 @@ import (
 
 	tea "charm.land/bubbletea/v2"
 	"charm.land/catwalk/pkg/catwalk"
+	"github.com/EngineerProjects/nexus-engine/internal/modes/execution"
 	tuiTools "github.com/EngineerProjects/nexus-engine/internal/nexustui/agent/tools"
 	mcptools "github.com/EngineerProjects/nexus-engine/internal/nexustui/agent/tools/mcp"
 	"github.com/EngineerProjects/nexus-engine/internal/nexustui/config"
@@ -586,6 +587,25 @@ func (w *NexusWorkspace) AgentRun(ctx context.Context, sessionID, prompt string,
 			}
 		}
 
+		// Mark any tool calls that never received an execution result as
+		// finished so their spinners stop (e.g. truncated JSON stream).
+		// Inject a synthetic error result so the tool shows an ERROR icon.
+		errMsg := "aborted"
+		if finishReason == message.FinishReasonError {
+			errMsg = "stream error"
+		}
+		for i, part := range cur.Parts {
+			if tc, ok := part.(message.ToolCall); ok && !tc.Finished {
+				cur.Parts[i] = message.ToolCall{ID: tc.ID, Name: tc.Name, Input: tc.Input, Finished: true}
+				cur.Parts = append(cur.Parts, message.ToolResult{
+					ToolCallID: tc.ID,
+					Name:       tc.Name,
+					Content:    errMsg,
+					IsError:    true,
+				})
+			}
+		}
+
 		cur.Parts = append(cur.Parts, message.Finish{
 			Reason: finishReason,
 			Time:   time.Now().UnixMilli(),
@@ -820,6 +840,36 @@ func (w *NexusWorkspace) AgentIsSessionBusy(sessionID string) bool {
 func (w *NexusWorkspace) AgentIsReady() bool                               { return w.client != nil }
 func (w *NexusWorkspace) AgentSummarize(_ context.Context, _ string) error { return nil }
 func (w *NexusWorkspace) InitCoderAgent(_ context.Context) error           { return nil }
+
+// ApprovePlan exits plan mode immediately on behalf of the agent — identical
+// in effect to the agent calling exit_plan_mode — and returns the plan content
+// so the TUI can include it in the approval message. This lets ctrl+y approval
+// skip the agent's verbose "plan approved!" preamble entirely.
+func (w *NexusWorkspace) ApprovePlan(sessionID string) (string, error) {
+	w.sessMu.Lock()
+	sess := w.session
+	w.sessMu.Unlock()
+
+	if sess == nil || string(sess.GetID()) != sessionID {
+		return "", fmt.Errorf("session %q not active", sessionID)
+	}
+
+	// Mirror what exit_plan_mode.Call does: clear the execution mode from the
+	// engine's session context so future tool calls see execute mode.
+	sess.ClearPlanMode()
+
+	// Update the disk state and the TUI's live display.
+	execution.ExitPlanMode(types.SessionID(sessionID))
+	w.setLiveExecutionMode(sessionID, "")
+	w.publishSessionRefresh(sessionID)
+
+	// Return the plan content so the TUI can embed it in the approval message.
+	content, err := execution.GetPlan(types.SessionID(sessionID), nil)
+	if err != nil {
+		return "", fmt.Errorf("read plan: %w", err)
+	}
+	return content, nil
+}
 
 // UpdateAgentModel rebuilds the SDK client with the current w.model string.
 // Called by the TUI after the user selects a new model.
@@ -1759,20 +1809,36 @@ func (w *NexusWorkspace) OnChunk(chunk sdk.ResponseChunk) {
 		}
 
 	case sdk.ResponseChunkTypeContentBlockStop:
-		// Clear block tracking on stop.
+		// Clear block tracking on stop and stamp FinishedAt on any open
+		// thinking block. FinishThinking is idempotent so calling it here
+		// for non-thinking blocks (text, tool_use) is a safe no-op.
 		w.streamMu.Lock()
+		cur := w.streamMsg
+		sessID := w.streamSess
 		w.streamToolUseID = ""
 		w.streamToolInputBuf = ""
 		w.streamMu.Unlock()
+		if cur != nil {
+			cur.FinishThinking()
+			w.debounce.update(*cur, sessID)
+		}
 
 	case sdk.ResponseChunkTypeMessageStop:
-		w.debounce.forceFlush()
+		// Safety net: stamp FinishedAt before the final flush so the TUI
+		// receives the correct thinking duration in the forceFlush payload.
 		w.streamMu.Lock()
+		cur := w.streamMsg
+		sessID := w.streamSess
 		w.streamResponseDone = true
 		w.streamToolUseID = ""
 		w.streamToolUseName = ""
 		w.streamToolInputBuf = ""
 		w.streamMu.Unlock()
+		if cur != nil {
+			cur.FinishThinking()
+			w.debounce.update(*cur, sessID)
+		}
+		w.debounce.forceFlush()
 	}
 }
 

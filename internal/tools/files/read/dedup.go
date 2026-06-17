@@ -43,8 +43,8 @@ type FileReadCache struct {
 func NewFileReadCache() *FileReadCache {
 	return &FileReadCache{
 		cache:      make(map[string]*FileReadState),
-		MaxEntries: 100,              // Cache up to 100 files
-		MaxAge:     30 * time.Minute, // Expire after 30 minutes
+		MaxEntries: 500,           // Cache up to 500 files
+		MaxAge:     2 * time.Hour, // Expire after 2 hours
 	}
 }
 

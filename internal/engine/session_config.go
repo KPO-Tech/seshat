@@ -152,6 +152,28 @@ func (s *Session) SetPermissionMode(mode types.PermissionMode) {
 	s.state.SetPermissionContext(ctx)
 }
 
+// ClearPlanMode exits plan mode in the session permission context, restoring
+// the previous permission mode. This mirrors what exit_plan_mode.Call does via
+// its ContextModifier, allowing the TUI to pre-exit plan mode on user approval
+// without waiting for the model to call exit_plan_mode itself.
+func (s *Session) ClearPlanMode() {
+	if s == nil || s.state == nil {
+		return
+	}
+	ctx := s.state.PermissionContextSnapshot()
+	if ctx == nil {
+		return
+	}
+	restoreMode := ctx.PrePlanMode
+	if restoreMode == "" {
+		restoreMode = types.PermissionModeOnRequest
+	}
+	ctx.Mode = restoreMode
+	ctx.PrePlanMode = ""
+	ctx.ExecutionMode = ""
+	s.state.SetPermissionContext(ctx)
+}
+
 // SetSystemPromptTemplate sets a per-session override that fully replaces the
 // default system prompt. Pass an empty string to clear the override.
 func (s *Session) SetSystemPromptTemplate(text string) {

@@ -700,6 +700,7 @@ func quickStyle(o quickStyleOpts) Styles {
 	s.Tool.AskUserCount = lipgloss.NewStyle().Foreground(o.accent).Italic(true)
 	s.Tool.AskUserFooter = lipgloss.NewStyle().Foreground(o.fgMostSubtle)
 	s.Tool.AskUserHistory = lipgloss.NewStyle().Foreground(o.fgSubtle)
+	s.Tool.RunningStatus = lipgloss.NewStyle().Foreground(o.fgMostSubtle).Italic(true)
 
 	// Buttons
 	s.Button.Focused = lipgloss.NewStyle().Foreground(o.onPrimary).Background(o.secondary)
@@ -712,6 +713,7 @@ func quickStyle(o quickStyleOpts) Styles {
 	s.Editor.PromptYoloIconBlurred = s.Editor.PromptYoloIconFocused.Foreground(o.bgBase).Background(o.fgMoreSubtle)
 	s.Editor.PromptYoloDotsFocused = lipgloss.NewStyle().MarginRight(1).Foreground(o.warningSubtle).SetString(":::")
 	s.Editor.PromptYoloDotsBlurred = s.Editor.PromptYoloDotsFocused.Foreground(o.fgMoreSubtle)
+	s.Editor.WorkingStatus = lipgloss.NewStyle().Foreground(o.fgMostSubtle).Italic(true).PaddingLeft(1)
 
 	s.Radio.On = lipgloss.NewStyle().Foreground(o.fgSubtle).SetString(RadioOn)
 	s.Radio.Off = lipgloss.NewStyle().Foreground(o.fgSubtle).SetString(RadioOff)
@@ -834,15 +836,18 @@ func quickStyle(o quickStyleOpts) Styles {
 	s.Messages.AssistantInfoDuration = subtle
 	s.Messages.AssistantCanceled = lipgloss.NewStyle().Foreground(o.fgBase).Italic(true)
 
-	// Thinking section styles — bordered box, no background fill
-	s.Messages.ThinkingBox = lipgloss.NewStyle().
+	// Thinking section styles — no border box, left-bar accent + indented text
+	s.Messages.ThinkingText = lipgloss.NewStyle().
 		Foreground(o.fgSubtle).
-		Border(lipgloss.RoundedBorder()).
+		Italic(true)
+	s.Messages.ThinkingLeftBar = lipgloss.NewStyle().
+		Border(lipgloss.ThickBorder(), false, false, false, true).
 		BorderForeground(o.fgMostSubtle).
-		Padding(0, 1)
+		PaddingLeft(1)
 	s.Messages.ThinkingTruncationHint = muted
 	s.Messages.ThinkingFooterTitle = muted
 	s.Messages.ThinkingFooterDuration = subtle
+	s.Messages.ThinkingExpandHint = muted
 
 	// Text selection.
 	s.TextSelection = lipgloss.NewStyle().Foreground(o.onPrimary).Background(o.primary)

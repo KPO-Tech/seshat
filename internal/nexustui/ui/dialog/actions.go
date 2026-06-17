@@ -95,6 +95,12 @@ type (
 	ActionPlanReviewSubmit struct {
 		Review planreview.Review
 	}
+	// ActionPlanReviewRequestChanges is sent when the user sends feedback to the
+	// agent without approving the plan. The dialog stays open; the agent is
+	// expected to revise the plan and call submit_plan again.
+	ActionPlanReviewRequestChanges struct {
+		Review planreview.Review
+	}
 	// ActionRunCustomCommand is a message to run a custom command.
 	ActionRunCustomCommand struct {
 		Content   string

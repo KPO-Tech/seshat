@@ -185,30 +185,20 @@ func (w *Tool) Call(
 		return tool.NewErrorResult(fmt.Errorf("path is a directory, not a file: %s", filePath)), nil
 	}
 
-	if readInfo, exists := w.readHistory.GetReadInfo(absolutePath); exists {
-		// Partial reads are allowed for write: we only care about concurrent
-		// modification by a third party (not about how much we previously read).
-		currentInfo, err := os.Stat(absolutePath)
-		if err == nil {
-			currentContent, readErr := os.ReadFile(absolutePath)
-			if currentInfo.ModTime().After(readInfo.ModTime) {
-				if !(readErr == nil && normalizeLineEndings(string(currentContent)) == normalizeLineEndings(readInfo.Content)) {
-					return tool.NewErrorResult(fmt.Errorf("file has been modified since read (read at %s, file modified at %s). Read it again first: %s",
-						readInfo.ModTime.Format(time.RFC3339),
-						currentInfo.ModTime().Format(time.RFC3339),
-						filePath)), nil
-				}
-			}
-			if readErr == nil && normalizeLineEndings(string(currentContent)) != normalizeLineEndings(readInfo.Content) {
-				return tool.NewErrorResult(fmt.Errorf("file content has changed unexpectedly since it was read: %s", filePath)), nil
-			}
-		}
-	} else {
+	// Retrieve read history once; reused for both the pre-permission guard and
+	// the post-permission content staleness check.
+	readInfo, readInfoExists := w.readHistory.GetReadInfo(absolutePath)
+
+	// Fast guard: existing file that was never read in this session → error
+	// immediately, before spending any time on a permission dialog.
+	if !readInfoExists {
 		if _, err := os.Stat(absolutePath); err == nil {
 			return tool.NewErrorResult(fmt.Errorf("file has not been read yet. Read it first before writing to it: %s", filePath)), nil
 		}
 	}
 
+	// Permission check comes BEFORE reading the full file content so we never
+	// do unnecessary I/O (large file reads) for a denied operation.
 	if permissionCheck != nil {
 		req := sandbox.PermissionRequest{
 			ToolName:      ToolName,
@@ -239,6 +229,27 @@ func (w *Tool) Call(
 		}
 		if err := sandbox.ErrorForPermissionResult(permResult, "file write requires approval"); err != nil {
 			return tool.NewErrorResult(err), nil
+		}
+	}
+
+	// Post-permission staleness check: verify the file has not been modified by
+	// a third party between when it was read and now. We read the content in a
+	// single os.ReadFile call (atomic from the OS perspective) to avoid the
+	// stat→read race present in the previous two-step approach.
+	if readInfoExists {
+		currentContent, readErr := os.ReadFile(absolutePath)
+		if readErr == nil {
+			currentInfo, statErr := os.Stat(absolutePath)
+			if statErr == nil && currentInfo.ModTime().After(readInfo.ModTime) {
+				if normalizeLineEndings(string(currentContent)) != normalizeLineEndings(readInfo.Content) {
+					return tool.NewErrorResult(fmt.Errorf("file has been modified since read (read at %s, file modified at %s). Read it again first: %s",
+						readInfo.ModTime.Format(time.RFC3339),
+						currentInfo.ModTime().Format(time.RFC3339),
+						filePath)), nil
+				}
+			} else if readErr == nil && normalizeLineEndings(string(currentContent)) != normalizeLineEndings(readInfo.Content) {
+				return tool.NewErrorResult(fmt.Errorf("file content has changed unexpectedly since it was read: %s", filePath)), nil
+			}
 		}
 	}
 
@@ -467,6 +478,13 @@ func (w *Tool) CheckPermissions(ctx context.Context, input map[string]any, toolC
 	// AcceptEdits mode: Auto-allow file operations in working directory
 	// Aligned with OpenClaude's AcceptEdits mode (filesystem.ts:1369-1384)
 	if toolCtx.PermissionMode == types.PermissionModeAcceptEdits {
+		return w.checkAcceptEditsPermissions(ctx, absolutePath, content, w.effectiveWorkingDir(toolCtx))
+	}
+
+	// Plan mode: auto-allow file writes in working directory so the agent can
+	// produce its output (reports, code, etc.) without blocking on a permission
+	// dialog while the plan review dialog is open or the user is away.
+	if toolCtx.ExecutionMode == "plan" {
 		return w.checkAcceptEditsPermissions(ctx, absolutePath, content, w.effectiveWorkingDir(toolCtx))
 	}
 

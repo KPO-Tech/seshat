@@ -697,8 +697,8 @@ func (t *baseToolMessageItem) HandleKeyEvent(key tea.KeyMsg) (bool, tea.Cmd) {
 	return false, nil
 }
 
-// pendingTool renders a tool that is still in progress with an animation.
-func pendingTool(sty *styles.Styles, name string, anim *anim.Anim, nested bool) string {
+// pendingTool renders a tool that is still in progress with a text status.
+func pendingTool(sty *styles.Styles, name string, a *anim.Anim, nested bool) string {
 	icon := sty.Tool.IconPending.Render()
 	nameStyle := sty.Tool.NameNormal
 	if nested {
@@ -706,12 +706,20 @@ func pendingTool(sty *styles.Styles, name string, anim *anim.Anim, nested bool) 
 	}
 	toolName := nameStyle.Render(name)
 
-	var animView string
-	if anim != nil {
-		animView = anim.Render()
+	var statusView string
+	if a != nil {
+		elapsed := a.ElapsedSeconds()
+		dots := a.EllipsisFrame()
+		var dStr string
+		if elapsed < 60 {
+			dStr = fmt.Sprintf("%ds", elapsed)
+		} else {
+			dStr = fmt.Sprintf("%dm%ds", elapsed/60, elapsed%60)
+		}
+		statusView = sty.Tool.RunningStatus.Render(fmt.Sprintf("running%s (%s)", dots, dStr))
 	}
 
-	return fmt.Sprintf("%s %s %s", icon, toolName, animView)
+	return fmt.Sprintf("%s %s  %s", icon, toolName, statusView)
 }
 
 // toolEarlyStateContent handles error/cancelled/awaiting-permission states before

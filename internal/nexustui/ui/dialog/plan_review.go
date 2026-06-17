@@ -65,8 +65,8 @@ func defaultPlanReviewKeyMap() planReviewKeyMap {
 			key.WithHelp("ctrl+y", "approve"),
 		),
 		RequestChanges: key.NewBinding(
-			key.WithKeys("r"),
-			key.WithHelp("r", "request changes"),
+			key.WithKeys("s"),
+			key.WithHelp("s", "send changes"),
 		),
 		EditLineComment: key.NewBinding(
 			key.WithKeys("c"),
@@ -298,6 +298,18 @@ func (p *PlanReview) collectLineComments() []planreview.LineComment {
 	return comments
 }
 
+func (p *PlanReview) hasFeedback() bool {
+	if strings.TrimSpace(p.globalComment) != "" {
+		return true
+	}
+	for _, c := range p.lineComments {
+		if strings.TrimSpace(c) != "" {
+			return true
+		}
+	}
+	return false
+}
+
 func (p *PlanReview) submitReview(approved bool) Action {
 	review := planreview.Review{
 		Submission:    p.currentSubmission(),
@@ -305,10 +317,13 @@ func (p *PlanReview) submitReview(approved bool) Action {
 		GlobalComment: strings.TrimSpace(p.globalComment),
 		LineComments:  p.collectLineComments(),
 	}
-	if !approved && !review.HasFeedback() {
-		return ActionCmd{Cmd: util.ReportWarn("Add a global comment or a line comment before requesting changes.")}
+	if approved {
+		return ActionPlanReviewSubmit{Review: review}
 	}
-	return ActionPlanReviewSubmit{Review: review}
+	if !review.HasFeedback() {
+		return ActionCmd{Cmd: util.ReportWarn("Add a global comment or a line comment before sending changes.")}
+	}
+	return ActionPlanReviewRequestChanges{Review: review}
 }
 
 func (p *PlanReview) switchVersion(delta int) {
@@ -471,9 +486,11 @@ func (p *PlanReview) helpView() string {
 		p.keyMap.Down,
 		p.keyMap.EditLineComment,
 		p.keyMap.EditGlobal,
-		p.keyMap.RequestChanges,
-		p.keyMap.Approve,
 	}
+	if p.hasFeedback() {
+		bindings = append(bindings, p.keyMap.RequestChanges)
+	}
+	bindings = append(bindings, p.keyMap.Approve)
 	if len(p.submissions) > 1 {
 		bindings = append(bindings, p.keyMap.PrevVersion, p.keyMap.NextVersion)
 	}
@@ -577,7 +594,9 @@ func (p *PlanReview) Draw(scr uv.Screen, area uv.Rectangle) *tea.Cursor {
 	if p.editorMode != planReviewModeView {
 		cur = InputCursor(t, p.input.Cursor())
 		if cur != nil {
-			cur.Y += inputOffsetY - 2
+			// inputOffsetY counts parts items; the viewport part contributes
+			// viewportHeight rendered lines, not 1. Add the extra lines here.
+			cur.Y += inputOffsetY - 2 + p.viewport.Height()
 		}
 	}
 

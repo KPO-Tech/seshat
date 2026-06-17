@@ -219,6 +219,11 @@ type UI struct {
 	readyPlaceholder   string
 	workingPlaceholder string
 
+	// workPhase tracks the current agent activity phase for the status line
+	// shown above the input box. Values: "thinking", "generating", "running", "".
+	workPhase     string
+	workPhaseTime time.Time // when the current phase started
+
 	// Completions state
 	completions              *completions.Completions
 	completionsOpen          bool
@@ -1213,6 +1218,7 @@ func (m *UI) appendSessionMessage(msg message.Message) tea.Cmd {
 			cmds = append(cmds, cmd)
 		}
 	case message.Assistant:
+		m.updateWorkPhase(&msg)
 		items := chat.ExtractMessageItems(m.com.Styles, &msg, nil)
 		for _, item := range items {
 			if animatable, ok := item.(chat.Animatable); ok {
@@ -1321,8 +1327,43 @@ func (m *UI) handleClickFocus(msg tea.MouseClickMsg) (cmd tea.Cmd) {
 // the chat when an assistant message is updated it may include updated tool
 // calls as well that is why we need to handle creating/updating each tool call
 // message too.
+// updateWorkPhase derives the current agent phase from a streaming message and
+// updates m.workPhase / m.workPhaseTime when the phase changes.
+func (m *UI) updateWorkPhase(msg *message.Message) {
+	if msg == nil || msg.Role != message.Assistant {
+		return
+	}
+	if msg.FinishPart() != nil {
+		m.workPhase = ""
+		return
+	}
+	var newPhase string
+	switch {
+	case msg.IsThinking():
+		newPhase = "thinking"
+	case func() bool {
+		for _, tc := range msg.ToolCalls() {
+			if !tc.Finished {
+				return true
+			}
+		}
+		return false
+	}():
+		newPhase = "running"
+	case msg.Content().Text != "" || msg.ReasoningContent().Thinking != "":
+		newPhase = "generating"
+	default:
+		newPhase = "working"
+	}
+	if newPhase != m.workPhase {
+		m.workPhase = newPhase
+		m.workPhaseTime = time.Now()
+	}
+}
+
 func (m *UI) updateSessionMessage(msg message.Message) tea.Cmd {
 	var cmds []tea.Cmd
+	m.updateWorkPhase(&msg)
 	existingItem := m.chat.MessageItem(msg.ID)
 
 	if existingItem != nil {
@@ -1833,8 +1874,21 @@ func (m *UI) handleDialogMsg(msg tea.Msg) tea.Cmd {
 		case dialog.PermissionDeny:
 			m.com.Workspace.PermissionDeny(msg.Permission)
 		}
+	case dialog.ActionPlanReviewRequestChanges:
+		// Send feedback to the agent without closing the plan review dialog.
+		// The agent is expected to revise the plan and call submit_plan again,
+		// which will update the dialog via AddSubmission. Only ctrl+y closes it.
+		cmds = append(cmds, m.sendMessage(formatPlanReviewResponse(msg.Review)))
+
 	case dialog.ActionPlanReviewSubmit:
 		m.dialog.CloseDialog(dialog.PlanReviewID)
+		if msg.Review.Approved && m.session != nil && m.com.Workspace != nil {
+			// Auto-exit plan mode immediately (mirrors exit_plan_mode tool call).
+			if _, err := m.com.Workspace.ApprovePlan(string(m.session.ID)); err == nil {
+				cmds = append(cmds, m.sendMessage(formatPlanApprovalMessage()))
+				break
+			}
+		}
 		cmds = append(cmds, m.sendMessage(formatPlanReviewResponse(msg.Review)))
 
 	case dialog.ActionFilePickerSelected:
@@ -2568,7 +2622,7 @@ func (m *UI) Draw(scr uv.Screen, area uv.Rectangle) *tea.Cursor {
 				fmt.Fprintf(f, "  ta.Cursor={X:%d,Y:%d} final={X:%d,Y:%d}\n",
 					cur.X, cur.Y,
 					cur.X+m.layout.editor.Min.X+1,
-					cur.Y+m.layout.editor.Min.Y+m.editorAttachmentsHeight(m.layout.editor.Dx())+1)
+					cur.Y+m.layout.editor.Min.Y+m.editorAttachmentsHeight(m.layout.editor.Dx())+m.editorStatusHeight()+1)
 			}
 			f.Close()
 		}
@@ -2678,9 +2732,9 @@ func (m *UI) Draw(scr uv.Screen, area uv.Rectangle) *tea.Cursor {
 			// +1 = left border character │ before textarea text.
 			cur.X += m.layout.editor.Min.X + 1
 			// editor.Min.Y = screen row where the editor area starts.
-			// Add any attachment rows rendered above the input box, then offset by
-			// the top border row ┌───┐ so the cursor lands on the textarea text.
-			cur.Y += m.layout.editor.Min.Y + m.editorAttachmentsHeight(m.layout.editor.Dx()) + 1
+			// Add attachment rows + working-status line (if visible) above the box,
+			// then +1 for the top border ┌───┐ so the cursor lands on textarea text.
+			cur.Y += m.layout.editor.Min.Y + m.editorAttachmentsHeight(m.layout.editor.Dx()) + m.editorStatusHeight() + 1
 			return cur
 		}
 	}
@@ -3026,8 +3080,6 @@ func (m *UI) generateLayout(w, h int) uiLayout {
 
 	// The help height
 	helpHeight := 1
-	// The editor height: textarea height + margin for attachments and bottom spacing.
-	editorHeight := m.textarea.Height() + editorHeightMargin
 	// The header height
 	const landingHeaderHeight = 1
 
@@ -3047,6 +3099,15 @@ func (m *UI) generateLayout(w, h int) uiLayout {
 	appRect.Min.Y += 1
 	appRect.Min.X += 1
 	appRect.Max.X -= 1
+
+	// The editor height: textarea + border + any attachment chips + working status
+	// line rendered above the input box.
+	editorAttachH := m.editorAttachmentsHeight(max(1, appRect.Dx()-1))
+	var editorStatusH int
+	if m.isAgentBusy() && m.workPhase != "" {
+		editorStatusH = 1
+	}
+	editorHeight := m.textarea.Height() + editorHeightMargin + editorAttachH + editorStatusH
 
 	if slices.Contains([]uiState{uiOnboarding, uiInitialize, uiLanding}, m.state) {
 		// extra padding on left and right for these states
@@ -3441,15 +3502,16 @@ func (m *UI) insertSkillCompletion(name string) tea.Cmd {
 // completionsPosition returns the X and Y position for the completions popup.
 func (m *UI) completionsPosition() image.Point {
 	cur := m.textarea.Cursor()
+	statusH := m.editorStatusHeight()
 	if cur == nil {
 		return image.Point{
 			X: m.layout.editor.Min.X + 1,
-			Y: m.layout.editor.Min.Y + m.editorAttachmentsHeight(m.layout.editor.Dx()) + 1,
+			Y: m.layout.editor.Min.Y + m.editorAttachmentsHeight(m.layout.editor.Dx()) + statusH + 1,
 		}
 	}
 	return image.Point{
 		X: cur.X + m.layout.editor.Min.X + 1,
-		Y: cur.Y + m.layout.editor.Min.Y + m.editorAttachmentsHeight(m.layout.editor.Dx()) + 1,
+		Y: cur.Y + m.layout.editor.Min.Y + m.editorAttachmentsHeight(m.layout.editor.Dx()) + statusH + 1,
 	}
 }
 
@@ -3521,12 +3583,36 @@ func (m *UI) renderEditorView(width int) string {
 		Width(boxWidth).
 		Render(m.textarea.View())
 
-	parts := make([]string, 0, 2)
+	parts := make([]string, 0, 3)
 	if attachmentsView != "" {
 		parts = append(parts, attachmentsView)
 	}
+	if statusLine := m.renderWorkingStatusLine(width); statusLine != "" {
+		parts = append(parts, statusLine)
+	}
 	parts = append(parts, box)
 	return strings.Join(parts, "\n")
+}
+
+// renderWorkingStatusLine returns a single-line status string shown above the
+// input box while the agent is working, or "" when idle.
+func (m *UI) renderWorkingStatusLine(width int) string {
+	if m.com.Workspace == nil || !m.isAgentBusy() || m.workPhase == "" {
+		return ""
+	}
+	elapsed := int(time.Since(m.workPhaseTime).Seconds())
+	if elapsed < 0 {
+		elapsed = 0
+	}
+	dots := []string{".", "..", "..."}[elapsed%3]
+	var dStr string
+	if elapsed < 60 {
+		dStr = fmt.Sprintf("%ds", elapsed)
+	} else {
+		dStr = fmt.Sprintf("%dm%ds", elapsed/60, elapsed%60)
+	}
+	text := fmt.Sprintf("%s%s (%s)", m.workPhase, dots, dStr)
+	return m.com.Styles.Editor.WorkingStatus.Width(width).Render(text)
 }
 
 func (m *UI) editorAttachmentsHeight(width int) int {
@@ -3534,6 +3620,16 @@ func (m *UI) editorAttachmentsHeight(width int) int {
 		return 0
 	}
 	return lipgloss.Height(m.attachments.Render(width))
+}
+
+// editorStatusHeight returns 1 when the working-status line ("generating... (Xs)")
+// is rendered above the textarea box, 0 otherwise. Must match the condition in
+// renderWorkingStatusLine and generateLayout so the cursor Y offset stays aligned.
+func (m *UI) editorStatusHeight() int {
+	if m.com.Workspace == nil || !m.isAgentBusy() || m.workPhase == "" {
+		return 0
+	}
+	return 1
 }
 
 // cacheSidebarLogo renders and caches the sidebar logo at the specified width.
@@ -3902,6 +3998,13 @@ func (m *UI) openFilesDialog() tea.Cmd {
 	m.dialog.OpenDialog(filePicker)
 
 	return cmd
+}
+
+// formatPlanApprovalMessage builds the message sent to the agent when the user
+// approves the plan via ctrl+y. Plan mode has already been exited by the time
+// this message is sent, so the agent should NOT call exit_plan_mode.
+func formatPlanApprovalMessage() string {
+	return "Plan approved. Plan mode has been exited automatically — do not call exit_plan_mode. Proceed with implementation."
 }
 
 func formatPlanReviewResponse(review planreview.Review) string {

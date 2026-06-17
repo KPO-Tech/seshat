@@ -108,6 +108,11 @@ type Workspace interface {
 	// or empty string if no worktree is active.
 	WorktreePath() string
 	AgentSummarize(ctx context.Context, sessionID string) error
+	// ApprovePlan exits plan mode immediately (as if exit_plan_mode was called)
+	// and returns the plan content from disk. The caller should send this content
+	// to the agent so it can start implementation without needing to call
+	// exit_plan_mode itself.
+	ApprovePlan(sessionID string) (planContent string, err error)
 	UpdateAgentModel(ctx context.Context) error
 	InitCoderAgent(ctx context.Context) error
 	GetDefaultSmallModel(providerID string) config.SelectedModel

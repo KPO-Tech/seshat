@@ -123,6 +123,9 @@ type Styles struct {
 		PromptYoloIconBlurred lipgloss.Style
 		PromptYoloDotsFocused lipgloss.Style
 		PromptYoloDotsBlurred lipgloss.Style
+
+		// Status line shown above the input box while the agent is working.
+		WorkingStatus lipgloss.Style
 	}
 
 	// Radio
@@ -251,11 +254,13 @@ type Styles struct {
 		DoneLabel            lipgloss.Style // "done" text at end of assistant turn
 		DoneDots             lipgloss.Style // "·····" fill between done label and right edge
 
-		// Thinking section styles
-		ThinkingBox            lipgloss.Style // Background for thinking content
+		// Thinking section styles — no border box, left-bar accent in expanded mode
+		ThinkingText           lipgloss.Style // Expanded thinking body (italic, subtle, indented)
+		ThinkingLeftBar        lipgloss.Style // Left accent bar for expanded text
 		ThinkingTruncationHint lipgloss.Style // "… (N lines hidden)" hint
-		ThinkingFooterTitle    lipgloss.Style // "Thought for" text
-		ThinkingFooterDuration lipgloss.Style // Duration value
+		ThinkingFooterTitle    lipgloss.Style // "Thought for" / "Thinking..." label
+		ThinkingFooterDuration lipgloss.Style // Duration / counter value
+		ThinkingExpandHint     lipgloss.Style // "click to expand" affordance
 		AssistantInfoIcon      lipgloss.Style
 		AssistantInfoModel     lipgloss.Style
 		AssistantInfoProvider  lipgloss.Style
@@ -388,6 +393,9 @@ type Styles struct {
 		AskUserCount          lipgloss.Style // "(N selected)" counter
 		AskUserFooter         lipgloss.Style // keyboard hint line (most subtle)
 		AskUserHistory        lipgloss.Style // answered Q→A history lines (subtle)
+
+		// Pending tool animation
+		RunningStatus lipgloss.Style // "running... (3s)" text beside pending tool name
 	}
 
 	// Dialog styles
