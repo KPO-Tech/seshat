@@ -550,6 +550,7 @@ func TestLearnerOnToolUse_RecordsStats(t *testing.T) {
 	stats := l.toolStats["grep"]
 	if stats == nil {
 		t.Fatal("expected stats for grep")
+		return
 	}
 	if stats.Attempts != 2 {
 		t.Fatalf("expected 2 attempts, got %d", stats.Attempts)
@@ -581,6 +582,7 @@ func TestLearnerOnToolUse_LearnPatternAfterThirdUse(t *testing.T) {
 	cross := l.memory.GetCrossSession()
 	if cross == nil {
 		t.Fatal("expected cross-session memory to be loaded")
+		return
 	}
 
 	pattern, ok := cross.GlobalPatterns["tool:rg"]
@@ -624,6 +626,7 @@ func TestLearnerAddUserPreference(t *testing.T) {
 	user := l.memory.GetUser()
 	if user == nil {
 		t.Fatal("expected user memory to be loaded")
+		return
 	}
 	entry, ok := user.Entries["language"]
 	if !ok {
@@ -650,6 +653,7 @@ func TestLearnerAddInstruction_RequiresProjectLoaded(t *testing.T) {
 	project := l.memory.GetProject()
 	if project == nil {
 		t.Fatal("expected project memory")
+		return
 	}
 	entry, ok := project.Entries["style"]
 	if !ok {
@@ -688,6 +692,7 @@ func TestLearnerFlush_PersistsToStore(t *testing.T) {
 	user := reloaded.GetUser()
 	if user == nil {
 		t.Fatal("expected reloaded user memory")
+		return
 	}
 	entry, ok := user.Entries["flush-key"]
 	if !ok {
@@ -736,6 +741,7 @@ func TestErrorLearnerOnError_TracksSingleError(t *testing.T) {
 	pattern := el.errors["error:permission"]
 	if pattern == nil {
 		t.Fatal("expected error pattern for 'permission'")
+		return
 	}
 	if pattern.Frequency != 1 {
 		t.Fatalf("expected frequency 1, got %d", pattern.Frequency)
@@ -760,6 +766,7 @@ func TestErrorLearnerOnError_LearnsSuggestionAfterRepeat(t *testing.T) {
 	project := el.memory.GetProject()
 	if project == nil {
 		t.Fatal("expected project memory after errors")
+		return
 	}
 	entry, ok := project.Entries["error:not_found"]
 	if !ok {
@@ -965,6 +972,7 @@ func TestFileStoreProjectMemoryMissingFileReturnsEmpty(t *testing.T) {
 	}
 	if mem == nil {
 		t.Fatal("expected empty ProjectMemory, got nil")
+		return
 	}
 	if len(mem.Entries) != 0 {
 		t.Fatalf("expected empty entries, got %d", len(mem.Entries))
@@ -1061,6 +1069,7 @@ func TestManagerSaveAll_PersistsEverything(t *testing.T) {
 	user := reload.GetUser()
 	if user == nil {
 		t.Fatal("expected user memory after reload")
+		return
 	}
 	if _, ok := user.Entries["save-key"]; !ok {
 		t.Fatal("expected 'save-key' persisted after SaveAll")

@@ -496,8 +496,12 @@ func setMemory(mem *memory.Manager, scope, key, value string, stdout io.Writer) 
 			return fmt.Errorf("save user memory: %w", err)
 		}
 	case "project":
-		fmt.Fprintf(stdout, "Project memory set requires project path\n")
-		return nil
+		if err := mem.LearnPreference(memory.MemoryScopeProject, key, value, "cli"); err != nil {
+			return fmt.Errorf("set project preference: %w", err)
+		}
+		if err := mem.SaveProject(); err != nil {
+			return fmt.Errorf("save project memory: %w", err)
+		}
 	default:
 		return fmt.Errorf("unknown scope: %s", scope)
 	}

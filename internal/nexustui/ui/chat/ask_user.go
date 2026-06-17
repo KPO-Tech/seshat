@@ -7,10 +7,11 @@ import (
 
 	"charm.land/bubbles/v2/textinput"
 	tea "charm.land/bubbletea/v2"
+	"github.com/charmbracelet/x/ansi"
+
 	"github.com/EngineerProjects/nexus-engine/internal/nexustui/agent/tools"
 	"github.com/EngineerProjects/nexus-engine/internal/nexustui/message"
 	"github.com/EngineerProjects/nexus-engine/internal/nexustui/ui/styles"
-	"github.com/charmbracelet/x/ansi"
 )
 
 // AnswerAskUserMsg is sent when the user completes an ask_user_question bubble.
@@ -40,6 +41,10 @@ type AskUserToolMessageItem struct {
 	customMode       bool
 	customInput      textinput.Model
 	submittedAnswers map[string]string
+	// optionYOffsets stores the terminal row (relative to item top) where each
+	// option in the current question starts. Populated by RenderTool and used
+	// by HandleMouseClick to map a click Y coordinate to an option index.
+	optionYOffsets []int
 }
 
 var _ AskUserActivatable = (*AskUserToolMessageItem)(nil)
@@ -81,6 +86,7 @@ func (a *AskUserToolMessageItem) ActivateQuestion(req tools.AskUserRequest) {
 	a.currentQuestion = 0
 	a.customMode = false
 	a.submittedAnswers = nil
+	a.optionYOffsets = nil
 	a.optionCursor = make([]int, len(questions))
 	a.singleSelections = make([]int, len(questions))
 	a.multiSelections = make([][]bool, len(questions))
@@ -95,6 +101,61 @@ func (a *AskUserToolMessageItem) ActivateQuestion(req tools.AskUserRequest) {
 	a.customInput.SetVirtualCursor(true)
 	a.clearCache()
 	a.Bump()
+}
+
+// HandleMouseClick overrides the base handler for interactive survey mode.
+// It maps the click Y position to an option and toggles/selects it.
+func (a *AskUserToolMessageItem) HandleMouseClick(btn ansi.MouseButton, x, y int) bool {
+	if btn != ansi.MouseLeft {
+		return false
+	}
+	if !a.waitingForUser || a.activeReq == nil || a.customMode {
+		return a.baseToolMessageItem.HandleMouseClick(btn, x, y)
+	}
+	optIdx := a.optionIndexAtY(y)
+	if optIdx < 0 {
+		// Click not on any option — still mark as handled to suppress expansion toggle.
+		return true
+	}
+	a.optionCursor[a.currentQuestion] = optIdx
+	a.selectCurrentOption()
+	return true
+}
+
+// ToggleExpanded is a no-op while the survey is waiting for user input so that
+// a click on the bubble does not collapse the question.
+func (a *AskUserToolMessageItem) ToggleExpanded() bool {
+	if a.waitingForUser {
+		return true
+	}
+	return a.baseToolMessageItem.ToggleExpanded()
+}
+
+// optionIndexAtY returns the option index for the given item-relative Y coordinate,
+// or -1 if no option occupies that row.
+func (a *AskUserToolMessageItem) optionIndexAtY(y int) int {
+	if len(a.optionYOffsets) == 0 {
+		return -1
+	}
+	question := a.currentSurveyQuestion()
+	for i, startY := range a.optionYOffsets {
+		if y < startY {
+			break
+		}
+		endY := startY + 1
+		if i < len(question.Options) {
+			opt := question.Options[i]
+			isOther := opt.Value == "__other__" || strings.EqualFold(opt.Label, "Other")
+			showDesc := opt.Description != "" && !(a.customMode && i == a.optionCursor[a.currentQuestion] && isOther)
+			if showDesc {
+				endY = startY + 2
+			}
+		}
+		if y < endY {
+			return i
+		}
+	}
+	return -1
 }
 
 // HandleKeyEvent overrides the base handler to provide survey navigation.
@@ -292,6 +353,20 @@ func (a *AskUserToolMessageItem) answerForQuestion(index int) string {
 	return question.Options[selectedIndex].Value
 }
 
+// multiSelectCount returns the number of currently checked options for question index.
+func (a *AskUserToolMessageItem) multiSelectCount(qIdx int) int {
+	if a.activeReq == nil || qIdx >= len(a.multiSelections) {
+		return 0
+	}
+	count := 0
+	for _, v := range a.multiSelections[qIdx] {
+		if v {
+			count++
+		}
+	}
+	return count
+}
+
 func (a *AskUserToolMessageItem) submitAnswers() tea.Cmd {
 	if a.activeReq == nil {
 		return nil
@@ -379,50 +454,99 @@ func (r *askUserRenderContext) RenderTool(sty *styles.Styles, width int, opts *T
 	if a.waitingForUser && a.activeReq != nil {
 		question := a.currentSurveyQuestion()
 		parts = append(parts, "")
+
+		// preambleLines tracks how many terminal rows precede the options block,
+		// used by optionIndexAtY for mouse click detection.
+		// header(1) + blank separator(1) = 2 so far.
+		preambleLines := 2
+
 		if len(a.activeReq.Questions) > 1 {
 			progress := fmt.Sprintf("Question %d/%d", a.currentQuestion+1, len(a.activeReq.Questions))
 			parts = append(parts, sty.Tool.Body.Render(sty.Tool.AskUserHistory.Render(progress)))
 			parts = append(parts, "")
+			preambleLines += 2
 		}
 		if question.Header != "" {
 			parts = append(parts, sty.Tool.Body.Render(sty.Tool.AskUserHistory.Render("["+question.Header+"]")))
 			parts = append(parts, "")
+			preambleLines += 2
 		}
-		parts = append(parts, sty.Tool.Body.Render(ansi.Wordwrap(question.Question, bodyWidth, "")))
+
+		questionWrapped := ansi.Wordwrap(question.Question, bodyWidth, "")
+		preambleLines += strings.Count(questionWrapped, "\n") + 1
+		preambleLines += 1 // blank after question
+
+		parts = append(parts, sty.Tool.Body.Render(questionWrapped))
 		parts = append(parts, "")
 
+		// Compute per-option Y offsets for mouse click hit detection.
+		a.optionYOffsets = a.optionYOffsets[:0]
+		lineY := preambleLines
+		for i, opt := range question.Options {
+			a.optionYOffsets = append(a.optionYOffsets, lineY)
+			isOtherOffset := opt.Value == "__other__" || strings.EqualFold(opt.Label, "Other")
+			hasCustomOffset := isOtherOffset && strings.TrimSpace(a.customAnswers[a.currentQuestion]) != ""
+			// Description hidden when: actively typing in this option, OR custom text replaces it.
+			showDesc := opt.Description != "" && !(a.customMode && i == a.optionCursor[a.currentQuestion] && isOtherOffset) && !hasCustomOffset
+			if showDesc {
+				lineY += 2
+			} else {
+				lineY += 1
+			}
+		}
+
+		// Render options.
 		var optLines []string
 		for i, opt := range question.Options {
+			isFocused := i == a.optionCursor[a.currentQuestion]
+			isSelected := question.MultiSelect && a.multiSelections[a.currentQuestion][i]
+			isSingleSelected := !question.MultiSelect && a.singleSelections[a.currentQuestion] == i
+
 			cursor := "  "
-			if i == a.optionCursor[a.currentQuestion] {
+			if isFocused {
 				cursor = sty.Tool.AskUserCursor.Render("▶ ")
 			}
 
+			isOtherOpt := opt.Value == "__other__" || strings.EqualFold(opt.Label, "Other")
+			customText := a.customAnswers[a.currentQuestion]
+			hasCustom := isOtherOpt && strings.TrimSpace(customText) != ""
+
 			var label string
-			if a.customMode && i == a.optionCursor[a.currentQuestion] && a.currentOptionIsOther() {
+			if a.customMode && isFocused && isOtherOpt {
+				// Actively typing: show the live input.
 				label = a.customInput.View()
+			} else if hasCustom && !isFocused {
+				// Confirmed custom text, not focused: show what was typed, not "Other".
+				label = sty.Tool.AskUserOptionSelected.Render(customText)
+			} else if hasCustom && isFocused {
+				// Confirmed custom text, re-focused: show typed text in focused style.
+				label = sty.Tool.AskUserOptionFocused.Render(customText)
 			} else {
 				label = opt.Label
-				if i == a.optionCursor[a.currentQuestion] {
+				switch {
+				case isFocused:
 					label = sty.Tool.AskUserOptionFocused.Render(label)
-				} else {
+				case isSelected || isSingleSelected:
+					label = sty.Tool.AskUserOptionSelected.Render(label)
+				default:
 					label = sty.Tool.ResultItemName.Render(label)
 				}
 			}
 
 			prefix := cursor
 			if question.MultiSelect {
-				if a.multiSelections[a.currentQuestion][i] {
-					prefix += sty.Tool.ResultAdded.Render("[✓]") + " "
+				if isSelected {
+					prefix += sty.Tool.AskUserCheckOn.Render("[✓]") + " "
 				} else {
-					prefix += sty.Tool.StateCancelled.Render("[ ]") + " "
+					prefix += sty.Tool.AskUserCheckOff.Render("[ ]") + " "
 				}
-			} else if a.singleSelections[a.currentQuestion] == i || (a.customAnswers[a.currentQuestion] != "" && (opt.Value == "__other__" || strings.EqualFold(opt.Label, "Other"))) {
-				prefix += sty.Tool.ResultAdded.Render("[✓]") + " "
+			} else if isSingleSelected ||
+				(a.customAnswers[a.currentQuestion] != "" && (opt.Value == "__other__" || strings.EqualFold(opt.Label, "Other"))) {
+				prefix += sty.Tool.AskUserCheckOn.Render("[✓]") + " "
 			}
 
 			line := prefix + label
-			if opt.Description != "" && !(a.customMode && i == a.optionCursor[a.currentQuestion] && a.currentOptionIsOther()) {
+			if opt.Description != "" && !(a.customMode && isFocused && isOtherOpt) && !hasCustom {
 				desc := sty.Tool.ResultItemDesc.Render(ansi.Truncate(opt.Description, bodyWidth-8, "…"))
 				line += "\n    " + desc
 			}
@@ -432,20 +556,32 @@ func (r *askUserRenderContext) RenderTool(sty *styles.Styles, width int, opts *T
 			parts = append(parts, sty.Tool.Body.Render(strings.Join(optLines, "\n")))
 		}
 
-		hint := "↑↓ navigate · Enter select · → next"
-		if question.MultiSelect {
-			hint = "↑↓ navigate · Space/Enter toggle · → next"
-		}
+		// Build hint line.
+		var hintParts []string
 		if a.customMode {
-			hint = "Type your answer · Enter confirm · Esc cancel"
-		} else if a.currentQuestion > 0 {
-			hint += " · ← previous"
-		}
-		if a.currentQuestion == len(a.activeReq.Questions)-1 {
-			hint += " · Ctrl+Y/→ submit"
+			hintParts = append(hintParts, "Type · Enter confirm · Esc cancel")
+		} else {
+			if question.MultiSelect {
+				hintParts = append(hintParts, "↑↓ navigate")
+				hintParts = append(hintParts, "Space/Enter toggle")
+				if n := a.multiSelectCount(a.currentQuestion); n > 0 {
+					hintParts = append(hintParts, sty.Tool.AskUserCount.Render(fmt.Sprintf("%d selected", n)))
+				}
+			} else {
+				hintParts = append(hintParts, "↑↓ navigate")
+				hintParts = append(hintParts, "Enter select")
+			}
+			if a.currentQuestion > 0 {
+				hintParts = append(hintParts, "← back")
+			}
+			if a.currentQuestion == len(a.activeReq.Questions)-1 {
+				hintParts = append(hintParts, "Ctrl+Y submit")
+			} else {
+				hintParts = append(hintParts, "Tab/→ next")
+			}
 		}
 		parts = append(parts, "")
-		parts = append(parts, sty.Tool.Body.Render(sty.Tool.AskUserFooter.Render(hint)))
+		parts = append(parts, sty.Tool.Body.Render(sty.Tool.AskUserFooter.Render(strings.Join(hintParts, " · "))))
 	}
 
 	return strings.Join(parts, "\n")

@@ -57,6 +57,11 @@ type Config struct {
 
 	// BrowserManager manages native browser sessions for browser tools.
 	BrowserManager browsercore.Manager `json:"-"`
+
+	// DisableStreaming opts out of server-sent-event streaming. Streaming is
+	// enabled by default; set this to true only when the provider or test
+	// harness does not support SSE.
+	DisableStreaming bool `json:"disable_streaming,omitempty"`
 }
 
 // DefaultConfig returns default engine configuration.

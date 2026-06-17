@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"os"
 	"strings"
+	"sync"
+	"time"
 
 	"github.com/EngineerProjects/nexus-engine/internal/tools/contract"
 	"github.com/EngineerProjects/nexus-engine/internal/tools/schema"
@@ -23,10 +25,20 @@ type SkillOutput struct {
 	Success bool   `json:"success"`
 }
 
+const skillDefCacheTTL = 10 * time.Second
+
+type skillDefCache struct {
+	def      contract.Definition
+	cachedAt time.Time
+	cwd      string
+}
+
 type SkillTool struct {
-	loader SkillLoader
-	cwd    string
-	userID string
+	loader     SkillLoader
+	cwd        string
+	userID     string
+	defCacheMu sync.Mutex
+	defCache   *skillDefCache
 }
 
 func NewSkillTool(loader SkillLoader) *SkillTool {
@@ -46,10 +58,16 @@ func (t *SkillTool) SetUserID(userID string) {
 }
 
 func (t *SkillTool) Definition() contract.Definition {
+	t.defCacheMu.Lock()
+	defer t.defCacheMu.Unlock()
+	if t.defCache != nil && t.defCache.cwd == t.cwd && time.Since(t.defCache.cachedAt) < skillDefCacheTTL {
+		return t.defCache.def
+	}
+
 	skills, _ := t.loader.GetSkillDirCommands(t.cwd)
 	skillList := FormatSkillsList(skills)
 
-	return contract.Definition{
+	def := contract.Definition{
 		Name:        SkillToolName,
 		Description: GetPromptWithSkills(skillList),
 		SearchHint:  "execute skill command plugin slash command",
@@ -71,6 +89,8 @@ func (t *SkillTool) Definition() contract.Definition {
 		IsConcurrencySafe: false,
 		ShouldDefer:       true,
 	}
+	t.defCache = &skillDefCache{def: def, cachedAt: time.Now(), cwd: t.cwd}
+	return def
 }
 
 func (t *SkillTool) Call(ctx context.Context, input contract.CallInput, permissionCheck types.CanUseToolFn) (contract.CallResult, error) {

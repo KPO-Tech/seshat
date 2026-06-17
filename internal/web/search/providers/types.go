@@ -1,10 +1,21 @@
 package providers
 
+import "context"
+
 // SearchInput represents the input for a search operation.
 type SearchInput struct {
+	Ctx            context.Context // propagated to HTTP requests; nil falls back to context.Background()
 	Query          string
 	AllowedDomains []string
 	BlockedDomains []string
+}
+
+// ctx returns a non-nil context for use in HTTP requests.
+func (s SearchInput) ctx() context.Context {
+	if s.Ctx != nil {
+		return s.Ctx
+	}
+	return context.Background()
 }
 
 // SearchHit represents a single search result.

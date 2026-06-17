@@ -48,7 +48,7 @@ func (p *LangSearchProvider) Search(input SearchInput) (ProviderOutput, error) {
 		return ProviderOutput{}, fmt.Errorf("failed to encode LangSearch request: %w", err)
 	}
 
-	req, err := http.NewRequest(http.MethodPost, "https://api.langsearch.com/v1/web-search", bytes.NewReader(body))
+	req, err := http.NewRequestWithContext(input.ctx(), http.MethodPost, "https://api.langsearch.com/v1/web-search", bytes.NewReader(body))
 	if err != nil {
 		return ProviderOutput{}, err
 	}

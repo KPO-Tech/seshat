@@ -818,9 +818,6 @@ func (w *NexusWorkspace) AgentIsSessionBusy(sessionID string) bool {
 }
 
 func (w *NexusWorkspace) AgentIsReady() bool                               { return w.client != nil }
-func (w *NexusWorkspace) AgentQueuedPrompts(_ string) int                  { return 0 }
-func (w *NexusWorkspace) AgentQueuedPromptsList(_ string) []string         { return nil }
-func (w *NexusWorkspace) AgentClearQueue(_ string)                         {}
 func (w *NexusWorkspace) AgentSummarize(_ context.Context, _ string) error { return nil }
 func (w *NexusWorkspace) InitCoderAgent(_ context.Context) error           { return nil }
 
@@ -1294,6 +1291,12 @@ func (w *NexusWorkspace) SetConfigField(scope config.Scope, key string, value an
 		}
 		invalidateConfig()
 		return nil
+	case strings.HasPrefix(key, "options."):
+		if err := persistConfigField(); err != nil {
+			return err
+		}
+		invalidateConfig()
+		return nil
 	default:
 		return nil
 	}
@@ -1675,29 +1678,16 @@ func (w *NexusWorkspace) LoadSessionMessages(sessionID string, sdkMsgs []sdk.Mes
 // SetSDKClient wires the SDK client and registers unique TUI tools.
 func (w *NexusWorkspace) SetSDKClient(client *sdk.Client) {
 	w.client = client
-	w.registerTUITools(nil)
-}
-
-// RegisterLSPTools registers the LSP-backed unique TUI tools with the live LSP manager.
-// Call this once the LSP manager is available (after startup).
-func (w *NexusWorkspace) RegisterLSPTools(lspManager *lsp.Manager) {
-	w.registerTUITools(lspManager)
-}
-
-// registerTUITools registers unique nexustui tools (not covered by SDK builtins).
-// lspManager may be nil; LSP tools will report "no LSP available" until one is set.
-func (w *NexusWorkspace) registerTUITools(lspManager *lsp.Manager) {
 	if w.client == nil {
 		return
 	}
 	logFile := w.logFilePath()
-	uniqueTools := []sdk.Tool{
+	for _, t := range []sdk.Tool{
 		tuiTools.NewNexusLogsTool(logFile),
-		tuiTools.NewDiagnosticsTool(lspManager),
-		tuiTools.NewLSPRestartTool(lspManager),
-		tuiTools.NewReferencesTool(lspManager),
-	}
-	for _, t := range uniqueTools {
+		tuiTools.NewDiagnosticsTool(nil),
+		tuiTools.NewLSPRestartTool(nil),
+		tuiTools.NewReferencesTool(nil),
+	} {
 		if err := w.client.RegisterTool(t); err != nil {
 			slog.Debug("Failed to register TUI tool", "tool", t.Definition().Name, "error", err)
 		}
@@ -2570,20 +2560,13 @@ func convertSDKMessages(sessionID string, sdkMsgs []sdk.Message) []message.Messa
 			}
 		case sdk.RoleAssistant:
 			msg.Role = message.Assistant
-			if m.Metadata != nil && m.Metadata.StopReason != "" {
-				finishReason := sdkStopToFinish(m.Metadata.StopReason)
-				msg.Parts = append(msg.Parts, message.Finish{
-					Reason: finishReason,
-					Time:   ts,
-				})
-			}
+			// Append content blocks in their natural order, then append Finish last.
 			for _, block := range m.Content {
 				switch b := block.(type) {
 				case sdk.TextContent:
-					// Insert text before the Finish part if present.
-					msg.Parts = prependPart(msg.Parts, message.TextContent{Text: b.Text})
+					msg.Parts = append(msg.Parts, message.TextContent{Text: b.Text})
 				case sdk.ThinkingContent:
-					msg.Parts = prependPart(msg.Parts, message.ReasoningContent{Thinking: b.Thinking})
+					msg.Parts = append(msg.Parts, message.ReasoningContent{Thinking: b.Thinking})
 				case sdk.ToolUseContent:
 					inputJSON, _ := json.Marshal(b.Input)
 					tc := message.ToolCall{
@@ -2592,9 +2575,9 @@ func convertSDKMessages(sessionID string, sdkMsgs []sdk.Message) []message.Messa
 						Input:    string(inputJSON),
 						Finished: true,
 					}
-					msg.Parts = prependPart(msg.Parts, tc)
+					msg.Parts = append(msg.Parts, tc)
 					if r, ok := resultMap[b.ID]; ok {
-						msg.Parts = prependPart(msg.Parts, message.ToolResult{
+						msg.Parts = append(msg.Parts, message.ToolResult{
 							ToolCallID: b.ID,
 							Name:       b.Name,
 							Content:    r.content,
@@ -2603,6 +2586,13 @@ func convertSDKMessages(sessionID string, sdkMsgs []sdk.Message) []message.Messa
 						})
 					}
 				}
+			}
+			if m.Metadata != nil && m.Metadata.StopReason != "" {
+				finishReason := sdkStopToFinish(m.Metadata.StopReason)
+				msg.Parts = append(msg.Parts, message.Finish{
+					Reason: finishReason,
+					Time:   ts,
+				})
 			}
 		}
 

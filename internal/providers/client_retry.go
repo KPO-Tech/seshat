@@ -33,28 +33,6 @@ func (c *Client) sendMessageWithRetry(ctx context.Context, req types.APIRequest)
 	)
 }
 
-// calculateBackoff calculates the next backoff delay with jitter
-func calculateBackoff(baseDelay, maxBackoff int64, multiplier float64, attempt int64) time.Duration {
-	delay := baseDelay
-	for i := int64(1); i < attempt; i++ {
-		delay = int64(float64(delay) * multiplier)
-		if delay > maxBackoff {
-			delay = maxBackoff
-			break
-		}
-	}
-
-	// Add jitter (0-25%)
-	jitter := float64(delay) * 0.25 * float64(time.Now().UnixNano()%1000) / 1000.0
-	delay = delay + int64(jitter)
-
-	if delay > maxBackoff {
-		delay = maxBackoff
-	}
-
-	return time.Duration(delay) * time.Millisecond
-}
-
 // parseRetryAfterHeader parses the Retry-After header from a response
 func (c *Client) parseRetryAfterHeader(resp *http.Response) time.Duration {
 	return providerretry.ParseRetryAfterHeader(resp)
@@ -103,23 +81,6 @@ func (c *Client) classifyError(err error, statusCode int) RetryClassification {
 // shouldRetryAdvanced determines if an error should trigger a retry
 func (c *Client) shouldRetryAdvanced(classification RetryClassification, attempt int) bool {
 	return providerretry.ShouldRetryHTTP(c.retryConfig, classification, attempt)
-}
-
-// powFloat64 calculates base^exponent for float64 values
-func powFloat64(base, exponent float64) float64 {
-	if exponent == 0 {
-		return 1
-	}
-	if exponent == 1 {
-		return base
-	}
-
-	result := base
-	for i := 2; i <= int(exponent); i++ {
-		result *= base
-	}
-
-	return result
 }
 
 // executeWithCircuitBreaker executes an HTTP request with circuit breaker protection

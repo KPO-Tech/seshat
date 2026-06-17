@@ -428,6 +428,7 @@ func CreateSkillFromFrontmatter(frontmatter FrontmatterData, markdownContent str
 		Agent:                       agent,
 		Effort:                      effort,
 		Paths:                       paths,
+		Content:                     markdownContent,
 		ContentLength:               len(markdownContent),
 		IsHidden:                    !userInvocable,
 		ProgressMessage:             "running",
@@ -590,17 +591,15 @@ func SubstituteNexusVariables(content string, skillDir string, sessionID string)
 }
 
 func ExecuteSkillPrompt(skill Skill, args string, ctx context.Context) ([]ContentBlock, error) {
-	// Default implementation - should be overridden by actual skill prompt function
-	prompt := ""
-
+	preamble := ""
 	if skill.SkillRoot != "" {
-		prompt += "Base directory for this skill: " + skill.SkillRoot + "\n\n"
+		preamble = "Base directory for this skill: " + skill.SkillRoot + "\n\n"
 	}
 
-	prompt += SubstituteArguments(prompt, args, skill.ArgNames)
-	prompt = SubstituteNexusVariables(prompt, skill.SkillRoot, sessionID)
+	content := SubstituteArguments(skill.Content, args, skill.ArgNames)
+	content = SubstituteNexusVariables(content, skill.SkillRoot, sessionID)
 
-	return []ContentBlock{{Type: "text", Text: prompt}}, nil
+	return []ContentBlock{{Type: "text", Text: preamble + content}}, nil
 }
 
 // --- Bundled Skills Registry ---
@@ -801,8 +800,6 @@ func ActivateConditionalSkillsForPaths(filePaths []string, cwd string) []string 
 }
 
 func matchesPathPattern(filePath string, pattern string, cwd string) bool {
-	// Simple pattern matching - just check if the file matches the pattern
-	// In a real implementation, this would use the ignore library
 	relPath := filePath
 	if !isAbs(pattern) && len(cwd) > 0 {
 		if len(filePath) > len(cwd) && filePath[:len(cwd)] == cwd {
@@ -810,7 +807,6 @@ func matchesPathPattern(filePath string, pattern string, cwd string) bool {
 		}
 	}
 
-	// Simple wildcard matching
 	if pattern == "**" {
 		return true
 	}
@@ -823,6 +819,16 @@ func matchesPathPattern(filePath string, pattern string, cwd string) bool {
 	if strings.HasSuffix(pattern, "/**") {
 		prefix := pattern[:len(pattern)-3]
 		return strings.HasPrefix(relPath, prefix)
+	}
+
+	// Single-component glob (e.g. "*.ts", "*.go") — match against the
+	// base file name so patterns like "*.ts" work as expected.
+	if strings.ContainsAny(pattern, "*?") && !strings.Contains(pattern, "/") {
+		base := filepath.Base(relPath)
+		matched, err := filepath.Match(pattern, base)
+		if err == nil {
+			return matched
+		}
 	}
 
 	return relPath == pattern || strings.Contains(relPath, pattern)

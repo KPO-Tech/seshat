@@ -205,7 +205,9 @@ func buildDialector(cfg Config) (gorm.Dialector, string, error) {
 
 	case DriverMySQL:
 		dsn := cfg.DSN
-		if !strings.Contains(dsn, "parseTime=") {
+		if strings.Contains(dsn, "parseTime=false") {
+			dsn = strings.ReplaceAll(dsn, "parseTime=false", "parseTime=true")
+		} else if !strings.Contains(dsn, "parseTime=") {
 			if strings.Contains(dsn, "?") {
 				dsn += "&parseTime=true"
 			} else {

@@ -191,7 +191,7 @@ func TestRunForkedAgentIncludesInheritedMessages(t *testing.T) {
 	)
 	runtimeEngine.SetAPIClient(apiClient)
 
-	result, err := coreagent.RunForkedAgent(&coreagent.RunConfig{
+	result, err := coreagent.RunAgent(&coreagent.RunConfig{
 		AgentType:        coreagent.AgentTypeGeneralPurpose,
 		Task:             "child task",
 		Engine:           runtimeEngine,

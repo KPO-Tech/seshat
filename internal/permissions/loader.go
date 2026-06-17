@@ -94,8 +94,9 @@ func loadRulesForSource(source SettingsSource) ([]PermissionRule, error) {
 				ToolName:    rule.ToolName,
 				RuleContent: rule.RuleContent,
 			},
-			Pattern: rule.Pattern,
-			Source:  types.PermissionRuleSource(source),
+			Behavior: types.PermissionBehavior(rule.Behavior),
+			Pattern:  rule.Pattern,
+			Source:   types.PermissionRuleSource(source),
 		}
 		rules = append(rules, permRule)
 	}

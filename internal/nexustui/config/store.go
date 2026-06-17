@@ -566,7 +566,7 @@ func (s *ConfigStore) ImportCopilot() (*oauth.Token, bool) {
 	}
 
 	slog.Info("Found existing GitHub Copilot token on disk. Authenticating...")
-	token, err := copilot.RefreshToken(context.TODO(), diskToken)
+	token, err := copilot.RefreshToken(context.Background(), diskToken)
 	if err != nil {
 		slog.Error("Unable to import GitHub Copilot token", "error", err)
 		return nil, false

@@ -29,7 +29,7 @@ type RunnerConfig struct {
 // DefaultRunnerConfig returns default runner configuration.
 func DefaultRunnerConfig() *RunnerConfig {
 	return &RunnerConfig{
-		MaxIterations: 10,
+		MaxIterations: 100,
 		AutoCompact:   true,
 		MaxTurns:      100,
 	}

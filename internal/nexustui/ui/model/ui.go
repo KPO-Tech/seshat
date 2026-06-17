@@ -270,6 +270,10 @@ type UI struct {
 	// detailsOpen tracks whether the details panel is open (in compact mode)
 	detailsOpen bool
 
+	// lifecycle context — cancelled when the UI shuts down.
+	ctx       context.Context
+	cancelCtx context.CancelFunc
+
 	// pills state
 	pillsExpanded      bool
 	pillsAutoExpanded  bool
@@ -360,6 +364,10 @@ func New(com *common.Common, initialSessionID string, continueLast bool) *UI {
 		continueLastSession: continueLast,
 		skillStates:         skills.GetLatestStates(),
 	}
+
+	ctx, cancel := context.WithCancel(context.Background())
+	ui.ctx = ctx
+	ui.cancelCtx = cancel
 
 	status := NewStatus(com, ui)
 
@@ -566,12 +574,9 @@ func (m *UI) loadMCPrompts() tea.Msg {
 // Update handles updates to the UI model.
 func (m *UI) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	var cmds []tea.Cmd
-	if m.hasSession() && m.isAgentBusy() {
-		queueSize := m.com.Workspace.AgentQueuedPrompts(m.session.ID)
-		if queueSize != m.promptQueue {
-			m.promptQueue = queueSize
-			m.updateLayoutAndSize()
-		}
+	if m.hasSession() && m.isAgentBusy() && m.promptQueue != 0 {
+		m.promptQueue = 0
+		m.updateLayoutAndSize()
 	}
 	// Update terminal capabilities
 	m.caps.Update(msg)
@@ -1669,7 +1674,7 @@ func (m *UI) handleDialogMsg(msg tea.Msg) tea.Cmd {
 			if err := m.com.Workspace.UpdatePreferredModel(config.ScopeGlobal, agentCfg.Model, currentModel); err != nil {
 				return util.ReportError(err)()
 			}
-			_ = m.com.Workspace.UpdateAgentModel(context.TODO())
+			_ = m.com.Workspace.UpdateAgentModel(m.ctx)
 			status := "disabled"
 			if currentModel.Think {
 				status = "enabled"
@@ -1699,6 +1704,7 @@ func (m *UI) handleDialogMsg(msg tea.Msg) tea.Cmd {
 		})
 		m.dialog.CloseDialog(dialog.CommandsID)
 	case dialog.ActionQuit:
+		m.cancelCtx()
 		cmds = append(cmds, tea.Quit)
 	case dialog.ActionEnableDockerMCP:
 		m.dialog.CloseDialog(dialog.CommandsID)
@@ -1761,7 +1767,7 @@ func (m *UI) handleDialogMsg(msg tea.Msg) tea.Cmd {
 			if err := m.com.Workspace.SetConfigField(config.ScopeGlobal, configKey, msg.ProviderID); err != nil {
 				return util.ReportError(err)()
 			}
-			if err := m.com.Workspace.UpdateAgentModel(context.TODO()); err != nil {
+			if err := m.com.Workspace.UpdateAgentModel(m.ctx); err != nil {
 				return util.ReportError(err)()
 			}
 			if msg.ProviderID == "" {
@@ -1813,7 +1819,7 @@ func (m *UI) handleDialogMsg(msg tea.Msg) tea.Cmd {
 		}
 
 		cmds = append(cmds, func() tea.Msg {
-			_ = m.com.Workspace.UpdateAgentModel(context.TODO())
+			_ = m.com.Workspace.UpdateAgentModel(m.ctx)
 			return util.NewInfoMsg("Reasoning effort set to " + msg.Effort)
 		})
 		m.dialog.CloseDialog(dialog.ReasoningID)
@@ -2007,7 +2013,7 @@ func (m *UI) handleSelectModel(msg dialog.ActionSelectModel) tea.Cmd {
 	}
 
 	cmds = append(cmds, func() tea.Msg {
-		if err := m.com.Workspace.UpdateAgentModel(context.TODO()); err != nil {
+		if err := m.com.Workspace.UpdateAgentModel(m.ctx); err != nil {
 			return util.ReportError(err)
 		}
 
@@ -2030,7 +2036,7 @@ func (m *UI) handleSelectModel(msg dialog.ActionSelectModel) tea.Cmd {
 	if isOnboarding {
 		m.setState(uiLanding, uiFocusEditor)
 		m.com.Config().SetupAgents()
-		if err := m.com.Workspace.InitCoderAgent(context.TODO()); err != nil {
+		if err := m.com.Workspace.InitCoderAgent(m.ctx); err != nil {
 			cmds = append(cmds, util.ReportError(err))
 		}
 	} else if m.com.IsHyper() {
@@ -2720,8 +2726,6 @@ func (m *UI) ShortHelp() []key.Binding {
 			cancelBinding := k.Chat.Cancel
 			if m.isCanceling {
 				cancelBinding.SetHelp("esc", "press again to cancel")
-			} else if m.com.Workspace.AgentQueuedPrompts(m.session.ID) > 0 {
-				cancelBinding.SetHelp("esc", "clear queue")
 			}
 			binds = append(binds, cancelBinding)
 		}
@@ -2773,8 +2777,6 @@ func (m *UI) FullHelp() [][]key.Binding {
 			cancelBinding := k.Chat.Cancel
 			if m.isCanceling {
 				cancelBinding.SetHelp("esc", "press again to cancel")
-			} else if m.com.Workspace.AgentQueuedPrompts(m.session.ID) > 0 {
-				cancelBinding.SetHelp("esc", "clear queue")
 			}
 			binds = append(binds, []key.Binding{cancelBinding})
 		}
@@ -3672,12 +3674,6 @@ func (m *UI) cancelAgent() tea.Cmd {
 		// Stop the spinning todo indicator.
 		m.todoIsSpinning = false
 		m.renderPills()
-		return nil
-	}
-
-	// Check if there are queued prompts - if so, clear the queue.
-	if m.com.Workspace.AgentQueuedPrompts(m.session.ID) > 0 {
-		m.com.Workspace.AgentClearQueue(m.session.ID)
 		return nil
 	}
 

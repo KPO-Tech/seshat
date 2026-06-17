@@ -122,17 +122,21 @@ func (s *Service) fetchViaHTTP(ctx context.Context, urlStr string, sessionID str
 		BrowserRecommended: browserRecommended,
 	}
 
-	s.cache.Set(urlStr, CacheEntry{
-		Content:            fetched.Content,
-		Bytes:              fetched.Bytes,
-		Code:               fetched.Code,
-		CodeText:           fetched.CodeText,
-		ContentType:        fetched.ContentType,
-		FinalURL:           fetched.FinalURL,
-		PersistedPath:      fetched.PersistedPath,
-		PersistedSize:      fetched.PersistedSize,
-		BrowserRecommended: fetched.BrowserRecommended,
-	})
+	// Only cache non-truncated responses; a truncated entry would serve a
+	// shorter-than-requested result to callers configured with a higher limit.
+	if !truncated {
+		s.cache.Set(urlStr, CacheEntry{
+			Content:            fetched.Content,
+			Bytes:              fetched.Bytes,
+			Code:               fetched.Code,
+			CodeText:           fetched.CodeText,
+			ContentType:        fetched.ContentType,
+			FinalURL:           fetched.FinalURL,
+			PersistedPath:      fetched.PersistedPath,
+			PersistedSize:      fetched.PersistedSize,
+			BrowserRecommended: fetched.BrowserRecommended,
+		})
+	}
 
 	return fetched, nil
 }

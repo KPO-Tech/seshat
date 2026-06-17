@@ -45,7 +45,7 @@ type AskUserQuestion struct {
 	Question    string          `json:"question"`
 	Header      string          `json:"header"`
 	Options     []AskUserOption `json:"options"`
-	MultiSelect bool            `json:"multi_select"`
+	MultiSelect bool            `json:"multiSelect,omitempty"`
 }
 
 // AskUserRequest is published to the askUserBroker for each question set the agent asks.

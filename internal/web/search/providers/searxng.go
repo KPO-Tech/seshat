@@ -59,7 +59,7 @@ func (p *SearXNGProvider) Search(input SearchInput) (ProviderOutput, error) {
 }
 
 func (p *SearXNGProvider) searchOnce(input SearchInput) (ProviderOutput, error) {
-	req, err := http.NewRequest(http.MethodGet, p.baseURL+"/search", nil)
+	req, err := http.NewRequestWithContext(input.ctx(), http.MethodGet, p.baseURL+"/search", nil)
 	if err != nil {
 		return ProviderOutput{}, err
 	}

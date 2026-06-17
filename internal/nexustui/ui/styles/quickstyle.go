@@ -693,7 +693,11 @@ func quickStyle(o quickStyleOpts) Styles {
 	s.Tool.WebSearchURL = lipgloss.NewStyle().Foreground(o.info)
 	s.Tool.WebFetchPrompt = lipgloss.NewStyle().Foreground(o.fgMostSubtle)
 	s.Tool.AskUserCursor = lipgloss.NewStyle().Foreground(o.accent)
-	s.Tool.AskUserOptionFocused = lipgloss.NewStyle().Foreground(o.fgBase)
+	s.Tool.AskUserOptionFocused = lipgloss.NewStyle().Foreground(o.fgBase).Bold(true)
+	s.Tool.AskUserOptionSelected = lipgloss.NewStyle().Foreground(o.accent)
+	s.Tool.AskUserCheckOn = lipgloss.NewStyle().Foreground(o.accent)
+	s.Tool.AskUserCheckOff = lipgloss.NewStyle().Foreground(o.fgMostSubtle)
+	s.Tool.AskUserCount = lipgloss.NewStyle().Foreground(o.accent).Italic(true)
 	s.Tool.AskUserFooter = lipgloss.NewStyle().Foreground(o.fgMostSubtle)
 	s.Tool.AskUserHistory = lipgloss.NewStyle().Foreground(o.fgSubtle)
 

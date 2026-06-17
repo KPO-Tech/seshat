@@ -94,7 +94,7 @@ func (s *EncryptedFileStore) load() error {
 	return nil
 }
 
-// save encrypts and persists credentials to disk.
+// save encrypts and persists credentials to disk using an atomic tmp-then-rename write.
 func (s *EncryptedFileStore) save() error {
 	dir := filepath.Dir(s.path)
 	if err := os.MkdirAll(dir, 0700); err != nil {
@@ -117,8 +117,13 @@ func (s *EncryptedFileStore) save() error {
 		return fmt.Errorf("marshal envelope: %w", err)
 	}
 
-	if err := os.WriteFile(s.path, out, 0600); err != nil {
-		return fmt.Errorf("write: %w", err)
+	tmp := s.path + ".tmp"
+	if err := os.WriteFile(tmp, out, 0600); err != nil {
+		return fmt.Errorf("write tmp: %w", err)
+	}
+	if err := os.Rename(tmp, s.path); err != nil {
+		_ = os.Remove(tmp)
+		return fmt.Errorf("rename: %w", err)
 	}
 
 	return nil

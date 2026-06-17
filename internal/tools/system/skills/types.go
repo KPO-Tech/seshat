@@ -145,6 +145,7 @@ type Skill struct {
 	Agent                       string
 	Effort                      string
 	Paths                       []string
+	Content                     string // raw markdown body, used by ExecuteSkillPrompt fallback
 	ContentLength               int
 	IsHidden                    bool
 	ProgressMessage             string

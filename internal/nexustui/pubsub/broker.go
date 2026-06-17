@@ -42,7 +42,7 @@ const (
 	// defaultMustDeliverTimeout is the per-subscriber upper bound on how
 	// long [Broker.PublishMustDeliver] will block waiting for buffer
 	// space before giving up on that subscriber.
-	defaultMustDeliverTimeout = 50 * time.Millisecond
+	defaultMustDeliverTimeout = 500 * time.Millisecond
 )
 
 type Broker[T any] struct {

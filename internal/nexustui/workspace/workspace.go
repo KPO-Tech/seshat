@@ -107,9 +107,6 @@ type Workspace interface {
 	// WorktreePath returns the active git worktree path for the current session,
 	// or empty string if no worktree is active.
 	WorktreePath() string
-	AgentQueuedPrompts(sessionID string) int
-	AgentQueuedPromptsList(sessionID string) []string
-	AgentClearQueue(sessionID string)
 	AgentSummarize(ctx context.Context, sessionID string) error
 	UpdateAgentModel(ctx context.Context) error
 	InitCoderAgent(ctx context.Context) error

@@ -1,14 +1,9 @@
 package engine
 
 import (
-	"crypto/sha256"
-	"encoding/hex"
 	"encoding/json"
-	"fmt"
 	"sort"
 	"strings"
-	"sync"
-	"time"
 
 	"github.com/EngineerProjects/nexus-engine/internal/modes"
 	"github.com/EngineerProjects/nexus-engine/internal/prompt"
@@ -646,279 +641,30 @@ func (s *MutableState) Clone() *MutableState {
 	}
 }
 
-// ================================================================================
-// Extended Session State Types (Slice 1: State Kernel + Prompt Caching)
-// ================================================================================
-
-// PromptSectionCache mémoïse les sections stables du prompt
-// Based on OpenClaude's memoized system prompt sections
-type PromptSectionCache struct {
-	mu      sync.RWMutex
-	cache   map[string]*CachedSection
-	version CacheVersion
-}
-
-// CachedSection represents a cached prompt section
-type CachedSection struct {
-	Content       string
-	ToolHash      string
-	CachedAt      time.Time
-	LastValidated time.Time
-}
-
-// CacheVersion represents versioning information for cache invalidation
-type CacheVersion struct {
-	ToolNames   []string
-	ModelConfig string
-	Environment map[string]string
-}
-
-// DenialTrackingState suit les refus et fallback-to-prompting
-// Based on OpenClaude's denial tracking system
-type DenialTrackingState struct {
-	mu                     sync.RWMutex
-	consecutiveToolDenials int
-	totalToolDenials       int
-	lastDenialTime         time.Time
-	promptModeEngaged      bool
-	fallbackTriggered      bool
-}
-
-// RecoveryContext tracks details needed to properly resume after interruption
-// This enables richer session reconstruction post-compaction
+// RecoveryContext tracks details needed to properly resume after interruption.
 type RecoveryContext struct {
-	// LastTransitionReason explains why the loop stopped/continued
 	LastTransitionReason string
-
-	// LastRecoveryType is the type of recovery that occurred
-	LastRecoveryType RecoveryType
-
-	// LastStopReason is why the loop stopped (if terminal)
-	LastStopReason string
-
-	// CompactionSnapshot captures compaction state at interruption point
-	CompactionSnapshot *CompactionSnapshot
-
-	// TurnProgress captures turn execution state at interruption point
-	TurnProgress *TurnProgress
+	LastRecoveryType     RecoveryType
+	LastStopReason       string
+	CompactionSnapshot   *CompactionSnapshot
+	TurnProgress         *TurnProgress
 }
 
-// CompactionSnapshot captures the state of compaction at interruption
+// CompactionSnapshot captures the state of compaction at interruption.
 type CompactionSnapshot struct {
-	// PreCompactionTokenCount tokens before last compaction
-	PreCompactionTokenCount int
-
-	// PostCompactionTokenCount tokens after last compaction
+	PreCompactionTokenCount  int
 	PostCompactionTokenCount int
-
-	// FirstPreservedMessageID marks the first message preserved in tail
-	FirstPreservedMessageID types.MessageID
-
-	// LastPreservedMessageID marks the last message preserved in tail
-	LastPreservedMessageID types.MessageID
-
-	// PreservedTailHash hash of preserved tail for integrity
-	PreservedTailHash string
-
-	// BoundaryVersion compaction boundary version
-	BoundaryVersion int
+	FirstPreservedMessageID  types.MessageID
+	LastPreservedMessageID   types.MessageID
+	PreservedTailHash        string
+	BoundaryVersion          int
 }
 
-// TurnProgress captures the turn execution state at interruption
+// TurnProgress captures the turn execution state at interruption.
 type TurnProgress struct {
-	// IterationsCompleted number of LLM calls completed in this turn
-	IterationsCompleted int
-
-	// LastAssistantMessageID the last assistant message before interruption
+	IterationsCompleted    int
 	LastAssistantMessageID types.MessageID
-
-	// PendingToolUses tool uses that haven't been executed yet
-	PendingToolUses []types.ToolUseContent
-
-	// PendingToolResults tool results that haven't been processed yet
-	PendingToolResults []tool.CallResult
-
-	// TotalTokensUsed total tokens consumed in this turn so far
-	TotalTokensUsed int
-}
-
-// ContentReplacementState suit les remplacements de contenu
-// Based on OpenClaude's content replacement tracking
-type ContentReplacementState struct {
-	mu           sync.RWMutex
-	replacements map[string]ContentReplacementRecord
-}
-
-// ContentReplacementRecord represents a single content replacement
-type ContentReplacementRecord struct {
-	ToolUseID   string
-	Original    string
-	Replacement string
-	ReplacedAt  time.Time
-}
-
-// CompactBoundaryTracking suit les boundaries de compaction
-// Based on OpenClaude's compact boundary tracking
-type CompactBoundaryTracking struct {
-	mu                sync.RWMutex
-	boundaries        []CompactBoundary
-	lastBoundaryIndex int
-}
-
-// CompactBoundary represents a single compaction boundary
-type CompactBoundary struct {
-	TurnNumber   int
-	MessageIndex int
-	Kind         string
-	TargetTokens int
-}
-
-// ActivityTracking suit l'activité session
-type ActivityTracking struct {
-	mu             sync.RWMutex
-	lastActiveTime time.Time
-	totalTurns     int
-	totalTokens    int
-	activeDuration time.Duration
-}
-
-// NewPromptSectionCache creates a new prompt section cache
-func NewPromptSectionCache() *PromptSectionCache {
-	return &PromptSectionCache{
-		cache: make(map[string]*CachedSection),
-	}
-}
-
-// NewDenialTrackingState creates a new denial tracking state
-func NewDenialTrackingState() *DenialTrackingState {
-	return &DenialTrackingState{
-		consecutiveToolDenials: 0,
-		totalToolDenials:       0,
-		promptModeEngaged:      false,
-		fallbackTriggered:      false,
-	}
-}
-
-// NewContentReplacementState creates a new content replacement state
-func NewContentReplacementState() *ContentReplacementState {
-	return &ContentReplacementState{
-		replacements: make(map[string]ContentReplacementRecord),
-	}
-}
-
-// NewCompactBoundaryTracking creates a new compact boundary tracking
-func NewCompactBoundaryTracking() *CompactBoundaryTracking {
-	return &CompactBoundaryTracking{
-		boundaries:        make([]CompactBoundary, 0),
-		lastBoundaryIndex: -1,
-	}
-}
-
-// NewActivityTracking creates a new activity tracking
-func NewActivityTracking() *ActivityTracking {
-	return &ActivityTracking{
-		lastActiveTime: time.Now(),
-		totalTurns:     0,
-		totalTokens:    0,
-		activeDuration: 0,
-	}
-}
-
-// ================================================================================
-// Cache Key Generation (Deterministic)
-// ================================================================================
-
-// BuildCacheKey construit une clé de cache déterministe
-// This ensures cache stability when inputs are identical
-func BuildCacheKey(
-	sectionNames []string,
-	tools map[string]tool.Tool,
-	model types.ModelIdentifier,
-	env map[string]string,
-) CacheKey {
-	// Tri pour déterminisme
-	sortedNames := make([]string, len(sectionNames))
-	copy(sortedNames, sectionNames)
-	sort.Strings(sortedNames)
-
-	// Hash des outils
-	toolHash := HashTools(tools)
-
-	// Config modèle
-	modelConfig := model.String()
-
-	return CacheKey{
-		SectionNames: sortedNames,
-		ToolHash:     toolHash,
-		ModelConfig:  modelConfig,
-		Environment:  env,
-	}
-}
-
-// HashTools construit un hash déterministe des outils
-func HashTools(tools map[string]tool.Tool) string {
-	toolNames := make([]string, 0, len(tools))
-	for name := range tools {
-		toolNames = append(toolNames, name)
-	}
-	sort.Strings(toolNames)
-
-	combined := strings.Join(toolNames, "|")
-	hash := sha256.Sum256([]byte(combined))
-	return hex.EncodeToString(hash[:])
-}
-
-// ================================================================================
-// Cache Key Type
-// ================================================================================
-
-// CacheKey represents a deterministic cache key
-type CacheKey struct {
-	SectionNames []string
-	ToolHash     string
-	ModelConfig  string
-	Environment  map[string]string
-}
-
-// Hash returns a string hash of the cache key
-func (k CacheKey) Hash() string {
-	// Build a deterministic string representation
-	var builder strings.Builder
-
-	// Section names (already sorted)
-	builder.WriteString("sections:")
-	for _, name := range k.SectionNames {
-		builder.WriteString(name)
-		builder.WriteString(",")
-	}
-	builder.WriteString(";")
-
-	// Tool hash
-	builder.WriteString("tools:")
-	builder.WriteString(k.ToolHash)
-	builder.WriteString(";")
-
-	// Model config
-	builder.WriteString("model:")
-	builder.WriteString(k.ModelConfig)
-	builder.WriteString(";")
-
-	// Environment (sorted)
-	if k.Environment != nil {
-		envKeys := make([]string, 0, len(k.Environment))
-		for key := range k.Environment {
-			envKeys = append(envKeys, key)
-		}
-		sort.Strings(envKeys)
-
-		builder.WriteString("env:")
-		for _, key := range envKeys {
-			builder.WriteString(fmt.Sprintf("%s=%s", key, k.Environment[key]))
-			builder.WriteString(",")
-		}
-	}
-
-	// Hash the final string
-	hash := sha256.Sum256([]byte(builder.String()))
-	return hex.EncodeToString(hash[:])
+	PendingToolUses        []types.ToolUseContent
+	PendingToolResults     []tool.CallResult
+	TotalTokensUsed        int
 }

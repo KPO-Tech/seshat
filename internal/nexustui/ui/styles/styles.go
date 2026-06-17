@@ -380,10 +380,14 @@ type Styles struct {
 		WebFetchPrompt lipgloss.Style // Fetch prompt context line (subtle)
 
 		// Ask user question
-		AskUserCursor        lipgloss.Style // ▶ focused option cursor (accent)
-		AskUserOptionFocused lipgloss.Style // focused option label (bright)
-		AskUserFooter        lipgloss.Style // keyboard hint line (most subtle)
-		AskUserHistory       lipgloss.Style // answered Q→A history lines (subtle)
+		AskUserCursor         lipgloss.Style // ▶ focused option cursor (accent)
+		AskUserOptionFocused  lipgloss.Style // focused option label (bright)
+		AskUserOptionSelected lipgloss.Style // selected (but not focused) option label
+		AskUserCheckOn        lipgloss.Style // [✓] checked checkbox (accent)
+		AskUserCheckOff       lipgloss.Style // [ ] unchecked checkbox (subtle)
+		AskUserCount          lipgloss.Style // "(N selected)" counter
+		AskUserFooter         lipgloss.Style // keyboard hint line (most subtle)
+		AskUserHistory        lipgloss.Style // answered Q→A history lines (subtle)
 	}
 
 	// Dialog styles
