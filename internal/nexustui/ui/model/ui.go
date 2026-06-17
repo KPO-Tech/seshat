@@ -1875,9 +1875,7 @@ func (m *UI) handleDialogMsg(msg tea.Msg) tea.Cmd {
 			m.com.Workspace.PermissionDeny(msg.Permission)
 		}
 	case dialog.ActionPlanReviewRequestChanges:
-		// Send feedback to the agent without closing the plan review dialog.
-		// The agent is expected to revise the plan and call submit_plan again,
-		// which will update the dialog via AddSubmission. Only ctrl+y closes it.
+		m.dialog.CloseDialog(dialog.PlanReviewID)
 		cmds = append(cmds, m.sendMessage(formatPlanReviewResponse(msg.Review)))
 
 	case dialog.ActionPlanReviewSubmit:
