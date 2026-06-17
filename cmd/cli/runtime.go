@@ -51,6 +51,10 @@ type runtimeOptions struct {
 	// MCPServers are the MCP server configs to wire into the SDK client so
 	// the agent can call MCP tools. Populated from nexus.json before newClient().
 	MCPServers []sdk.MCPServerConfig
+
+	ImageGeneration *sdk.ImageGenerationConfig
+	TextToSpeech    *sdk.TextToSpeechConfig
+	SpeechToText    *sdk.SpeechToTextConfig
 }
 
 type runtimeOverrides struct {
@@ -220,6 +224,9 @@ func newClient(
 		PlanStore:               planStore,
 		LongTermMemory:          ltMemory,
 		MCPServers:              options.MCPServers,
+		ImageGeneration:         options.ImageGeneration,
+		TextToSpeech:            options.TextToSpeech,
+		SpeechToText:            options.SpeechToText,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("create SDK client: %w", err)

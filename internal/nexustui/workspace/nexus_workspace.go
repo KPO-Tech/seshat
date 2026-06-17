@@ -138,6 +138,10 @@ type NexusWorkspace struct {
 	sqlitePath string
 	permMode   sdk.PermissionMode
 	monitoring *sdk.MonitoringSystem
+
+	imageGeneration config.ImageGenerationConfig
+	textToSpeech    config.TextToSpeechConfig
+	speechToText    config.SpeechToTextConfig
 }
 
 // ─── Constructor ──────────────────────────────────────────────────────────────
@@ -842,6 +846,9 @@ func (w *NexusWorkspace) UpdateAgentModel(ctx context.Context) error {
 		OnSessionTitled:   w.OnSessionTitled,
 		WorkingDir:        w.workDir,
 		ProviderConfig:    provCfg,
+		ImageGeneration:   w.currentImageGenerationConfig(),
+		TextToSpeech:      w.currentTextToSpeechConfig(),
+		SpeechToText:      w.currentSpeechToTextConfig(),
 		EnableMonitoring:  enableMonitoring,
 		Monitoring:        w.monitoring,
 		PlanStore:         w.planStore,
@@ -950,9 +957,40 @@ func (w *NexusWorkspace) Config() *config.Config {
 	}
 
 	provider, modelID := w.splitModel()
-	providers := csync.NewMap[string, config.ProviderConfig]()
-	providerIDs := map[string]struct{}{provider: {}}
+	var cfg config.Config
+	if w.mcpStore != nil && w.mcpStore.Config() != nil {
+		cfg = *w.mcpStore.Config()
+	}
+	if cfg.Options == nil {
+		cfg.Options = &config.Options{}
+	}
+	if cfg.Options.TUI == nil {
+		cfg.Options.TUI = &config.TUIOptions{}
+	}
+	if len(cfg.Models) == 0 {
+		cfg.Models = make(map[config.SelectedModelType]config.SelectedModel)
+	}
+	cfg.Models[config.SelectedModelTypeLarge] = config.SelectedModel{Model: modelID, Provider: provider}
+	if _, ok := cfg.Models[config.SelectedModelTypeSmall]; !ok {
+		cfg.Models[config.SelectedModelTypeSmall] = config.SelectedModel{Model: modelID, Provider: provider}
+	}
+	if len(w.mcpCfg) > 0 {
+		cfg.MCP = w.mcpCfg
+	}
 
+	providers := csync.NewMap[string, config.ProviderConfig]()
+	if cfg.Providers != nil {
+		for pid, pc := range cfg.Providers.Seq2() {
+			providers.Set(pid, pc)
+		}
+	}
+
+	providerIDs := map[string]struct{}{provider: {}}
+	if cfg.Providers != nil {
+		for pc := range cfg.Providers.Seq() {
+			providerIDs[pc.ID] = struct{}{}
+		}
+	}
 	w.providerKeys.Range(func(k, _ any) bool {
 		providerIDs[k.(string)] = struct{}{}
 		return true
@@ -963,38 +1001,49 @@ func (w *NexusWorkspace) Config() *config.Config {
 	})
 
 	for pid := range providerIDs {
+		pc, _ := providers.Get(pid)
 		apiKey := w.resolveAPIKey(pid)
+		if apiKey != "" {
+			pc.APIKey = apiKey
+		}
 		baseURL := w.resolveProviderBaseURL(pid)
-		var models []catwalk.Model
+		if baseURL != "" {
+			pc.BaseURL = baseURL
+		}
+		pc.ID = pid
+		if pc.Name == "" {
+			pc.Name = displayNameFor(pid)
+		}
+		if pc.Type == "" {
+			pc.Type = catwalkTypeFor(pid)
+		}
 		if pid == "ollama" {
 			w.ollamaMu.RLock()
-			models = append([]catwalk.Model(nil), w.ollamaModels...)
+			pc.Models = append([]catwalk.Model(nil), w.ollamaModels...)
 			w.ollamaMu.RUnlock()
 		}
-		if pid == provider && len(models) == 0 {
-			models = []catwalk.Model{{ID: modelID, Name: modelID, ContextWindow: 200000}}
+		if pid == provider && len(pc.Models) == 0 {
+			pc.Models = []catwalk.Model{{ID: modelID, Name: modelID, ContextWindow: 200000}}
 		}
-		providers.Set(pid, config.ProviderConfig{
-			ID:      pid,
-			Name:    displayNameFor(pid),
-			APIKey:  apiKey,
-			BaseURL: baseURL,
-			Type:    catwalkTypeFor(pid),
-			Models:  models,
-		})
+		providers.Set(pid, pc)
 	}
+	cfg.Providers = providers
 
-	cfg := &config.Config{
-		Models: map[config.SelectedModelType]config.SelectedModel{
-			config.SelectedModelTypeLarge: {Model: modelID, Provider: provider},
-			config.SelectedModelTypeSmall: {Model: modelID, Provider: provider},
-		},
-		Providers: providers,
-		Options:   &config.Options{TUI: &config.TUIOptions{}},
-		MCP:       w.mcpCfg,
+	if cfg.ImageGeneration != nil {
+		w.imageGeneration = *cfg.ImageGeneration
 	}
-	w.cfg = cfg
-	return cfg
+	if cfg.TextToSpeech != nil {
+		w.textToSpeech = *cfg.TextToSpeech
+	}
+	if cfg.SpeechToText != nil {
+		w.speechToText = *cfg.SpeechToText
+	}
+	cfg.ImageGeneration = cloneImageGenerationConfig(w.imageGeneration)
+	cfg.TextToSpeech = cloneTextToSpeechConfig(w.textToSpeech)
+	cfg.SpeechToText = cloneSpeechToTextConfig(w.speechToText)
+
+	w.cfg = &cfg
+	return w.cfg
 }
 
 // SetMCPConfig stores the MCP configuration loaded from nexus.json so it is
@@ -1020,6 +1069,85 @@ func (w *NexusWorkspace) Resolver() config.VariableResolver {
 	return config.IdentityResolver()
 }
 
+func cloneImageGenerationConfig(src config.ImageGenerationConfig) *config.ImageGenerationConfig {
+	if strings.TrimSpace(src.Provider) == "" && strings.TrimSpace(src.Model) == "" {
+		return nil
+	}
+	cp := src
+	return &cp
+}
+
+func cloneTextToSpeechConfig(src config.TextToSpeechConfig) *config.TextToSpeechConfig {
+	if strings.TrimSpace(src.Provider) == "" && strings.TrimSpace(src.Model) == "" &&
+		strings.TrimSpace(src.Voice) == "" && strings.TrimSpace(src.Format) == "" {
+		return nil
+	}
+	cp := src
+	return &cp
+}
+
+func cloneSpeechToTextConfig(src config.SpeechToTextConfig) *config.SpeechToTextConfig {
+	if strings.TrimSpace(src.Provider) == "" && strings.TrimSpace(src.Model) == "" && strings.TrimSpace(src.Language) == "" {
+		return nil
+	}
+	cp := src
+	return &cp
+}
+
+func (w *NexusWorkspace) currentImageGenerationConfig() *sdk.ImageGenerationConfig {
+	cfg := w.Config()
+	if cfg == nil || cfg.ImageGeneration == nil {
+		return nil
+	}
+	providerID := strings.TrimSpace(cfg.ImageGeneration.Provider)
+	if providerID == "" {
+		return nil
+	}
+	return &sdk.ImageGenerationConfig{
+		Provider: providerID,
+		Model:    strings.TrimSpace(cfg.ImageGeneration.Model),
+		APIKey:   w.resolveAPIKey(providerID),
+		BaseURL:  w.resolveProviderBaseURL(providerID),
+	}
+}
+
+func (w *NexusWorkspace) currentTextToSpeechConfig() *sdk.TextToSpeechConfig {
+	cfg := w.Config()
+	if cfg == nil || cfg.TextToSpeech == nil {
+		return nil
+	}
+	providerID := strings.TrimSpace(cfg.TextToSpeech.Provider)
+	if providerID == "" {
+		return nil
+	}
+	return &sdk.TextToSpeechConfig{
+		Provider: providerID,
+		Model:    strings.TrimSpace(cfg.TextToSpeech.Model),
+		Voice:    strings.TrimSpace(cfg.TextToSpeech.Voice),
+		Format:   strings.TrimSpace(cfg.TextToSpeech.Format),
+		APIKey:   w.resolveAPIKey(providerID),
+		BaseURL:  w.resolveProviderBaseURL(providerID),
+	}
+}
+
+func (w *NexusWorkspace) currentSpeechToTextConfig() *sdk.SpeechToTextConfig {
+	cfg := w.Config()
+	if cfg == nil || cfg.SpeechToText == nil {
+		return nil
+	}
+	providerID := strings.TrimSpace(cfg.SpeechToText.Provider)
+	if providerID == "" {
+		return nil
+	}
+	return &sdk.SpeechToTextConfig{
+		Provider: providerID,
+		Model:    strings.TrimSpace(cfg.SpeechToText.Model),
+		Language: strings.TrimSpace(cfg.SpeechToText.Language),
+		APIKey:   w.resolveAPIKey(providerID),
+		BaseURL:  w.resolveProviderBaseURL(providerID),
+	}
+}
+
 // ─── Config mutations (stubs — UI writes, we ignore) ─────────────────────────
 
 func (w *NexusWorkspace) UpdatePreferredModel(_ config.Scope, _ config.SelectedModelType, m config.SelectedModel) error {
@@ -1031,8 +1159,20 @@ func (w *NexusWorkspace) UpdatePreferredModel(_ config.Scope, _ config.SelectedM
 }
 
 func (w *NexusWorkspace) SetCompactMode(_ config.Scope, _ bool) error { return nil }
-func (w *NexusWorkspace) SetConfigField(_ config.Scope, key string, value any) error {
+func (w *NexusWorkspace) SetConfigField(scope config.Scope, key string, value any) error {
 	stringValue := strings.TrimSpace(fmt.Sprint(value))
+	persistConfigField := func() error {
+		if w.mcpStore == nil {
+			return nil
+		}
+		return w.mcpStore.SetConfigField(scope, key, value)
+	}
+	invalidateConfig := func() {
+		w.cfgMu.Lock()
+		w.cfg = nil
+		w.cfgMu.Unlock()
+	}
+
 	switch {
 	case strings.HasPrefix(key, "providers.") && strings.HasSuffix(key, ".base_url"):
 		providerID := strings.TrimSuffix(strings.TrimPrefix(key, "providers."), ".base_url")
@@ -1051,9 +1191,7 @@ func (w *NexusWorkspace) SetConfigField(_ config.Scope, key string, value any) e
 				w.providerKeys.Store("ollama", "")
 			}
 		}
-		w.cfgMu.Lock()
-		w.cfg = nil
-		w.cfgMu.Unlock()
+		invalidateConfig()
 		go w.persistProviderBaseURL(providerID, stringValue)
 		return nil
 	case key == "web_search_provider":
@@ -1084,6 +1222,69 @@ func (w *NexusWorkspace) SetConfigField(_ config.Scope, key string, value any) e
 			}
 			go w.persistCredential("web_search_base_url:"+providerID, stringValue)
 		}
+		return nil
+	case key == "image_generation.provider":
+		w.imageGeneration.Provider = stringValue
+		if err := persistConfigField(); err != nil {
+			return err
+		}
+		invalidateConfig()
+		return nil
+	case key == "image_generation.model":
+		w.imageGeneration.Model = stringValue
+		if err := persistConfigField(); err != nil {
+			return err
+		}
+		invalidateConfig()
+		return nil
+	case key == "text_to_speech.provider":
+		w.textToSpeech.Provider = stringValue
+		if err := persistConfigField(); err != nil {
+			return err
+		}
+		invalidateConfig()
+		return nil
+	case key == "text_to_speech.model":
+		w.textToSpeech.Model = stringValue
+		if err := persistConfigField(); err != nil {
+			return err
+		}
+		invalidateConfig()
+		return nil
+	case key == "text_to_speech.voice":
+		w.textToSpeech.Voice = stringValue
+		if err := persistConfigField(); err != nil {
+			return err
+		}
+		invalidateConfig()
+		return nil
+	case key == "text_to_speech.format":
+		w.textToSpeech.Format = stringValue
+		if err := persistConfigField(); err != nil {
+			return err
+		}
+		invalidateConfig()
+		return nil
+	case key == "speech_to_text.provider":
+		w.speechToText.Provider = stringValue
+		if err := persistConfigField(); err != nil {
+			return err
+		}
+		invalidateConfig()
+		return nil
+	case key == "speech_to_text.model":
+		w.speechToText.Model = stringValue
+		if err := persistConfigField(); err != nil {
+			return err
+		}
+		invalidateConfig()
+		return nil
+	case key == "speech_to_text.language":
+		w.speechToText.Language = stringValue
+		if err := persistConfigField(); err != nil {
+			return err
+		}
+		invalidateConfig()
 		return nil
 	default:
 		return nil

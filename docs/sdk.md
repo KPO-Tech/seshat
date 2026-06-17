@@ -464,3 +464,10 @@ if err != nil {
 ```
 
 Permanent errors (auth, invalid input) are never retried. Transient errors (rate limit, network, server overload) are retried with exponential backoff.
+
+
+### Multimodal Tool Providers
+
+- `ImageGeneration *ImageGenerationConfig`: Selects the provider/model/base URL used by the `generate_image` built-in tool.
+- `TextToSpeech *TextToSpeechConfig`: Selects the provider/options used by the `text_to_speech` built-in tool.
+- `SpeechToText *SpeechToTextConfig`: Selects the provider/options used by the `speech_to_text` built-in tool.

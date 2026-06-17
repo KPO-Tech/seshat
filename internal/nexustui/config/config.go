@@ -170,6 +170,24 @@ func (c *ProviderConfig) SetupGitHubCopilot() {
 	maps.Copy(c.ExtraHeaders, copilot.Headers())
 }
 
+type ImageGenerationConfig struct {
+	Provider string `json:"provider,omitempty" jsonschema:"description=Provider ID used for image generation,example=openai"`
+	Model    string `json:"model,omitempty" jsonschema:"description=Optional model override for image generation,example=dall-e-3"`
+}
+
+type TextToSpeechConfig struct {
+	Provider string `json:"provider,omitempty" jsonschema:"description=Provider ID used for text-to-speech,example=openai"`
+	Model    string `json:"model,omitempty" jsonschema:"description=Optional model override for text-to-speech,example=tts-1"`
+	Voice    string `json:"voice,omitempty" jsonschema:"description=Optional voice override for text-to-speech,example=alloy"`
+	Format   string `json:"format,omitempty" jsonschema:"description=Optional output format override for text-to-speech,example=mp3"`
+}
+
+type SpeechToTextConfig struct {
+	Provider string `json:"provider,omitempty" jsonschema:"description=Provider ID used for speech-to-text,example=openai"`
+	Model    string `json:"model,omitempty" jsonschema:"description=Optional model override for speech-to-text,example=whisper-1"`
+	Language string `json:"language,omitempty" jsonschema:"description=Optional language hint for speech-to-text,example=en"`
+}
+
 type MCPType string
 
 const (
@@ -572,6 +590,10 @@ type Config struct {
 
 	// The providers that are configured
 	Providers *csync.Map[string, ProviderConfig] `json:"providers,omitempty" jsonschema:"description=AI provider configurations"`
+
+	ImageGeneration *ImageGenerationConfig `json:"image_generation,omitempty" jsonschema:"description=Image generation tool configuration"`
+	TextToSpeech    *TextToSpeechConfig    `json:"text_to_speech,omitempty" jsonschema:"description=Text-to-speech tool configuration"`
+	SpeechToText    *SpeechToTextConfig    `json:"speech_to_text,omitempty" jsonschema:"description=Speech-to-text tool configuration"`
 
 	MCP MCPs `json:"mcp,omitempty" jsonschema:"description=Model Context Protocol server configurations"`
 

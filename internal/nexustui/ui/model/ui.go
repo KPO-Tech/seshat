@@ -1740,6 +1740,35 @@ func (m *UI) handleDialogMsg(msg tea.Msg) tea.Cmd {
 			}
 			return util.NewInfoMsg("Web search provider changed to " + cases.Title(language.English).String(msg.ProviderID))
 		})
+	case dialog.ActionSelectCapabilityProvider:
+		cmds = append(cmds, func() tea.Msg {
+			capabilityLabel := map[string]string{
+				"image_generation": "Image generation",
+				"text_to_speech":   "Text to speech",
+				"speech_to_text":   "Speech to text",
+			}[msg.Capability]
+			if capabilityLabel == "" {
+				capabilityLabel = "Provider"
+			}
+			configKey := map[string]string{
+				"image_generation": "image_generation.provider",
+				"text_to_speech":   "text_to_speech.provider",
+				"speech_to_text":   "speech_to_text.provider",
+			}[msg.Capability]
+			if configKey == "" {
+				return util.ReportError(fmt.Errorf("unknown capability: %s", msg.Capability))()
+			}
+			if err := m.com.Workspace.SetConfigField(config.ScopeGlobal, configKey, msg.ProviderID); err != nil {
+				return util.ReportError(err)()
+			}
+			if err := m.com.Workspace.UpdateAgentModel(context.TODO()); err != nil {
+				return util.ReportError(err)()
+			}
+			if msg.ProviderID == "" {
+				return util.NewInfoMsg(capabilityLabel + " disabled")
+			}
+			return util.NewInfoMsg(capabilityLabel + " provider changed to " + cases.Title(language.English).String(msg.ProviderID))
+		})
 	case dialog.ActionCopyLastMessage:
 		m.dialog.CloseDialog(dialog.CommandsID)
 		cmds = append(cmds, m.copyLastUserMessage())

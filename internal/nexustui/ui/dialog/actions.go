@@ -46,6 +46,12 @@ type ActionSelectWebSearchProvider struct {
 	ProviderID string
 }
 
+// ActionSelectCapabilityProvider selects the provider used by a capability-specific tool.
+type ActionSelectCapabilityProvider struct {
+	Capability string
+	ProviderID string
+}
+
 // ActionSelectSession is a message indicating a session has been selected.
 type ActionSelectSession struct {
 	Session session.Session

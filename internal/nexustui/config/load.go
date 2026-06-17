@@ -453,6 +453,15 @@ func (c *Config) setDefaults(workingDir, dataDir string) {
 	if c.LSP == nil {
 		c.LSP = make(map[string]LSPConfig)
 	}
+	if c.ImageGeneration == nil {
+		c.ImageGeneration = &ImageGenerationConfig{}
+	}
+	if c.TextToSpeech == nil {
+		c.TextToSpeech = &TextToSpeechConfig{}
+	}
+	if c.SpeechToText == nil {
+		c.SpeechToText = &SpeechToTextConfig{}
+	}
 
 	// Apply defaults to LSP configurations
 	c.applyLSPDefaults()

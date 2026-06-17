@@ -42,6 +42,9 @@ const (
 	settingsViewRoot settingsView = iota
 	settingsViewProviders
 	settingsViewProvidersLLM
+	settingsViewImageGeneration
+	settingsViewTextToSpeech
+	settingsViewSpeechToText
 	settingsViewTheme
 	settingsViewWebSearch
 	settingsViewTools
@@ -91,6 +94,11 @@ type Settings struct {
 
 	// web-search sub-view state
 	webSearchList *list.FilterableList
+
+	// capability provider sub-view state
+	imageGenerationList *list.FilterableList
+	textToSpeechList    *list.FilterableList
+	speechToTextList    *list.FilterableList
 
 	// tools sub-view state
 	toolsList  *ToolsList
@@ -172,6 +180,24 @@ func NewSettings(com *common.Common) (*Settings, error) {
 	s.webSearchList.SetGap(1)
 	s.rebuildWebSearchList()
 
+	s.imageGenerationList = list.NewFilterableList()
+	s.imageGenerationList.Focus()
+	s.imageGenerationList.SetSelected(0)
+	s.imageGenerationList.SetGap(1)
+	s.rebuildImageGenerationList()
+
+	s.textToSpeechList = list.NewFilterableList()
+	s.textToSpeechList.Focus()
+	s.textToSpeechList.SetSelected(0)
+	s.textToSpeechList.SetGap(1)
+	s.rebuildTextToSpeechList()
+
+	s.speechToTextList = list.NewFilterableList()
+	s.speechToTextList.Focus()
+	s.speechToTextList.SetSelected(0)
+	s.speechToTextList.SetGap(1)
+	s.rebuildSpeechToTextList()
+
 	// Tools filter input + list.
 	s.toolsInput = textinput.New()
 	s.toolsInput.SetVirtualCursor(false)
@@ -229,6 +255,9 @@ func defaultSettingsSections() []settingsSection {
 func defaultProviderSections() []settingsSection {
 	return []settingsSection{
 		{id: "providers_llm", name: "LLM", desc: "configure model providers and credentials", subView: settingsViewProvidersLLM},
+		{id: "providers_image_generation", name: "Image Generation", desc: "choose the provider for the generate_image tool", subView: settingsViewImageGeneration},
+		{id: "providers_text_to_speech", name: "Text to Speech", desc: "choose the provider for the text_to_speech tool", subView: settingsViewTextToSpeech},
+		{id: "providers_speech_to_text", name: "Speech to Text", desc: "choose the provider for the speech_to_text tool", subView: settingsViewSpeechToText},
 		{id: "providers_web_search", name: "Web Search", desc: "configure web search providers and defaults", subView: settingsViewWebSearch},
 	}
 }
@@ -300,6 +329,12 @@ func (s *Settings) handleSubKey(msg tea.KeyPressMsg) Action {
 		return s.handleProviderKey(msg)
 	case settingsViewProvidersLLM:
 		return s.handleProvKey(msg)
+	case settingsViewImageGeneration:
+		return s.handleCapabilityProviderKey(msg, s.imageGenerationList)
+	case settingsViewTextToSpeech:
+		return s.handleCapabilityProviderKey(msg, s.textToSpeechList)
+	case settingsViewSpeechToText:
+		return s.handleCapabilityProviderKey(msg, s.speechToTextList)
 	case settingsViewTheme:
 		return s.handleThemeKey(msg)
 	case settingsViewWebSearch:
@@ -353,6 +388,38 @@ func (s *Settings) handleProviderKey(msg tea.KeyPressMsg) Action {
 		}
 	}
 	return nil
+}
+
+func (s *Settings) handleCapabilityProviderKey(msg tea.KeyPressMsg, lst *list.FilterableList) Action {
+	switch {
+	case key.Matches(msg, s.keyMap.Previous):
+		lst.SelectPrevCyclic()
+	case key.Matches(msg, s.keyMap.Next):
+		lst.SelectNextCyclic()
+	case key.Matches(msg, s.keyMap.Select):
+		if item := lst.SelectedItem(); item != nil {
+			if pi, ok := item.(*settingsCapabilityProviderItem); ok {
+				providerID := pi.option.providerID
+				if providerID == "" || capabilityProviderConfigured(s.com.Config(), providerID) {
+					return ActionSelectCapabilityProvider{Capability: pi.capabilityID, ProviderID: providerID}
+				}
+				if provider, ok := s.providerByID(providerID); ok {
+					return ActionOpenProviderConfig{Provider: provider}
+				}
+				return ActionSelectCapabilityProvider{Capability: pi.capabilityID, ProviderID: providerID}
+			}
+		}
+	}
+	return nil
+}
+
+func (s *Settings) providerByID(providerID string) (catwalk.Provider, bool) {
+	for _, provider := range s.providers {
+		if string(provider.ID) == providerID {
+			return provider, true
+		}
+	}
+	return catwalk.Provider{}, false
 }
 
 func (s *Settings) handleWebSearchKey(msg tea.KeyPressMsg) Action {
@@ -881,6 +948,12 @@ func (s *Settings) gotoView(v settingsView) {
 		s.provInput.SetValue("")
 		s.provInput.Focus()
 		s.rebuildProvList("")
+	case settingsViewImageGeneration:
+		s.rebuildImageGenerationList()
+	case settingsViewTextToSpeech:
+		s.rebuildTextToSpeechList()
+	case settingsViewSpeechToText:
+		s.rebuildSpeechToTextList()
 	case settingsViewTheme:
 		s.rebuildThemeList()
 	case settingsViewWebSearch:
@@ -910,7 +983,7 @@ func (s *Settings) gotoView(v settingsView) {
 
 func (s *Settings) gotoParent() {
 	switch s.view {
-	case settingsViewProvidersLLM, settingsViewWebSearch:
+	case settingsViewProvidersLLM, settingsViewImageGeneration, settingsViewTextToSpeech, settingsViewSpeechToText, settingsViewWebSearch:
 		s.gotoView(settingsViewProviders)
 	case settingsViewMCPDetail:
 		s.gotoView(settingsViewMCP)
@@ -982,6 +1055,9 @@ func (s *Settings) rebuildWebSearchList() {
 }
 
 func (s *Settings) rebuildProvList(filter string) {
+	if providers, err := config.Providers(s.com.Config()); err == nil {
+		s.providers = providers
+	}
 	cfg := s.com.Config()
 	items := make([]list.FilterableItem, 0, len(s.providers))
 	for _, p := range s.providers {
@@ -1002,6 +1078,24 @@ func (s *Settings) rebuildProvList(filter string) {
 	s.provList.SetFilter(filter)
 	s.provList.ScrollToTop()
 	s.provList.SetSelected(0)
+}
+
+func (s *Settings) rebuildImageGenerationList() {
+	s.imageGenerationList.SetItems(buildCapabilityProviderItems(s.com, "image_generation", imageGenerationProviderOptions())...)
+	s.imageGenerationList.ScrollToTop()
+	s.imageGenerationList.SetSelected(0)
+}
+
+func (s *Settings) rebuildTextToSpeechList() {
+	s.textToSpeechList.SetItems(buildCapabilityProviderItems(s.com, "text_to_speech", textToSpeechProviderOptions())...)
+	s.textToSpeechList.ScrollToTop()
+	s.textToSpeechList.SetSelected(0)
+}
+
+func (s *Settings) rebuildSpeechToTextList() {
+	s.speechToTextList.SetItems(buildCapabilityProviderItems(s.com, "speech_to_text", speechToTextProviderOptions())...)
+	s.speechToTextList.ScrollToTop()
+	s.speechToTextList.SetSelected(0)
 }
 
 func (s *Settings) rebuildThemeList() {
@@ -1058,7 +1152,7 @@ func (s *Settings) Draw(scr uv.Screen, area uv.Rectangle) *tea.Cursor {
 	switch s.view {
 	case settingsViewRoot, settingsViewProvidersLLM, settingsViewTools, settingsViewSkills:
 		overhead = titleH + inputH + subBlock + sepAbove + helpH + viewFrameH + listMarginH
-	case settingsViewProviders, settingsViewTheme, settingsViewWebSearch, settingsViewMCP:
+	case settingsViewProviders, settingsViewImageGeneration, settingsViewTextToSpeech, settingsViewSpeechToText, settingsViewTheme, settingsViewWebSearch, settingsViewMCP:
 		overhead = titleH + subBlock + sepAbove + helpH + viewFrameH + listMarginH
 	default:
 		overhead = titleH + 1 + sepAbove + helpH + viewFrameH
@@ -1078,6 +1172,12 @@ func (s *Settings) Draw(scr uv.Screen, area uv.Rectangle) *tea.Cursor {
 		s.provList.SetSize(innerW, finalContentH)
 	case settingsViewTheme:
 		s.themeList.SetSize(innerW, finalContentH)
+	case settingsViewImageGeneration:
+		s.imageGenerationList.SetSize(innerW, finalContentH)
+	case settingsViewTextToSpeech:
+		s.textToSpeechList.SetSize(innerW, finalContentH)
+	case settingsViewSpeechToText:
+		s.speechToTextList.SetSize(innerW, finalContentH)
 	case settingsViewWebSearch:
 		s.webSearchList.SetSize(innerW, finalContentH)
 	case settingsViewTools:
@@ -1132,6 +1232,24 @@ func (s *Settings) Draw(scr uv.Screen, area uv.Rectangle) *tea.Cursor {
 		rc.AddPart(t.Dialog.SecondaryText.Render("  select a provider — configure first, then choose a model"))
 		rc.Parts = append(rc.Parts, "")
 		rc.AddPart(t.Dialog.List.Height(s.provList.Height()).Render(s.provList.Render()))
+
+	case settingsViewImageGeneration:
+		rc.AddPart(sep)
+		rc.AddPart(t.Dialog.SecondaryText.Render("  choose the provider used by the generate_image tool"))
+		rc.Parts = append(rc.Parts, "")
+		rc.AddPart(t.Dialog.List.Height(s.imageGenerationList.Height()).Render(s.imageGenerationList.Render()))
+
+	case settingsViewTextToSpeech:
+		rc.AddPart(sep)
+		rc.AddPart(t.Dialog.SecondaryText.Render("  choose the provider used by the text_to_speech tool"))
+		rc.Parts = append(rc.Parts, "")
+		rc.AddPart(t.Dialog.List.Height(s.textToSpeechList.Height()).Render(s.textToSpeechList.Render()))
+
+	case settingsViewSpeechToText:
+		rc.AddPart(sep)
+		rc.AddPart(t.Dialog.SecondaryText.Render("  choose the provider used by the speech_to_text tool"))
+		rc.Parts = append(rc.Parts, "")
+		rc.AddPart(t.Dialog.List.Height(s.speechToTextList.Height()).Render(s.speechToTextList.Render()))
 
 	case settingsViewTheme:
 		// Theme has no search input — sep → subtitle → blank → list.
@@ -1203,6 +1321,12 @@ func (s *Settings) viewTitle() string {
 		return "Settings  ›  Providers"
 	case settingsViewProvidersLLM:
 		return "Settings  ›  Providers  ›  LLM"
+	case settingsViewImageGeneration:
+		return "Settings  ›  Providers  ›  Image Generation"
+	case settingsViewTextToSpeech:
+		return "Settings  ›  Providers  ›  Text to Speech"
+	case settingsViewSpeechToText:
+		return "Settings  ›  Providers  ›  Speech to Text"
 	case settingsViewTheme:
 		return "Settings  ›  Theme"
 	case settingsViewWebSearch:
@@ -1785,6 +1909,172 @@ func (i *settingsThemeItem) Render(width int) string {
 		descWidth = len(sep) + lipgloss.Width(desc)
 	}
 
+	gap := strings.Repeat(" ", max(0, lineWidth-prefixW-nameWidth-descWidth-infoWidth))
+	return style.Render(prefix + nameStr + descStr + gap + infoText)
+}
+
+type capabilityProviderOption struct {
+	providerID string
+	name       string
+	desc       string
+}
+
+func imageGenerationProviderOptions() []capabilityProviderOption {
+	return []capabilityProviderOption{
+		{providerID: "", name: "Disabled", desc: "disable the generate_image tool"},
+		{providerID: "openai", name: "OpenAI", desc: "uses your configured OpenAI credentials"},
+		{providerID: "gemini", name: "Gemini", desc: "uses your configured Gemini credentials"},
+	}
+}
+
+func textToSpeechProviderOptions() []capabilityProviderOption {
+	return []capabilityProviderOption{
+		{providerID: "", name: "Disabled", desc: "disable the text_to_speech tool"},
+		{providerID: "openai", name: "OpenAI", desc: "uses your configured OpenAI credentials"},
+	}
+}
+
+func speechToTextProviderOptions() []capabilityProviderOption {
+	return []capabilityProviderOption{
+		{providerID: "", name: "Disabled", desc: "disable the speech_to_text tool"},
+		{providerID: "openai", name: "OpenAI", desc: "uses your configured OpenAI credentials"},
+	}
+}
+
+func currentCapabilityProviderID(cfg *config.Config, capabilityID string) string {
+	if cfg == nil {
+		return ""
+	}
+	switch capabilityID {
+	case "image_generation":
+		if cfg.ImageGeneration != nil {
+			return strings.TrimSpace(cfg.ImageGeneration.Provider)
+		}
+	case "text_to_speech":
+		if cfg.TextToSpeech != nil {
+			return strings.TrimSpace(cfg.TextToSpeech.Provider)
+		}
+	case "speech_to_text":
+		if cfg.SpeechToText != nil {
+			return strings.TrimSpace(cfg.SpeechToText.Provider)
+		}
+	}
+	return ""
+}
+
+func capabilityProviderConfigured(cfg *config.Config, providerID string) bool {
+	if providerID == "" {
+		return true
+	}
+	if cfg == nil {
+		return false
+	}
+	pc, ok := cfg.Providers.Get(providerID)
+	if !ok {
+		return false
+	}
+	return pc.APIKey != "" || pc.OAuthToken != nil || (!providerNeedsAPIKey(providerID) && pc.BaseURL != "")
+}
+
+func buildCapabilityProviderItems(com *common.Common, capabilityID string, options []capabilityProviderOption) []list.FilterableItem {
+	items := make([]list.FilterableItem, 0, len(options))
+	for _, option := range options {
+		option := option
+		items = append(items, &settingsCapabilityProviderItem{
+			Versioned:    list.NewVersioned(),
+			capabilityID: capabilityID,
+			option:       option,
+			com:          com,
+		})
+	}
+	return items
+}
+
+// settingsCapabilityProviderItem represents one capability-specific provider choice.
+type settingsCapabilityProviderItem struct {
+	*list.Versioned
+	capabilityID string
+	option       capabilityProviderOption
+	com          *common.Common
+	focused      bool
+	match        fuzzy.Match
+}
+
+func (i *settingsCapabilityProviderItem) Filter() string { return i.option.name + " " + i.option.desc }
+func (i *settingsCapabilityProviderItem) ID() string {
+	return i.capabilityID + ":" + i.option.providerID
+}
+func (i *settingsCapabilityProviderItem) Finished() bool { return false }
+
+func (i *settingsCapabilityProviderItem) SetFocused(f bool) {
+	if i.focused == f {
+		return
+	}
+	i.focused = f
+	i.Bump()
+}
+
+func (i *settingsCapabilityProviderItem) SetMatch(m fuzzy.Match) {
+	i.match = m
+	i.Bump()
+}
+
+func (i *settingsCapabilityProviderItem) Render(width int) string {
+	t := i.com.Styles
+	style := t.Dialog.NormalItem
+	if i.focused {
+		style = t.Dialog.SelectedItem.
+			Background(lipgloss.Color(settingsCardSelectedBg)).
+			Foreground(t.Dialog.NormalItem.GetForeground())
+	}
+	style = style.Width(width)
+	hpad := style.GetHorizontalPadding()
+	lineWidth := width - hpad
+	const prefix = "    "
+	const prefixW = 4
+
+	cfg := i.com.Config()
+	active := currentCapabilityProviderID(cfg, i.capabilityID) == i.option.providerID
+	configured := capabilityProviderConfigured(cfg, i.option.providerID)
+	statusStyle := lipgloss.NewStyle().Foreground(t.Sidebar.WorkingDir.GetForeground())
+	statusText := "not configured"
+	if i.option.providerID == "" {
+		statusText = "available"
+	}
+	if configured && i.option.providerID != "" {
+		statusStyle = lipgloss.NewStyle().Foreground(t.ToolCallSuccess.GetForeground())
+		statusText = "configured"
+	}
+	if active {
+		statusStyle = lipgloss.NewStyle().Foreground(t.ToolCallSuccess.GetForeground()).Bold(true)
+		if i.option.providerID == "" {
+			statusText = "disabled"
+		} else {
+			statusText = "active"
+		}
+	}
+	infoText := statusStyle.Render(" "+statusText) + "  "
+	infoWidth := lipgloss.Width(infoText)
+
+	boldOn := ansi.Style{}.Bold().String()
+	boldOff := ansi.Style{}.Normal().String()
+	nameStr := boldOn + i.option.name + boldOff
+	nameWidth := lipgloss.Width(i.option.name)
+
+	var descStr string
+	descWidth := 0
+	if i.option.desc != "" {
+		greyColor := t.Sidebar.WorkingDir.GetForeground()
+		greyOn := ansi.Style{}.ForegroundColor(greyColor).String()
+		greyOff := ansi.Style{}.ForegroundColor(nil).String()
+		const sep = "  "
+		maxDesc := lineWidth - prefixW - nameWidth - len(sep) - infoWidth - 1
+		if maxDesc > 2 {
+			desc := ansi.Truncate(i.option.desc, maxDesc, "…")
+			descStr = sep + greyOn + desc + greyOff
+			descWidth = len(sep) + lipgloss.Width(desc)
+		}
+	}
 	gap := strings.Repeat(" ", max(0, lineWidth-prefixW-nameWidth-descWidth-infoWidth))
 	return style.Render(prefix + nameStr + descStr + gap + infoText)
 }

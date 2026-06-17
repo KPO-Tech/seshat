@@ -66,6 +66,7 @@ func runNexusTUI(ctx context.Context, options runtimeOptions, initialSessionID s
 	if mcpStore, err := tuiconfig.LoadForMCP(options.WorkingDir); err == nil {
 		ws.SetMCPConfig(mcpStore.Config().MCP)
 		ws.SetMCPStore(mcpStore)
+		applyCapabilityToolConfig(&options, mcpStore.Config())
 		options.MCPServers = nexusMCPToSDK(mcpStore)
 		go mcptools.Initialize(ctx, nil, mcpStore)
 	} else if mcps := tuiconfig.LoadMCPConfig(options.WorkingDir); len(mcps) > 0 {
@@ -201,4 +202,70 @@ func envSliceToMap(envs []string) map[string]string {
 		}
 	}
 	return m
+}
+
+func applyCapabilityToolConfig(options *runtimeOptions, cfg *tuiconfig.Config) {
+	if options == nil || cfg == nil {
+		return
+	}
+	options.ImageGeneration = buildSDKImageGenerationConfig(cfg)
+	options.TextToSpeech = buildSDKTextToSpeechConfig(cfg)
+	options.SpeechToText = buildSDKSpeechToTextConfig(cfg)
+}
+
+func buildSDKImageGenerationConfig(cfg *tuiconfig.Config) *sdk.ImageGenerationConfig {
+	if cfg == nil || cfg.ImageGeneration == nil {
+		return nil
+	}
+	providerID := strings.TrimSpace(cfg.ImageGeneration.Provider)
+	if providerID == "" {
+		return nil
+	}
+	out := &sdk.ImageGenerationConfig{Provider: providerID, Model: strings.TrimSpace(cfg.ImageGeneration.Model)}
+	if pc, ok := cfg.Providers.Get(providerID); ok {
+		out.APIKey = strings.TrimSpace(pc.APIKey)
+		out.BaseURL = strings.TrimSpace(pc.BaseURL)
+	}
+	return out
+}
+
+func buildSDKTextToSpeechConfig(cfg *tuiconfig.Config) *sdk.TextToSpeechConfig {
+	if cfg == nil || cfg.TextToSpeech == nil {
+		return nil
+	}
+	providerID := strings.TrimSpace(cfg.TextToSpeech.Provider)
+	if providerID == "" {
+		return nil
+	}
+	out := &sdk.TextToSpeechConfig{
+		Provider: providerID,
+		Model:    strings.TrimSpace(cfg.TextToSpeech.Model),
+		Voice:    strings.TrimSpace(cfg.TextToSpeech.Voice),
+		Format:   strings.TrimSpace(cfg.TextToSpeech.Format),
+	}
+	if pc, ok := cfg.Providers.Get(providerID); ok {
+		out.APIKey = strings.TrimSpace(pc.APIKey)
+		out.BaseURL = strings.TrimSpace(pc.BaseURL)
+	}
+	return out
+}
+
+func buildSDKSpeechToTextConfig(cfg *tuiconfig.Config) *sdk.SpeechToTextConfig {
+	if cfg == nil || cfg.SpeechToText == nil {
+		return nil
+	}
+	providerID := strings.TrimSpace(cfg.SpeechToText.Provider)
+	if providerID == "" {
+		return nil
+	}
+	out := &sdk.SpeechToTextConfig{
+		Provider: providerID,
+		Model:    strings.TrimSpace(cfg.SpeechToText.Model),
+		Language: strings.TrimSpace(cfg.SpeechToText.Language),
+	}
+	if pc, ok := cfg.Providers.Get(providerID); ok {
+		out.APIKey = strings.TrimSpace(pc.APIKey)
+		out.BaseURL = strings.TrimSpace(pc.BaseURL)
+	}
+	return out
 }
