@@ -7,9 +7,13 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"time"
 
 	tea "charm.land/bubbletea/v2"
+	"github.com/EngineerProjects/nexus-engine/cmd/cli/appdir"
 	"github.com/EngineerProjects/nexus-engine/internal/monitoring"
+	mcptools "github.com/EngineerProjects/nexus-engine/internal/nexustui/agent/tools/mcp"
+	tuiconfig "github.com/EngineerProjects/nexus-engine/internal/nexustui/config"
 	crushcommon "github.com/EngineerProjects/nexus-engine/internal/nexustui/ui/common"
 	uimodel "github.com/EngineerProjects/nexus-engine/internal/nexustui/ui/model"
 	crushws "github.com/EngineerProjects/nexus-engine/internal/nexustui/workspace"
@@ -25,6 +29,9 @@ import (
 // all rendering to the copied Crush UI layer.
 func runNexusTUI(ctx context.Context, options runtimeOptions, initialSessionID string, continueLast bool) error {
 	ensureNexusTUIRuntimeRoot()
+	// Create top-level dirs and seed nexus.json skeleton on first run.
+	// Non-fatal: a missing logs/ or sessions/ dir is annoying but not fatal.
+	_ = appdir.EnsureAppDirs()
 	if err := validateProviderSetup(options); err != nil {
 		return err
 	}
@@ -56,6 +63,15 @@ func runNexusTUI(ctx context.Context, options runtimeOptions, initialSessionID s
 
 	ws := crushws.NewNexusWorkspace(nil, options.WorkingDir, modelStr)
 	ws.SetStartupConfig(options.SQLitePath, options.PermissionMode, options.Monitoring)
+	if mcpStore, err := tuiconfig.LoadForMCP(options.WorkingDir); err == nil {
+		ws.SetMCPConfig(mcpStore.Config().MCP)
+		ws.SetMCPStore(mcpStore)
+		applyCapabilityToolConfig(&options, mcpStore.Config())
+		options.MCPServers = nexusMCPToSDK(mcpStore)
+		go mcptools.Initialize(ctx, nil, mcpStore)
+	} else if mcps := tuiconfig.LoadMCPConfig(options.WorkingDir); len(mcps) > 0 {
+		ws.SetMCPConfig(mcps)
+	}
 
 	client, err := newClient(
 		options,
@@ -134,4 +150,122 @@ func openCLILogFile() *os.File {
 		return nil
 	}
 	return f
+}
+
+// nexusMCPToSDK converts nexus.json MCP entries into the engine-side
+// MCPServerConfig slice so the agent can discover and call MCP tools.
+func nexusMCPToSDK(store *tuiconfig.ConfigStore) []sdk.MCPServerConfig {
+	r := store.Resolver()
+	cfg := store.Config()
+	out := make([]sdk.MCPServerConfig, 0, len(cfg.MCP))
+	for name, m := range cfg.MCP {
+		if m.Disabled {
+			continue
+		}
+		sc := sdk.MCPServerConfig{Name: name}
+		switch m.Type {
+		case tuiconfig.MCPStdio:
+			sc.Transport = sdk.MCPTransportStdio
+			sc.Command = m.Command
+			sc.Args, _ = m.ResolvedArgs(r)
+			if envSlice, err := m.ResolvedEnv(r); err == nil {
+				sc.Env = envSliceToMap(envSlice)
+			}
+		case tuiconfig.MCPHttp:
+			sc.Transport = sdk.MCPTransportHTTP
+			sc.URL, _ = m.ResolvedURL(r)
+			sc.Headers, _ = m.ResolvedHeaders(r)
+		case tuiconfig.MCPSSE:
+			sc.Transport = sdk.MCPTransportSSE
+			sc.URL, _ = m.ResolvedURL(r)
+			sc.Headers, _ = m.ResolvedHeaders(r)
+		default:
+			continue
+		}
+		if m.Timeout > 0 {
+			sc.Timeout = time.Duration(m.Timeout) * time.Second
+		}
+		out = append(out, sc)
+	}
+	return out
+}
+
+func envSliceToMap(envs []string) map[string]string {
+	if len(envs) == 0 {
+		return nil
+	}
+	m := make(map[string]string, len(envs))
+	for _, entry := range envs {
+		k, v, _ := strings.Cut(entry, "=")
+		if k != "" {
+			m[k] = v
+		}
+	}
+	return m
+}
+
+func applyCapabilityToolConfig(options *runtimeOptions, cfg *tuiconfig.Config) {
+	if options == nil || cfg == nil {
+		return
+	}
+	options.ImageGeneration = buildSDKImageGenerationConfig(cfg)
+	options.TextToSpeech = buildSDKTextToSpeechConfig(cfg)
+	options.SpeechToText = buildSDKSpeechToTextConfig(cfg)
+}
+
+func buildSDKImageGenerationConfig(cfg *tuiconfig.Config) *sdk.ImageGenerationConfig {
+	if cfg == nil || cfg.ImageGeneration == nil {
+		return nil
+	}
+	providerID := strings.TrimSpace(cfg.ImageGeneration.Provider)
+	if providerID == "" {
+		return nil
+	}
+	out := &sdk.ImageGenerationConfig{Provider: providerID, Model: strings.TrimSpace(cfg.ImageGeneration.Model)}
+	if pc, ok := cfg.Providers.Get(providerID); ok {
+		out.APIKey = strings.TrimSpace(pc.APIKey)
+		out.BaseURL = strings.TrimSpace(pc.BaseURL)
+	}
+	return out
+}
+
+func buildSDKTextToSpeechConfig(cfg *tuiconfig.Config) *sdk.TextToSpeechConfig {
+	if cfg == nil || cfg.TextToSpeech == nil {
+		return nil
+	}
+	providerID := strings.TrimSpace(cfg.TextToSpeech.Provider)
+	if providerID == "" {
+		return nil
+	}
+	out := &sdk.TextToSpeechConfig{
+		Provider: providerID,
+		Model:    strings.TrimSpace(cfg.TextToSpeech.Model),
+		Voice:    strings.TrimSpace(cfg.TextToSpeech.Voice),
+		Format:   strings.TrimSpace(cfg.TextToSpeech.Format),
+	}
+	if pc, ok := cfg.Providers.Get(providerID); ok {
+		out.APIKey = strings.TrimSpace(pc.APIKey)
+		out.BaseURL = strings.TrimSpace(pc.BaseURL)
+	}
+	return out
+}
+
+func buildSDKSpeechToTextConfig(cfg *tuiconfig.Config) *sdk.SpeechToTextConfig {
+	if cfg == nil || cfg.SpeechToText == nil {
+		return nil
+	}
+	providerID := strings.TrimSpace(cfg.SpeechToText.Provider)
+	if providerID == "" {
+		return nil
+	}
+	out := &sdk.SpeechToTextConfig{
+		Provider: providerID,
+		Model:    strings.TrimSpace(cfg.SpeechToText.Model),
+		Language: strings.TrimSpace(cfg.SpeechToText.Language),
+	}
+	if pc, ok := cfg.Providers.Get(providerID); ok {
+		out.APIKey = strings.TrimSpace(pc.APIKey)
+		out.BaseURL = strings.TrimSpace(pc.BaseURL)
+	}
+	return out
 }

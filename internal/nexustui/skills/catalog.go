@@ -19,12 +19,17 @@ const (
 
 // CatalogEntry describes an effective visible skill for frontend display.
 type CatalogEntry struct {
-	ID            string     `json:"id"`
-	Name          string     `json:"name"`
-	Description   string     `json:"description"`
-	Label         string     `json:"label"`
-	Source        SourceType `json:"source"`
-	UserInvocable bool       `json:"user_invocable"`
+	ID          string     `json:"id"`
+	Name        string     `json:"name"`
+	Description string     `json:"description"`
+	Label       string     `json:"label"`
+	Source      SourceType `json:"source"`
+	// Collection is the name of the enclosing skill repo (e.g. a cloned
+	// collection like "nexus-skills" or "paperasse") when the skill is
+	// nested under one. Empty for standalone skills placed directly under
+	// a registered skills path.
+	Collection    string `json:"collection,omitempty"`
+	UserInvocable bool   `json:"user_invocable"`
 }
 
 // SkillReadResult holds metadata about a skill returned alongside its
@@ -47,13 +52,14 @@ var ErrSkillNotFound = errors.New("skill not found")
 func Catalog(active []*Skill, skillPaths []string, workingDir string) []CatalogEntry {
 	entries := make([]CatalogEntry, 0, len(active))
 	for _, skill := range active {
-		label, source := skillLabel(skillPaths, workingDir, skill)
+		label, source, collection := skillLabel(skillPaths, workingDir, skill)
 		entries = append(entries, CatalogEntry{
 			ID:            skill.SkillFilePath,
 			Name:          skill.Name,
 			Description:   skill.Description,
 			Label:         label,
 			Source:        source,
+			Collection:    collection,
 			UserInvocable: skill.UserInvocable,
 		})
 	}
@@ -79,21 +85,12 @@ func ReadContent(active []*Skill, skillPaths []string, workingDir string, skillI
 		return nil, SkillReadResult{}, err
 	}
 
-	_, source := skillLabel(skillPaths, workingDir, skill)
+	_, source, _ := skillLabel(skillPaths, workingDir, skill)
 	result := SkillReadResult{
 		Name:        skill.Name,
 		Description: skill.Description,
 		Source:      source,
 		Builtin:     skill.Builtin,
-	}
-
-	if skill.Builtin {
-		embeddedPath := "builtin/" + strings.TrimPrefix(skill.SkillFilePath, BuiltinPrefix)
-		content, err := BuiltinFS().ReadFile(embeddedPath)
-		if err != nil {
-			return nil, SkillReadResult{}, fmt.Errorf("read builtin skill %q: %w", skillID, err)
-		}
-		return content, result, nil
 	}
 
 	content, err := os.ReadFile(skill.SkillFilePath)
@@ -103,11 +100,7 @@ func ReadContent(active []*Skill, skillPaths []string, workingDir string, skillI
 	return content, result, nil
 }
 
-func skillLabel(skillPaths []string, workingDir string, skill *Skill) (string, SourceType) {
-	if skill.Builtin {
-		return string(SourceSystem) + ":" + skill.Name, SourceSystem
-	}
-
+func skillLabel(skillPaths []string, workingDir string, skill *Skill) (label string, source SourceType, collection string) {
 	cleanFile := filepath.Clean(skill.SkillFilePath)
 	for _, base := range skillPaths {
 		cleanBase := filepath.Clean(base)
@@ -116,16 +109,29 @@ func skillLabel(skillPaths []string, workingDir string, skill *Skill) (string, S
 			continue
 		}
 
-		source := SourceUser
+		source = SourceUser
 		prefix := string(SourceUser) + ":"
 		if isProjectSkillPath(cleanBase, workingDir) {
 			source = SourceProject
 			prefix = string(SourceProject) + ":"
 		}
-		return prefix + filepath.Base(filepath.Dir(cleanFile)), source
+		return prefix + filepath.Base(filepath.Dir(cleanFile)), source, collectionFromRel(rel)
 	}
 
-	return string(SourceUser) + ":" + filepath.Base(filepath.Dir(cleanFile)), SourceUser
+	return string(SourceUser) + ":" + filepath.Base(filepath.Dir(cleanFile)), SourceUser, ""
+}
+
+// collectionFromRel returns the name of the enclosing skill collection (e.g.
+// a cloned repo such as "nexus-skills" or "paperasse") when a skill is
+// nested two levels below a registered skills path:
+// "<collection>/<skill>/SKILL.md". Skills placed directly under a
+// registered path ("<skill>/SKILL.md") have no collection.
+func collectionFromRel(rel string) string {
+	parts := strings.Split(filepath.ToSlash(rel), "/")
+	if len(parts) >= 3 {
+		return parts[0]
+	}
+	return ""
 }
 
 func escapesParent(rel string) bool {

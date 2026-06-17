@@ -502,6 +502,7 @@ func (e *Engine) checkRuleBasedPermissions(
 			TurnID:           pctx.TurnID,
 			ToolUseID:        pctx.ToolUseID,
 			PermissionMode:   pctx.Mode,
+			ExecutionMode:    pctx.ExecutionMode,
 			WorkingDirectory: workingDirectory,
 			Metadata:         pctx.Additional,
 		}
@@ -1041,7 +1042,7 @@ func isAlwaysSafeTool(name string) bool {
 		// MCP read-only
 		"mcp_list_resources", "mcp_read_resource",
 		// Utility / introspection
-		"tool_search", "lsp", "docx", "monitor", "skill",
+		"tool_search", "lsp", "monitor", "skill",
 		// User interaction (never destructive — agent explicitly needs human input)
 		"ask_user_question":
 		return true
@@ -1058,7 +1059,7 @@ func isSafeWorkflowTool(name string) bool {
 		"agent",
 		"task_create", "task_update", "task_get",
 		"task_list", "task_output", "task_stop",
-		"enter_plan_mode", "exit_plan_mode":
+		"enter_plan_mode", "exit_plan_mode", "submit_plan":
 		return true
 	}
 	return false

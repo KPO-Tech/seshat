@@ -233,6 +233,15 @@ func (k cacheKey) computeHash() string {
 	return hex.EncodeToString(hash[:])
 }
 
+// stableCacheKeys lists the env keys that stable prompt sections actually reference
+// via template substitution. Dynamic-only keys (session_id, turn_number,
+// mcp_client_count, available_deferred_tools …) would invalidate the stable
+// section cache on every turn even when no stable content changed.
+var stableCacheKeys = map[string]bool{
+	"working_directory":              true,
+	"additional_working_directories": true,
+}
+
 // buildCacheKey construit une clé de cache déterministe
 func buildCacheKey(
 	sectionNames []string,
@@ -245,17 +254,26 @@ func buildCacheKey(
 	copy(sortedNames, sectionNames)
 	sort.Strings(sortedNames)
 
-	// Hash des outils
+	// Hash des outils (captures available_tools, tool_count, stable_tool_names)
 	toolHash := hashTools(tools)
 
-	// Config modèle
+	// Config modèle (captures model + provider)
 	modelConfig := model.String()
+
+	// Only include env keys that stable sections reference; dynamic-only keys
+	// must not vary the stable-section cache key.
+	filteredEnv := make(map[string]string, len(stableCacheKeys))
+	for k, v := range env {
+		if stableCacheKeys[k] {
+			filteredEnv[k] = v
+		}
+	}
 
 	return cacheKey{
 		SectionNames: sortedNames,
 		ToolHash:     toolHash,
 		ModelConfig:  modelConfig,
-		Environment:  env,
+		Environment:  filteredEnv,
 	}
 }
 

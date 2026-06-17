@@ -94,7 +94,7 @@ func (t *CreateGoalTool) ValidateInput(_ context.Context, in map[string]any) (ma
 	return in, nil
 }
 func (t *CreateGoalTool) CheckPermissions(_ context.Context, in map[string]any, _ tool.ToolUseContext) types.PermissionResult {
-	return types.Passthrough(in)
+	return types.AllowWithInput("", in)
 }
 func (t *CreateGoalTool) Description(_ context.Context) (string, error) {
 	return createGoalDescription, nil

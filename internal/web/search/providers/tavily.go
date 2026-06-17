@@ -76,7 +76,7 @@ func (p *TavilyProvider) Search(input SearchInput) (ProviderOutput, error) {
 		return ProviderOutput{}, fmt.Errorf("failed to encode Tavily request: %w", err)
 	}
 
-	req, err := http.NewRequest("POST", "https://api.tavily.com/search", bytes.NewReader(body))
+	req, err := http.NewRequestWithContext(input.ctx(), "POST", "https://api.tavily.com/search", bytes.NewReader(body))
 	if err != nil {
 		return ProviderOutput{}, err
 	}

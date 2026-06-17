@@ -300,11 +300,6 @@ func (m *UI) renderPills() {
 	if m.pillsExpanded {
 		if todosFocused && hasIncomplete {
 			expandedList = todoList(m.session.Todos, inProgressIcon, t, contentWidth)
-		} else if queueFocused && hasQueue {
-			if m.com != nil && m.com.Workspace != nil && m.com.Workspace.AgentIsReady() {
-				queueItems := m.com.Workspace.AgentQueuedPromptsList(m.session.ID)
-				expandedList = queueList(queueItems, t)
-			}
 		}
 	}
 

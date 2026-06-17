@@ -87,8 +87,8 @@ const sessionDetailsMaxHeight = 20
 // TextareaMaxHeight is the maximum height of the prompt textarea before scrolling.
 const TextareaMaxHeight = 6
 
-// editorHeightMargin accounts for the border top+bottom (2) plus one bottom spacing line (1).
-const editorHeightMargin = 3
+// editorHeightMargin accounts for the textarea box's top+bottom border.
+const editorHeightMargin = 2
 
 // TextareaMinHeight is the minimum height of the prompt textarea.
 const TextareaMinHeight = 1
@@ -219,12 +219,18 @@ type UI struct {
 	readyPlaceholder   string
 	workingPlaceholder string
 
+	// workPhase tracks the current agent activity phase for the status line
+	// shown above the input box. Values: "thinking", "generating", "running", "".
+	workPhase     string
+	workPhaseTime time.Time // when the current phase started
+
 	// Completions state
 	completions              *completions.Completions
 	completionsOpen          bool
+	completionsTrigger       string // "@" or "/", the character that opened the popup
 	completionsStartIndex    int
 	completionsQuery         string
-	completionsPositionStart image.Point // x,y where user typed '@'
+	completionsPositionStart image.Point // x,y where user typed '@' or '/'
 
 	// Chat components
 	chat *Chat
@@ -268,6 +274,10 @@ type UI struct {
 
 	// detailsOpen tracks whether the details panel is open (in compact mode)
 	detailsOpen bool
+
+	// lifecycle context — cancelled when the UI shuts down.
+	ctx       context.Context
+	cancelCtx context.CancelFunc
 
 	// pills state
 	pillsExpanded      bool
@@ -316,11 +326,7 @@ func New(com *common.Common, initialSessionID string, continueLast bool) *UI {
 	keyMap := DefaultKeyMap()
 
 	// Completions component
-	comp := completions.New(
-		com.Styles.Completions.Normal,
-		com.Styles.Completions.Focused,
-		com.Styles.Completions.Match,
-	)
+	comp := completions.New(completionsStyles(com.Styles))
 
 	todoSpinner := spinner.New(
 		spinner.WithSpinner(spinner.MiniDot),
@@ -364,6 +370,10 @@ func New(com *common.Common, initialSessionID string, continueLast bool) *UI {
 		skillStates:         skills.GetLatestStates(),
 	}
 
+	ctx, cancel := context.WithCancel(context.Background())
+	ui.ctx = ctx
+	ui.cancelCtx = cancel
+
 	status := NewStatus(com, ui)
 
 	ui.setEditorPrompt(com.Workspace.PermissionSkipRequests())
@@ -378,7 +388,7 @@ func New(com *common.Common, initialSessionID string, continueLast bool) *UI {
 	ui.onboarding.yesInitializeSelected = true
 
 	desiredState := uiLanding
-	desiredFocus := uiFocusEditor
+	desiredFocus := uiFocusMain
 	if !com.Config().IsConfigured() {
 		desiredState = uiOnboarding
 	} else if n, _ := com.Workspace.ProjectNeedsInitialization(); n {
@@ -387,6 +397,9 @@ func New(com *common.Common, initialSessionID string, continueLast bool) *UI {
 
 	// set initial state
 	ui.setState(desiredState, desiredFocus)
+	if desiredFocus != uiFocusEditor {
+		ui.textarea.Blur()
+	}
 
 	opts := com.Config().Options
 
@@ -566,12 +579,9 @@ func (m *UI) loadMCPrompts() tea.Msg {
 // Update handles updates to the UI model.
 func (m *UI) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	var cmds []tea.Cmd
-	if m.hasSession() && m.isAgentBusy() {
-		queueSize := m.com.Workspace.AgentQueuedPrompts(m.session.ID)
-		if queueSize != m.promptQueue {
-			m.promptQueue = queueSize
-			m.updateLayoutAndSize()
-		}
+	if m.hasSession() && m.isAgentBusy() && m.promptQueue != 0 {
+		m.promptQueue = 0
+		m.updateLayoutAndSize()
 	}
 	// Update terminal capabilities
 	m.caps.Update(msg)
@@ -643,11 +653,6 @@ func (m *UI) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if dia := m.dialog.Dialog(dialog.CommandsID); dia != nil {
 			if commands, ok := dia.(*dialog.Commands); ok {
 				commands.SetCustomCommands(m.customCommands)
-			}
-		}
-		if dia := m.dialog.Dialog(dialog.SkillsPickerID); dia != nil {
-			if skillsDialog, ok := dia.(*dialog.SkillsPicker); ok {
-				skillsDialog.SetSkills(m.skillCommands)
 			}
 		}
 
@@ -1213,6 +1218,7 @@ func (m *UI) appendSessionMessage(msg message.Message) tea.Cmd {
 			cmds = append(cmds, cmd)
 		}
 	case message.Assistant:
+		m.updateWorkPhase(&msg)
 		items := chat.ExtractMessageItems(m.com.Styles, &msg, nil)
 		for _, item := range items {
 			if animatable, ok := item.(chat.Animatable); ok {
@@ -1296,7 +1302,7 @@ func (m *UI) handleSidebarClick(msg tea.MouseClickMsg) bool {
 
 func (m *UI) handleClickFocus(msg tea.MouseClickMsg) (cmd tea.Cmd) {
 	switch {
-	case m.state != uiChat:
+	case m.state != uiChat && m.state != uiLanding:
 		return nil
 	case image.Pt(msg.X, msg.Y).In(m.layout.sidebar):
 		if m.focus != uiFocusSidebar {
@@ -1321,8 +1327,43 @@ func (m *UI) handleClickFocus(msg tea.MouseClickMsg) (cmd tea.Cmd) {
 // the chat when an assistant message is updated it may include updated tool
 // calls as well that is why we need to handle creating/updating each tool call
 // message too.
+// updateWorkPhase derives the current agent phase from a streaming message and
+// updates m.workPhase / m.workPhaseTime when the phase changes.
+func (m *UI) updateWorkPhase(msg *message.Message) {
+	if msg == nil || msg.Role != message.Assistant {
+		return
+	}
+	if msg.FinishPart() != nil {
+		m.workPhase = ""
+		return
+	}
+	var newPhase string
+	switch {
+	case msg.IsThinking():
+		newPhase = "thinking"
+	case func() bool {
+		for _, tc := range msg.ToolCalls() {
+			if !tc.Finished {
+				return true
+			}
+		}
+		return false
+	}():
+		newPhase = "running"
+	case msg.Content().Text != "" || msg.ReasoningContent().Thinking != "":
+		newPhase = "generating"
+	default:
+		newPhase = "working"
+	}
+	if newPhase != m.workPhase {
+		m.workPhase = newPhase
+		m.workPhaseTime = time.Now()
+	}
+}
+
 func (m *UI) updateSessionMessage(msg message.Message) tea.Cmd {
 	var cmds []tea.Cmd
+	m.updateWorkPhase(&msg)
 	existingItem := m.chat.MessageItem(msg.ID)
 
 	if existingItem != nil {
@@ -1674,7 +1715,7 @@ func (m *UI) handleDialogMsg(msg tea.Msg) tea.Cmd {
 			if err := m.com.Workspace.UpdatePreferredModel(config.ScopeGlobal, agentCfg.Model, currentModel); err != nil {
 				return util.ReportError(err)()
 			}
-			_ = m.com.Workspace.UpdateAgentModel(context.TODO())
+			_ = m.com.Workspace.UpdateAgentModel(m.ctx)
 			status := "disabled"
 			if currentModel.Think {
 				status = "enabled"
@@ -1704,6 +1745,7 @@ func (m *UI) handleDialogMsg(msg tea.Msg) tea.Cmd {
 		})
 		m.dialog.CloseDialog(dialog.CommandsID)
 	case dialog.ActionQuit:
+		m.cancelCtx()
 		cmds = append(cmds, tea.Quit)
 	case dialog.ActionEnableDockerMCP:
 		m.dialog.CloseDialog(dialog.CommandsID)
@@ -1711,6 +1753,10 @@ func (m *UI) handleDialogMsg(msg tea.Msg) tea.Cmd {
 	case dialog.ActionDisableDockerMCP:
 		m.dialog.CloseDialog(dialog.CommandsID)
 		cmds = append(cmds, m.disableDockerMCP)
+	case dialog.ActionEnableMCPServer:
+		cmds = append(cmds, m.enableMCPServer(msg.Name))
+	case dialog.ActionDisableMCPServer:
+		cmds = append(cmds, m.disableMCPServer(msg.Name))
 	case dialog.ActionOpenProviderConfig:
 		providerID := string(msg.Provider.ID)
 		if providerID == "bedrock" || providerID == "vertex" {
@@ -1740,6 +1786,35 @@ func (m *UI) handleDialogMsg(msg tea.Msg) tea.Cmd {
 				return util.ReportError(err)()
 			}
 			return util.NewInfoMsg("Web search provider changed to " + cases.Title(language.English).String(msg.ProviderID))
+		})
+	case dialog.ActionSelectCapabilityProvider:
+		cmds = append(cmds, func() tea.Msg {
+			capabilityLabel := map[string]string{
+				"image_generation": "Image generation",
+				"text_to_speech":   "Text to speech",
+				"speech_to_text":   "Speech to text",
+			}[msg.Capability]
+			if capabilityLabel == "" {
+				capabilityLabel = "Provider"
+			}
+			configKey := map[string]string{
+				"image_generation": "image_generation.provider",
+				"text_to_speech":   "text_to_speech.provider",
+				"speech_to_text":   "speech_to_text.provider",
+			}[msg.Capability]
+			if configKey == "" {
+				return util.ReportError(fmt.Errorf("unknown capability: %s", msg.Capability))()
+			}
+			if err := m.com.Workspace.SetConfigField(config.ScopeGlobal, configKey, msg.ProviderID); err != nil {
+				return util.ReportError(err)()
+			}
+			if err := m.com.Workspace.UpdateAgentModel(m.ctx); err != nil {
+				return util.ReportError(err)()
+			}
+			if msg.ProviderID == "" {
+				return util.NewInfoMsg(capabilityLabel + " disabled")
+			}
+			return util.NewInfoMsg(capabilityLabel + " provider changed to " + cases.Title(language.English).String(msg.ProviderID))
 		})
 	case dialog.ActionCopyLastMessage:
 		m.dialog.CloseDialog(dialog.CommandsID)
@@ -1785,7 +1860,7 @@ func (m *UI) handleDialogMsg(msg tea.Msg) tea.Cmd {
 		}
 
 		cmds = append(cmds, func() tea.Msg {
-			_ = m.com.Workspace.UpdateAgentModel(context.TODO())
+			_ = m.com.Workspace.UpdateAgentModel(m.ctx)
 			return util.NewInfoMsg("Reasoning effort set to " + msg.Effort)
 		})
 		m.dialog.CloseDialog(dialog.ReasoningID)
@@ -1799,8 +1874,19 @@ func (m *UI) handleDialogMsg(msg tea.Msg) tea.Cmd {
 		case dialog.PermissionDeny:
 			m.com.Workspace.PermissionDeny(msg.Permission)
 		}
+	case dialog.ActionPlanReviewRequestChanges:
+		m.dialog.CloseDialog(dialog.PlanReviewID)
+		cmds = append(cmds, m.sendMessage(formatPlanReviewResponse(msg.Review)))
+
 	case dialog.ActionPlanReviewSubmit:
 		m.dialog.CloseDialog(dialog.PlanReviewID)
+		if msg.Review.Approved && m.session != nil && m.com.Workspace != nil {
+			// Auto-exit plan mode immediately (mirrors exit_plan_mode tool call).
+			if _, err := m.com.Workspace.ApprovePlan(string(m.session.ID)); err == nil {
+				cmds = append(cmds, m.sendMessage(formatPlanApprovalMessage()))
+				break
+			}
+		}
 		cmds = append(cmds, m.sendMessage(formatPlanReviewResponse(msg.Review)))
 
 	case dialog.ActionFilePickerSelected:
@@ -1979,7 +2065,7 @@ func (m *UI) handleSelectModel(msg dialog.ActionSelectModel) tea.Cmd {
 	}
 
 	cmds = append(cmds, func() tea.Msg {
-		if err := m.com.Workspace.UpdateAgentModel(context.TODO()); err != nil {
+		if err := m.com.Workspace.UpdateAgentModel(m.ctx); err != nil {
 			return util.ReportError(err)
 		}
 
@@ -2002,7 +2088,7 @@ func (m *UI) handleSelectModel(msg dialog.ActionSelectModel) tea.Cmd {
 	if isOnboarding {
 		m.setState(uiLanding, uiFocusEditor)
 		m.com.Config().SetupAgents()
-		if err := m.com.Workspace.InitCoderAgent(context.TODO()); err != nil {
+		if err := m.com.Workspace.InitCoderAgent(m.ctx); err != nil {
 			cmds = append(cmds, util.ReportError(err))
 		}
 	} else if m.com.IsHyper() {
@@ -2163,6 +2249,11 @@ func (m *UI) handleKeyPressMsg(msg tea.KeyPressMsg) tea.Cmd {
 						if !msg.KeepOpen {
 							m.closeCompletions()
 						}
+					case completions.SelectionMsg[completions.SkillCompletionValue]:
+						cmds = append(cmds, m.insertSkillCompletion(msg.Value.Name))
+						if !msg.KeepOpen {
+							m.closeCompletions()
+						}
 					case completions.ClosedMsg:
 						m.completionsOpen = false
 					}
@@ -2281,10 +2372,6 @@ func (m *UI) handleKeyPressMsg(msg tea.KeyPressMsg) tea.Cmd {
 				if cmd != nil {
 					cmds = append(cmds, cmd)
 				}
-			case key.Matches(msg, m.keyMap.Editor.Skills) && m.textarea.Value() == "":
-				if cmd := m.openSkillsDialog(); cmd != nil {
-					cmds = append(cmds, cmd)
-				}
 			case key.Matches(msg, m.keyMap.Editor.Commands) && m.textarea.Value() == "":
 				if cmd := m.openCommandsDialog(); cmd != nil {
 					cmds = append(cmds, cmd)
@@ -2295,20 +2382,25 @@ func (m *UI) handleKeyPressMsg(msg tea.KeyPressMsg) tea.Cmd {
 					break
 				}
 
-				// Check for @ trigger before passing to textarea.
+				// Check for a @ or / trigger before passing to textarea.
 				curValue := m.textarea.Value()
 				curIdx := len(curValue)
 
-				// Trigger completions on @.
-				if msg.String() == "@" && !m.completionsOpen {
+				// Trigger completions on @ (files/MCP resources) or / (skills).
+				if !m.completionsOpen && (msg.String() == "@" || msg.String() == "/") {
 					// Only show if beginning of prompt or after whitespace.
 					if curIdx == 0 || (curIdx > 0 && isWhitespace(curValue[curIdx-1])) {
 						m.completionsOpen = true
+						m.completionsTrigger = msg.String()
 						m.completionsQuery = ""
 						m.completionsStartIndex = curIdx
 						m.completionsPositionStart = m.completionsPosition()
-						depth, limit := m.com.Config().Options.TUI.Completions.Limits()
-						cmds = append(cmds, m.completions.Open(depth, limit))
+						if m.completionsTrigger == "@" {
+							depth, limit := m.com.Config().Options.TUI.Completions.Limits()
+							cmds = append(cmds, m.completions.Open(depth, limit))
+						} else {
+							m.completions.SetSkillItems(skillCompletionValues(m.skillCommands))
+						}
 					}
 				}
 
@@ -2325,8 +2417,10 @@ func (m *UI) handleKeyPressMsg(msg tea.KeyPressMsg) tea.Cmd {
 				m.updateHistoryDraft(curValue)
 
 				// After updating textarea, check if we need to filter completions.
-				// Skip filtering on the initial @ keystroke since items are loading async.
-				if m.completionsOpen && msg.String() != "@" {
+				// Skip filtering on the keystroke that just opened it: for @ the
+				// items are still loading async, and skills are unaffected either
+				// way since the query is empty on that keystroke.
+				if m.completionsOpen && msg.String() != m.completionsTrigger {
 					newValue := m.textarea.Value()
 					newIdx := len(newValue)
 
@@ -2339,7 +2433,7 @@ func (m *UI) handleKeyPressMsg(msg tea.KeyPressMsg) tea.Cmd {
 					} else {
 						// Extract current word and filter.
 						word := m.textareaWord()
-						if strings.HasPrefix(word, "@") {
+						if strings.HasPrefix(word, m.completionsTrigger) {
 							m.completionsQuery = word[1:]
 							m.completions.Filter(m.completionsQuery)
 						} else if m.completionsOpen {
@@ -2511,6 +2605,26 @@ func (m *UI) Draw(scr uv.Screen, area uv.Rectangle) *tea.Cursor {
 			m.updateSize()
 		}
 	}
+	// Always draw with the final, stable layout so the box position and the
+	// cursor offset both reference the same rect (m.layout is updated by the
+	// double-pass above; the local var may be one pass behind).
+	layout = m.layout
+
+	if os.Getenv("NEXUS_LAYOUT_DEBUG") != "" {
+		if f, err := os.OpenFile("/tmp/nexus_layout.log", os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644); err == nil {
+			taH := m.textarea.Height()
+			taW := m.textarea.Width()
+			fmt.Fprintf(f, "area=%v editor=%v main=%v taH=%d taW=%d state=%d\n",
+				area, layout.editor, layout.main, taH, taW, m.state)
+			if cur := m.textarea.Cursor(); cur != nil {
+				fmt.Fprintf(f, "  ta.Cursor={X:%d,Y:%d} final={X:%d,Y:%d}\n",
+					cur.X, cur.Y,
+					cur.X+m.layout.editor.Min.X+1,
+					cur.Y+m.layout.editor.Min.Y+m.editorAttachmentsHeight(m.layout.editor.Dx())+m.editorStatusHeight()+1)
+			}
+			f.Close()
+		}
+	}
 
 	// Clear the screen first
 	screen.Clear(scr)
@@ -2569,7 +2683,11 @@ func (m *UI) Draw(scr uv.Screen, area uv.Rectangle) *tea.Cursor {
 			x = screenW - w
 		}
 		x = max(0, x)
-		y = max(0, y+1) // Offset for attachments row
+		// Attachments height is already folded into completionsPositionStart
+		// (see completionsPosition); don't shift again here. Max.Y is kept
+		// at exactly positionStart.Y so the popup sits flush above the
+		// input line instead of overlapping it.
+		y = max(0, y)
 
 		completionsView := uv.NewStyledString(m.completions.Render())
 		completionsView.Draw(scr, image.Rectangle{
@@ -2612,9 +2730,9 @@ func (m *UI) Draw(scr uv.Screen, area uv.Rectangle) *tea.Cursor {
 			// +1 = left border character │ before textarea text.
 			cur.X += m.layout.editor.Min.X + 1
 			// editor.Min.Y = screen row where the editor area starts.
-			// Add any attachment rows rendered above the input box, then offset by
-			// the top border row ┌───┐ so the cursor lands on the textarea text.
-			cur.Y += m.layout.editor.Min.Y + m.editorAttachmentsHeight(m.layout.editor.Dx()) + 1
+			// Add attachment rows + working-status line (if visible) above the box,
+			// then +1 for the top border ┌───┐ so the cursor lands on textarea text.
+			cur.Y += m.layout.editor.Min.Y + m.editorAttachmentsHeight(m.layout.editor.Dx()) + m.editorStatusHeight() + 1
 			return cur
 		}
 	}
@@ -2649,7 +2767,6 @@ func (m *UI) View() tea.View {
 func (m *UI) ShortHelp() []key.Binding {
 	var binds []key.Binding
 	k := &m.keyMap
-	tab := k.Tab
 	commands := k.Commands
 
 	switch m.state {
@@ -2661,49 +2778,14 @@ func (m *UI) ShortHelp() []key.Binding {
 			cancelBinding := k.Chat.Cancel
 			if m.isCanceling {
 				cancelBinding.SetHelp("esc", "press again to cancel")
-			} else if m.com.Workspace.AgentQueuedPrompts(m.session.ID) > 0 {
-				cancelBinding.SetHelp("esc", "clear queue")
 			}
 			binds = append(binds, cancelBinding)
 		}
 
-		switch m.focus {
-		case uiFocusEditor:
-			// Same shortcuts as the landing page — no tab/skills/commands hints.
-			binds = append(binds, commands, k.Models, k.Editor.Newline)
-		case uiFocusMain:
-			if m.hasSidebarTasks() {
-				tab.SetHelp("tab", "focus tasks")
-			} else {
-				tab.SetHelp("tab", "focus editor")
-			}
-			binds = append(
-				binds,
-				tab,
-				commands,
-				k.Models,
-				k.Chat.UpDown,
-				k.Chat.UpDownOneItem,
-				k.Chat.PageUp,
-				k.Chat.PageDown,
-				k.Chat.Copy,
-			)
-			if m.pillsExpanded && hasIncompleteTodos(m.session.Todos) && m.promptQueue > 0 {
-				binds = append(binds, k.Chat.PillLeft)
-			}
-		case uiFocusSidebar:
-			tab.SetHelp("tab", "focus editor")
-			binds = append(
-				binds,
-				tab,
-				commands,
-				k.Models,
-				k.Chat.UpDown,
-				k.Chat.Home,
-				k.Chat.End,
-				k.Chat.Expand,
-			)
-		}
+		// Always the same compact row, regardless of focus — switching to a
+		// longer focus-specific list (tab/scroll/copy hints) made the
+		// footer visibly grow and shrink as focus changed.
+		binds = append(binds, commands, k.Models, k.Editor.Newline)
 	default:
 		// TODO: other states
 		// if m.session == nil {
@@ -2747,8 +2829,6 @@ func (m *UI) FullHelp() [][]key.Binding {
 			cancelBinding := k.Chat.Cancel
 			if m.isCanceling {
 				cancelBinding.SetHelp("esc", "press again to cancel")
-			} else if m.com.Workspace.AgentQueuedPrompts(m.session.ID) > 0 {
-				cancelBinding.SetHelp("esc", "clear queue")
 			}
 			binds = append(binds, []key.Binding{cancelBinding})
 		}
@@ -2998,8 +3078,6 @@ func (m *UI) generateLayout(w, h int) uiLayout {
 
 	// The help height
 	helpHeight := 1
-	// The editor height: textarea height + margin for attachments and bottom spacing.
-	editorHeight := m.textarea.Height() + editorHeightMargin
 	// The header height
 	const landingHeaderHeight = 1
 
@@ -3017,10 +3095,17 @@ func (m *UI) generateLayout(w, h int) uiLayout {
 		layout.Fill(1),
 	).Split(area).Assign(&appRect, &helpRect)
 	appRect.Min.Y += 1
-	appRect.Max.Y -= 1
-	helpRect.Min.Y -= 1
 	appRect.Min.X += 1
 	appRect.Max.X -= 1
+
+	// The editor height: textarea + border + any attachment chips + working status
+	// line rendered above the input box.
+	editorAttachH := m.editorAttachmentsHeight(max(1, appRect.Dx()-1))
+	var editorStatusH int
+	if m.isAgentBusy() && m.workPhase != "" {
+		editorStatusH = 1
+	}
+	editorHeight := m.textarea.Height() + editorHeightMargin + editorAttachH + editorStatusH
 
 	if slices.Contains([]uiState{uiOnboarding, uiInitialize, uiLanding}, m.state) {
 		// extra padding on left and right for these states
@@ -3069,7 +3154,7 @@ func (m *UI) generateLayout(w, h int) uiLayout {
 		).Split(appRect).Assign(&headerRect, &mainRect)
 		var editorRect image.Rectangle
 		layout.Vertical(
-			layout.Len(mainRect.Dy()-editorHeight),
+			layout.Len(max(0, mainRect.Dy()-editorHeight)),
 			layout.Fill(1),
 		).Split(mainRect).Assign(&mainRect, &editorRect)
 		// Remove extra padding from editor (but keep it for header and main)
@@ -3108,7 +3193,7 @@ func (m *UI) generateLayout(w, h int) uiLayout {
 		mainRect.Min.Y += 1
 		var editorRect image.Rectangle
 		layout.Vertical(
-			layout.Len(mainRect.Dy()-editorHeight),
+			layout.Len(max(0, mainRect.Dy()-editorHeight)),
 			layout.Fill(1),
 		).Split(mainRect).Assign(&mainRect, &editorRect)
 		mainRect.Max.X -= 1 // right padding
@@ -3217,12 +3302,15 @@ func (m *UI) setEditorPrompt(yolo bool) {
 
 // normalPromptFunc returns the normal editor prompt style.
 // First line shows "  > " (focused) or "    " (blurred).
-// Subsequent lines show "    " (blank, same width as prompt).
+// Subsequent lines show "  │ " so wrapped text is visually aligned with line 1.
 func (m *UI) normalPromptFunc(info textarea.PromptInfo) string {
-	if info.LineNumber == 0 && info.Focused {
-		return "  > "
+	if info.LineNumber == 0 {
+		if info.Focused {
+			return "  > "
+		}
+		return "    "
 	}
-	return "    "
+	return "  │ "
 }
 
 // yoloPromptFunc returns the yolo mode editor prompt style with warning icon
@@ -3245,6 +3333,7 @@ func (m *UI) yoloPromptFunc(info textarea.PromptInfo) string {
 // closeCompletions closes the completions popup and resets state.
 func (m *UI) closeCompletions() {
 	m.completionsOpen = false
+	m.completionsTrigger = ""
 	m.completionsQuery = ""
 	m.completionsStartIndex = 0
 	m.completions.Close()
@@ -3364,18 +3453,63 @@ func (m *UI) insertMCPResourceCompletion(item completions.ResourceCompletionValu
 	return tea.Batch(heightCmd, resourceCmd)
 }
 
+// completionsStyles maps the app's theme onto the completions popup's
+// style bundle.
+func completionsStyles(t *styles.Styles) completions.Styles {
+	return completions.Styles{
+		ItemStyles: completions.ItemStyles{
+			Normal:  t.Completions.Normal,
+			Focused: t.Completions.Focused,
+			Match:   t.Completions.Match,
+			Desc:    t.Completions.Desc,
+			Icon:    t.Completions.Icon,
+			Bar:     t.Completions.Bar,
+		},
+		Border: t.Completions.Border,
+	}
+}
+
+// skillCompletionValues converts the in-memory skill commands into
+// completion items for the inline "/" popup.
+func skillCompletionValues(cmds []commands.CustomCommand) []completions.SkillCompletionValue {
+	values := make([]completions.SkillCompletionValue, 0, len(cmds))
+	for _, cmd := range cmds {
+		if cmd.Skill == nil {
+			continue
+		}
+		values = append(values, completions.SkillCompletionValue{
+			Name:        cmd.Skill.Name,
+			Description: cmd.Skill.Description,
+		})
+	}
+	return values
+}
+
+// insertSkillCompletion inserts the selected skill's slash command into the
+// textarea, replacing the /query. Unlike files and MCP resources, no
+// attachment is produced — the user can keep typing arguments and send
+// normally.
+func (m *UI) insertSkillCompletion(name string) tea.Cmd {
+	prevHeight := m.textarea.Height()
+	if !m.insertCompletionText("/" + name) {
+		return nil
+	}
+	return m.handleTextareaHeightChange(prevHeight)
+}
+
 // completionsPosition returns the X and Y position for the completions popup.
 func (m *UI) completionsPosition() image.Point {
 	cur := m.textarea.Cursor()
+	statusH := m.editorStatusHeight()
 	if cur == nil {
 		return image.Point{
 			X: m.layout.editor.Min.X + 1,
-			Y: m.layout.editor.Min.Y + m.editorAttachmentsHeight(m.layout.editor.Dx()) + 1,
+			Y: m.layout.editor.Min.Y + m.editorAttachmentsHeight(m.layout.editor.Dx()) + statusH + 1,
 		}
 	}
 	return image.Point{
 		X: cur.X + m.layout.editor.Min.X + 1,
-		Y: cur.Y + m.layout.editor.Min.Y + m.editorAttachmentsHeight(m.layout.editor.Dx()) + 1,
+		Y: cur.Y + m.layout.editor.Min.Y + m.editorAttachmentsHeight(m.layout.editor.Dx()) + statusH + 1,
 	}
 }
 
@@ -3432,10 +3566,15 @@ func (m *UI) renderEditorView(width int) string {
 		attachmentsView = m.attachments.Render(width)
 	}
 
-	boxWidth := max(10, width-2)
+	borderColor := t.Section.Line.GetForeground()
+	// lipgloss.Width is the total box width, including borders. The textarea
+	// itself is already sized to the inner content width in updateSize, so
+	// subtracting the border again here makes lipgloss re-wrap the textarea's
+	// rendered lines two cells too early.
+	boxWidth := max(10, width)
 	box := lipgloss.NewStyle().
 		Border(lipgloss.NormalBorder()).
-		BorderForeground(t.Section.Line.GetForeground()).
+		BorderForeground(borderColor).
 		Width(boxWidth).
 		Render(m.textarea.View())
 
@@ -3443,8 +3582,32 @@ func (m *UI) renderEditorView(width int) string {
 	if attachmentsView != "" {
 		parts = append(parts, attachmentsView)
 	}
-	parts = append(parts, box, "")
+	if statusLine := m.renderWorkingStatusLine(width); statusLine != "" {
+		parts = append(parts, statusLine)
+	}
+	parts = append(parts, box)
 	return strings.Join(parts, "\n")
+}
+
+// renderWorkingStatusLine returns a single-line status string shown above the
+// input box while the agent is working, or "" when idle.
+func (m *UI) renderWorkingStatusLine(width int) string {
+	if m.com.Workspace == nil || !m.isAgentBusy() || m.workPhase == "" {
+		return ""
+	}
+	elapsed := int(time.Since(m.workPhaseTime).Seconds())
+	if elapsed < 0 {
+		elapsed = 0
+	}
+	dots := []string{".", "..", "..."}[elapsed%3]
+	var dStr string
+	if elapsed < 60 {
+		dStr = fmt.Sprintf("%ds", elapsed)
+	} else {
+		dStr = fmt.Sprintf("%dm%ds", elapsed/60, elapsed%60)
+	}
+	text := fmt.Sprintf("%s%s (%s)", m.workPhase, dots, dStr)
+	return m.com.Styles.Editor.WorkingStatus.Width(width).Render(text)
 }
 
 func (m *UI) editorAttachmentsHeight(width int) int {
@@ -3452,6 +3615,16 @@ func (m *UI) editorAttachmentsHeight(width int) int {
 		return 0
 	}
 	return lipgloss.Height(m.attachments.Render(width))
+}
+
+// editorStatusHeight returns 1 when the working-status line ("generating... (Xs)")
+// is rendered above the textarea box, 0 otherwise. Must match the condition in
+// renderWorkingStatusLine and generateLayout so the cursor Y offset stays aligned.
+func (m *UI) editorStatusHeight() int {
+	if m.com.Workspace == nil || !m.isAgentBusy() || m.workPhase == "" {
+		return 0
+	}
+	return 1
 }
 
 // cacheSidebarLogo renders and caches the sidebar logo at the specified width.
@@ -3477,7 +3650,7 @@ func (m *UI) refreshStyles() {
 		m.cacheSidebarLogo(m.layout.sidebar.Dx())
 	}
 	m.textarea.SetStyles(t.Editor.Textarea)
-	m.completions.SetStyles(t.Completions.Normal, t.Completions.Focused, t.Completions.Match)
+	m.completions.SetStyles(completionsStyles(t))
 	m.attachments.Renderer().SetStyles(
 		t.Attachments.Normal,
 		t.Attachments.Deleting,
@@ -3592,12 +3765,6 @@ func (m *UI) cancelAgent() tea.Cmd {
 		// Stop the spinning todo indicator.
 		m.todoIsSpinning = false
 		m.renderPills()
-		return nil
-	}
-
-	// Check if there are queued prompts - if so, clear the queue.
-	if m.com.Workspace.AgentQueuedPrompts(m.session.ID) > 0 {
-		m.com.Workspace.AgentClearQueue(m.session.ID)
 		return nil
 	}
 
@@ -3735,19 +3902,6 @@ func (m *UI) openSettingsDialog() tea.Cmd {
 	return nil
 }
 
-func (m *UI) openSkillsDialog() tea.Cmd {
-	if m.dialog.ContainsDialog(dialog.SkillsPickerID) {
-		m.dialog.BringToFront(dialog.SkillsPickerID)
-		return nil
-	}
-	skillsDialog, err := dialog.NewSkillsPicker(m.com, m.skillCommands)
-	if err != nil {
-		return util.ReportError(err)
-	}
-	m.dialog.OpenDialog(skillsDialog)
-	return nil
-}
-
 // openCommandsDialog opens the commands dialog.
 func (m *UI) openCommandsDialog() tea.Cmd {
 	if m.dialog.ContainsDialog(dialog.CommandsID) {
@@ -3841,6 +3995,13 @@ func (m *UI) openFilesDialog() tea.Cmd {
 	return cmd
 }
 
+// formatPlanApprovalMessage builds the message sent to the agent when the user
+// approves the plan via ctrl+y. Plan mode has already been exited by the time
+// this message is sent, so the agent should NOT call exit_plan_mode.
+func formatPlanApprovalMessage() string {
+	return "Plan approved. Plan mode has been exited automatically — do not call exit_plan_mode. Proceed with implementation."
+}
+
 func formatPlanReviewResponse(review planreview.Review) string {
 	if review.Approved {
 		return "Proceed"
@@ -3854,13 +4015,17 @@ func formatPlanReviewResponse(review planreview.Review) string {
 		b.WriteString("\n\n")
 	}
 	if comments := review.SortedLineComments(); len(comments) > 0 {
+		lines := strings.Split(strings.ReplaceAll(review.Submission.Content, "\r\n", "\n"), "\n")
 		b.WriteString("Line comments:\n")
 		for _, comment := range comments {
 			b.WriteString(fmt.Sprintf("- line %d: %s\n", comment.Line, comment.Comment))
+			if comment.Line >= 1 && comment.Line <= len(lines) {
+				b.WriteString(fmt.Sprintf("  (current content: %s)\n", strings.TrimSpace(lines[comment.Line-1])))
+			}
 		}
 		b.WriteString("\n")
 	}
-	b.WriteString("Please revise the plan and submit an updated version with submit_plan.")
+	b.WriteString(fmt.Sprintf("Revise the plan and call submit_plan with plan_id=%q to update it (do NOT omit plan_id or a new plan will be created instead of updating this one).", review.Submission.PlanID))
 	return strings.TrimSpace(b.String())
 }
 
@@ -4332,6 +4497,24 @@ func (m *UI) disableDockerMCP() tea.Msg {
 	}
 
 	return util.NewInfoMsg("Docker MCP disabled successfully")
+}
+
+func (m *UI) enableMCPServer(name string) tea.Cmd {
+	return func() tea.Msg {
+		if err := m.com.Workspace.EnableMCPServer(context.Background(), name); err != nil {
+			return util.ReportError(err)()
+		}
+		return util.NewInfoMsg(fmt.Sprintf("MCP server %q reconnected", name))
+	}
+}
+
+func (m *UI) disableMCPServer(name string) tea.Cmd {
+	return func() tea.Msg {
+		if err := m.com.Workspace.DisableMCPServer(name); err != nil {
+			return util.ReportError(err)()
+		}
+		return util.NewInfoMsg(fmt.Sprintf("MCP server %q disabled", name))
+	}
 }
 
 // copyLastUserMessage copies the user's last sent message to the clipboard.

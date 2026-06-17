@@ -10,7 +10,75 @@ import (
 	"github.com/charmbracelet/x/ansi"
 )
 
-// MCPToolMessageItem is a message item that represents a bash tool call.
+// ─── MCP tool classification ──────────────────────────────────────────────────
+
+type mcpToolCategory int
+
+const (
+	mcpCatRead    mcpToolCategory = iota // get, fetch, read, open, show → header-only on success
+	mcpCatSearch                         // search, find, list, query, scan → always show body
+	mcpCatCreate                         // create, write, add, insert, send → header-only on success
+	mcpCatDestroy                        // delete, remove, destroy, drop, purge → destructive style + header-only on success
+	mcpCatUpdate                         // update, edit, patch, modify → header-only on success
+	mcpCatGeneric                        // fallback: show body if content exists
+)
+
+// mcpClassifyTool infers the semantic category from the tool name.
+// Destroy is checked first so "delete_and_create" is treated as destructive.
+func mcpClassifyTool(toolName string) mcpToolCategory {
+	lower := strings.ToLower(toolName)
+	switch {
+	case mcpNameContains(lower, "delete", "remove", "destroy", "drop", "purge", "clear", "unlink", "revoke", "dismiss"):
+		return mcpCatDestroy
+	case mcpNameContains(lower, "create", "write", "add", "insert", "send", "post", "push", "publish", "upload", "append"):
+		return mcpCatCreate
+	case mcpNameContains(lower, "update", "edit", "patch", "modify", "rename", "move", "set", "replace", "put"):
+		return mcpCatUpdate
+	case mcpNameContains(lower, "search", "find", "list", "query", "scan", "browse", "lookup", "suggest", "enumerate"):
+		return mcpCatSearch
+	case mcpNameContains(lower, "read", "get", "fetch", "open", "show", "view", "download", "load", "describe", "info", "check", "inspect"):
+		return mcpCatRead
+	default:
+		return mcpCatGeneric
+	}
+}
+
+func mcpNameContains(lower string, words ...string) bool {
+	for _, w := range words {
+		if strings.Contains(lower, w) {
+			return true
+		}
+	}
+	return false
+}
+
+// mcpPrimaryParam extracts the most informative single parameter from MCP input.
+// Checks well-known semantic keys in priority order before falling back to any string value.
+var mcpKnownParamKeys = []string{
+	"path", "query", "url", "name", "message", "key", "id", "uri",
+	"file", "command", "text", "content", "repo", "topic", "issue",
+}
+
+func mcpPrimaryParam(params map[string]any) string {
+	for _, key := range mcpKnownParamKeys {
+		if v, ok := params[key]; ok {
+			if s, ok := v.(string); ok && s != "" {
+				return s
+			}
+		}
+	}
+	// Fallback: first non-empty string value found
+	for _, v := range params {
+		if s, ok := v.(string); ok && s != "" {
+			return s
+		}
+	}
+	return ""
+}
+
+// ─── MCPTool renderer ─────────────────────────────────────────────────────────
+
+// MCPToolMessageItem is a message item that represents an MCP tool call.
 type MCPToolMessageItem struct {
 	*baseToolMessageItem
 }
@@ -24,38 +92,52 @@ func NewMCPToolMessageItem(
 	result *message.ToolResult,
 	canceled bool,
 ) ToolMessageItem {
-	return newBaseToolMessageItem(sty, toolCall, result, &MCPToolRenderContext{}, canceled)
+	return &MCPToolMessageItem{newBaseToolMessageItem(sty, toolCall, result, &MCPToolRenderContext{}, canceled)}
 }
 
-// MCPToolRenderContext renders bash tool messages.
+// MCPToolRenderContext renders generic MCP tool messages.
 type MCPToolRenderContext struct{}
 
 // RenderTool implements the [ToolRenderer] interface.
 func (b *MCPToolRenderContext) RenderTool(sty *styles.Styles, width int, opts *ToolRenderOpts) string {
 	cappedWidth := width
+
+	// Tool name is "mcp_{server}_{tool}" — split into server + action.
 	toolNameParts := strings.SplitN(opts.ToolCall.Name, "_", 3)
 	if len(toolNameParts) != 3 {
 		return toolErrorContent(sty, &message.ToolResult{Content: "Invalid tool name"}, cappedWidth)
 	}
-	mcpName := humanizedToolName(toolNameParts[1])
-	toolName := humanizedToolName(toolNameParts[2])
+	mcpServer := toolNameParts[1]
+	mcpTool := toolNameParts[2]
+	cat := mcpClassifyTool(mcpTool)
 
-	mcpName = sty.Tool.MCPName.Render(mcpName)
-	toolName = sty.Tool.MCPToolName.Render(toolName)
+	// Build styled "ServerName → ActionName" display.
+	serverStyled := sty.Tool.MCPName.Render(humanizedToolName(mcpServer))
+	arrow := sty.Tool.MCPArrow.String()
 
-	name := fmt.Sprintf("%s %s %s", mcpName, sty.Tool.MCPArrow.String(), toolName)
+	var actionStyled string
+	switch cat {
+	case mcpCatDestroy:
+		actionStyled = sty.Tool.ActionDestroy.Render(humanizedToolName(mcpTool))
+	case mcpCatCreate:
+		actionStyled = sty.Tool.ActionCreate.Render(humanizedToolName(mcpTool))
+	default:
+		actionStyled = sty.Tool.MCPToolName.Render(humanizedToolName(mcpTool))
+	}
+	name := fmt.Sprintf("%s %s %s", serverStyled, arrow, actionStyled)
 
 	if opts.IsPending() {
 		return pendingTool(sty, name, opts.Anim, opts.Compact)
 	}
 
+	// Extract the most informative single param for the header.
 	var params map[string]any
-	if err := json.Unmarshal([]byte(opts.ToolCall.Input), &params); err != nil {
-		return invalidInputContent(sty, opts, name, cappedWidth)
-	}
+	_ = json.Unmarshal([]byte(opts.ToolCall.Input), &params)
 
 	var toolParams []string
-	if len(params) > 0 {
+	if primary := mcpPrimaryParam(params); primary != "" {
+		toolParams = append(toolParams, primary)
+	} else if len(params) > 0 {
 		parsed, _ := json.Marshal(params)
 		toolParams = append(toolParams, string(parsed))
 	}
@@ -69,7 +151,12 @@ func (b *MCPToolRenderContext) RenderTool(sty *styles.Styles, width int, opts *T
 		return joinToolParts(header, earlyState)
 	}
 
-	if !opts.HasResult() || opts.Result.Content == "" {
+	// Show body when: error (all categories) OR successful search/generic with content.
+	needsBody := opts.HasResult() &&
+		opts.Result.Content != "" &&
+		(opts.Result.IsError || cat == mcpCatSearch || cat == mcpCatGeneric)
+
+	if !needsBody {
 		return header
 	}
 
@@ -78,9 +165,7 @@ func (b *MCPToolRenderContext) RenderTool(sty *styles.Styles, width int, opts *T
 	return joinToolParts(header, body)
 }
 
-// -----------------------------------------------------------------------------
-// MCP List Resources Tool
-// -----------------------------------------------------------------------------
+// ─── MCP List Resources ───────────────────────────────────────────────────────
 
 // MCPListResourcesToolMessageItem represents a mcp_list_resources tool call.
 type MCPListResourcesToolMessageItem struct {
@@ -96,7 +181,7 @@ func NewMCPListResourcesToolMessageItem(
 	result *message.ToolResult,
 	canceled bool,
 ) ToolMessageItem {
-	return newBaseToolMessageItem(sty, toolCall, result, &MCPListResourcesToolRenderContext{}, canceled)
+	return &MCPListResourcesToolMessageItem{newBaseToolMessageItem(sty, toolCall, result, &MCPListResourcesToolRenderContext{}, canceled)}
 }
 
 // MCPListResourcesToolRenderContext renders mcp_list_resources tool messages.
@@ -127,9 +212,7 @@ func (m *MCPListResourcesToolRenderContext) RenderTool(sty *styles.Styles, width
 	return joinToolParts(header, body)
 }
 
-// -----------------------------------------------------------------------------
-// MCP Read Resource Tool
-// -----------------------------------------------------------------------------
+// ─── MCP Read Resource ────────────────────────────────────────────────────────
 
 // MCPReadResourceToolMessageItem represents a mcp_read_resource tool call.
 type MCPReadResourceToolMessageItem struct {
@@ -145,7 +228,7 @@ func NewMCPReadResourceToolMessageItem(
 	result *message.ToolResult,
 	canceled bool,
 ) ToolMessageItem {
-	return newBaseToolMessageItem(sty, toolCall, result, &MCPReadResourceToolRenderContext{}, canceled)
+	return &MCPReadResourceToolMessageItem{newBaseToolMessageItem(sty, toolCall, result, &MCPReadResourceToolRenderContext{}, canceled)}
 }
 
 // MCPReadResourceToolRenderContext renders mcp_read_resource tool messages.
@@ -177,7 +260,8 @@ func (m *MCPReadResourceToolRenderContext) RenderTool(sty *styles.Styles, width 
 		return joinToolParts(header, earlyState)
 	}
 
-	if opts.HasEmptyResult() {
+	// Read resource: header-only on success (URI already shown in header).
+	if !opts.HasResult() || !opts.Result.IsError {
 		return header
 	}
 

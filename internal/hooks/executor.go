@@ -51,7 +51,7 @@ func (e *Executor) Execute(ctx context.Context, event types.HookEvent, data map[
 		return nil, nil
 	}
 
-	hooks := e.registry.Get(event)
+	hooks := e.registry.GetActiveHooks(event)
 	if len(hooks) == 0 {
 		return nil, nil
 	}
@@ -135,7 +135,7 @@ func (e *Executor) ExecuteFirst(ctx context.Context, event types.HookEvent, data
 		return nil
 	}
 
-	hooks := e.registry.Get(event)
+	hooks := e.registry.GetActiveHooks(event)
 	if len(hooks) == 0 {
 		return nil
 	}

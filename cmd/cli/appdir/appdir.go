@@ -77,8 +77,12 @@ func SessionArtifactsAudioDir(sessionID string) string {
 
 // ─── Lifecycle helpers ────────────────────────────────────────────────────────
 
-// EnsureAppDirs creates the top-level directories required at startup.
-// Safe to call multiple times (uses os.MkdirAll).
+// GlobalConfigPath returns the path to the global TUI config file (nexus.json).
+func GlobalConfigPath() string { return filepath.Join(Root(), "nexus.json") }
+
+// EnsureAppDirs creates the top-level directories required at startup and
+// seeds nexus.json with an empty object if the file does not yet exist.
+// Safe to call multiple times (os.MkdirAll and the existence check are both idempotent).
 func EnsureAppDirs() error {
 	dirs := []string{
 		LogsDir(),
@@ -86,6 +90,12 @@ func EnsureAppDirs() error {
 	}
 	for _, d := range dirs {
 		if err := os.MkdirAll(d, 0o700); err != nil {
+			return err
+		}
+	}
+	cfgPath := GlobalConfigPath()
+	if _, err := os.Stat(cfgPath); os.IsNotExist(err) {
+		if err := os.WriteFile(cfgPath, []byte("{}\n"), 0o600); err != nil {
 			return err
 		}
 	}

@@ -240,6 +240,8 @@ func parseProvider(raw string) (sdk.APIProvider, bool) {
 		return sdk.APIProviderMiniMax, true
 	case "workers-ai", "workers", "cloudflare":
 		return sdk.APIProviderWorkersAI, true
+	case "kimi", "moonshot":
+		return sdk.APIProviderKimi, true
 	default:
 		return "", false
 	}

@@ -5,6 +5,11 @@ import (
 	"log"
 	"strings"
 
+	audioproviders "github.com/EngineerProjects/nexus-engine/internal/audio/providers"
+	"github.com/EngineerProjects/nexus-engine/internal/audio/stt"
+	"github.com/EngineerProjects/nexus-engine/internal/audio/tts"
+	"github.com/EngineerProjects/nexus-engine/internal/image"
+	imageproviders "github.com/EngineerProjects/nexus-engine/internal/image/providers"
 	"github.com/EngineerProjects/nexus-engine/internal/memory"
 	"github.com/EngineerProjects/nexus-engine/internal/monitoring"
 	"github.com/EngineerProjects/nexus-engine/internal/storage"
@@ -120,7 +125,164 @@ func initBuiltinRegistry(config *ClientConfig, browserManager browsercore.Manage
 		PlanStore:                  config.PlanStore,
 		LongTermMemory:             config.LongTermMemory,
 		DoclingURL:                 config.DoclingURL,
+		ImageGenerator:             initImageGenerator(config),
+		TTSGenerator:               initTextToSpeechGenerator(config),
+		STTTranscriber:             initSpeechToTextTranscriber(config),
 	})
+}
+
+func initImageGenerator(config *ClientConfig) image.Generation {
+	cfg := config.ImageGeneration
+	if cfg == nil || strings.TrimSpace(cfg.Provider) == "" {
+		return nil
+	}
+	providerID := strings.ToLower(strings.TrimSpace(cfg.Provider))
+	apiKey := resolveCapabilityAPIKey(config, providerID, strings.TrimSpace(cfg.APIKey))
+	baseURL := resolveCapabilityBaseURL(config, providerID, strings.TrimSpace(cfg.BaseURL))
+
+	switch providerID {
+	case "openai":
+		if apiKey == "" {
+			return nil
+		}
+		opts := []imageproviders.OpenAIOption{}
+		if model := strings.TrimSpace(cfg.Model); model != "" {
+			opts = append(opts, imageproviders.WithOpenAIModel(model))
+		}
+		if baseURL != "" {
+			opts = append(opts, imageproviders.WithOpenAIBaseURL(ensureOpenAIBaseURL(baseURL)))
+		}
+		return imageproviders.NewOpenAI(apiKey, opts...)
+	case "gemini":
+		if apiKey == "" {
+			return nil
+		}
+		opts := []imageproviders.GeminiOption{}
+		if model := strings.TrimSpace(cfg.Model); model != "" {
+			opts = append(opts, imageproviders.WithGeminiModel(model))
+		}
+		if baseURL != "" {
+			opts = append(opts, imageproviders.WithGeminiBaseURL(ensureGeminiBaseURL(baseURL)))
+		}
+		return imageproviders.NewGemini(apiKey, opts...)
+	default:
+		return nil
+	}
+}
+
+func initTextToSpeechGenerator(config *ClientConfig) tts.Generation {
+	cfg := config.TextToSpeech
+	if cfg == nil || strings.TrimSpace(cfg.Provider) == "" {
+		return nil
+	}
+	providerID := strings.ToLower(strings.TrimSpace(cfg.Provider))
+	apiKey := resolveCapabilityAPIKey(config, providerID, strings.TrimSpace(cfg.APIKey))
+	baseURL := resolveCapabilityBaseURL(config, providerID, strings.TrimSpace(cfg.BaseURL))
+
+	switch providerID {
+	case "openai":
+		if apiKey == "" {
+			return nil
+		}
+		opts := []audioproviders.OpenAITTSOption{}
+		if model := strings.TrimSpace(cfg.Model); model != "" {
+			opts = append(opts, audioproviders.WithTTSModel(model))
+		}
+		if voice := strings.TrimSpace(cfg.Voice); voice != "" {
+			opts = append(opts, audioproviders.WithTTSVoice(voice))
+		}
+		if format := strings.TrimSpace(cfg.Format); format != "" {
+			opts = append(opts, audioproviders.WithTTSFormat(format))
+		}
+		if baseURL != "" {
+			opts = append(opts, audioproviders.WithTTSBaseURL(ensureOpenAIBaseURL(baseURL)))
+		}
+		return audioproviders.NewOpenAITTS(apiKey, opts...)
+	default:
+		return nil
+	}
+}
+
+func initSpeechToTextTranscriber(config *ClientConfig) stt.SpeechToText {
+	cfg := config.SpeechToText
+	if cfg == nil || strings.TrimSpace(cfg.Provider) == "" {
+		return nil
+	}
+	providerID := strings.ToLower(strings.TrimSpace(cfg.Provider))
+	apiKey := resolveCapabilityAPIKey(config, providerID, strings.TrimSpace(cfg.APIKey))
+	baseURL := resolveCapabilityBaseURL(config, providerID, strings.TrimSpace(cfg.BaseURL))
+
+	switch providerID {
+	case "openai":
+		if apiKey == "" {
+			return nil
+		}
+		opts := []audioproviders.OpenAISTTOption{}
+		if model := strings.TrimSpace(cfg.Model); model != "" {
+			opts = append(opts, audioproviders.WithSTTModel(model))
+		}
+		if language := strings.TrimSpace(cfg.Language); language != "" {
+			opts = append(opts, audioproviders.WithSTTLanguage(language))
+		}
+		if baseURL != "" {
+			opts = append(opts, audioproviders.WithSTTBaseURL(ensureOpenAIBaseURL(baseURL)))
+		}
+		return audioproviders.NewOpenAISTT(apiKey, opts...)
+	default:
+		return nil
+	}
+}
+
+func resolveCapabilityAPIKey(config *ClientConfig, providerID, explicit string) string {
+	if explicit != "" {
+		return explicit
+	}
+	if strings.EqualFold(providerID, string(config.Model.Provider)) {
+		if config.ProviderConfig != nil && strings.TrimSpace(config.ProviderConfig.APIKey) != "" {
+			return strings.TrimSpace(config.ProviderConfig.APIKey)
+		}
+		if strings.TrimSpace(config.APIKey) != "" {
+			return strings.TrimSpace(config.APIKey)
+		}
+	}
+	if config.CredentialResolver != nil {
+		if key, err := config.CredentialResolver.ResolveAPIKey(context.Background(), providerID); err == nil {
+			return strings.TrimSpace(key)
+		}
+	}
+	return ""
+}
+
+func resolveCapabilityBaseURL(config *ClientConfig, providerID, explicit string) string {
+	if explicit != "" {
+		return explicit
+	}
+	if strings.EqualFold(providerID, string(config.Model.Provider)) && config.ProviderConfig != nil {
+		return strings.TrimSpace(config.ProviderConfig.BaseURL)
+	}
+	return ""
+}
+
+func ensureOpenAIBaseURL(baseURL string) string {
+	baseURL = strings.TrimRight(strings.TrimSpace(baseURL), "/")
+	if baseURL == "" {
+		return ""
+	}
+	if strings.HasSuffix(baseURL, "/v1") {
+		return baseURL
+	}
+	return baseURL + "/v1"
+}
+
+func ensureGeminiBaseURL(baseURL string) string {
+	baseURL = strings.TrimRight(strings.TrimSpace(baseURL), "/")
+	if baseURL == "" {
+		return ""
+	}
+	if strings.Contains(baseURL, "/v1beta") {
+		return baseURL
+	}
+	return baseURL + "/v1beta"
 }
 
 func parseStorageNamespaces(raw []string) []storage.ArtifactNamespace {

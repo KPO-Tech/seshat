@@ -162,31 +162,28 @@ func (m *Manager) Shutdown() {
 	}
 }
 
-// DiscoverFromConfig walks the embedded builtin FS and every path in
-// cfg.Options.SkillsPaths (after home / env expansion), then dedups and
-// filters by cfg.Options.DisabledSkills. It returns the three slices the
-// rest of the system needs:
+// DiscoverFromConfig walks every path in cfg.Options.SkillsPaths (after
+// home / env expansion), then dedups and filters by
+// cfg.Options.DisabledSkills. It returns the three slices the rest of the
+// system needs:
 //
 //   - allSkills:    deduplicated, pre-filter (includes disabled).
 //   - activeSkills: post-filter (DisabledSkills removed).
 //   - states:       per-file discovery outcome for diagnostics/UI.
 func DiscoverFromConfig(cfg DiscoveryConfig) (allSkills, activeSkills []*Skill, states []*SkillState) {
-	builtin, builtinStates := DiscoverBuiltinWithStates()
-	discovered := append([]*Skill(nil), builtin...)
+	var discovered []*Skill
+	var allStates []*SkillState
 
-	var userStates []*SkillState
 	userPaths := cfg.ResolvePaths()
 	if len(userPaths) > 0 {
-		var userSkills []*Skill
-		userSkills, userStates = DiscoverWithStates(userPaths)
+		userSkills, userStates := DiscoverWithStates(userPaths)
 		discovered = append(discovered, userSkills...)
+		allStates = append(allStates, userStates...)
 	}
 
 	allSkills = Deduplicate(discovered)
 	activeSkills = Filter(allSkills, cfg.DisabledSkills)
 
-	allStates := append([]*SkillState(nil), builtinStates...)
-	allStates = append(allStates, userStates...)
 	allStates = DeduplicateStates(allStates)
 	slices.SortStableFunc(allStates, func(a, b *SkillState) int {
 		return strings.Compare(strings.ToLower(a.Path), strings.ToLower(b.Path))

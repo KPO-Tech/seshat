@@ -1,10 +1,6 @@
 package agent
 
 import (
-	"context"
-
-	"github.com/EngineerProjects/nexus-engine/internal/engine"
-	tool "github.com/EngineerProjects/nexus-engine/internal/tools/registry"
 	"github.com/EngineerProjects/nexus-engine/internal/types"
 )
 
@@ -90,52 +86,4 @@ type BuiltInAgentDefinition struct {
 	Model           string
 	GetSystemPrompt func() string
 	MaxTurns        int
-}
-
-// AgentResult represents the result of running an agent
-type AgentResult struct {
-	// AgentType is the type of agent that ran
-	AgentType string `json:"agentType"`
-
-	// Success indicates if the agent completed successfully
-	Success bool `json:"success"`
-
-	// Result is the agent's final result
-	Result string `json:"result"`
-
-	// Turns is the number of turns taken
-	Turns int `json:"turns"`
-
-	// ToolUses is the number of tool uses
-	ToolUses int `json:"toolUses"`
-
-	// Error is the error message if failed
-	Error string `json:"error,omitempty"`
-}
-
-// AgentContext is the context for running an agent
-type AgentContext struct {
-	// Definition is the agent definition
-	Definition *AgentDefinition
-
-	// Engine is the query engine
-	Engine *engine.Engine
-
-	// Session is the query session
-	Session *engine.Session
-
-	// Tools is the available tools
-	Tools []tool.Tool
-
-	// Input is the user input
-	Input string
-
-	// MaxTurns is the maximum turns (overrides definition)
-	MaxTurns int
-
-	// OnProgress is called on progress updates
-	OnProgress func(result *AgentResult)
-
-	// Context is the parent context
-	Context context.Context
 }

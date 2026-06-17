@@ -2,6 +2,7 @@ package execution
 
 import (
 	"context"
+	"sync"
 	"sync/atomic"
 
 	"github.com/EngineerProjects/nexus-engine/internal/types"
@@ -13,6 +14,7 @@ const DefaultRuntimeEventQueueCapacity = 1000
 // RuntimeEventQueue is a non-blocking buffered channel for structured runtime events.
 type RuntimeEventQueue struct {
 	ch       chan types.RuntimeEvent
+	mu       sync.RWMutex // protects close vs. concurrent sends
 	emitted  atomic.Int64
 	overflow atomic.Int64
 	closed   atomic.Bool
@@ -30,6 +32,8 @@ func NewRuntimeEventQueue(capacity int) *RuntimeEventQueue {
 // Emit sends an event into the queue. If the queue is full or already closed,
 // the event is discarded and the overflow counter is incremented.
 func (q *RuntimeEventQueue) Emit(event types.RuntimeEvent) {
+	q.mu.RLock()
+	defer q.mu.RUnlock()
 	if q.closed.Load() {
 		return
 	}
@@ -43,6 +47,8 @@ func (q *RuntimeEventQueue) Emit(event types.RuntimeEvent) {
 
 // Close signals readers that no more events will arrive.
 func (q *RuntimeEventQueue) Close() {
+	q.mu.Lock()
+	defer q.mu.Unlock()
 	if q.closed.CompareAndSwap(false, true) {
 		close(q.ch)
 	}
@@ -80,6 +86,8 @@ func (q *RuntimeEventQueue) Stats() RuntimeEventQueueStats {
 // EmitBlocking sends an event into the queue, blocking until the queue has room
 // or until ctx is cancelled.
 func (q *RuntimeEventQueue) EmitBlocking(ctx context.Context, event types.RuntimeEvent) bool {
+	q.mu.RLock()
+	defer q.mu.RUnlock()
 	if q.closed.Load() {
 		return false
 	}

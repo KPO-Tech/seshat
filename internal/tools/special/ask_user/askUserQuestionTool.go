@@ -3,6 +3,7 @@ package askuser
 import (
 	"bufio"
 	"context"
+	"encoding/json"
 	"fmt"
 	"os"
 	"sort"
@@ -517,8 +518,8 @@ func (t *Tool) askQuestions(ctx context.Context, input *Input, toolUseID string)
 	answers := make(map[string]string, len(input.Questions))
 	annotations := make(map[string]Annotation)
 
-	for _, question := range input.Questions {
-		answer, annotation, err := t.askSingleQuestion(ctx, question, toolUseID)
+	for index, question := range input.Questions {
+		answer, annotation, err := t.askSingleQuestion(ctx, question, input.Questions, index, toolUseID)
 		if err != nil {
 			return nil, nil, err
 		}
@@ -531,14 +532,14 @@ func (t *Tool) askQuestions(ctx context.Context, input *Input, toolUseID string)
 	return answers, annotations, nil
 }
 
-func (t *Tool) askSingleQuestion(ctx context.Context, question Question, toolUseID string) (string, Annotation, error) {
+func (t *Tool) askSingleQuestion(ctx context.Context, question Question, allQuestions []Question, questionIndex int, toolUseID string) (string, Annotation, error) {
 	if t.promptFn != nil {
-		return t.askWithPromptFn(ctx, question, toolUseID)
+		return t.askWithPromptFn(ctx, question, allQuestions, questionIndex, toolUseID)
 	}
 	return t.askWithReader(ctx, question)
 }
 
-func (t *Tool) askWithPromptFn(ctx context.Context, question Question, toolUseID string) (string, Annotation, error) {
+func (t *Tool) askWithPromptFn(ctx context.Context, question Question, allQuestions []Question, questionIndex int, toolUseID string) (string, Annotation, error) {
 	options := make([]types.PromptOption, 0, len(question.Options)+1)
 	for _, option := range question.Options {
 		options = append(options, types.PromptOption{
@@ -549,16 +550,24 @@ func (t *Tool) askWithPromptFn(ctx context.Context, question Question, toolUseID
 	}
 	options = append(options, types.PromptOption{Label: "Other", Value: "__other__", Description: "Provide custom input"})
 
+	metadata := map[string]any{
+		"header":                question.Header,
+		"multiSelect":           question.MultiSelect,
+		"tool_name":             ToolName,
+		"tool_use_id":           toolUseID,
+		"survey_question_index": questionIndex,
+	}
+	if len(allQuestions) > 0 {
+		if rawQuestions, err := json.Marshal(allQuestions); err == nil {
+			metadata["survey_questions_json"] = string(rawQuestions)
+		}
+	}
+
 	response, err := t.promptFn(ctx, types.PromptRequest{
-		Type:    types.PromptTypeChoice,
-		Message: question.Question,
-		Options: options,
-		Metadata: map[string]any{
-			"header":      question.Header,
-			"multiSelect": question.MultiSelect,
-			"tool_name":   ToolName,
-			"tool_use_id": toolUseID,
-		},
+		Type:     types.PromptTypeChoice,
+		Message:  question.Question,
+		Options:  options,
+		Metadata: metadata,
 	})
 	if err != nil {
 		return "", Annotation{}, err
@@ -568,6 +577,21 @@ func (t *Tool) askWithPromptFn(ctx context.Context, question Question, toolUseID
 	}
 
 	if question.MultiSelect {
+		if directCustom, ok := response.Value.(string); ok {
+			trimmed := strings.TrimSpace(directCustom)
+			if trimmed != "" {
+				parts := splitCSV(trimmed)
+				matched := 0
+				for _, part := range parts {
+					if question.GetOptionByLabel(part) != nil {
+						matched++
+					}
+				}
+				if matched == 0 {
+					return trimmed, Annotation{}, nil
+				}
+			}
+		}
 		selections, custom, err := normalizeMultiPromptResponse(response.Value)
 		if err != nil {
 			return "", Annotation{}, err

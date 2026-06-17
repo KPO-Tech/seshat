@@ -2,7 +2,6 @@ package web
 
 import (
 	"net/url"
-	"path/filepath"
 	"strings"
 
 	"github.com/EngineerProjects/nexus-engine/internal/types"
@@ -1091,14 +1090,46 @@ func wildcardMatch(pattern string, candidate string) bool {
 	if pattern == "" || candidate == "" {
 		return false
 	}
-	if strings.Contains(pattern, "*") && strings.HasSuffix(pattern, "*") && strings.Count(pattern, "*") == 1 && !strings.Contains(pattern, "?") {
-		return strings.HasPrefix(candidate, strings.TrimSuffix(pattern, "*"))
-	}
 	if strings.ContainsAny(pattern, "*?") {
-		matched, err := filepath.Match(pattern, candidate)
-		if err == nil {
-			return matched
-		}
+		// filepath.Match treats '*' as non-separator — useless for URL paths.
+		// Use a simple recursive split instead so '*' crosses '/'.
+		return urlWildcardMatch(pattern, candidate)
 	}
 	return strings.EqualFold(pattern, candidate)
+}
+
+// urlWildcardMatch implements glob matching where '*' matches any sequence of
+// characters including '/', making it suitable for URL path comparisons.
+func urlWildcardMatch(pattern, candidate string) bool {
+	for len(pattern) > 0 {
+		switch pattern[0] {
+		case '*':
+			// Collapse consecutive stars.
+			for len(pattern) > 0 && pattern[0] == '*' {
+				pattern = pattern[1:]
+			}
+			if len(pattern) == 0 {
+				return true
+			}
+			for i := 0; i <= len(candidate); i++ {
+				if urlWildcardMatch(pattern, candidate[i:]) {
+					return true
+				}
+			}
+			return false
+		case '?':
+			if len(candidate) == 0 {
+				return false
+			}
+			pattern = pattern[1:]
+			candidate = candidate[1:]
+		default:
+			if len(candidate) == 0 || !strings.EqualFold(string(pattern[0]), string(candidate[0])) {
+				return false
+			}
+			pattern = pattern[1:]
+			candidate = candidate[1:]
+		}
+	}
+	return len(candidate) == 0
 }

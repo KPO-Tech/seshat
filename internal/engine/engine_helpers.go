@@ -86,5 +86,9 @@ func loopConfigFromConfig(config *Config) *LoopConfig {
 	if len(config.StopHooks) > 0 {
 		lc.StopHooks = config.StopHooks
 	}
-	return normalizeLoopConfig(lc)
+	normalized := normalizeLoopConfig(lc)
+	if config.DisableStreaming {
+		normalized.EnableStreaming = false
+	}
+	return normalized
 }

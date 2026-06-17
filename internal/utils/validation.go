@@ -28,10 +28,11 @@ func (v *PathValidator) ValidatePath(path string) error {
 		return nil
 	}
 
-	// Check if path is within allowed directories
+	// Check if path is within allowed directories.
+	// Append the OS separator so "/allowed-extra" does not match "/allowed".
 	for _, allowedDir := range v.AllowedDirectories {
 		allowedClean := filepath.Clean(allowedDir)
-		if strings.HasPrefix(cleanPath, allowedClean) {
+		if cleanPath == allowedClean || strings.HasPrefix(cleanPath, allowedClean+string(filepath.Separator)) {
 			return nil
 		}
 	}

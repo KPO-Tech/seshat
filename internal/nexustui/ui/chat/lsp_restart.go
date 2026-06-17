@@ -52,7 +52,8 @@ func (r *LSPRestartToolRenderContext) RenderTool(sty *styles.Styles, width int, 
 		return joinToolParts(header, earlyState)
 	}
 
-	if opts.HasEmptyResult() {
+	// Header-only on success — the ✓ + server name already conveys the result.
+	if !opts.HasResult() || !opts.Result.IsError {
 		return header
 	}
 

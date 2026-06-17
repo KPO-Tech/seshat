@@ -46,7 +46,7 @@ func GetProviderChain(mode ProviderMode, allProviders []SearchProvider) []Search
 
 func shouldFallbackOnEmpty(provider SearchProvider) bool {
 	switch provider.Name() {
-	case "ddg", "searxng":
+	case "searxng":
 		return true
 	default:
 		return false

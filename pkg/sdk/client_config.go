@@ -21,6 +21,33 @@ type CredentialResolver interface {
 	ResolveAPIKey(ctx context.Context, provider string) (string, error)
 }
 
+// ImageGenerationConfig controls the generate_image built-in tool.
+type ImageGenerationConfig struct {
+	Provider string `json:"provider,omitempty"`
+	Model    string `json:"model,omitempty"`
+	APIKey   string `json:"api_key,omitempty"`
+	BaseURL  string `json:"base_url,omitempty"`
+}
+
+// TextToSpeechConfig controls the text_to_speech built-in tool.
+type TextToSpeechConfig struct {
+	Provider string `json:"provider,omitempty"`
+	Model    string `json:"model,omitempty"`
+	Voice    string `json:"voice,omitempty"`
+	Format   string `json:"format,omitempty"`
+	APIKey   string `json:"api_key,omitempty"`
+	BaseURL  string `json:"base_url,omitempty"`
+}
+
+// SpeechToTextConfig controls the speech_to_text built-in tool.
+type SpeechToTextConfig struct {
+	Provider string `json:"provider,omitempty"`
+	Model    string `json:"model,omitempty"`
+	Language string `json:"language,omitempty"`
+	APIKey   string `json:"api_key,omitempty"`
+	BaseURL  string `json:"base_url,omitempty"`
+}
+
 // ClientConfig represents the client configuration.
 type ClientConfig struct {
 	APIKey         string          `json:"api_key"`
@@ -121,6 +148,11 @@ type ClientConfig struct {
 
 	// Document conversion
 	DoclingURL string `json:"docling_url,omitempty"`
+
+	// Optional capability-specific providers for multimodal built-in tools.
+	ImageGeneration *ImageGenerationConfig `json:"image_generation,omitempty"`
+	TextToSpeech    *TextToSpeechConfig    `json:"text_to_speech,omitempty"`
+	SpeechToText    *SpeechToTextConfig    `json:"speech_to_text,omitempty"`
 }
 
 // PreToolHookConfig is a single shell hook that runs before a tool call.

@@ -43,6 +43,7 @@ func TestIntegrateMCPServers_SingleFailure_CapturedInServerResult(t *testing.T) 
 
 	if result == nil {
 		t.Fatal("expected non-nil IntegrationResult")
+		return
 	}
 	if len(result.ServerResults) != 1 {
 		t.Fatalf("expected 1 ServerResult, got %d", len(result.ServerResults))
@@ -99,6 +100,7 @@ func TestIntegrateMCPServers_EmptyConfig_NoError(t *testing.T) {
 
 	if result == nil {
 		t.Fatal("expected non-nil IntegrationResult even for empty config")
+		return
 	}
 	if result.Error != nil {
 		t.Errorf("Error should be nil for empty config, got: %v", result.Error)

@@ -254,7 +254,11 @@ func (m *WebSearchConfig) Cursor() *tea.Cursor {
 	if m.state == webSearchConfigStateVerifying || m.state == webSearchConfigStateVerified {
 		return nil
 	}
-	return InputCursor(m.com.Styles, m.input.Cursor())
+	cur := InputCursor(m.com.Styles, m.input.Cursor())
+	if cur != nil {
+		cur.Y++ // account for the field label line rendered above the input
+	}
+	return cur
 }
 
 func (m *WebSearchConfig) ShortHelp() []key.Binding {

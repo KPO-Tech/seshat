@@ -234,7 +234,7 @@ func renderNestedAgentBlock(
 			tail := getWrappedTailLines(trimmedContent, tailWidth, 3)
 			if tail != "" {
 				prefix := sty.Tool.StateWaiting.Render("✍ Generating:")
-				leftBorderColor := sty.Messages.ThinkingBox.GetBorderLeftForeground()
+				leftBorderColor := sty.Messages.ThinkingLeftBar.GetBorderLeftForeground()
 				borderStyle := lipgloss.NewStyle().
 					Border(lipgloss.NormalBorder(), false, false, false, true).
 					BorderForeground(leftBorderColor).
@@ -248,7 +248,7 @@ func renderNestedAgentBlock(
 			tail := getWrappedTailLines(trimmedReasoning, tailWidth, 3)
 			if tail != "" {
 				prefix := sty.Tool.StateWaiting.Render("💭 Thinking:")
-				leftBorderColor := sty.Messages.ThinkingBox.GetBorderLeftForeground()
+				leftBorderColor := sty.Messages.ThinkingLeftBar.GetBorderLeftForeground()
 				borderStyle := lipgloss.NewStyle().
 					Border(lipgloss.NormalBorder(), false, false, false, true).
 					BorderForeground(leftBorderColor).

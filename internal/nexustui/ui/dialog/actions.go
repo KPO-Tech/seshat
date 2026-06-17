@@ -46,6 +46,12 @@ type ActionSelectWebSearchProvider struct {
 	ProviderID string
 }
 
+// ActionSelectCapabilityProvider selects the provider used by a capability-specific tool.
+type ActionSelectCapabilityProvider struct {
+	Capability string
+	ProviderID string
+}
+
 // ActionSelectSession is a message indicating a session has been selected.
 type ActionSelectSession struct {
 	Session session.Session
@@ -89,6 +95,12 @@ type (
 	ActionPlanReviewSubmit struct {
 		Review planreview.Review
 	}
+	// ActionPlanReviewRequestChanges is sent when the user sends feedback to the
+	// agent without approving the plan. The dialog stays open; the agent is
+	// expected to revise the plan and call submit_plan again.
+	ActionPlanReviewRequestChanges struct {
+		Review planreview.Review
+	}
 	// ActionRunCustomCommand is a message to run a custom command.
 	ActionRunCustomCommand struct {
 		Content   string
@@ -115,6 +127,10 @@ type (
 	ActionEnableDockerMCP struct{}
 	// ActionDisableDockerMCP is a message to disable Docker MCP.
 	ActionDisableDockerMCP struct{}
+	// ActionEnableMCPServer reconnects/enables a named MCP server from Settings.
+	ActionEnableMCPServer struct{ Name string }
+	// ActionDisableMCPServer disconnects/disables a named MCP server from Settings.
+	ActionDisableMCPServer struct{ Name string }
 	// ActionCopyLastMessage copies the user's last sent message to the clipboard.
 	ActionCopyLastMessage struct{}
 	// ActionToggleVerboseSteps toggles verbose agent step narration.

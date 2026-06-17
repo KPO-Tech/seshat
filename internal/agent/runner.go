@@ -448,11 +448,6 @@ func extractSources(tu types.ToolUseContent) []SourceRef {
 	return nil
 }
 
-// RunForkedAgent runs an agent in fork mode (like OpenClaude's forkSubagent)
-func RunForkedAgent(config *RunConfig) (*RunResult, error) {
-	return RunAgent(config)
-}
-
 // matchesPattern checks if a tool name matches any of the patterns
 func matchesPattern(name string, patterns []string) bool {
 	for _, pattern := range patterns {

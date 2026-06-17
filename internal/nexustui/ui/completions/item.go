@@ -2,6 +2,7 @@ package completions
 
 import (
 	"slices"
+	"strings"
 
 	"charm.land/lipgloss/v2"
 	"github.com/EngineerProjects/nexus-engine/internal/nexustui/ui/list"
@@ -23,32 +24,62 @@ type ResourceCompletionValue struct {
 	MIMEType string
 }
 
+// SkillCompletionValue represents a skill completion value.
+type SkillCompletionValue struct {
+	Name        string
+	Description string
+}
+
 // CompletionItem represents an item in the completions list.
 type CompletionItem struct {
 	*list.Versioned
 
-	text    string
-	value   any
-	match   fuzzy.Match
-	focused bool
-	cache   map[int]string
+	text         string
+	desc         string // optional, rendered dim in an aligned column when there's room
+	value        any
+	match        fuzzy.Match
+	focused      bool
+	nameColWidth int // shared column width so descriptions line up across rows
+	cache        map[int]string
 
 	// Styles
 	normalStyle  lipgloss.Style
 	focusedStyle lipgloss.Style
 	matchStyle   lipgloss.Style
+	descStyle    lipgloss.Style
+	iconStyle    lipgloss.Style
+	barStyle     lipgloss.Style
 }
 
-// NewCompletionItem creates a new completion item.
-func NewCompletionItem(text string, value any, normalStyle, focusedStyle, matchStyle lipgloss.Style) *CompletionItem {
+// NewCompletionItem creates a new completion item. desc may be empty.
+func NewCompletionItem(text, desc string, value any, styles ItemStyles) *CompletionItem {
 	return &CompletionItem{
 		Versioned:    list.NewVersioned(),
 		text:         text,
+		desc:         desc,
 		value:        value,
-		normalStyle:  normalStyle,
-		focusedStyle: focusedStyle,
-		matchStyle:   matchStyle,
+		normalStyle:  styles.Normal,
+		focusedStyle: styles.Focused,
+		matchStyle:   styles.Match,
+		descStyle:    styles.Desc,
+		iconStyle:    styles.Icon,
+		barStyle:     styles.Bar,
 	}
+}
+
+// ItemStyles bundles the styles a [CompletionItem] needs to render.
+type ItemStyles struct {
+	Normal, Focused, Match, Desc, Icon, Bar lipgloss.Style
+}
+
+// SetNameColumnWidth sets the shared name-column width used to align
+// descriptions across all rows in the popup.
+func (c *CompletionItem) SetNameColumnWidth(w int) {
+	if c.nameColWidth == w {
+		return
+	}
+	c.cache = nil
+	c.nameColWidth = w
 }
 
 // Finished implements list.Item. Completion items render purely from
@@ -68,6 +99,11 @@ func (c *CompletionItem) Text() string {
 // Value returns the value of the item.
 func (c *CompletionItem) Value() any {
 	return c.value
+}
+
+// Desc returns the item's secondary description, if any.
+func (c *CompletionItem) Desc() string {
+	return c.desc
 }
 
 // Filter implements [list.FilterableItem].
@@ -107,25 +143,32 @@ func (c *CompletionItem) SetFocused(focused bool) {
 	c.Bump()
 }
 
+// completionIcon marks every row in the popup; selection is conveyed by the
+// left accent bar and the name's color/weight, not by a full-row fill.
+const completionIcon = "●"
+
 // Render implements [list.Item].
 func (c *CompletionItem) Render(width int) string {
 	return renderItem(
-		c.normalStyle,
-		c.focusedStyle,
-		c.matchStyle,
-		c.text,
+		c.normalStyle, c.focusedStyle, c.matchStyle, c.descStyle, c.iconStyle, c.barStyle,
+		c.text, c.desc,
 		c.focused,
 		width,
+		c.nameColWidth,
 		c.cache,
 		&c.match,
 	)
 }
 
+// renderItem renders one popup row: a left accent bar (focused rows only),
+// an icon, the name, and — if there's room — a description aligned to
+// nameColWidth so descriptions line up across rows regardless of name
+// length.
 func renderItem(
-	normalStyle, focusedStyle, matchStyle lipgloss.Style,
-	text string,
+	normalStyle, focusedStyle, matchStyle, descStyle, iconStyle, barStyle lipgloss.Style,
+	text, desc string,
 	focused bool,
-	width int,
+	width, nameColWidth int,
 	cache map[int]string,
 	match *fuzzy.Match,
 ) string {
@@ -138,33 +181,74 @@ func renderItem(
 		return cached
 	}
 
-	innerWidth := width - 2 // Account for padding
-	// Truncate if needed.
-	if ansi.StringWidth(text) > innerWidth {
-		text = ansi.Truncate(text, innerWidth, "…")
-	}
-
-	// Select base style.
+	const prefixWidth = 3 // bar + icon + gap
+	innerWidth := width - 2 - prefixWidth
 	style := normalStyle
-	matchStyle = matchStyle.Background(style.GetBackground())
 	if focused {
 		style = focusedStyle
-		matchStyle = matchStyle.Background(style.GetBackground())
+	}
+	matchStyle = matchStyle.Background(style.GetBackground())
+	descStyle = descStyle.Background(style.GetBackground())
+	iconStyle = iconStyle.Background(style.GetBackground())
+	barStyle = barStyle.Background(style.GetBackground())
+
+	nameWidth := max(ansi.StringWidth(text), min(nameColWidth, innerWidth))
+	const minGap = 2
+	const minDescWidth = 4
+
+	name := text
+	if ansi.StringWidth(name) > innerWidth {
+		name = ansi.Truncate(name, innerWidth, "…")
+		nameWidth = ansi.StringWidth(name)
+	}
+	paddedName := name + strings.Repeat(" ", max(0, nameWidth-ansi.StringWidth(name)))
+
+	combined := paddedName
+	var descShown string
+	if avail := innerWidth - nameWidth - minGap; desc != "" && avail >= minDescWidth {
+		descShown = desc
+		if ansi.StringWidth(descShown) > avail {
+			descShown = ansi.Truncate(descShown, avail, "…")
+		}
+		gap := max(minGap, innerWidth-nameWidth-ansi.StringWidth(descShown))
+		combined = paddedName + strings.Repeat(" ", gap) + descShown
 	}
 
-	// Render full-width text with background.
-	content := style.Padding(0, 1).Width(width).Render(text)
+	if ansi.StringWidth(combined) > innerWidth {
+		combined = ansi.Truncate(combined, innerWidth, "…")
+		if ansi.StringWidth(combined) <= nameWidth {
+			descShown = ""
+		}
+	}
 
-	// Apply match highlighting using StyleRanges.
+	bar := " "
+	if focused {
+		bar = "▏"
+	}
+	full := bar + completionIcon + " " + combined
+
+	content := style.Padding(0, 1).Width(width).Render(full)
+
+	var ranges []lipgloss.Range
+	if focused {
+		ranges = append(ranges, lipgloss.NewRange(1, 2, barStyle))
+	}
+	ranges = append(ranges, lipgloss.NewRange(2, 3, iconStyle))
+	if descShown != "" {
+		descStart := prefixWidth + ansi.StringWidth(combined) - ansi.StringWidth(descShown)
+		ranges = append(ranges, lipgloss.NewRange(descStart+1, prefixWidth+ansi.StringWidth(combined)+1, descStyle))
+	}
 	if len(match.MatchedIndexes) > 0 {
-		var ranges []lipgloss.Range
 		for _, rng := range matchedRanges(match.MatchedIndexes) {
 			start, stop := bytePosToVisibleCharPos(text, rng)
-			// Offset by 1 for the padding space.
-			ranges = append(ranges, lipgloss.NewRange(start+1, stop+2, matchStyle))
+			ranges = append(ranges, lipgloss.NewRange(start+prefixWidth+1, stop+prefixWidth+2, matchStyle))
 		}
-		content = lipgloss.StyleRanges(content, ranges...)
 	}
+	// StyleRanges walks ranges in order and expects them sorted by Start;
+	// an out-of-order range regresses its internal cursor and corrupts the
+	// output (the tail gets duplicated).
+	slices.SortFunc(ranges, func(a, b lipgloss.Range) int { return a.Start - b.Start })
+	content = lipgloss.StyleRanges(content, ranges...)
 
 	cache[width] = content
 	return content

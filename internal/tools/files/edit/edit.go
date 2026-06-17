@@ -153,52 +153,27 @@ func (e *Tool) Call(
 		return tool.NewErrorResult(err), nil
 	}
 
-	rawOriginalContent, fileExists, err := readFileIfExists(absolutePath)
-	if err != nil {
-		return tool.NewErrorResult(err), nil
-	}
-
 	if info, statErr := os.Stat(absolutePath); statErr == nil && info.IsDir() {
 		return tool.NewErrorResult(fmt.Errorf("path is a directory, not a file: %s", filePath)), nil
 	}
 
-	normalizedOriginalContent := normalizeLineEndings(rawOriginalContent)
+	// Pre-permission guard: check read state from cache (no I/O).
+	// For existing files with old_string, the read state must already be present.
+	readState, hasReadState := fileReadTool.GetLastReadState(absolutePath)
 	normalizedOldString := normalizeLineEndings(oldString)
-	normalizedNewString := normalizeLineEndings(newString)
-	preferredLineEnding := detectPreferredLineEnding(rawOriginalContent)
-	if preferredLineEnding == "" {
-		preferredLineEnding = "\n"
-	}
 
-	if fileExists {
-		if normalizedOldString == "" {
-			if strings.TrimSpace(normalizedOriginalContent) != "" {
-				return tool.NewErrorResult(fmt.Errorf("cannot create new file - file already exists: %s", filePath)), nil
-			}
-		} else {
-			readState, hasReadState := fileReadTool.GetLastReadState(absolutePath)
+	if normalizedOldString != "" {
+		// Editing existing content: file must have been read.
+		if _, statErr := os.Stat(absolutePath); statErr == nil {
+			// File exists.
 			if !hasReadState {
 				return tool.NewErrorResult(fmt.Errorf("file has not been read yet. Read it first before editing it: %s", filePath)), nil
 			}
 			if readState.IsPartialView {
 				return tool.NewErrorResult(fmt.Errorf("file has not been fully read yet. Read it first before editing it: %s", filePath)), nil
 			}
-
-			if currentInfo, statErr := os.Stat(absolutePath); statErr == nil {
-				readModTime := time.Unix(readState.Timestamp, 0)
-				if currentInfo.ModTime().After(readModTime) {
-					currentNormalized := normalizeLineEndings(rawOriginalContent)
-					if currentNormalized != normalizeLineEndings(readState.Content) {
-						return tool.NewErrorResult(fmt.Errorf("file has been modified since read (read at %s, file modified at %s). Read it again first: %s",
-							readModTime.Format(time.RFC3339),
-							currentInfo.ModTime().Format(time.RFC3339),
-							filePath)), nil
-					}
-				}
-			}
 		}
-	} else if normalizedOldString != "" {
-		return tool.NewErrorResult(fmt.Errorf("file not found: %s", filePath)), nil
+		// File does not exist and old_string is non-empty → will be caught below after content read.
 	}
 
 	toolCtx := input.ToolContextValue()
@@ -251,6 +226,43 @@ func (e *Tool) Call(
 		if err := sandbox.ErrorForPermissionResult(res, "file editing requires approval"); err != nil {
 			return tool.NewErrorResult(err), nil
 		}
+	}
+
+	// Read file content AFTER permission is granted.
+	rawOriginalContent, fileExists, err := readFileIfExists(absolutePath)
+	if err != nil {
+		return tool.NewErrorResult(err), nil
+	}
+
+	normalizedNewString := normalizeLineEndings(newString)
+
+	if fileExists {
+		if normalizedOldString == "" {
+			if strings.TrimSpace(normalizeLineEndings(rawOriginalContent)) != "" {
+				return tool.NewErrorResult(fmt.Errorf("cannot create new file - file already exists: %s", filePath)), nil
+			}
+		} else if hasReadState {
+			// Post-permission staleness check.
+			if currentInfo, statErr := os.Stat(absolutePath); statErr == nil {
+				readModTime := time.Unix(readState.Timestamp, 0)
+				if currentInfo.ModTime().After(readModTime) {
+					if normalizeLineEndings(rawOriginalContent) != normalizeLineEndings(readState.Content) {
+						return tool.NewErrorResult(fmt.Errorf("file has been modified since read (read at %s, file modified at %s). Read it again first: %s",
+							readModTime.Format(time.RFC3339),
+							currentInfo.ModTime().Format(time.RFC3339),
+							filePath)), nil
+					}
+				}
+			}
+		}
+	} else if normalizedOldString != "" {
+		return tool.NewErrorResult(fmt.Errorf("file not found: %s", filePath)), nil
+	}
+
+	normalizedOriginalContent := normalizeLineEndings(rawOriginalContent)
+	preferredLineEnding := detectPreferredLineEnding(rawOriginalContent)
+	if preferredLineEnding == "" {
+		preferredLineEnding = "\n"
 	}
 
 	actualOldString := ""
@@ -377,6 +389,40 @@ func (e *Tool) CheckPermissions(ctx context.Context, input map[string]any, toolC
 	if err := shared.ValidateSensitivePath(absolutePath, "editTool", newString); err != nil {
 		return types.Deny(err.Error())
 	}
+
+	// Plan mode: auto-allow edits in working directory (same logic as write_file)
+	if toolCtx.ExecutionMode == "plan" {
+		workingDir := e.effectiveWorkingDir(toolCtx)
+		if !shared.IsInWorkingDirectory(absolutePath, workingDir) {
+			return types.AskWithDecisionReason(
+				fmt.Sprintf("file path outside working directory requires approval: %s", absolutePath),
+				&types.PermissionDecisionReason{
+					Type:   types.PermissionDecisionReasonMode,
+					Source: "plan",
+					Reason: fmt.Sprintf("path is outside working directory: %s", absolutePath),
+				},
+			)
+		}
+		if shared.IsDangerousFile(absolutePath) || shared.IsDangerousDirectory(absolutePath) || shared.HasSuspiciousPattern(absolutePath) {
+			return types.AskWithDecisionReason(
+				fmt.Sprintf("potentially dangerous file requires approval: %s", absolutePath),
+				&types.PermissionDecisionReason{
+					Type:   types.PermissionDecisionReasonSafetyCheck,
+					Source: "plan",
+					Reason: fmt.Sprintf("file is protected: %s", absolutePath),
+				},
+			)
+		}
+		return types.AllowWithDecisionReason(
+			"edit is safe in plan mode",
+			&types.PermissionDecisionReason{
+				Type:   types.PermissionDecisionReasonMode,
+				Source: "plan",
+				Reason: "file is in working directory and passes safety checks",
+			},
+		)
+	}
+
 	return types.Passthrough(input)
 }
 

@@ -563,10 +563,23 @@ func (l *Loop) shouldNudgeContinuation(message types.Message, priorToolUseCount 
 	// Conservative forward-looking signals: only nudge when the model explicitly
 	// signals it was mid-work and intended to continue.
 	for _, signal := range []string{
+		// English
 		"let me continue", "i'll continue", "i will continue",
 		"next i'll", "next i will", "next step",
 		"moving on", "continuing with", "proceeding to",
 		"i'll now", "i will now",
+		// French
+		"je vais continuer", "je continue", "passons à", "ensuite je",
+		"prochaine étape", "je vais maintenant",
+		// Spanish
+		"voy a continuar", "continuando con", "siguiente paso",
+		"ahora voy a", "procedo a",
+		// German
+		"ich fahre fort", "weiter mit", "als nächstes", "ich werde nun",
+		// Chinese (Simplified)
+		"接下来", "继续", "下一步", "我将",
+		// Japanese
+		"次に", "続けて", "引き続き",
 	} {
 		if strings.Contains(text, signal) {
 			return true

@@ -450,22 +450,28 @@ func (t *Tool) formatResult(operation string, result any) map[string]any {
 	case "definition", "references", "implementations":
 		if locations, ok := result.([]lspClient.Location); ok {
 			output["summary"] = fmt.Sprintf("Found %d location(s)", len(locations))
+		} else {
+			output["summary"] = "No results"
 		}
 	case "hover":
-		if hover, ok := result.(*lspClient.Hover); ok {
-			if hover != nil {
-				output["summary"] = formatHover(hover)
-			}
+		if hover, ok := result.(*lspClient.Hover); ok && hover != nil {
+			output["summary"] = formatHover(hover)
+		} else {
+			output["summary"] = "No hover information"
 		}
 	case "symbols":
 		if symbols, ok := result.([]lspClient.DocumentSymbol); ok {
 			output["summary"] = fmt.Sprintf("Found %d symbol(s)", countSymbols(symbols))
+		} else {
+			output["summary"] = "No symbols found"
 		}
 	case "incoming_calls", "outgoing_calls":
 		output["summary"] = formatCallHierarchy(result)
 	case "workspace_symbol":
 		if symbols, ok := result.([]lspClient.SymbolInformation); ok {
 			output["summary"] = fmt.Sprintf("Found %d symbol(s)", len(symbols))
+		} else {
+			output["summary"] = "No symbols found"
 		}
 	}
 

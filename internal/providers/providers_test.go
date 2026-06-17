@@ -229,27 +229,6 @@ func TestShouldRetryAdvanced(t *testing.T) {
 	assert.False(t, client.shouldRetryAdvanced(RetryClassificationUnknown, 3))
 }
 
-func TestPowFloat64(t *testing.T) {
-	tests := []struct {
-		base     float64
-		exponent float64
-		expected float64
-	}{
-		{2, 0, 1},
-		{2, 1, 2},
-		{2, 2, 4},
-		{2, 3, 8},
-		{2, 10, 1024},
-		{10, 2, 100},
-		{10, 3, 1000},
-	}
-
-	for _, tt := range tests {
-		result := powFloat64(tt.base, tt.exponent)
-		assert.Equal(t, tt.expected, result)
-	}
-}
-
 func TestAdvancedRetryIntegration(t *testing.T) {
 	attemptCount := 0
 

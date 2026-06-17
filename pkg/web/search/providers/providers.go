@@ -14,7 +14,6 @@ const (
 	ProviderModeAuto       = internalproviders.ProviderModeAuto
 	ProviderModeCustom     = internalproviders.ProviderModeCustom
 	ProviderModeTavily     = internalproviders.ProviderModeTavily
-	ProviderModeDuckDuckGo = internalproviders.ProviderModeDuckDuckGo
 	ProviderModeSearXNG    = internalproviders.ProviderModeSearXNG
 	ProviderModeJina       = internalproviders.ProviderModeJina
 	ProviderModeExa        = internalproviders.ProviderModeExa
@@ -76,8 +75,4 @@ func NewSearXNGProvider() *internalproviders.SearXNGProvider {
 
 func NewSearXNGProviderWithBaseURL(baseURL string) *internalproviders.SearXNGProvider {
 	return internalproviders.NewSearXNGProviderWithBaseURL(baseURL)
-}
-
-func NewDuckDuckGoProvider() *internalproviders.DuckDuckGoProvider {
-	return internalproviders.NewDuckDuckGoProvider()
 }

@@ -162,7 +162,7 @@ func (t *EnterWorktreeTool) ValidateInput(ctx context.Context, input map[string]
 
 // CheckPermissions checks tool permissions
 func (t *EnterWorktreeTool) CheckPermissions(ctx context.Context, input map[string]any, toolCtx tool.ToolUseContext) types.PermissionResult {
-	return types.PermissionResult{Behavior: types.PermissionBehaviorAsk}
+	return types.AllowWithInput("", input)
 }
 
 // IsConcurrencySafe returns whether tool is concurrency safe

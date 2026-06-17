@@ -6,6 +6,7 @@ import (
 
 	shellhooks "github.com/EngineerProjects/nexus-engine/internal/hooks"
 	runtimehooks "github.com/EngineerProjects/nexus-engine/internal/runtime/hooks"
+	"github.com/EngineerProjects/nexus-engine/internal/types"
 )
 
 // registerShellPreToolHooks converts PreToolHookConfig entries to ToolHooks
@@ -35,8 +36,8 @@ func (c *Client) registerShellPreToolHooks(cfgs []PreToolHookConfig, workDir str
 
 			sessionID := ""
 			if ctx != nil {
-				// Best-effort: extract session ID from context if available.
-				if v, ok := ctx.Value(contextKeySessionID{}).(string); ok {
+				// Best-effort: extract session ID using the engine's canonical key.
+				if v, ok := ctx.Value(types.ContextKeySessionID).(string); ok {
 					sessionID = v
 				}
 			}
@@ -91,6 +92,3 @@ func (c *Client) registerShellPreToolHooks(cfgs []PreToolHookConfig, workDir str
 
 	c.AddToolHook(hook)
 }
-
-// contextKeySessionID is the context key for the current session ID.
-type contextKeySessionID struct{}

@@ -16,7 +16,6 @@ import (
 	tool "github.com/EngineerProjects/nexus-engine/internal/tools/registry"
 	agentsTool "github.com/EngineerProjects/nexus-engine/internal/tools/special/agents"
 	askUserQuestionTool "github.com/EngineerProjects/nexus-engine/internal/tools/special/ask_user"
-	docxTool "github.com/EngineerProjects/nexus-engine/internal/tools/special/docx"
 	fimtool "github.com/EngineerProjects/nexus-engine/internal/tools/special/fim"
 	goalTool "github.com/EngineerProjects/nexus-engine/internal/tools/special/goal"
 	imagegenTool "github.com/EngineerProjects/nexus-engine/internal/tools/special/imagegen"
@@ -94,7 +93,6 @@ func RegisterBuiltinToolsWithConfig(reg *tool.Registry, config *Config) error {
 		notebookTool.NewEditTool(),
 		notebookTool.NewCreateTool(),
 		notebookTool.NewWriteTool(),
-		docxTool.NewDocxTool(config.WorkingDir),
 		askUserQuestionTool.NewTool(askUserConfig),
 		webfetchTool.NewTool(webFetchConfig),
 		webSearchTool.NewTool(),

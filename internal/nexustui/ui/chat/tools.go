@@ -20,6 +20,7 @@ import (
 	"github.com/EngineerProjects/nexus-engine/internal/nexustui/ui/common"
 	"github.com/EngineerProjects/nexus-engine/internal/nexustui/ui/list"
 	"github.com/EngineerProjects/nexus-engine/internal/nexustui/ui/styles"
+	skillsTool "github.com/EngineerProjects/nexus-engine/internal/tools/system/skills"
 	taskTool "github.com/EngineerProjects/nexus-engine/internal/tools/task"
 	"github.com/charmbracelet/x/ansi"
 )
@@ -27,8 +28,10 @@ import (
 // responseContextHeight limits the number of lines displayed in tool output.
 const responseContextHeight = 10
 
-// toolBodyLeftPaddingTotal represents the padding that should be applied to each tool body
-const toolBodyLeftPaddingTotal = 2
+// toolBodyLeftPaddingTotal must equal sty.Tool.Body.GetPaddingLeft() so that
+// content widths passed to body renderers stay within cappedWidth after the
+// Body style adds its left padding.
+const toolBodyLeftPaddingTotal = 4
 
 // assistantMessageTruncateFormat is used in tool output and diff truncation hints.
 const assistantMessageTruncateFormat = "… (%d lines hidden) [click or space to expand]"
@@ -306,6 +309,36 @@ func NewToolMessageItem(
 		item = NewWaitAgentToolMessageItem(sty, toolCall, result, canceled)
 	case "close_agent":
 		item = NewCloseAgentToolMessageItem(sty, toolCall, result, canceled)
+	case "memory_create_entities":
+		item = NewMemoryCreateEntitiesToolMessageItem(sty, toolCall, result, canceled)
+	case "memory_add_observations":
+		item = NewMemoryAddObservationsToolMessageItem(sty, toolCall, result, canceled)
+	case "memory_search_nodes":
+		item = NewMemorySearchNodesToolMessageItem(sty, toolCall, result, canceled)
+	case "memory_open_nodes":
+		item = NewMemoryOpenNodesToolMessageItem(sty, toolCall, result, canceled)
+	case "create_goal":
+		item = NewCreateGoalToolMessageItem(sty, toolCall, result, canceled)
+	case "get_goal":
+		item = NewGetGoalToolMessageItem(sty, toolCall, result, canceled)
+	case "update_goal":
+		item = NewUpdateGoalToolMessageItem(sty, toolCall, result, canceled)
+	case "docx":
+		item = NewDocxToolMessageItem(sty, toolCall, result, canceled)
+	case "monitor":
+		item = NewMonitorToolMessageItem(sty, toolCall, result, canceled)
+	case "code_complete":
+		item = NewFIMToolMessageItem(sty, toolCall, result, canceled)
+	case "lsp":
+		item = NewLSPToolMessageItem(sty, toolCall, result, canceled)
+	case skillsTool.SkillToolName:
+		item = NewSkillToolMessageItem(sty, toolCall, result, canceled)
+	case "nexus_list_skills":
+		item = NewNexusListSkillsToolMessageItem(sty, toolCall, result, canceled)
+	case "nexus_read_skill":
+		item = NewNexusReadSkillToolMessageItem(sty, toolCall, result, canceled)
+	case "nexus_validate_skill":
+		item = NewNexusValidateSkillToolMessageItem(sty, toolCall, result, canceled)
 	default:
 		if IsDockerMCPTool(toolCall.Name) {
 			item = NewDockerMCPToolMessageItem(sty, toolCall, result, canceled)
@@ -664,8 +697,8 @@ func (t *baseToolMessageItem) HandleKeyEvent(key tea.KeyMsg) (bool, tea.Cmd) {
 	return false, nil
 }
 
-// pendingTool renders a tool that is still in progress with an animation.
-func pendingTool(sty *styles.Styles, name string, anim *anim.Anim, nested bool) string {
+// pendingTool renders a tool that is still in progress with a text status.
+func pendingTool(sty *styles.Styles, name string, a *anim.Anim, nested bool) string {
 	icon := sty.Tool.IconPending.Render()
 	nameStyle := sty.Tool.NameNormal
 	if nested {
@@ -673,12 +706,20 @@ func pendingTool(sty *styles.Styles, name string, anim *anim.Anim, nested bool) 
 	}
 	toolName := nameStyle.Render(name)
 
-	var animView string
-	if anim != nil {
-		animView = anim.Render()
+	var statusView string
+	if a != nil {
+		elapsed := a.ElapsedSeconds()
+		dots := a.EllipsisFrame()
+		var dStr string
+		if elapsed < 60 {
+			dStr = fmt.Sprintf("%ds", elapsed)
+		} else {
+			dStr = fmt.Sprintf("%dm%ds", elapsed/60, elapsed%60)
+		}
+		statusView = sty.Tool.RunningStatus.Render(fmt.Sprintf("running%s (%s)", dots, dStr))
 	}
 
-	return fmt.Sprintf("%s %s %s", icon, toolName, animView)
+	return fmt.Sprintf("%s %s  %s", icon, toolName, statusView)
 }
 
 // toolEarlyStateContent handles error/cancelled/awaiting-permission states before
@@ -836,7 +877,6 @@ func toolOutputPlainContent(sty *styles.Styles, content string, width int, expan
 		if i >= maxLines {
 			break
 		}
-		ln = " " + ln
 		if lipgloss.Width(ln) > width {
 			ln = ansi.Truncate(ln, width, "…")
 		}

@@ -249,10 +249,8 @@ func (s *Session) submitWithMessage(ctx context.Context, userMsg types.Message, 
 		if loopResult.RecoveryContext != nil {
 			s.state.StoreRecoveryContext(loopResult.RecoveryContext)
 		}
-		if len(loopResult.Messages) > len(s.state.Messages) {
-			s.state.AdvanceTurn(loopResult.Usage, loopResult.Messages)
-			_ = s.persistSessionState(persistedMessages)
-		}
+		// Do NOT call AdvanceTurn on error: counting an errored loop as a
+		// completed turn would increment TurnNumber and prematurely exhaust MaxTurns.
 		return nil, fmt.Errorf("query loop failed: %w", loopResult.Error)
 	}
 	s.state.RegisterDiscoveredDeferredTools(loopResult.DiscoveredDeferred)

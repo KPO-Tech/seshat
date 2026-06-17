@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"log"
 	"os"
@@ -8,6 +9,8 @@ import (
 	"strings"
 	"time"
 
+	dbpkg "github.com/EngineerProjects/nexus-engine/internal/db"
+	longtermStore "github.com/EngineerProjects/nexus-engine/internal/memory/longterm"
 	"github.com/EngineerProjects/nexus-engine/internal/providers"
 	internalrag "github.com/EngineerProjects/nexus-engine/internal/rag"
 	"github.com/EngineerProjects/nexus-engine/internal/rag/embedder"
@@ -44,6 +47,14 @@ type runtimeOptions struct {
 	// Set by runInteractive to redirect logs away from stdout/stderr when
 	// running in TUI (alt-screen) mode.
 	Monitoring *sdk.MonitoringSystem
+
+	// MCPServers are the MCP server configs to wire into the SDK client so
+	// the agent can call MCP tools. Populated from nexus.json before newClient().
+	MCPServers []sdk.MCPServerConfig
+
+	ImageGeneration *sdk.ImageGenerationConfig
+	TextToSpeech    *sdk.TextToSpeechConfig
+	SpeechToText    *sdk.SpeechToTextConfig
 }
 
 type runtimeOverrides struct {
@@ -170,6 +181,18 @@ func newClient(
 		providerConfig.Region = options.ProviderResource
 	}
 
+	// Initialize the longterm knowledge-graph store backed by the same SQLite DB.
+	// Non-fatal: if this fails the memory_* tools remain disabled rather than
+	// blocking the whole TUI startup.
+	var ltMemory sdk.LongTermMemory
+	if options.SQLitePath != "" {
+		if ltDB, err := dbpkg.Open(context.Background(), dbpkg.DefaultSQLiteConfig(options.SQLitePath)); err == nil {
+			ltMemory = longtermStore.NewSQLiteStore(ltDB.SQL())
+		} else {
+			log.Printf("[runtime] longterm memory store unavailable: %v", err)
+		}
+	}
+
 	// EnableMonitoring must be true so initMonitoringSystem honours
 	// options.Monitoring (the TUI file logger) instead of short-circuiting.
 	enableMonitoring := options.Monitoring != nil
@@ -199,6 +222,11 @@ func newClient(
 		RAGService:              options.RAGService,
 		ProviderConfig:          providerConfig,
 		PlanStore:               planStore,
+		LongTermMemory:          ltMemory,
+		MCPServers:              options.MCPServers,
+		ImageGeneration:         options.ImageGeneration,
+		TextToSpeech:            options.TextToSpeech,
+		SpeechToText:            options.SpeechToText,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("create SDK client: %w", err)

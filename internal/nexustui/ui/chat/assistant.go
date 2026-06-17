@@ -132,9 +132,10 @@ type AssistantMessageItem struct {
 	// Per-section render caches. Splitting these out means content
 	// streaming does not invalidate the (often expensive) thinking
 	// render, and vice versa.
-	thinkingSec assistantSection
-	contentSec  assistantSection
-	errorSec    assistantSection
+	thinkingSec     assistantSection // full section (footer + styled body), keyed by view mode
+	thinkingBodySec assistantSection // raw glamour body only, shared across all view modes
+	contentSec      assistantSection
+	errorSec        assistantSection
 
 	// streamingContent caches a "stable prefix" glamour render of
 	// the assistant content body so each streaming flush only
@@ -179,15 +180,15 @@ func (a *AssistantMessageItem) StartAnimation() tea.Cmd {
 
 // Animate progresses the assistant message animation if it should be spinning.
 func (a *AssistantMessageItem) Animate(msg anim.StepMsg) tea.Cmd {
-	if !a.isSpinning() {
+	// Keep ticking while thinking is in progress even when the standalone
+	// spinner is suppressed (thinking text is streaming). The Bump() here
+	// is what drives the live counter update: each tick causes a re-render
+	// which misses the thinking section cache because thinkingKey() folds
+	// in the current second via ThinkingDuration().
+	isActive := a.isSpinning() || a.message.IsThinking()
+	if !isActive {
 		return nil
 	}
-	// Bump the F6 list-cache version so the next draw re-renders
-	// this item: a spinner tick mutates anim's internal frame
-	// counter, which changes the rendered output but is invisible
-	// to the per-section content hashes. Without the bump the
-	// list cache would serve the previously rendered frame
-	// indefinitely and the spinner would appear frozen.
 	a.Bump()
 	return a.anim.Animate(msg)
 }
@@ -201,8 +202,13 @@ func (a *AssistantMessageItem) ID() string {
 func (a *AssistantMessageItem) RawRender(width int) string {
 	cappedWidth := cappedMessageWidth(width)
 
+	// The standalone spinner is shown only when there is nothing else to
+	// display yet (no thinking text, no content, no tool calls). Once
+	// thinking text is streaming, the counter line inside renderThinking
+	// takes over as the live indicator and the spinner is suppressed.
+	hasThinkingText := strings.TrimSpace(a.message.ReasoningContent().Thinking) != ""
 	var spinner string
-	if a.isSpinning() {
+	if a.isSpinning() && !hasThinkingText {
 		spinner = a.renderSpinning()
 	}
 
@@ -351,29 +357,28 @@ func (a *AssistantMessageItem) renderMessageContent(width int) (string, int) {
 // thinkingKey returns the (srcHash, extra) cache key components for the
 // thinking section. extra folds in everything other than the raw
 // thinking text that affects the rendered output: the view mode
-// (collapsed / tail-window / full) and the footer state (which
-// depends on IsThinking, ToolCalls, and ThinkingDuration).
+// (collapsed / tail-window / full), IsThinking state, and duration.
+//
+// Duration is always included — not just after thinking ends — so that
+// the collapsed counter line ("Thinking... (12s)") updates every second
+// while reasoning is in progress. ThinkingDuration() returns a
+// seconds-level value that changes each second, causing a cache miss
+// on every animation tick, which is the desired live-counter behavior.
 func (a *AssistantMessageItem) thinkingKey() (uint64, uint64) {
 	thinking := a.message.ReasoningContent().Thinking
 	srcHash := fnv64(thinking)
 
-	showFooter := !a.message.IsThinking() || len(a.message.ToolCalls()) > 0
+	isThinking := a.message.IsThinking()
+	duration := a.message.ThinkingDuration()
 	var durationStr string
-	if showFooter {
-		duration := a.message.ThinkingDuration()
-		if duration.String() != "0s" {
-			durationStr = duration.String()
-		}
+	if duration.String() != "0s" {
+		durationStr = duration.String()
 	}
-	var footer byte
-	if showFooter {
-		footer = 1
+	var isThinkingByte byte
+	if isThinking {
+		isThinkingByte = 1
 	}
-	// Length-prefixed framing avoids any delimiter collision between
-	// the flag bytes and the duration string. The view mode is folded
-	// in so that toggling collapsed ↔ tail-window ↔ full invalidates
-	// only the thinking section, not content/error.
-	extra := fnvFields([]byte{byte(a.thinkingViewMode), footer}, []byte(durationStr))
+	extra := fnvFields([]byte{byte(a.thinkingViewMode), isThinkingByte}, []byte(durationStr))
 	return srcHash, extra
 }
 
@@ -437,24 +442,15 @@ func (a *AssistantMessageItem) cachedError(width int) string {
 	return out
 }
 
-// renderThinking renders the thinking/reasoning content with footer.
-//
-// Slicing happens AFTER glamour rendering so fenced code blocks, list
-// continuations, and tables are not split mid-block — the same
-// boundary problem §4.4 of the design note flags. The bordered
-// ThinkingBox style is applied on top of the (already-windowed)
-// lines so the visual box matches what the user sees today.
-func (a *AssistantMessageItem) renderThinking(thinking string, width int) string {
-	// Width() in lipgloss includes padding but NOT borders (borders are external).
-	// So: Width(width - borderH) → total rendered = (width-borderH) + borderH = width.
-	// The glamour renderer must wrap at (width - borderH - padH) so lines fit inside
-	// the content area without overflowing the right border.
-	thinkingBox := a.sty.Messages.ThinkingBox
-	borderH := thinkingBox.GetHorizontalBorderSize()
-	padH := thinkingBox.GetHorizontalPadding()
-	contentWidth := max(1, width-borderH-padH) // glamour wrap width (inner content area)
-	boxWidth := max(1, width-borderH)          // Width() value (includes padding, not borders)
-
+// renderThinkingBodyLines runs glamour on thinking and returns the rendered
+// lines. Results are cached in thinkingBodySec keyed by (contentWidth,
+// srcHash) so that the expensive glamour render only happens once
+// regardless of how many view modes the user cycles through.
+func (a *AssistantMessageItem) renderThinkingBodyLines(thinking string, contentWidth int) []string {
+	srcHash := fnv64(thinking)
+	if a.thinkingBodySec.hit(contentWidth, srcHash, 0) {
+		return strings.Split(a.thinkingBodySec.out, "\n")
+	}
 	renderer := common.QuietMarkdownRenderer(a.sty, contentWidth)
 	mu := common.LockMarkdownRenderer(renderer)
 	mu.Lock()
@@ -464,60 +460,111 @@ func (a *AssistantMessageItem) renderThinking(thinking string, width int) string
 		rendered = thinking
 	}
 	rendered = strings.TrimSpace(rendered)
+	a.thinkingBodySec.store(contentWidth, srcHash, 0, rendered, 0)
+	return strings.Split(rendered, "\n")
+}
 
-	lines := strings.Split(rendered, "\n")
+// renderThinking renders the thinking/reasoning content.
+//
+// Layout:
+//   - Collapsed + thinking in progress : "💭 Thinking... (Xs)   click to expand"
+//   - Collapsed + done                 : "Thought for 8m41s   click to expand"
+//   - Expanded (any)                   : left-bar indented text body + footer
+//
+// The border box has been removed. Expanded text uses a subtle left accent
+// bar with italic muted styling. The footer / counter line is the single
+// clickable target (thinkingBoxHeight tracks its row count).
+//
+// Performance: the raw glamour render is cached in thinkingBodySec keyed by
+// content width and source hash. In collapsed mode (when thinking is done) the
+// body is rendered eagerly to warm this cache, so the first expand is served
+// from cache rather than triggering a cold glamour render.
+func (a *AssistantMessageItem) renderThinking(thinking string, width int) string {
+	isThinking := a.message.IsThinking()
+	duration := a.message.ThinkingDuration()
+	durationStr := duration.Round(0).String()
+	if durationStr == "0s" {
+		durationStr = ""
+	}
+
+	// ── footer / counter line ────────────────────────────────────────────────
+	expandHint := "   " + a.sty.Messages.ThinkingExpandHint.Render("click to expand")
+	var footerLine string
+	if isThinking {
+		label := a.sty.Messages.ThinkingFooterTitle.Render("💭 Thinking...")
+		if durationStr != "" {
+			label += " " + a.sty.Messages.ThinkingFooterDuration.Render("("+durationStr+")")
+		}
+		footerLine = label + expandHint
+	} else {
+		if durationStr != "" {
+			footerLine = a.sty.Messages.ThinkingFooterTitle.Render("Thought for ") +
+				a.sty.Messages.ThinkingFooterDuration.Render(durationStr)
+		} else {
+			// Restored session: StartedAt/FinishedAt were not persisted —
+			// fall back to a generic label so the section remains visible.
+			footerLine = a.sty.Messages.ThinkingFooterTitle.Render("Thought")
+		}
+		footerLine += expandHint
+	}
+
+	// ── collapsed ────────────────────────────────────────────────────────────
+	if a.thinkingViewMode == thinkingCollapsed {
+		// Pre-warm the body cache while the footer is displayed so that
+		// the first expand is served from cache (instant) rather than
+		// triggering a cold glamour render on click.
+		if !isThinking {
+			leftBarStyle := a.sty.Messages.ThinkingLeftBar
+			borderH := leftBarStyle.GetHorizontalBorderSize()
+			padH := leftBarStyle.GetHorizontalPadding()
+			contentWidth := max(1, width-borderH-padH)
+			a.renderThinkingBodyLines(thinking, contentWidth)
+		}
+		a.thinkingBoxHeight = 1
+		return footerLine
+	}
+
+	// ── expanded: apply the pre-warmed (or fresh) body ───────────────────────
+	leftBarStyle := a.sty.Messages.ThinkingLeftBar
+	borderH := leftBarStyle.GetHorizontalBorderSize()
+	padH := leftBarStyle.GetHorizontalPadding()
+	contentWidth := max(1, width-borderH-padH)
+
+	lines := a.renderThinkingBodyLines(thinking, contentWidth)
 	totalLines := len(lines)
 
-	var wasTruncated bool
-	switch a.thinkingViewMode {
-	case thinkingCollapsed:
-		if totalLines > maxCollapsedThinkingHeight {
-			// Show the tail — the last lines are the most recent reasoning
-			// so they give the most relevant preview. Prepend a "…" inside
-			// the box to signal that earlier content is hidden above.
-			hidden := totalLines - maxCollapsedThinkingHeight
-			lines = lines[hidden:]
-			hint := a.sty.Messages.ThinkingTruncationHint.Render(
-				fmt.Sprintf("… %d earlier lines hidden", hidden),
-			)
-			lines = append([]string{hint, ""}, lines...)
-			wasTruncated = true
-		}
-	case thinkingTailWindow:
-		if totalLines > maxExpandedThinkingTailLines {
-			lines = lines[totalLines-maxExpandedThinkingTailLines:]
-			hint := a.sty.Messages.ThinkingTruncationHint.Render(
-				fmt.Sprintf(assistantMessageTailWindowFormat, totalLines-maxExpandedThinkingTailLines),
-			)
-			lines = append([]string{hint, ""}, lines...)
-		}
+	if a.thinkingViewMode == thinkingTailWindow && totalLines > maxExpandedThinkingTailLines {
+		hidden := totalLines - maxExpandedThinkingTailLines
+		lines = lines[hidden:]
+		hint := a.sty.Messages.ThinkingTruncationHint.Render(
+			fmt.Sprintf(assistantMessageTailWindowFormat, hidden),
+		)
+		lines = append([]string{hint, ""}, lines...)
 	}
 
-	result := thinkingBox.Width(boxWidth).Render(strings.Join(lines, "\n"))
-	a.thinkingBoxHeight = lipgloss.Height(result)
-
-	var footer string
-	if !a.message.IsThinking() || len(a.message.ToolCalls()) > 0 {
-		duration := a.message.ThinkingDuration()
-		if duration.String() != "0s" {
-			footer = a.sty.Messages.ThinkingFooterTitle.Render("Thought for ") +
-				a.sty.Messages.ThinkingFooterDuration.Render(duration.String())
-		}
-	}
-
-	if wasTruncated {
-		expandHint := a.sty.Messages.ThinkingTruncationHint.Render("click to expand")
-		if footer != "" {
-			footer += "   " + expandHint
+	// The footer line is shown without "click to expand" when expanded —
+	// the user is already seeing the content.
+	if !isThinking {
+		if durationStr != "" {
+			footerLine = a.sty.Messages.ThinkingFooterTitle.Render("Thought for ") +
+				a.sty.Messages.ThinkingFooterDuration.Render(durationStr)
 		} else {
-			footer = expandHint
+			footerLine = a.sty.Messages.ThinkingFooterTitle.Render("Thought")
 		}
 	}
 
-	if footer != "" {
-		result += "\n" + footer
+	body := a.sty.Messages.ThinkingText.Render(strings.Join(lines, "\n"))
+	body = leftBarStyle.Render(body)
+
+	var parts []string
+	parts = append(parts, body)
+	if footerLine != "" {
+		parts = append(parts, "")
+		parts = append(parts, footerLine)
 	}
 
+	result := strings.Join(parts, "\n")
+	a.thinkingBoxHeight = lipgloss.Height(result)
 	return result
 }
 
@@ -606,6 +653,7 @@ func (a *AssistantMessageItem) Finished() bool {
 func (a *AssistantMessageItem) clearCache() {
 	a.cachedMessageItem.clearCache()
 	a.thinkingSec.reset()
+	a.thinkingBodySec.reset()
 	a.contentSec.reset()
 	a.errorSec.reset()
 	a.streamingContent.Reset()
