@@ -654,27 +654,22 @@ func (ms *Catalog) extractKeywords(content string) []string {
 
 // removeFromIndex removes an entry from the index
 func (ms *Catalog) removeFromIndex(entry Entry, index int) {
-	// Remove from content index
 	for _, keyword := range ms.extractKeywords(entry.Content) {
-		ms.removeFromSlice(ms.index.contentIndex[keyword], index)
+		ms.index.contentIndex[keyword] = ms.removeFromSlice(ms.index.contentIndex[keyword], index)
 	}
 
-	// Remove from tag index
 	for _, tag := range entry.Tags {
-		ms.removeFromSlice(ms.index.tagIndex[tag], index)
+		ms.index.tagIndex[tag] = ms.removeFromSlice(ms.index.tagIndex[tag], index)
 	}
 
-	// Remove from type index
-	ms.removeFromSlice(ms.index.typeIndex[entry.Type], index)
+	ms.index.typeIndex[entry.Type] = ms.removeFromSlice(ms.index.typeIndex[entry.Type], index)
 
-	// Remove from session index
 	if entry.SessionID != "" {
-		ms.removeFromSlice(ms.index.sessionIndex[entry.SessionID], index)
+		ms.index.sessionIndex[entry.SessionID] = ms.removeFromSlice(ms.index.sessionIndex[entry.SessionID], index)
 	}
 
-	// Remove from tool index
 	if entry.Metadata != nil && entry.Metadata.ToolUsed != "" {
-		ms.removeFromSlice(ms.index.toolIndex[entry.Metadata.ToolUsed], index)
+		ms.index.toolIndex[entry.Metadata.ToolUsed] = ms.removeFromSlice(ms.index.toolIndex[entry.Metadata.ToolUsed], index)
 	}
 }
 

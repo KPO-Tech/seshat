@@ -175,6 +175,17 @@ func ParseContent(content []byte) (*Skill, error) {
 		return nil, fmt.Errorf("parsing frontmatter: %w", err)
 	}
 
+	// user-invocable defaults to true per the Agent Skills spec. The bool
+	// field's zero value is false, so re-parse just that key to tell
+	// "absent" from "explicitly false".
+	var presence struct {
+		UserInvocable *bool `yaml:"user-invocable"`
+	}
+	_ = yaml.Unmarshal([]byte(frontmatter), &presence)
+	if presence.UserInvocable == nil {
+		skill.UserInvocable = true
+	}
+
 	skill.Instructions = strings.TrimSpace(body)
 
 	return &skill, nil

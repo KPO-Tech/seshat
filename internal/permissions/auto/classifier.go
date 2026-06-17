@@ -441,7 +441,7 @@ func (c *TwoStageClassifier) callStage1(ctx context.Context, systemPrompt, userC
 		LogSuccess(c.model, 0)
 		return resp.Text
 	}
-	return `<block>no</block><reason>Allowed by classifier</reason>`
+	return `<block>yes</block><reason>No classifier available — blocking by default</reason>`
 }
 
 func (c *TwoStageClassifier) callStage2(ctx context.Context, systemPrompt, userContent string, prefixMessages []types.Message) string {
@@ -475,7 +475,7 @@ func (c *TwoStageClassifier) callStage2(ctx context.Context, systemPrompt, userC
 		LogSuccess(c.model, 0)
 		return resp.Text
 	}
-	return `<block>no</block><reason>Allowed by classifier</reason>`
+	return `<block>yes</block><reason>No classifier available — blocking by default</reason>`
 }
 
 func BuildTranscriptFromMessages(messages []types.Message) []TranscriptEntry {

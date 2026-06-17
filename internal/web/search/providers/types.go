@@ -1,10 +1,21 @@
 package providers
 
+import "context"
+
 // SearchInput represents the input for a search operation.
 type SearchInput struct {
+	Ctx            context.Context // propagated to HTTP requests; nil falls back to context.Background()
 	Query          string
 	AllowedDomains []string
 	BlockedDomains []string
+}
+
+// ctx returns a non-nil context for use in HTTP requests.
+func (s SearchInput) ctx() context.Context {
+	if s.Ctx != nil {
+		return s.Ctx
+	}
+	return context.Background()
 }
 
 // SearchHit represents a single search result.
@@ -36,7 +47,6 @@ const (
 	ProviderModeAuto       ProviderMode = "auto"
 	ProviderModeCustom     ProviderMode = "custom"
 	ProviderModeTavily     ProviderMode = "tavily"
-	ProviderModeDuckDuckGo ProviderMode = "ddg"
 	ProviderModeSearXNG    ProviderMode = "searxng"
 	ProviderModeJina       ProviderMode = "jina"
 	ProviderModeExa        ProviderMode = "exa"
@@ -54,7 +64,6 @@ func IsValidMode(mode string) bool {
 		"auto":       true,
 		"custom":     true,
 		"tavily":     true,
-		"ddg":        true,
 		"searxng":    true,
 		"jina":       true,
 		"exa":        true,

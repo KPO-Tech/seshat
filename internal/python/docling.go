@@ -132,11 +132,14 @@ func (m *DoclingManager) Start(ctx context.Context) error {
 	m.cmd = cmd
 
 	// Background: wait for process exit (log, set not-ready).
+	// Recreate readyCh so the next Start() → WaitReady() works correctly
+	// instead of returning immediately because the old closed channel is still set.
 	go func() {
 		_ = cmd.Wait()
 		m.mu.Lock()
 		m.ready = false
 		m.cmd = nil
+		m.readyCh = make(chan struct{})
 		m.mu.Unlock()
 	}()
 

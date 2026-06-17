@@ -72,13 +72,14 @@ func PDFKey(title string, now time.Time) string {
 
 // ScreenshotKey builds a session-scoped storage key for a browser screenshot.
 // Layout: sessions/{sessionID}/artifacts/screenshots/{pageID}/{date}/{timestamp}-screenshot.png
+// Must match the path produced by BuildArtifactKey(NamespaceBrowserScreenshots).
 func ScreenshotKey(sessionID, pageID string, now time.Time) string {
 	now = now.UTC()
 	if now.IsZero() {
 		now = time.Now().UTC()
 	}
 	datePrefix := fmt.Sprintf("%04d/%02d/%02d", now.Year(), now.Month(), now.Day())
-	parts := []string{"sessions", sanitizePathSegment(sessionID), "screenshots"}
+	parts := []string{"sessions", sanitizePathSegment(sessionID), "artifacts", "screenshots"}
 	if pageID != "" {
 		parts = append(parts, sanitizePathSegment(pageID))
 	}

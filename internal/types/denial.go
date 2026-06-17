@@ -87,10 +87,13 @@ func DefaultDenialLimitConfig() DenialLimitConfig {
 // When the time-based reset threshold is exceeded, consecutive denials are
 // automatically reset before evaluating the limit.
 func (c DenialLimitConfig) ShouldFallback(state *DenialTrackingState) bool {
-	// Time-based reset of consecutive counter: if enough time has passed
-	// since the last denial, reset consecutive denials.
-	if c.ResetAfterSeconds > 0 && state.LastDeniedAt != nil {
-		if time.Since(*state.LastDeniedAt).Seconds() > float64(c.ResetAfterSeconds) {
+	// Time-based reset: check LastDeniedAt under lock to avoid a data race,
+	// then reset ConsecutiveDenials under a write lock if the threshold passed.
+	if c.ResetAfterSeconds > 0 {
+		state.mu.RLock()
+		lastDenied := state.LastDeniedAt
+		state.mu.RUnlock()
+		if lastDenied != nil && time.Since(*lastDenied).Seconds() > float64(c.ResetAfterSeconds) {
 			state.mu.Lock()
 			state.ConsecutiveDenials = 0
 			state.mu.Unlock()

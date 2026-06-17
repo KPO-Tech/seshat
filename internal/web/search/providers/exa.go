@@ -56,7 +56,7 @@ func (p *ExaProvider) Search(input SearchInput) (ProviderOutput, error) {
 		return ProviderOutput{}, fmt.Errorf("Exa API key not configured (set EXA_API_KEY)")
 	}
 
-	req, err := http.NewRequest("GET", "https://api.exa.ai/search", nil)
+	req, err := http.NewRequestWithContext(input.ctx(), "GET", "https://api.exa.ai/search", nil)
 	if err != nil {
 		return ProviderOutput{}, err
 	}

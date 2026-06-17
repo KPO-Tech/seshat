@@ -1,11 +1,14 @@
 package lspClient
 
 import (
+	"bufio"
 	"context"
 	"encoding/json"
 	"fmt"
 	"io"
 	"os"
+	"strconv"
+	"strings"
 	"sync"
 )
 
@@ -33,13 +36,14 @@ func (e *RPCError) Error() string {
 // Client represents an LSP client connection
 type Client struct {
 	mu           sync.RWMutex
+	wmu          sync.Mutex // guards writes to stdin
 	nextID       int
 	pending      map[int]chan *RPCMessage
 	serverName   string
 	capabilities ServerCapabilities
 
 	stdin    io.Writer
-	stdout   io.Reader
+	reader   *bufio.Reader // buffered reader for LSP-framed responses
 	readDone chan struct{}
 
 	// Callbacks for notifications
@@ -64,7 +68,7 @@ func NewClient(serverName string) *Client {
 // ConnectProcess connects to an LSP server via an existing process
 func (c *Client) ConnectProcess(stdin io.Writer, stdout io.Reader) error {
 	c.stdin = stdin
-	c.stdout = stdout
+	c.reader = bufio.NewReader(stdout)
 
 	// Start message handling in background
 	go c.handleMessages()
@@ -355,16 +359,12 @@ func (c *Client) Request(ctx context.Context, method string, params interface{},
 		msg.Params = paramsBytes
 	}
 
-	// Send the request
+	// Send the request using LSP wire format (Content-Length framing)
 	msgBytes, err := json.Marshal(msg)
 	if err != nil {
 		return fmt.Errorf("failed to marshal request: %w", err)
 	}
-
-	// Add content-length header for LSP
-	content := string(msgBytes) + "\n"
-	_, err = c.stdin.Write([]byte(content))
-	if err != nil {
+	if err := c.writeMessage(msgBytes); err != nil {
 		return fmt.Errorf("failed to write request: %w", err)
 	}
 
@@ -406,40 +406,83 @@ func (c *Client) Notify(ctx context.Context, method string, params interface{}) 
 	if err != nil {
 		return fmt.Errorf("failed to marshal notification: %w", err)
 	}
-
-	// Add newline for LSP
-	content := string(msgBytes) + "\n"
-	_, err = c.stdin.Write([]byte(content))
-	if err != nil {
+	if err := c.writeMessage(msgBytes); err != nil {
 		return fmt.Errorf("failed to write notification: %w", err)
 	}
-
 	return nil
 }
 
 func (c *Client) handleMessages() {
-	decoder := json.NewDecoder(c.stdout)
 	for {
 		select {
 		case <-c.readDone:
 			return
 		default:
-			// No blocking - continue
 		}
 
-		var msg RPCMessage
-		if err := decoder.Decode(&msg); err != nil {
-			// Connection might be closed
+		msg, err := c.readLSPMessage()
+		if err != nil {
 			select {
 			case <-c.readDone:
 				return
 			default:
+				if err == io.EOF || err == io.ErrUnexpectedEOF {
+					return
+				}
 				continue
 			}
 		}
 
-		c.handleMessage(&msg)
+		c.handleMessage(msg)
 	}
+}
+
+// writeMessage sends a JSON payload using the LSP Content-Length wire format.
+func (c *Client) writeMessage(payload []byte) error {
+	header := fmt.Sprintf("Content-Length: %d\r\n\r\n", len(payload))
+	c.wmu.Lock()
+	defer c.wmu.Unlock()
+	if _, err := io.WriteString(c.stdin, header); err != nil {
+		return err
+	}
+	_, err := c.stdin.Write(payload)
+	return err
+}
+
+// readLSPMessage reads one Content-Length framed LSP message from the server.
+func (c *Client) readLSPMessage() (*RPCMessage, error) {
+	var contentLength int
+	for {
+		line, err := c.reader.ReadString('\n')
+		if err != nil {
+			return nil, err
+		}
+		line = strings.TrimRight(line, "\r\n")
+		if line == "" {
+			break
+		}
+		if strings.HasPrefix(strings.ToLower(line), "content-length:") {
+			parts := strings.SplitN(line, ":", 2)
+			if len(parts) == 2 {
+				n, err := strconv.Atoi(strings.TrimSpace(parts[1]))
+				if err == nil {
+					contentLength = n
+				}
+			}
+		}
+	}
+	if contentLength <= 0 {
+		return nil, fmt.Errorf("invalid or missing Content-Length")
+	}
+	body := make([]byte, contentLength)
+	if _, err := io.ReadFull(c.reader, body); err != nil {
+		return nil, err
+	}
+	var msg RPCMessage
+	if err := json.Unmarshal(body, &msg); err != nil {
+		return nil, fmt.Errorf("failed to unmarshal LSP message: %w", err)
+	}
+	return &msg, nil
 }
 
 func (c *Client) handleMessage(msg *RPCMessage) {

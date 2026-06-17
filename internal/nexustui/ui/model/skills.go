@@ -5,7 +5,6 @@ import (
 	"path/filepath"
 	"slices"
 	"strings"
-	"sync"
 
 	"charm.land/lipgloss/v2"
 	"github.com/EngineerProjects/nexus-engine/internal/nexustui/skills"
@@ -19,18 +18,6 @@ type skillStatusItem struct {
 	title string
 	// description is reserved for future use (e.g. showing error details).
 	description string
-}
-
-var builtinSkillsCache struct {
-	once   sync.Once
-	skills []*skills.Skill
-}
-
-func cachedBuiltinSkills() []*skills.Skill {
-	builtinSkillsCache.once.Do(func() {
-		builtinSkillsCache.skills = skills.DiscoverBuiltin()
-	})
-	return builtinSkillsCache.skills
 }
 
 // skillsInfo renders the skill discovery status section showing loaded and
@@ -91,24 +78,6 @@ func (m *UI) skillStatusItems() []skillStatusItem {
 			icon:  icon,
 			name:  name,
 			title: t.Resource.Name.Render(name),
-		})
-	}
-
-	builtin := cachedBuiltinSkills()
-	slices.SortStableFunc(builtin, func(a, b *skills.Skill) int {
-		return strings.Compare(a.Name, b.Name)
-	})
-	for _, skill := range builtin {
-		if _, ok := stateNames[skill.Name]; ok {
-			continue
-		}
-		if disabledSet[skill.Name] {
-			continue
-		}
-		items = append(items, skillStatusItem{
-			icon:  t.Resource.OnlineIcon.String(),
-			name:  skill.Name,
-			title: t.Resource.Name.Render(skill.Name),
 		})
 	}
 

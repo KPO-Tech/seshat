@@ -116,10 +116,7 @@ func (p *streamPrinter) finishTurn(response *sdk.SessionResponse) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 	p.ensureBoundaryLocked()
-
-	if response == nil || p.showThinking || !p.sawThinking {
-		return
-	}
+	_ = response
 }
 
 func (p *streamPrinter) ensureBoundary() {

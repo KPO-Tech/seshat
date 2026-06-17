@@ -187,13 +187,15 @@ type Manager struct {
 
 // NewManager creates a new LSP server manager
 func NewManager(workingDir string) *Manager {
-	return &Manager{
+	m := &Manager{
 		servers:      make(map[string]*ServerInstance),
 		configs:      DefaultServerConfigs(),
 		extensionMap: make(map[string]string),
 		openedFiles:  make(map[string]string),
 		workingDir:   workingDir,
 	}
+	m.rebuildExtensionMap()
+	return m
 }
 
 // SetConfigs sets custom server configurations

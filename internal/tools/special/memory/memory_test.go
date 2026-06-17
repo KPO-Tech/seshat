@@ -158,13 +158,19 @@ func TestCreateEntitiesTool_Idempotent(t *testing.T) {
 	require.Empty(t, created, "second upsert must not create a duplicate entity")
 }
 
-func TestCreateEntitiesTool_RequiresUserID(t *testing.T) {
-	tl := memtool.NewCreateEntitiesTool(&fakeStore{})
+func TestCreateEntitiesTool_DefaultsToLocalUserWithoutContext(t *testing.T) {
+	store := &fakeStore{}
+	tl := memtool.NewCreateEntitiesTool(store)
 	result, err := tl.Call(context.Background(), tool.CallInput{Parsed: map[string]any{
 		"entities": []any{map[string]any{"name": "x", "entity_type": "y"}},
 	}}, nil)
 	require.NoError(t, err)
-	require.True(t, result.IsError(), "must fail when user ID is absent from context")
+	require.False(t, result.IsError(), "must fall back to the local user when no user ID is in context, got: %s", result.Content)
+
+	var created []longterm.Entity
+	require.NoError(t, json.Unmarshal([]byte(result.Content), &created))
+	require.Len(t, created, 1)
+	require.Equal(t, "local", created[0].UserID)
 }
 
 func TestAddObservationsTool_AppendsToEntity(t *testing.T) {

@@ -6,9 +6,9 @@ import (
 	"fmt"
 	"log"
 	"os"
-	"strconv"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	coreagent "github.com/EngineerProjects/nexus-engine/internal/agent"
@@ -30,20 +30,21 @@ import (
 
 // Client provides a high-level SDK for headless AI operations.
 type Client struct {
-	queryEngine   *engine.Engine
-	orchestrator  *execution.Orchestrator
-	registry      *registry.Registry
-	store         SessionStore
-	config        *ClientConfig
-	memoryInitErr error
-	mcpResult     *MCPIntegrationResult
-	mcpMu         sync.Mutex
-	ownedStore    bool
-	browser       browsercore.Manager
-	artifacts     ArtifactStore
-	reaper        *storage.Reaper
-	closeOnce     sync.Once
-	closeErr      error
+	queryEngine     *engine.Engine
+	orchestrator    *execution.Orchestrator
+	registry        *registry.Registry
+	store           SessionStore
+	config          *ClientConfig
+	memoryInitErr   error
+	mcpResult       *MCPIntegrationResult
+	mcpMu           sync.Mutex
+	ownedStore      bool
+	browser         browsercore.Manager
+	artifacts       ArtifactStore
+	reaper          *storage.Reaper
+	closeOnce       sync.Once
+	closeErr        error
+	untitledCounter atomic.Int64
 }
 
 type promptAwareTool interface {
@@ -307,27 +308,10 @@ func (c *Client) CreateSession(ctx context.Context) (*Session, error) {
 	return newSDKSession(c, querySession), nil
 }
 
-// nextUntitledTitle returns the next "untitled_session_N" title.
-// It inspects existing session titles and picks max(N)+1. Defaults to 1.
+// nextUntitledTitle returns the next "untitled_session_N" title using an
+// atomic counter — O(1) and safe under concurrent CreateSession calls.
 func (c *Client) nextUntitledTitle() string {
-	const prefix = "untitled_session_"
-	max := 0
-	if c.store != nil {
-		if infos, err := c.store.GetAllSessionsInfo(); err == nil {
-			for _, info := range infos {
-				if info == nil {
-					continue
-				}
-				if strings.HasPrefix(info.Title, prefix) {
-					n, err := strconv.Atoi(strings.TrimPrefix(info.Title, prefix))
-					if err == nil && n > max {
-						max = n
-					}
-				}
-			}
-		}
-	}
-	return fmt.Sprintf("%s%d", prefix, max+1)
+	return fmt.Sprintf("untitled_session_%d", c.untitledCounter.Add(1))
 }
 
 // LoadSession loads an existing session.

@@ -105,12 +105,14 @@ func loadOrCreateEncryptionKey() ([]byte, error) {
 		return data, nil
 	}
 
-	// Migrate legacy key from ~/.nexus_secret if it exists.
+	// Migrate legacy key from ~/.nexus_secret if it exists, then remove it so
+	// the plaintext credential is not left on disk indefinitely.
 	if home, herr := os.UserHomeDir(); herr == nil {
 		legacy := filepath.Join(home, ".nexus_secret")
 		if legacyData, lerr := os.ReadFile(legacy); lerr == nil && len(legacyData) == 32 {
 			if merr := os.MkdirAll(filepath.Dir(path), 0o700); merr == nil {
 				if werr := os.WriteFile(path, legacyData, 0o600); werr == nil {
+					_ = os.Remove(legacy)
 					return legacyData, nil
 				}
 			}

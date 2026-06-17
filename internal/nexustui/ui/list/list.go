@@ -830,6 +830,26 @@ func (l *List) WrapToEnd() bool {
 	return true
 }
 
+// SelectPrevCyclic selects the visually previous item, wrapping to the
+// visual end if the visual start is currently selected, and scrolls the new
+// selection into view.
+func (l *List) SelectPrevCyclic() {
+	if !l.SelectPrev() {
+		l.WrapToEnd()
+	}
+	l.ScrollToSelected()
+}
+
+// SelectNextCyclic selects the visually next item, wrapping to the visual
+// start if the visual end is currently selected, and scrolls the new
+// selection into view.
+func (l *List) SelectNextCyclic() {
+	if !l.SelectNext() {
+		l.WrapToStart()
+	}
+	l.ScrollToSelected()
+}
+
 // SelectedItem returns the currently selected item. It may be nil if no item
 // is selected.
 func (l *List) SelectedItem() Item {

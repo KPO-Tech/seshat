@@ -102,19 +102,16 @@ func NewAssembler() *Assembler {
 // AddSection adds a section
 func (a *Assembler) AddSection(section Section) {
 	a.sections = append(a.sections, section)
-	a.sortSections()
 }
 
 // AddSections adds multiple sections
 func (a *Assembler) AddSections(sections []Section) {
 	a.sections = append(a.sections, sections...)
-	a.sortSections()
 }
 
 // SetDefaultSections sets the default sections
 func (a *Assembler) SetDefaultSections(sections []Section) {
 	a.defaultSections = sections
-	a.sortDefaultSections()
 }
 
 // Build builds the system prompt.
@@ -230,31 +227,6 @@ func dedupeStrings(values []string) []string {
 		result = append(result, value)
 	}
 	return result
-}
-
-// sortSections sorts sections by priority (descending)
-func (a *Assembler) sortSections() {
-	// Simple bubble sort
-	n := len(a.sections)
-	for i := 0; i < n-1; i++ {
-		for j := 0; j < n-i-1; j++ {
-			if a.sections[j].Priority < a.sections[j+1].Priority {
-				a.sections[j], a.sections[j+1] = a.sections[j+1], a.sections[j]
-			}
-		}
-	}
-}
-
-// sortDefaultSections sorts default sections by priority (descending)
-func (a *Assembler) sortDefaultSections() {
-	n := len(a.defaultSections)
-	for i := 0; i < n-1; i++ {
-		for j := 0; j < n-i-1; j++ {
-			if a.defaultSections[j].Priority < a.defaultSections[j+1].Priority {
-				a.defaultSections[j], a.defaultSections[j+1] = a.defaultSections[j+1], a.defaultSections[j]
-			}
-		}
-	}
 }
 
 // DefaultSystemPromptSections returns the canonical prompt sections in stable order.

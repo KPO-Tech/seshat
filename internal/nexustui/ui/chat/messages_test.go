@@ -6,6 +6,7 @@ import (
 	"github.com/EngineerProjects/nexus-engine/internal/nexustui/message"
 	"github.com/EngineerProjects/nexus-engine/internal/nexustui/ui/styles"
 	planTool "github.com/EngineerProjects/nexus-engine/internal/tools/system/plan"
+	skillsTool "github.com/EngineerProjects/nexus-engine/internal/tools/system/skills"
 	taskTool "github.com/EngineerProjects/nexus-engine/internal/tools/task"
 )
 
@@ -98,5 +99,34 @@ func TestNewToolMessageItemUsesTaskRenderers(t *testing.T) {
 	}
 	if _, ok := NewToolMessageItem(sty, "assistant-1", message.ToolCall{ID: "task-stop", Name: taskTool.ToolNameTaskStop}, nil, false).(*TaskStopToolMessageItem); !ok {
 		t.Fatalf("expected task_stop renderer")
+	}
+}
+
+func TestNewToolMessageItemUsesSkillRenderers(t *testing.T) {
+	sty := &styles.Styles{}
+	if _, ok := NewToolMessageItem(sty, "assistant-1", message.ToolCall{ID: "skill-1", Name: skillsTool.SkillToolName}, nil, false).(*SkillToolMessageItem); !ok {
+		t.Fatalf("expected skill renderer")
+	}
+	if _, ok := NewToolMessageItem(sty, "assistant-1", message.ToolCall{ID: "skill-list", Name: "nexus_list_skills"}, nil, false).(*NexusListSkillsToolMessageItem); !ok {
+		t.Fatalf("expected nexus_list_skills renderer")
+	}
+	if _, ok := NewToolMessageItem(sty, "assistant-1", message.ToolCall{ID: "skill-read", Name: "nexus_read_skill"}, nil, false).(*NexusReadSkillToolMessageItem); !ok {
+		t.Fatalf("expected nexus_read_skill renderer")
+	}
+	if _, ok := NewToolMessageItem(sty, "assistant-1", message.ToolCall{ID: "skill-validate", Name: "nexus_validate_skill"}, nil, false).(*NexusValidateSkillToolMessageItem); !ok {
+		t.Fatalf("expected nexus_validate_skill renderer")
+	}
+}
+
+func TestNewToolMessageItemUsesMCPRenderers(t *testing.T) {
+	sty := &styles.Styles{}
+	if _, ok := NewToolMessageItem(sty, "assistant-1", message.ToolCall{ID: "mcp-list", Name: "mcp_list_resources"}, nil, false).(*MCPListResourcesToolMessageItem); !ok {
+		t.Fatalf("expected mcp_list_resources renderer")
+	}
+	if _, ok := NewToolMessageItem(sty, "assistant-1", message.ToolCall{ID: "mcp-read", Name: "mcp_read_resource"}, nil, false).(*MCPReadResourceToolMessageItem); !ok {
+		t.Fatalf("expected mcp_read_resource renderer")
+	}
+	if _, ok := NewToolMessageItem(sty, "assistant-1", message.ToolCall{ID: "mcp-generic", Name: "mcp_github_search"}, nil, false).(*MCPToolMessageItem); !ok {
+		t.Fatalf("expected generic mcp_* renderer")
 	}
 }

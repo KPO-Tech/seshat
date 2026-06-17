@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/EngineerProjects/nexus-engine/internal/execution"
@@ -34,6 +35,7 @@ type sessionRestorer interface {
 
 // Engine orchestrates query sessions.
 type Engine struct {
+	mu                   sync.RWMutex // protects apiClient and loop.apiClient swaps
 	apiClient            *providers.Client
 	orchestrator         *execution.Orchestrator
 	compactor            *compact.Engine
@@ -132,6 +134,8 @@ func NewEngine(
 
 // SetAPIClient swaps the loop-facing API client.
 func (e *Engine) SetAPIClient(apiClient *providers.Client) {
+	e.mu.Lock()
+	defer e.mu.Unlock()
 	e.apiClient = apiClient
 	if e.loop != nil {
 		e.loop.apiClient = apiClient

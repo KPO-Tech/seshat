@@ -422,16 +422,16 @@ func ShouldRenderAssistantMessage(msg *message.Message) bool {
 }
 
 // BuildToolResultMap creates a map of tool call IDs to their results from a list of messages.
-// Tool result messages (role == message.Tool) contain the results that should be linked
-// to tool calls in assistant messages.
+// Results may live in a dedicated message.Tool-role message (live streaming) or be embedded
+// directly inside the assistant message Parts (restored sessions — convertSDKMessages stores
+// ToolResult alongside the matching ToolCall in the same Parts slice). Scanning every message
+// regardless of role handles both cases without double-counting, since ToolCallID is unique.
 func BuildToolResultMap(messages []*message.Message) map[string]message.ToolResult {
 	resultMap := make(map[string]message.ToolResult)
 	for _, msg := range messages {
-		if msg.Role == message.Tool {
-			for _, result := range msg.ToolResults() {
-				if result.ToolCallID != "" {
-					resultMap[result.ToolCallID] = result
-				}
+		for _, result := range msg.ToolResults() {
+			if result.ToolCallID != "" {
+				resultMap[result.ToolCallID] = result
 			}
 		}
 	}

@@ -396,10 +396,10 @@ func getProjectRootID(projectPath string) string {
 		headPath := filepath.Join(gitPath, "HEAD")
 		if data, err := os.ReadFile(headPath); err == nil {
 			content := string(data)
-			// Check for gitdir reference
-			if len(content) > 10 && content[:10] == "gitdir: " {
+			// Check for gitdir reference ("gitdir: " is 8 chars)
+			if len(content) > 8 && content[:8] == "gitdir: " {
 				// It's a worktree reference, find actual repo
-				refPath := strings.TrimSpace(content[9:])
+				refPath := strings.TrimSpace(content[8:])
 				if filepath.IsAbs(refPath) {
 					return filepath.Base(refPath)
 				}

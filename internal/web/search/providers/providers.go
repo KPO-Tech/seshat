@@ -9,13 +9,12 @@ func AllProviders() []SearchProvider {
 		NewJinaProvider(),
 		NewLangSearchProvider(),
 		NewSearXNGProvider(),
-		NewDuckDuckGoProvider(),
 	}
 }
 
 // autoProviderPriority defines the fallback order in auto mode.
 // Lower = tried first. Paid/high-quality APIs first, free-key next,
-// self-hosted last, scraping-based fallback at the very end.
+// self-hosted last.
 func autoProviderPriority(name string) int {
 	switch name {
 	case "tavily":
@@ -28,8 +27,6 @@ func autoProviderPriority(name string) int {
 		return 35 // free API key, clean JSON, AI-optimised results
 	case "searxng":
 		return 40 // self-hosted, no third-party key required
-	case "ddg":
-		return 50 // scraping fallback, always available
 	default:
 		return 100
 	}

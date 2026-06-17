@@ -155,7 +155,9 @@ func generateSchema(v any) (map[string]any, []string) {
 
 		prop := buildPropertySchema(field, optional)
 		properties[name] = prop
-		required = append(required, name)
+		if !optional {
+			required = append(required, name)
+		}
 	}
 
 	return properties, required

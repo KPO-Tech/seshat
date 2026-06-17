@@ -331,29 +331,6 @@ Exécute ces tools dans cet ordre exact :
 Ne fais rien d'autre après l'étape 5.
 ```
 
-### 6c. Agentic Fetch — live tail avec nested tools web
-
-```
-Utilise explicitement le tool "agentic_fetch" pour cette tâche :
-
-  url: "https://go.dev/doc/effective_go"
-  prompt: "Extrais uniquement les 5 règles de nommage les plus importantes mentionnées dans ce document."
-
-→ attendu pendant l'exécution :
-  - Header "● Agentic Fetch  https://go.dev/doc/effective_go"
-  - Tag "Prompt" + texte de la requête sous le header
-  - Arbre compact des nested tools (fetch, éventuellement web_search)
-  - Section live = dernier tool complété en plein rendu
-  - Spinner ⠋
-
-→ attendu à la fin :
-  - Header avec icône ✓
-  - Arbre compact uniquement
-  - Body = les 5 règles en markdown
-
-Ne fais rien d'autre après.
-```
-
 ---
 
 ## 7. TASK TOOLS
@@ -632,4 +609,253 @@ Exécute les tools ci-dessous dans l'ordre exact, sans commenter entre les étap
     → header seul, aucun texte
 
 Ne fais rien d'autre après l'étape 11.
+```
+
+---
+
+## 14. MEMORY TOOLS
+
+Valide : `memory_create_entities`, `memory_add_observations`, `memory_search_nodes`, `memory_open_nodes`.
+
+```
+Exécute ces appels dans cet ordre exact, sans commenter entre les étapes.
+
+1. memory_create_entities — crée 3 entités :
+     entities:
+       - name: "nexus-engine"
+         entity_type: "project"
+         observations:
+           - "TUI terminal écrit en Go avec bubbletea"
+           - "Supporte les agents multi-modaux"
+       - name: "Alice"
+         entity_type: "person"
+         observations:
+           - "Développeuse principale du projet"
+       - name: "bubbletea"
+         entity_type: "library"
+   → attendu : header "✓ Create Memory  3 entities"
+   → attendu : body = liste 3 lignes :
+       nexus-engine (project) · 2 obs
+       Alice (person) · 1 ob
+       bubbletea (library)
+
+2. memory_add_observations — ajoute des observations :
+     observations:
+       - entity_name: "bubbletea"
+         contents:
+           - "Framework TUI de Charmbracelet"
+           - "Utilisé par nexus-engine pour le rendu terminal"
+       - entity_name: "Alice"
+         contents:
+           - "Préfère les interfaces en ligne de commande"
+   → attendu : header "✓ Memory Observe  2 entities"
+   → attendu : body = liste 2 lignes :
+       bubbletea · +2 observations
+       Alice · +1 observation
+
+3. memory_search_nodes — recherche par mot-clé :
+     query: "Go"
+   → attendu : header "✓ Memory Search  Go  N results" (N ≥ 1)
+   → attendu : body = liste des entités correspondantes avec leur type
+
+4. memory_search_nodes — recherche sans résultats :
+     query: "rust programming language"
+   → attendu : header "✓ Memory Search  rust programming language  no results"
+   → attendu : aucun body
+
+5. memory_open_nodes — ouvre des nœuds par nom exact :
+     names: ["nexus-engine", "Alice"]
+   → attendu : header "✓ Memory Open  2 nodes" (+ relations si présentes)
+   → attendu : body = liste 2 lignes avec nom + type + obs count
+
+6. memory_open_nodes — nom inexistant :
+     names: ["entite-inconnue-xyz"]
+   → attendu : header "✓ Memory Open  1 node  not found"
+   → attendu : aucun body
+
+Ne fais rien d'autre après l'étape 6.
+```
+
+---
+
+## 15. GOAL TOOLS
+
+Valide : `create_goal`, `get_goal`, `update_goal`.
+
+```
+Exécute ces appels dans cet ordre exact, sans commenter entre les étapes.
+
+1. get_goal — avant toute création (aucun goal actif)
+   → attendu : header "Goal · not set"
+   → attendu : aucun body
+
+2. create_goal — avec objectif et budget de tokens :
+     objective: "Refactoriser le système de rendu TUI pour supporter les nouveaux tools de goal, memory et agent"
+     token_budget: 8000
+   → attendu : header "Create Goal · Refactoriser le système de rendu TUI… · active"
+   → attendu : header mentionne "8000 token budget"
+   → attendu : body = "Objective: Refactoriser le système de rendu TUI…" + ligne budget
+
+3. get_goal — après création
+   → attendu : header "Goal · active · Refactoriser le système de rendu TUI…"
+   → attendu : body = lignes Objective + Budget restant
+
+4. update_goal — change le statut en paused :
+     status: "paused"
+   → attendu : header "Update Goal · paused"
+   → attendu : body = nouvelle ligne statut + budget mis à jour
+
+5. update_goal — reprend et modifie l'objectif :
+     status: "active"
+     objective: "Refactoriser le rendu TUI — phase 2 : tools de goal et memory"
+   → attendu : header "Update Goal · active"
+   → attendu : body = nouveau résumé goal
+
+6. get_goal — état final
+   → attendu : header "Goal · active · Refactoriser le rendu TUI — phase 2…"
+   → attendu : body = objective complet + ligne tokens
+
+7. update_goal — marque comme complete :
+     status: "complete"
+   → attendu : header "Update Goal · complete"
+   → attendu : body = "Goal marked complete (status: complete)…"
+
+Ne fais rien d'autre après l'étape 7.
+```
+
+---
+
+## 16. DOCX, MONITOR, CODE COMPLETE, LSP
+
+Valide : `docx`, `monitor`, `code_complete`, `lsp`.
+
+### 16a. docx — create, append, replace
+
+```
+Travaille uniquement dans /tmp. Exécute ces appels dans cet ordre exact.
+
+1. docx — créer un nouveau document :
+     document_path: "/tmp/test_nexus.docx"
+     action: "create"
+     content: "Nexus Engine — rapport de test TUI"
+     bold: true
+     font_size: 18
+     alignment: "center"
+     title: "Rapport TUI"
+     author: "Nexus Agent"
+   → attendu : header "✓ Docx  create  ~/test_nexus.docx"
+   → attendu : body = "Message: Document created successfully"
+
+2. docx — ajouter du contenu :
+     document_path: "/tmp/test_nexus.docx"
+     action: "append"
+     content: "Section 1 : le rendu TUI utilise bubbletea et lipgloss."
+     italic: true
+   → attendu : header "✓ Docx  append  ~/test_nexus.docx"
+   → attendu : body = "Message: Content appended successfully"
+
+3. docx — créer un document avec table :
+     document_path: "/tmp/test_table.docx"
+     action: "create"
+     table_data: "Tool\tStatus\tFile\ndocx\tDone\tdocx.go\nmonitor\tDone\tmonitor.go\nlsp\tDone\tlsp_tools.go"
+   → attendu : header "✓ Docx  create  ~/test_table.docx"
+   → attendu : body = "Message: Document created successfully"
+
+4. docx — remplacer le premier paragraphe :
+     document_path: "/tmp/test_nexus.docx"
+     action: "replace"
+     content: "Nexus Engine v2 — rapport de test TUI (mis à jour)"
+   → attendu : header "✓ Docx  replace  ~/test_nexus.docx"
+   → attendu : body = "Message: Content replaced successfully"
+
+Ne fais rien d'autre après l'étape 4.
+```
+
+### 16b. monitor — démarrage en arrière-plan
+
+```
+Exécute ces appels dans cet ordre exact.
+
+1. monitor — surveiller un log en boucle :
+     command: "for i in $(seq 1 5); do echo \"line $i\"; sleep 0.5; done"
+     description: "Génère 5 lignes à 0.5s d'intervalle"
+   → attendu : header "Monitor  for i in $(seq 1 5)…  Génère 5 lignes…"
+   → attendu : body = "Monitor task started with ID: <id>. Output is being streamed to: <file>"
+
+2. monitor — commande plus simple sans description :
+     command: "echo hello && sleep 1 && echo world"
+   → attendu : header "Monitor  echo hello && sleep 1…"
+   → attendu : body = ligne task ID
+
+Ne fais rien d'autre après l'étape 2.
+```
+
+### 16c. code_complete — complétion FIM
+
+```
+Exécute ces appels dans cet ordre exact.
+(Si le tool code_complete n'est pas activé, passe directement à 16d.)
+
+1. code_complete — compléter une fonction Go :
+     prompt: |
+       package main
+
+       import "fmt"
+
+       func fibonacci(n int) int {
+           if n <= 1 {
+               return n
+           }
+   → attendu : header "Code Complete  if n <= 1 {  <provider>/<model>  N tokens"
+   → attendu : body = complétion de la fonction en code Go colorisé
+
+2. code_complete — compléter avec suffix :
+     prompt: |
+       func greet(name string) string {
+           return fmt.Sprintf("Hello,
+     suffix: |
+       ")
+       }
+   → attendu : header "Code Complete  return fmt.Sprintf(…  <provider>/<model>"
+   → attendu : body = fragment de complétion en code colorisé
+
+Ne fais rien d'autre après l'étape 2.
+```
+
+### 16d. lsp — opérations code intelligence
+
+```
+Utilise un fichier Go existant du projet courant pour chaque opération.
+Exécute ces appels dans cet ordre exact.
+(Si gopls n'est pas disponible, les résultats peuvent être vides — vérifie quand même le header.)
+
+1. lsp — symboles du document :
+     operation: "symbols"
+     file_path: "internal/nexustui/ui/chat/tools.go"
+   → attendu : header "✓ LSP  symbols  internal/…/tools.go  Found N symbol(s)"
+   → attendu : aucun body (summary dans le header suffit)
+
+2. lsp — définition d'un symbole :
+     operation: "definition"
+     file_path: "internal/nexustui/ui/chat/tools.go"
+     line: 99
+     column: 6
+   → attendu : header "✓ LSP  definition  internal/…/tools.go:99:6  Found N location(s)"
+   → attendu : aucun body si summary présent
+
+3. lsp — hover sur un identifiant :
+     operation: "hover"
+     file_path: "internal/nexustui/ui/chat/tools.go"
+     line: 99
+     column: 6
+   → attendu : header "✓ LSP  hover  internal/…/tools.go:99:6  <texte hover tronqué>"
+   → attendu : aucun body si summary présent
+
+4. lsp — recherche workspace :
+     operation: "workspace_symbol"
+     file_path: "internal/nexustui/ui/chat/tools.go"
+     query: "ToolMessageItem"
+   → attendu : header "✓ LSP  workspace_symbol  internal/…/tools.go  ToolMessageItem  Found N symbol(s)"
+
+Ne fais rien d'autre après l'étape 4.
 ```

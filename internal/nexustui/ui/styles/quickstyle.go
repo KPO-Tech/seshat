@@ -495,11 +495,11 @@ func quickStyle(o quickStyleOpts) Styles {
 	}
 
 	s.Help = help.Styles{
-		ShortKey:       base.Foreground(o.fgMoreSubtle),
+		ShortKey:       base.Foreground(o.primary),
 		ShortDesc:      base.Foreground(o.fgMostSubtle),
 		ShortSeparator: base.Foreground(o.separator),
 		Ellipsis:       base.Foreground(o.separator),
-		FullKey:        base.Foreground(o.fgMoreSubtle),
+		FullKey:        base.Foreground(o.primary),
 		FullDesc:       base.Foreground(o.fgMostSubtle),
 		FullSeparator:  base.Foreground(o.separator),
 	}
@@ -605,8 +605,8 @@ func quickStyle(o quickStyleOpts) Styles {
 
 	// Content rendering — explicit bgBase background prevents terminal escape-code
 	// bleeding from previously styled content while matching the page background.
-	s.Tool.ContentLine = muted.Background(o.bgBase)
-	s.Tool.ContentTruncation = muted.Background(o.bgBase)
+	s.Tool.ContentLine = subtle.Background(o.bgBase)
+	s.Tool.ContentTruncation = subtle.Background(o.bgBase)
 	s.Tool.ContentCodeLine = base.Background(o.bgBase).PaddingLeft(2)
 	s.Tool.ContentCodeTruncation = muted.Background(o.bgBase).PaddingLeft(2)
 	s.Tool.ContentCodeBg = o.bgBase
@@ -693,9 +693,14 @@ func quickStyle(o quickStyleOpts) Styles {
 	s.Tool.WebSearchURL = lipgloss.NewStyle().Foreground(o.info)
 	s.Tool.WebFetchPrompt = lipgloss.NewStyle().Foreground(o.fgMostSubtle)
 	s.Tool.AskUserCursor = lipgloss.NewStyle().Foreground(o.accent)
-	s.Tool.AskUserOptionFocused = lipgloss.NewStyle().Foreground(o.fgBase)
+	s.Tool.AskUserOptionFocused = lipgloss.NewStyle().Foreground(o.fgBase).Bold(true)
+	s.Tool.AskUserOptionSelected = lipgloss.NewStyle().Foreground(o.accent)
+	s.Tool.AskUserCheckOn = lipgloss.NewStyle().Foreground(o.accent)
+	s.Tool.AskUserCheckOff = lipgloss.NewStyle().Foreground(o.fgMostSubtle)
+	s.Tool.AskUserCount = lipgloss.NewStyle().Foreground(o.accent).Italic(true)
 	s.Tool.AskUserFooter = lipgloss.NewStyle().Foreground(o.fgMostSubtle)
 	s.Tool.AskUserHistory = lipgloss.NewStyle().Foreground(o.fgSubtle)
+	s.Tool.RunningStatus = lipgloss.NewStyle().Foreground(o.fgMostSubtle).Italic(true)
 
 	// Buttons
 	s.Button.Focused = lipgloss.NewStyle().Foreground(o.onPrimary).Background(o.secondary)
@@ -708,6 +713,7 @@ func quickStyle(o quickStyleOpts) Styles {
 	s.Editor.PromptYoloIconBlurred = s.Editor.PromptYoloIconFocused.Foreground(o.bgBase).Background(o.fgMoreSubtle)
 	s.Editor.PromptYoloDotsFocused = lipgloss.NewStyle().MarginRight(1).Foreground(o.warningSubtle).SetString(":::")
 	s.Editor.PromptYoloDotsBlurred = s.Editor.PromptYoloDotsFocused.Foreground(o.fgMoreSubtle)
+	s.Editor.WorkingStatus = lipgloss.NewStyle().Foreground(o.fgMostSubtle).Italic(true).PaddingLeft(1)
 
 	s.Radio.On = lipgloss.NewStyle().Foreground(o.fgSubtle).SetString(RadioOn)
 	s.Radio.Off = lipgloss.NewStyle().Foreground(o.fgSubtle).SetString(RadioOff)
@@ -830,15 +836,18 @@ func quickStyle(o quickStyleOpts) Styles {
 	s.Messages.AssistantInfoDuration = subtle
 	s.Messages.AssistantCanceled = lipgloss.NewStyle().Foreground(o.fgBase).Italic(true)
 
-	// Thinking section styles — bordered box, no background fill
-	s.Messages.ThinkingBox = lipgloss.NewStyle().
+	// Thinking section styles — no border box, left-bar accent + indented text
+	s.Messages.ThinkingText = lipgloss.NewStyle().
 		Foreground(o.fgSubtle).
-		Border(lipgloss.RoundedBorder()).
+		Italic(true)
+	s.Messages.ThinkingLeftBar = lipgloss.NewStyle().
+		Border(lipgloss.ThickBorder(), false, false, false, true).
 		BorderForeground(o.fgMostSubtle).
-		Padding(0, 1)
+		PaddingLeft(1)
 	s.Messages.ThinkingTruncationHint = muted
 	s.Messages.ThinkingFooterTitle = muted
 	s.Messages.ThinkingFooterDuration = subtle
+	s.Messages.ThinkingExpandHint = muted
 
 	// Text selection.
 	s.TextSelection = lipgloss.NewStyle().Foreground(o.onPrimary).Background(o.primary)
@@ -943,9 +952,13 @@ func quickStyle(o quickStyleOpts) Styles {
 	s.Status.ErrorMessage = s.Status.SuccessMessage.Foreground(o.onPrimary).Background(o.error)
 
 	// Completions styles
-	s.Completions.Normal = base.Background(o.bgLessVisible).Foreground(o.fgBase)
-	s.Completions.Focused = base.Background(o.primary).Foreground(o.onPrimary)
+	s.Completions.Normal = base.Foreground(o.fgBase)
+	s.Completions.Focused = base.Background(o.bgMostVisible).Foreground(o.primary).Bold(true)
 	s.Completions.Match = base.Underline(true)
+	s.Completions.Desc = base.Foreground(o.fgSubtle)
+	s.Completions.Icon = base.Foreground(o.fgSubtle)
+	s.Completions.Bar = base.Foreground(o.primary)
+	s.Completions.Border = base.Border(lipgloss.RoundedBorder()).BorderForeground(o.primary)
 
 	// Attachments styles
 	attachmentIconStyle := base.Foreground(o.bgLessVisible).Background(o.success).Padding(0, 1)

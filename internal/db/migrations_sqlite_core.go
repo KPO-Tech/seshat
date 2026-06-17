@@ -74,6 +74,11 @@ func sqliteCoreMigrations() []schemaMigration {
 			Scope: migrationScopeCoreSQLite,
 			Run:   migrateSQLiteSessionTasks,
 		},
+		{
+			ID:    "20260615_012_longterm_memory",
+			Scope: migrationScopeCoreSQLite,
+			Run:   migrateSQLiteLongtermMemory,
+		},
 	}
 }
 
@@ -320,6 +325,39 @@ func migrateSQLiteSessionTasks(ctx context.Context, db *DB) error {
 		)`,
 		`CREATE INDEX IF NOT EXISTS idx_session_tasks_session_position
 			ON session_tasks(session_id, position ASC)`,
+	}
+	for _, stmt := range statements {
+		if err := db.gormDB.WithContext(ctx).Exec(stmt).Error; err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func migrateSQLiteLongtermMemory(ctx context.Context, db *DB) error {
+	statements := []string{
+		`CREATE TABLE IF NOT EXISTS memory_entities (
+			id                TEXT    PRIMARY KEY,
+			user_id           TEXT    NOT NULL,
+			name              TEXT    NOT NULL,
+			entity_type       TEXT    NOT NULL,
+			observations_json TEXT    NOT NULL DEFAULT '[]',
+			created_at_unix   INTEGER NOT NULL,
+			updated_at_unix   INTEGER NOT NULL,
+			UNIQUE(user_id, name)
+		)`,
+		`CREATE TABLE IF NOT EXISTS memory_relations (
+			id              TEXT    PRIMARY KEY,
+			user_id         TEXT    NOT NULL,
+			from_name       TEXT    NOT NULL,
+			to_name         TEXT    NOT NULL,
+			relation_type   TEXT    NOT NULL,
+			created_at_unix INTEGER NOT NULL,
+			UNIQUE(user_id, from_name, to_name, relation_type)
+		)`,
+		`CREATE INDEX IF NOT EXISTS idx_memory_entities_user ON memory_entities(user_id)`,
+		`CREATE INDEX IF NOT EXISTS idx_memory_relations_user ON memory_relations(user_id)`,
+		`CREATE INDEX IF NOT EXISTS idx_memory_relations_endpoints ON memory_relations(user_id, from_name, to_name)`,
 	}
 	for _, stmt := range statements {
 		if err := db.gormDB.WithContext(ctx).Exec(stmt).Error; err != nil {

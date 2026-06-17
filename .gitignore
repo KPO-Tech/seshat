@@ -41,6 +41,9 @@ go.work.sum
 .DS_Store
 Thumbs.db
 
+# Local test artifacts
+test.db
+
 # Local tool state
 .gemini/
 .antigravity/

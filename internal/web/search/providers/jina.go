@@ -59,7 +59,7 @@ func (p *JinaProvider) Search(input SearchInput) (ProviderOutput, error) {
 	}
 
 	reqURL := "https://api.jina.ai/v1/search"
-	req, err := http.NewRequest("GET", reqURL, nil)
+	req, err := http.NewRequestWithContext(input.ctx(), "GET", reqURL, nil)
 	if err != nil {
 		return ProviderOutput{}, err
 	}

@@ -62,7 +62,7 @@ func NewSessions(com *common.Common, selectedSessionID string) (*Session, error)
 	s := new(Session)
 	s.sessionsMode = sessionsModeNormal
 	s.com = com
-	sessions, err := com.Workspace.ListSessions(context.TODO())
+	sessions, err := com.Workspace.ListSessions(context.Background())
 	if err != nil {
 		return nil, err
 	}
@@ -190,20 +190,10 @@ func (s *Session) HandleMsg(msg tea.Msg) Action {
 				s.list.SetItems(sessionItems(s.com.Styles, sessionsModeDeleting, s.sessions...)...)
 			case key.Matches(msg, s.keyMap.Previous):
 				s.list.Focus()
-				if s.list.IsSelectedFirst() {
-					s.list.SelectLast()
-				} else {
-					s.list.SelectPrev()
-				}
-				s.list.ScrollToSelected()
+				s.list.SelectPrevCyclic()
 			case key.Matches(msg, s.keyMap.Next):
 				s.list.Focus()
-				if s.list.IsSelectedLast() {
-					s.list.SelectFirst()
-				} else {
-					s.list.SelectNext()
-				}
-				s.list.ScrollToSelected()
+				s.list.SelectNextCyclic()
 			case key.Matches(msg, s.keyMap.Select):
 				if item := s.list.SelectedItem(); item != nil {
 					sessionItem := item.(*SessionItem)
@@ -361,7 +351,7 @@ func (s *Session) removeSession(id string) {
 
 func (s *Session) deleteSessionCmd(id string) tea.Cmd {
 	return func() tea.Msg {
-		err := s.com.Workspace.DeleteSession(context.TODO(), id)
+		err := s.com.Workspace.DeleteSession(context.Background(), id)
 		if err != nil {
 			return util.NewErrorMsg(err)
 		}
@@ -397,7 +387,7 @@ func (s *Session) updateSession(session session.Session) {
 
 func (s *Session) updateSessionCmd(session session.Session) tea.Cmd {
 	return func() tea.Msg {
-		_, err := s.com.Workspace.SaveSession(context.TODO(), session)
+		_, err := s.com.Workspace.SaveSession(context.Background(), session)
 		if err != nil {
 			return util.NewErrorMsg(err)
 		}

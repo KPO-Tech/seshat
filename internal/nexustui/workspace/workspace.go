@@ -107,10 +107,12 @@ type Workspace interface {
 	// WorktreePath returns the active git worktree path for the current session,
 	// or empty string if no worktree is active.
 	WorktreePath() string
-	AgentQueuedPrompts(sessionID string) int
-	AgentQueuedPromptsList(sessionID string) []string
-	AgentClearQueue(sessionID string)
 	AgentSummarize(ctx context.Context, sessionID string) error
+	// ApprovePlan exits plan mode immediately (as if exit_plan_mode was called)
+	// and returns the plan content from disk. The caller should send this content
+	// to the agent so it can start implementation without needing to call
+	// exit_plan_mode itself.
+	ApprovePlan(sessionID string) (planContent string, err error)
 	UpdateAgentModel(ctx context.Context) error
 	InitCoderAgent(ctx context.Context) error
 	GetDefaultSmallModel(providerID string) config.SelectedModel
@@ -179,6 +181,8 @@ type Workspace interface {
 	GetMCPPrompt(clientID, promptID string, args map[string]string) (string, error)
 	EnableDockerMCP(ctx context.Context) error
 	DisableDockerMCP() error
+	EnableMCPServer(ctx context.Context, name string) error
+	DisableMCPServer(name string) error
 
 	// Events
 	Subscribe(program *tea.Program)

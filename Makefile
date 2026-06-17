@@ -1,7 +1,7 @@
 CMD_CLI  := ./cmd/cli
 CMD_GRPC := ./cmd/grpc
 
-.PHONY: all build build-cli build-grpc test test-race fmt vet lint tidy clean hooks \
+.PHONY: all build build-cli build-grpc build_linux test test-race fmt vet lint tidy clean hooks \
         setup install-python start-docling
 
 # ── Default ────────────────────────────────────────────────────────────────────
@@ -38,6 +38,9 @@ build-cli:
 
 build-grpc:
 	go build -o bin/nexus-grpc $(CMD_GRPC)
+
+build_linux:
+	go build -o /tmp/nexus $(CMD_CLI)
 
 # ── Test ───────────────────────────────────────────────────────────────────────
 

@@ -101,7 +101,7 @@ func (t *UpdateGoalTool) ValidateInput(_ context.Context, in map[string]any) (ma
 	return in, nil
 }
 func (t *UpdateGoalTool) CheckPermissions(_ context.Context, in map[string]any, _ tool.ToolUseContext) types.PermissionResult {
-	return types.Passthrough(in)
+	return types.AllowWithInput("", in)
 }
 func (t *UpdateGoalTool) Description(_ context.Context) (string, error) {
 	return updateGoalDescription, nil

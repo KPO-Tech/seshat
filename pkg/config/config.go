@@ -29,7 +29,7 @@ type Config struct {
 	ProviderProjectID string  `mapstructure:"provider_project_id" yaml:"provider_project_id,omitempty"`
 	ProviderResource  string  `mapstructure:"provider_resource" yaml:"provider_resource,omitempty"`
 	AdminEmail        string  `mapstructure:"admin_email" yaml:"admin_email,omitempty"`
-	AdminPassword     string  `mapstructure:"admin_password" yaml:"admin_password,omitempty"`
+	AdminPassword     string  `mapstructure:"admin_password" yaml:"-"`
 	AdminPasswordHash string  `mapstructure:"admin_password_hash" yaml:"admin_password_hash,omitempty"`
 
 	// Database driver configuration (multi-driver support)
@@ -190,8 +190,7 @@ func LoadInto(config *Config) error {
 	}
 
 	*config = DefaultConfig()
-	loadEnvFile(".env")    //nolint:errcheck // best-effort .env loading
-	loadEnvFile("../.env") //nolint:errcheck // best-effort .env loading
+	loadEnvFile(".env") //nolint:errcheck // best-effort .env loading
 
 	v := viper.New()
 	v.SetConfigType("yaml")

@@ -319,6 +319,22 @@ func (a *Anim) renderLabel(label string) {
 	}
 }
 
+// ElapsedSeconds returns the number of full seconds elapsed since the animation
+// started, derived from the frame counter so no wall-clock call is needed.
+func (a *Anim) ElapsedSeconds() int {
+	return int(a.framesSinceStart.Load()) / fps
+}
+
+// EllipsisFrame returns a cycling ellipsis string (".", "..", "...") based on
+// the current frame counter. Advances every ~400ms regardless of label width.
+func (a *Anim) EllipsisFrame() string {
+	frames := int(a.framesSinceStart.Load())
+	const cycleLen = ellipsisAnimSpeed * 3
+	idx := (frames / ellipsisAnimSpeed) % 3
+	_ = cycleLen
+	return []string{".", "..", "..."}[idx]
+}
+
 // Width returns the total width of the animation.
 func (a *Anim) Width() (w int) {
 	w = a.width

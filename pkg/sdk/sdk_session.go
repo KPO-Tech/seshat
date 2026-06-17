@@ -99,6 +99,16 @@ func (s *Session) GetPermissionContext() *PermissionContext {
 	return s.session.GetPermissionContext()
 }
 
+// ClearPlanMode exits plan mode in the session context, restoring the previous
+// permission mode. This allows the host to pre-exit plan mode on user approval
+// without the model needing to call exit_plan_mode itself.
+func (s *Session) ClearPlanMode() {
+	if s == nil || s.session == nil {
+		return
+	}
+	s.session.ClearPlanMode()
+}
+
 func (s *Session) SetPermissionMode(mode PermissionMode) {
 	if s == nil || s.session == nil {
 		return

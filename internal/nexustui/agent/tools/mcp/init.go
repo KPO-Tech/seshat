@@ -257,13 +257,21 @@ func initClient(ctx context.Context, cfg *config.ConfigStore, name string, m con
 		return err
 	}
 
+	resources, err := getResources(ctx, session)
+	if err != nil {
+		slog.Warn("Error listing resources (non-fatal)", "name", name, "error", err)
+		resources = nil
+	}
+
 	toolCount := updateTools(cfg, name, tools)
 	updatePrompts(name, prompts)
+	resourceCount := updateResources(name, resources)
 	sessions.Set(name, session)
 
 	updateState(name, StateConnected, nil, session, Counts{
-		Tools:   toolCount,
-		Prompts: len(prompts),
+		Tools:     toolCount,
+		Prompts:   len(prompts),
+		Resources: resourceCount,
 	})
 
 	return nil
@@ -519,7 +527,7 @@ func (rt headerRoundTripper) RoundTrip(req *http.Request) (*http.Response, error
 }
 
 func mcpTimeout(m config.MCPConfig) time.Duration {
-	return time.Duration(cmp.Or(m.Timeout, 15)) * time.Second
+	return time.Duration(cmp.Or(m.Timeout, 60)) * time.Second
 }
 
 func stdioCheck(old *exec.Cmd) error {

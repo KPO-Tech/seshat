@@ -22,13 +22,13 @@ const (
 	nameOpenNodes       = "memory_open_nodes"
 )
 
-// userIDFromCtx extracts the authenticated user ID injected by the query handler.
+// userIDFromCtx returns the user ID from context, falling back to "local" for
+// single-user CLI sessions where no auth layer injects a user ID.
 func userIDFromCtx(ctx context.Context) (string, error) {
-	id := types.AgentUserIDFromContext(ctx)
-	if id == "" {
-		return "", fmt.Errorf("memory tools require an authenticated session (user ID not found in context)")
+	if id := types.AgentUserIDFromContext(ctx); id != "" {
+		return id, nil
 	}
-	return id, nil
+	return "local", nil
 }
 
 // formatGraph renders a Graph as a compact JSON string for tool output.

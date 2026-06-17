@@ -64,6 +64,7 @@ func (s *Service) Search(ctx context.Context, request webcore.SearchRequest) (we
 	}
 
 	providerOutput, err := providers.Search(providers.SearchInput{
+		Ctx:            ctx,
 		Query:          input.Query,
 		AllowedDomains: input.AllowedDomains,
 		BlockedDomains: input.BlockedDomains,

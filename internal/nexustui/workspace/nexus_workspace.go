@@ -25,6 +25,7 @@ import (
 
 	tea "charm.land/bubbletea/v2"
 	"charm.land/catwalk/pkg/catwalk"
+	"github.com/EngineerProjects/nexus-engine/internal/modes/execution"
 	tuiTools "github.com/EngineerProjects/nexus-engine/internal/nexustui/agent/tools"
 	mcptools "github.com/EngineerProjects/nexus-engine/internal/nexustui/agent/tools/mcp"
 	"github.com/EngineerProjects/nexus-engine/internal/nexustui/config"
@@ -50,6 +51,10 @@ import (
 type subAgentStreamState struct {
 	reasoning string
 	content   string
+}
+
+type askUserSurveyState struct {
+	Answers map[string]string
 }
 
 // Verify compile-time that NexusWorkspace implements Workspace.
@@ -112,8 +117,10 @@ type NexusWorkspace struct {
 	submitCancel context.CancelFunc
 
 	// Config (lazily built, mutex-guarded)
-	cfgMu sync.Mutex
-	cfg   *config.Config
+	cfgMu    sync.Mutex
+	cfg      *config.Config
+	mcpCfg   config.MCPs
+	mcpStore *config.ConfigStore
 
 	// Permission: allow-all skip flag
 	permSkip atomic.Bool
@@ -126,6 +133,10 @@ type NexusWorkspace struct {
 	// PromptFn (ask_user path) blocks on the channel; AnswerAskUser sends the response.
 	pendingAskUser sync.Map // map[string]chan types.PromptResponse
 
+	// askUserSurveyAnswers buffers final wizard answers by tool use ID so the
+	// ask_user tool can keep calling promptFn sequentially without re-showing UI.
+	askUserSurveyAnswers sync.Map // map[string]askUserSurveyState
+
 	// Provider registry — populated by DetectProviders() at startup.
 	providerKeys     sync.Map // providerID → apiKey string (empty string = no key needed)
 	providerBaseURLs sync.Map // providerID → editable/test base URL override
@@ -136,6 +147,10 @@ type NexusWorkspace struct {
 	sqlitePath string
 	permMode   sdk.PermissionMode
 	monitoring *sdk.MonitoringSystem
+
+	imageGeneration config.ImageGenerationConfig
+	textToSpeech    config.TextToSpeechConfig
+	speechToText    config.SpeechToTextConfig
 }
 
 // ─── Constructor ──────────────────────────────────────────────────────────────
@@ -219,6 +234,14 @@ func (w *NexusWorkspace) Subscribe(p *tea.Program) {
 			p.Send(ev)
 		}
 	}()
+
+	// Fan out MCP state-change events so the UI reacts in real time.
+	go func() {
+		ch := mcptools.SubscribeEvents(ctx)
+		for ev := range ch {
+			p.Send(ev)
+		}
+	}()
 }
 
 func (w *NexusWorkspace) Shutdown() {
@@ -260,12 +283,33 @@ func (w *NexusWorkspace) WorktreePath() string {
 
 // ─── Sessions ─────────────────────────────────────────────────────────────────
 
+// ensureSessionDirs creates sessions/{id}/ and all standard subdirectories.
+// Idempotent; errors are intentionally swallowed — the DB is the authoritative
+// store and a missing subdirectory only causes a deferred tool-level error.
+func ensureSessionDirs(sessionID string) {
+	dirs := []string{
+		runtimepath.SessionScreenshotsDir("", sessionID),
+		runtimepath.SessionArtifactsImagesDir("", sessionID),
+		runtimepath.SessionArtifactsWebDir("", sessionID),
+		runtimepath.SessionArtifactsAudioDir("", sessionID),
+		runtimepath.SessionPastesTextDir("", sessionID),
+		runtimepath.SessionPastesImagesDir("", sessionID),
+		runtimepath.SessionPastesOtherDir("", sessionID),
+		runtimepath.SessionPlansDir("", sessionID),
+		runtimepath.SessionToolsDir("", sessionID),
+	}
+	for _, d := range dirs {
+		_ = os.MkdirAll(d, 0o700)
+	}
+}
+
 func (w *NexusWorkspace) CreateSession(ctx context.Context, title string) (session.Session, error) {
 	sess, err := w.client.CreateSession(ctx)
 	if err != nil {
 		return session.Session{}, fmt.Errorf("create session: %w", err)
 	}
 	id := string(sess.GetID())
+	ensureSessionDirs(id)
 	now := time.Now().UnixMilli()
 	s := session.Session{
 		ID:        id,
@@ -364,6 +408,8 @@ func (w *NexusWorkspace) DeleteSession(_ context.Context, sessionID string) erro
 	w.msgMu.Unlock()
 
 	w.sessBroker.Publish(pubsub.DeletedEvent, s)
+	// Remove sessions/{id}/ from disk; DB cascade already cleaned up all records.
+	_ = os.RemoveAll(runtimepath.SessionDir("", sessionID))
 	return nil
 }
 
@@ -385,6 +431,7 @@ func (w *NexusWorkspace) SetCurrentSession(ctx context.Context, sessionID string
 	}
 	w.LoadSessionMessages(sessionID, sess.GetMessages())
 	w.syncSessionTodos(sessionID)
+	ensureSessionDirs(sessionID)
 	w.sessMu.Lock()
 	w.session = sess
 	w.sessMu.Unlock()
@@ -495,6 +542,15 @@ func (w *NexusWorkspace) AgentRun(ctx context.Context, sessionID, prompt string,
 			w.debounce.forceFlush()
 		}()
 
+		// Wait for MCP servers to finish initializing before the first turn
+		// so the engine already has the tools registered. Bounded to avoid
+		// blocking the turn indefinitely if a server is slow.
+		if w.mcpStore != nil {
+			waitCtx, waitCancel := context.WithTimeout(submitCtx, 5*time.Second)
+			_ = mcptools.WaitForInit(waitCtx)
+			waitCancel()
+		}
+
 		var (
 			resp *sdk.SessionResponse
 			err  error
@@ -528,6 +584,25 @@ func (w *NexusWorkspace) AgentRun(ctx context.Context, sessionID, prompt string,
 				finishReason = message.FinishReasonMaxTokens
 			case "tool_use":
 				finishReason = message.FinishReasonToolUse
+			}
+		}
+
+		// Mark any tool calls that never received an execution result as
+		// finished so their spinners stop (e.g. truncated JSON stream).
+		// Inject a synthetic error result so the tool shows an ERROR icon.
+		errMsg := "aborted"
+		if finishReason == message.FinishReasonError {
+			errMsg = "stream error"
+		}
+		for i, part := range cur.Parts {
+			if tc, ok := part.(message.ToolCall); ok && !tc.Finished {
+				cur.Parts[i] = message.ToolCall{ID: tc.ID, Name: tc.Name, Input: tc.Input, Finished: true}
+				cur.Parts = append(cur.Parts, message.ToolResult{
+					ToolCallID: tc.ID,
+					Name:       tc.Name,
+					Content:    errMsg,
+					IsError:    true,
+				})
 			}
 		}
 
@@ -763,11 +838,38 @@ func (w *NexusWorkspace) AgentIsSessionBusy(sessionID string) bool {
 }
 
 func (w *NexusWorkspace) AgentIsReady() bool                               { return w.client != nil }
-func (w *NexusWorkspace) AgentQueuedPrompts(_ string) int                  { return 0 }
-func (w *NexusWorkspace) AgentQueuedPromptsList(_ string) []string         { return nil }
-func (w *NexusWorkspace) AgentClearQueue(_ string)                         {}
 func (w *NexusWorkspace) AgentSummarize(_ context.Context, _ string) error { return nil }
 func (w *NexusWorkspace) InitCoderAgent(_ context.Context) error           { return nil }
+
+// ApprovePlan exits plan mode immediately on behalf of the agent — identical
+// in effect to the agent calling exit_plan_mode — and returns the plan content
+// so the TUI can include it in the approval message. This lets ctrl+y approval
+// skip the agent's verbose "plan approved!" preamble entirely.
+func (w *NexusWorkspace) ApprovePlan(sessionID string) (string, error) {
+	w.sessMu.Lock()
+	sess := w.session
+	w.sessMu.Unlock()
+
+	if sess == nil || string(sess.GetID()) != sessionID {
+		return "", fmt.Errorf("session %q not active", sessionID)
+	}
+
+	// Mirror what exit_plan_mode.Call does: clear the execution mode from the
+	// engine's session context so future tool calls see execute mode.
+	sess.ClearPlanMode()
+
+	// Update the disk state and the TUI's live display.
+	execution.ExitPlanMode(types.SessionID(sessionID))
+	w.setLiveExecutionMode(sessionID, "")
+	w.publishSessionRefresh(sessionID)
+
+	// Return the plan content so the TUI can embed it in the approval message.
+	content, err := execution.GetPlan(types.SessionID(sessionID), nil)
+	if err != nil {
+		return "", fmt.Errorf("read plan: %w", err)
+	}
+	return content, nil
+}
 
 // UpdateAgentModel rebuilds the SDK client with the current w.model string.
 // Called by the TUI after the user selects a new model.
@@ -799,6 +901,9 @@ func (w *NexusWorkspace) UpdateAgentModel(ctx context.Context) error {
 		OnSessionTitled:   w.OnSessionTitled,
 		WorkingDir:        w.workDir,
 		ProviderConfig:    provCfg,
+		ImageGeneration:   w.currentImageGenerationConfig(),
+		TextToSpeech:      w.currentTextToSpeechConfig(),
+		SpeechToText:      w.currentSpeechToTextConfig(),
 		EnableMonitoring:  enableMonitoring,
 		Monitoring:        w.monitoring,
 		PlanStore:         w.planStore,
@@ -907,9 +1012,40 @@ func (w *NexusWorkspace) Config() *config.Config {
 	}
 
 	provider, modelID := w.splitModel()
-	providers := csync.NewMap[string, config.ProviderConfig]()
-	providerIDs := map[string]struct{}{provider: {}}
+	var cfg config.Config
+	if w.mcpStore != nil && w.mcpStore.Config() != nil {
+		cfg = *w.mcpStore.Config()
+	}
+	if cfg.Options == nil {
+		cfg.Options = &config.Options{}
+	}
+	if cfg.Options.TUI == nil {
+		cfg.Options.TUI = &config.TUIOptions{}
+	}
+	if len(cfg.Models) == 0 {
+		cfg.Models = make(map[config.SelectedModelType]config.SelectedModel)
+	}
+	cfg.Models[config.SelectedModelTypeLarge] = config.SelectedModel{Model: modelID, Provider: provider}
+	if _, ok := cfg.Models[config.SelectedModelTypeSmall]; !ok {
+		cfg.Models[config.SelectedModelTypeSmall] = config.SelectedModel{Model: modelID, Provider: provider}
+	}
+	if len(w.mcpCfg) > 0 {
+		cfg.MCP = w.mcpCfg
+	}
 
+	providers := csync.NewMap[string, config.ProviderConfig]()
+	if cfg.Providers != nil {
+		for pid, pc := range cfg.Providers.Seq2() {
+			providers.Set(pid, pc)
+		}
+	}
+
+	providerIDs := map[string]struct{}{provider: {}}
+	if cfg.Providers != nil {
+		for pc := range cfg.Providers.Seq() {
+			providerIDs[pc.ID] = struct{}{}
+		}
+	}
 	w.providerKeys.Range(func(k, _ any) bool {
 		providerIDs[k.(string)] = struct{}{}
 		return true
@@ -920,43 +1056,151 @@ func (w *NexusWorkspace) Config() *config.Config {
 	})
 
 	for pid := range providerIDs {
+		pc, _ := providers.Get(pid)
 		apiKey := w.resolveAPIKey(pid)
+		if apiKey != "" {
+			pc.APIKey = apiKey
+		}
 		baseURL := w.resolveProviderBaseURL(pid)
-		var models []catwalk.Model
+		if baseURL != "" {
+			pc.BaseURL = baseURL
+		}
+		pc.ID = pid
+		if pc.Name == "" {
+			pc.Name = displayNameFor(pid)
+		}
+		if pc.Type == "" {
+			pc.Type = catwalkTypeFor(pid)
+		}
 		if pid == "ollama" {
 			w.ollamaMu.RLock()
-			models = append([]catwalk.Model(nil), w.ollamaModels...)
+			pc.Models = append([]catwalk.Model(nil), w.ollamaModels...)
 			w.ollamaMu.RUnlock()
 		}
-		if pid == provider && len(models) == 0 {
-			models = []catwalk.Model{{ID: modelID, Name: modelID, ContextWindow: 200000}}
+		if pid == provider && len(pc.Models) == 0 {
+			pc.Models = []catwalk.Model{{ID: modelID, Name: modelID, ContextWindow: 200000}}
 		}
-		providers.Set(pid, config.ProviderConfig{
-			ID:      pid,
-			Name:    displayNameFor(pid),
-			APIKey:  apiKey,
-			BaseURL: baseURL,
-			Type:    catwalkTypeFor(pid),
-			Models:  models,
-		})
+		providers.Set(pid, pc)
 	}
+	cfg.Providers = providers
 
-	cfg := &config.Config{
-		Models: map[config.SelectedModelType]config.SelectedModel{
-			config.SelectedModelTypeLarge: {Model: modelID, Provider: provider},
-			config.SelectedModelTypeSmall: {Model: modelID, Provider: provider},
-		},
-		Providers: providers,
-		Options:   &config.Options{TUI: &config.TUIOptions{}},
+	if cfg.ImageGeneration != nil {
+		w.imageGeneration = *cfg.ImageGeneration
 	}
-	w.cfg = cfg
-	return cfg
+	if cfg.TextToSpeech != nil {
+		w.textToSpeech = *cfg.TextToSpeech
+	}
+	if cfg.SpeechToText != nil {
+		w.speechToText = *cfg.SpeechToText
+	}
+	cfg.ImageGeneration = cloneImageGenerationConfig(w.imageGeneration)
+	cfg.TextToSpeech = cloneTextToSpeechConfig(w.textToSpeech)
+	cfg.SpeechToText = cloneSpeechToTextConfig(w.speechToText)
+
+	w.cfg = &cfg
+	return w.cfg
+}
+
+// SetMCPConfig stores the MCP configuration loaded from nexus.json so it is
+// included in the config returned by Config() and shown in the Settings panel.
+func (w *NexusWorkspace) SetMCPConfig(mcps config.MCPs) {
+	w.cfgMu.Lock()
+	w.mcpCfg = mcps
+	w.cfg = nil // invalidate cached config so next Config() call picks up MCPs
+	w.cfgMu.Unlock()
+}
+
+// SetMCPStore stores the full config store used for MCP operations (resource
+// reads, prompt fetches, tool refresh, Docker MCP, enable/disable).
+func (w *NexusWorkspace) SetMCPStore(store *config.ConfigStore) {
+	w.cfgMu.Lock()
+	w.mcpStore = store
+	w.cfgMu.Unlock()
 }
 
 func (w *NexusWorkspace) WorkingDir() string { return w.workDir }
 
 func (w *NexusWorkspace) Resolver() config.VariableResolver {
 	return config.IdentityResolver()
+}
+
+func cloneImageGenerationConfig(src config.ImageGenerationConfig) *config.ImageGenerationConfig {
+	if strings.TrimSpace(src.Provider) == "" && strings.TrimSpace(src.Model) == "" {
+		return nil
+	}
+	cp := src
+	return &cp
+}
+
+func cloneTextToSpeechConfig(src config.TextToSpeechConfig) *config.TextToSpeechConfig {
+	if strings.TrimSpace(src.Provider) == "" && strings.TrimSpace(src.Model) == "" &&
+		strings.TrimSpace(src.Voice) == "" && strings.TrimSpace(src.Format) == "" {
+		return nil
+	}
+	cp := src
+	return &cp
+}
+
+func cloneSpeechToTextConfig(src config.SpeechToTextConfig) *config.SpeechToTextConfig {
+	if strings.TrimSpace(src.Provider) == "" && strings.TrimSpace(src.Model) == "" && strings.TrimSpace(src.Language) == "" {
+		return nil
+	}
+	cp := src
+	return &cp
+}
+
+func (w *NexusWorkspace) currentImageGenerationConfig() *sdk.ImageGenerationConfig {
+	cfg := w.Config()
+	if cfg == nil || cfg.ImageGeneration == nil {
+		return nil
+	}
+	providerID := strings.TrimSpace(cfg.ImageGeneration.Provider)
+	if providerID == "" {
+		return nil
+	}
+	return &sdk.ImageGenerationConfig{
+		Provider: providerID,
+		Model:    strings.TrimSpace(cfg.ImageGeneration.Model),
+		APIKey:   w.resolveAPIKey(providerID),
+		BaseURL:  w.resolveProviderBaseURL(providerID),
+	}
+}
+
+func (w *NexusWorkspace) currentTextToSpeechConfig() *sdk.TextToSpeechConfig {
+	cfg := w.Config()
+	if cfg == nil || cfg.TextToSpeech == nil {
+		return nil
+	}
+	providerID := strings.TrimSpace(cfg.TextToSpeech.Provider)
+	if providerID == "" {
+		return nil
+	}
+	return &sdk.TextToSpeechConfig{
+		Provider: providerID,
+		Model:    strings.TrimSpace(cfg.TextToSpeech.Model),
+		Voice:    strings.TrimSpace(cfg.TextToSpeech.Voice),
+		Format:   strings.TrimSpace(cfg.TextToSpeech.Format),
+		APIKey:   w.resolveAPIKey(providerID),
+		BaseURL:  w.resolveProviderBaseURL(providerID),
+	}
+}
+
+func (w *NexusWorkspace) currentSpeechToTextConfig() *sdk.SpeechToTextConfig {
+	cfg := w.Config()
+	if cfg == nil || cfg.SpeechToText == nil {
+		return nil
+	}
+	providerID := strings.TrimSpace(cfg.SpeechToText.Provider)
+	if providerID == "" {
+		return nil
+	}
+	return &sdk.SpeechToTextConfig{
+		Provider: providerID,
+		Model:    strings.TrimSpace(cfg.SpeechToText.Model),
+		Language: strings.TrimSpace(cfg.SpeechToText.Language),
+		APIKey:   w.resolveAPIKey(providerID),
+		BaseURL:  w.resolveProviderBaseURL(providerID),
+	}
 }
 
 // ─── Config mutations (stubs — UI writes, we ignore) ─────────────────────────
@@ -970,8 +1214,20 @@ func (w *NexusWorkspace) UpdatePreferredModel(_ config.Scope, _ config.SelectedM
 }
 
 func (w *NexusWorkspace) SetCompactMode(_ config.Scope, _ bool) error { return nil }
-func (w *NexusWorkspace) SetConfigField(_ config.Scope, key string, value any) error {
+func (w *NexusWorkspace) SetConfigField(scope config.Scope, key string, value any) error {
 	stringValue := strings.TrimSpace(fmt.Sprint(value))
+	persistConfigField := func() error {
+		if w.mcpStore == nil {
+			return nil
+		}
+		return w.mcpStore.SetConfigField(scope, key, value)
+	}
+	invalidateConfig := func() {
+		w.cfgMu.Lock()
+		w.cfg = nil
+		w.cfgMu.Unlock()
+	}
+
 	switch {
 	case strings.HasPrefix(key, "providers.") && strings.HasSuffix(key, ".base_url"):
 		providerID := strings.TrimSuffix(strings.TrimPrefix(key, "providers."), ".base_url")
@@ -990,9 +1246,7 @@ func (w *NexusWorkspace) SetConfigField(_ config.Scope, key string, value any) e
 				w.providerKeys.Store("ollama", "")
 			}
 		}
-		w.cfgMu.Lock()
-		w.cfg = nil
-		w.cfgMu.Unlock()
+		invalidateConfig()
 		go w.persistProviderBaseURL(providerID, stringValue)
 		return nil
 	case key == "web_search_provider":
@@ -1023,6 +1277,75 @@ func (w *NexusWorkspace) SetConfigField(_ config.Scope, key string, value any) e
 			}
 			go w.persistCredential("web_search_base_url:"+providerID, stringValue)
 		}
+		return nil
+	case key == "image_generation.provider":
+		w.imageGeneration.Provider = stringValue
+		if err := persistConfigField(); err != nil {
+			return err
+		}
+		invalidateConfig()
+		return nil
+	case key == "image_generation.model":
+		w.imageGeneration.Model = stringValue
+		if err := persistConfigField(); err != nil {
+			return err
+		}
+		invalidateConfig()
+		return nil
+	case key == "text_to_speech.provider":
+		w.textToSpeech.Provider = stringValue
+		if err := persistConfigField(); err != nil {
+			return err
+		}
+		invalidateConfig()
+		return nil
+	case key == "text_to_speech.model":
+		w.textToSpeech.Model = stringValue
+		if err := persistConfigField(); err != nil {
+			return err
+		}
+		invalidateConfig()
+		return nil
+	case key == "text_to_speech.voice":
+		w.textToSpeech.Voice = stringValue
+		if err := persistConfigField(); err != nil {
+			return err
+		}
+		invalidateConfig()
+		return nil
+	case key == "text_to_speech.format":
+		w.textToSpeech.Format = stringValue
+		if err := persistConfigField(); err != nil {
+			return err
+		}
+		invalidateConfig()
+		return nil
+	case key == "speech_to_text.provider":
+		w.speechToText.Provider = stringValue
+		if err := persistConfigField(); err != nil {
+			return err
+		}
+		invalidateConfig()
+		return nil
+	case key == "speech_to_text.model":
+		w.speechToText.Model = stringValue
+		if err := persistConfigField(); err != nil {
+			return err
+		}
+		invalidateConfig()
+		return nil
+	case key == "speech_to_text.language":
+		w.speechToText.Language = stringValue
+		if err := persistConfigField(); err != nil {
+			return err
+		}
+		invalidateConfig()
+		return nil
+	case strings.HasPrefix(key, "options."):
+		if err := persistConfigField(); err != nil {
+			return err
+		}
+		invalidateConfig()
 		return nil
 	default:
 		return nil
@@ -1088,10 +1411,23 @@ func (w *NexusWorkspace) ListTools(ctx context.Context) ([]ToolInfo, error) {
 	return tools, nil
 }
 func (w *NexusWorkspace) ListSkills(_ context.Context) ([]skills.CatalogEntry, error) {
-	cfg := w.Config()
+	// w.Config() returns a lazily-synthesized config (provider/model/MCP
+	// state only) whose Options is never populated with the defaulted
+	// SkillsPaths/DisabledSkills. The fully-loaded config — with
+	// runtimepath-aware defaults applied via setDefaults — lives in
+	// w.mcpStore, so prefer that when available.
+	var cfg *config.Config
+	w.cfgMu.Lock()
+	store := w.mcpStore
+	w.cfgMu.Unlock()
+	if store != nil {
+		cfg = store.Config()
+	} else {
+		cfg = w.Config()
+	}
 	var skillsPaths []string
 	var disabledSkills []string
-	if cfg.Options != nil {
+	if cfg != nil && cfg.Options != nil {
 		skillsPaths = cfg.Options.SkillsPaths
 		disabledSkills = cfg.Options.DisabledSkills
 	}
@@ -1110,20 +1446,112 @@ func (w *NexusWorkspace) ReadSkill(_ context.Context, _ string) ([]byte, skills.
 	return nil, skills.SkillReadResult{}, nil
 }
 
-// ─── MCP (stubs) ──────────────────────────────────────────────────────────────
+// ─── MCP ──────────────────────────────────────────────────────────────────────
 
-func (w *NexusWorkspace) MCPGetStates() map[string]mcptools.ClientInfo    { return mcptools.GetStates() }
-func (w *NexusWorkspace) MCPRefreshPrompts(_ context.Context, _ string)   {}
-func (w *NexusWorkspace) MCPRefreshResources(_ context.Context, _ string) {}
-func (w *NexusWorkspace) RefreshMCPTools(_ context.Context, _ string)     {}
-func (w *NexusWorkspace) ReadMCPResource(_ context.Context, _, _ string) ([]MCPResourceContents, error) {
-	return nil, nil
+func (w *NexusWorkspace) MCPGetStates() map[string]mcptools.ClientInfo {
+	return mcptools.GetStates()
 }
-func (w *NexusWorkspace) GetMCPPrompt(_, _ string, _ map[string]string) (string, error) {
-	return "", nil
+
+func (w *NexusWorkspace) MCPRefreshPrompts(ctx context.Context, name string) {
+	mcptools.RefreshPrompts(ctx, name)
 }
-func (w *NexusWorkspace) EnableDockerMCP(_ context.Context) error { return nil }
-func (w *NexusWorkspace) DisableDockerMCP() error                 { return nil }
+
+func (w *NexusWorkspace) MCPRefreshResources(ctx context.Context, name string) {
+	mcptools.RefreshResources(ctx, name)
+}
+
+func (w *NexusWorkspace) RefreshMCPTools(ctx context.Context, name string) {
+	w.cfgMu.Lock()
+	store := w.mcpStore
+	w.cfgMu.Unlock()
+	if store == nil {
+		return
+	}
+	mcptools.RefreshTools(ctx, store, name)
+}
+
+func (w *NexusWorkspace) ReadMCPResource(ctx context.Context, name, uri string) ([]MCPResourceContents, error) {
+	w.cfgMu.Lock()
+	store := w.mcpStore
+	w.cfgMu.Unlock()
+	if store == nil {
+		return nil, nil
+	}
+	raw, err := mcptools.ReadResource(ctx, store, name, uri)
+	if err != nil {
+		return nil, err
+	}
+	out := make([]MCPResourceContents, 0, len(raw))
+	for _, c := range raw {
+		out = append(out, MCPResourceContents{
+			URI:      c.URI,
+			MIMEType: c.MIMEType,
+			Text:     c.Text,
+			Blob:     c.Blob,
+		})
+	}
+	return out, nil
+}
+
+func (w *NexusWorkspace) GetMCPPrompt(clientID, promptID string, args map[string]string) (string, error) {
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+	w.cfgMu.Lock()
+	store := w.mcpStore
+	w.cfgMu.Unlock()
+	if store == nil {
+		return "", nil
+	}
+	messages, err := mcptools.GetPromptMessages(ctx, store, clientID, promptID, args)
+	if err != nil {
+		return "", err
+	}
+	return strings.Join(messages, " "), nil
+}
+
+func (w *NexusWorkspace) EnableDockerMCP(ctx context.Context) error {
+	w.cfgMu.Lock()
+	store := w.mcpStore
+	w.cfgMu.Unlock()
+	if store == nil {
+		return fmt.Errorf("MCP config store not initialized")
+	}
+	if err := store.EnableDockerMCP(); err != nil {
+		return err
+	}
+	return mcptools.InitializeSingle(ctx, config.DockerMCPName, store)
+}
+
+func (w *NexusWorkspace) DisableDockerMCP() error {
+	w.cfgMu.Lock()
+	store := w.mcpStore
+	w.cfgMu.Unlock()
+	if store == nil {
+		return nil
+	}
+	_ = mcptools.DisableSingle(store, config.DockerMCPName)
+	return store.DisableDockerMCP()
+}
+
+func (w *NexusWorkspace) EnableMCPServer(ctx context.Context, name string) error {
+	w.cfgMu.Lock()
+	store := w.mcpStore
+	w.cfgMu.Unlock()
+	if store == nil {
+		return fmt.Errorf("MCP config store not initialized")
+	}
+	return mcptools.InitializeSingle(ctx, name, store)
+}
+
+func (w *NexusWorkspace) DisableMCPServer(name string) error {
+	w.cfgMu.Lock()
+	store := w.mcpStore
+	w.cfgMu.Unlock()
+	if store == nil {
+		return nil
+	}
+	return mcptools.DisableSingle(store, name)
+}
 
 // ─── SDK callback receivers (called from SDK event callbacks) ─────────────────
 
@@ -1300,29 +1728,16 @@ func (w *NexusWorkspace) LoadSessionMessages(sessionID string, sdkMsgs []sdk.Mes
 // SetSDKClient wires the SDK client and registers unique TUI tools.
 func (w *NexusWorkspace) SetSDKClient(client *sdk.Client) {
 	w.client = client
-	w.registerTUITools(nil)
-}
-
-// RegisterLSPTools registers the LSP-backed unique TUI tools with the live LSP manager.
-// Call this once the LSP manager is available (after startup).
-func (w *NexusWorkspace) RegisterLSPTools(lspManager *lsp.Manager) {
-	w.registerTUITools(lspManager)
-}
-
-// registerTUITools registers unique nexustui tools (not covered by SDK builtins).
-// lspManager may be nil; LSP tools will report "no LSP available" until one is set.
-func (w *NexusWorkspace) registerTUITools(lspManager *lsp.Manager) {
 	if w.client == nil {
 		return
 	}
 	logFile := w.logFilePath()
-	uniqueTools := []sdk.Tool{
+	for _, t := range []sdk.Tool{
 		tuiTools.NewNexusLogsTool(logFile),
-		tuiTools.NewDiagnosticsTool(lspManager),
-		tuiTools.NewLSPRestartTool(lspManager),
-		tuiTools.NewReferencesTool(lspManager),
-	}
-	for _, t := range uniqueTools {
+		tuiTools.NewDiagnosticsTool(nil),
+		tuiTools.NewLSPRestartTool(nil),
+		tuiTools.NewReferencesTool(nil),
+	} {
 		if err := w.client.RegisterTool(t); err != nil {
 			slog.Debug("Failed to register TUI tool", "tool", t.Definition().Name, "error", err)
 		}
@@ -1394,20 +1809,36 @@ func (w *NexusWorkspace) OnChunk(chunk sdk.ResponseChunk) {
 		}
 
 	case sdk.ResponseChunkTypeContentBlockStop:
-		// Clear block tracking on stop.
+		// Clear block tracking on stop and stamp FinishedAt on any open
+		// thinking block. FinishThinking is idempotent so calling it here
+		// for non-thinking blocks (text, tool_use) is a safe no-op.
 		w.streamMu.Lock()
+		cur := w.streamMsg
+		sessID := w.streamSess
 		w.streamToolUseID = ""
 		w.streamToolInputBuf = ""
 		w.streamMu.Unlock()
+		if cur != nil {
+			cur.FinishThinking()
+			w.debounce.update(*cur, sessID)
+		}
 
 	case sdk.ResponseChunkTypeMessageStop:
-		w.debounce.forceFlush()
+		// Safety net: stamp FinishedAt before the final flush so the TUI
+		// receives the correct thinking duration in the forceFlush payload.
 		w.streamMu.Lock()
+		cur := w.streamMsg
+		sessID := w.streamSess
 		w.streamResponseDone = true
 		w.streamToolUseID = ""
 		w.streamToolUseName = ""
 		w.streamToolInputBuf = ""
 		w.streamMu.Unlock()
+		if cur != nil {
+			cur.FinishThinking()
+			w.debounce.update(*cur, sessID)
+		}
+		w.debounce.forceFlush()
 	}
 }
 
@@ -1910,43 +2341,152 @@ func (w *NexusWorkspace) PromptFn(ctx context.Context, req sdk.PromptRequest) (s
 // promptAskUser handles ask_user_question prompts by publishing to askUserBroker
 // and blocking until the user answers (or context is cancelled).
 func (w *NexusWorkspace) promptAskUser(ctx context.Context, req sdk.PromptRequest, toolUseID string) (sdk.PromptResponse, error) {
-	header, _ := req.Metadata["header"].(string)
-	multiSelect, _ := req.Metadata["multiSelect"].(bool)
-	isCustomText := req.Type == types.PromptTypeText
-
-	id := uuid.New().String()
-
-	askReq := tuiTools.AskUserRequest{
-		ID:           id,
-		ToolCallID:   toolUseID,
-		Question:     req.Message,
-		Header:       header,
-		MultiSelect:  multiSelect,
-		IsCustomText: isCustomText,
+	askReq, questionIndex, isSurvey, err := buildAskUserRequest(req, toolUseID)
+	if err != nil {
+		return sdk.PromptResponse{Cancelled: true}, err
 	}
-
-	if !isCustomText {
-		for _, opt := range req.Options {
-			askReq.Options = append(askReq.Options, tuiTools.AskUserOption{
-				Label:       opt.Label,
-				Value:       fmt.Sprintf("%v", opt.Value),
-				Description: opt.Description,
-			})
+	if isSurvey && questionIndex > 0 {
+		if resp, ok, err := w.consumeAskUserSurveyAnswer(toolUseID, askReq, questionIndex); ok || err != nil {
+			return resp, err
 		}
 	}
 
+	id := uuid.New().String()
+	askReq.ID = id
+
 	ch := make(chan sdk.PromptResponse, 1)
 	w.pendingAskUser.Store(id, ch)
-
 	w.askUserBroker.Publish(pubsub.CreatedEvent, askReq)
 
 	select {
 	case resp := <-ch:
+		if isSurvey && len(askReq.Questions) > 1 {
+			answers, err := decodeAskUserSurveyAnswers(fmt.Sprintf("%v", resp.Value))
+			if err != nil {
+				return sdk.PromptResponse{Cancelled: true}, err
+			}
+			w.askUserSurveyAnswers.Store(toolUseID, askUserSurveyState{Answers: answers})
+			bufferedResp, ok, err := w.consumeAskUserSurveyAnswer(toolUseID, askReq, questionIndex)
+			if err != nil {
+				return sdk.PromptResponse{Cancelled: true}, err
+			}
+			if !ok {
+				return sdk.PromptResponse{Cancelled: true}, fmt.Errorf("missing buffered ask_user survey answer")
+			}
+			return bufferedResp, nil
+		}
 		return resp, nil
 	case <-ctx.Done():
 		w.pendingAskUser.Delete(id)
 		return sdk.PromptResponse{Cancelled: true}, ctx.Err()
 	}
+}
+
+func buildAskUserRequest(req sdk.PromptRequest, toolUseID string) (tuiTools.AskUserRequest, int, bool, error) {
+	header, _ := req.Metadata["header"].(string)
+	multiSelect, _ := req.Metadata["multiSelect"].(bool)
+	questionIndex := 0
+	if rawIndex, ok := req.Metadata["survey_question_index"]; ok {
+		switch value := rawIndex.(type) {
+		case int:
+			questionIndex = value
+		case float64:
+			questionIndex = int(value)
+		}
+	}
+
+	askReq := tuiTools.AskUserRequest{
+		ToolCallID:   toolUseID,
+		Question:     req.Message,
+		Header:       header,
+		MultiSelect:  multiSelect,
+		IsCustomText: req.Type == types.PromptTypeText,
+	}
+	for _, opt := range req.Options {
+		askReq.Options = append(askReq.Options, tuiTools.AskUserOption{
+			Label:       opt.Label,
+			Value:       fmt.Sprintf("%v", opt.Value),
+			Description: opt.Description,
+		})
+	}
+
+	rawSurvey, _ := req.Metadata["survey_questions_json"].(string)
+	if strings.TrimSpace(rawSurvey) == "" {
+		askReq.Questions = []tuiTools.AskUserQuestion{{
+			Question:    askReq.Question,
+			Header:      askReq.Header,
+			Options:     append([]tuiTools.AskUserOption(nil), askReq.Options...),
+			MultiSelect: askReq.MultiSelect,
+		}}
+		return askReq, questionIndex, false, nil
+	}
+
+	var surveyQuestions []tuiTools.AskUserQuestion
+	if err := json.Unmarshal([]byte(rawSurvey), &surveyQuestions); err != nil {
+		return tuiTools.AskUserRequest{}, 0, false, fmt.Errorf("parse ask_user survey metadata: %w", err)
+	}
+	if len(surveyQuestions) == 0 {
+		return askReq, questionIndex, false, nil
+	}
+	askReq.Questions = normalizeAskUserSurveyQuestions(surveyQuestions)
+	return askReq, questionIndex, true, nil
+}
+
+func normalizeAskUserSurveyQuestions(questions []tuiTools.AskUserQuestion) []tuiTools.AskUserQuestion {
+	for qIndex := range questions {
+		hasOther := false
+		for optIndex := range questions[qIndex].Options {
+			if strings.TrimSpace(questions[qIndex].Options[optIndex].Value) == "" {
+				questions[qIndex].Options[optIndex].Value = questions[qIndex].Options[optIndex].Label
+			}
+			if questions[qIndex].Options[optIndex].Value == "__other__" || strings.EqualFold(questions[qIndex].Options[optIndex].Label, "Other") {
+				hasOther = true
+			}
+		}
+		if !hasOther {
+			questions[qIndex].Options = append(questions[qIndex].Options, tuiTools.AskUserOption{
+				Label:       "Other",
+				Value:       "__other__",
+				Description: "Provide custom input",
+			})
+		}
+	}
+	return questions
+}
+
+func decodeAskUserSurveyAnswers(raw string) (map[string]string, error) {
+	answers := make(map[string]string)
+	if err := json.Unmarshal([]byte(strings.TrimSpace(raw)), &answers); err != nil {
+		return nil, fmt.Errorf("decode ask_user survey answers: %w", err)
+	}
+	if len(answers) == 0 {
+		return nil, fmt.Errorf("decode ask_user survey answers: empty response")
+	}
+	return answers, nil
+}
+
+func (w *NexusWorkspace) consumeAskUserSurveyAnswer(toolUseID string, askReq tuiTools.AskUserRequest, questionIndex int) (sdk.PromptResponse, bool, error) {
+	if questionIndex < 0 || questionIndex >= len(askReq.Questions) {
+		return sdk.PromptResponse{}, false, fmt.Errorf("ask_user survey question index %d out of range", questionIndex)
+	}
+	stored, ok := w.askUserSurveyAnswers.Load(toolUseID)
+	if !ok {
+		return sdk.PromptResponse{}, false, nil
+	}
+	state, ok := stored.(askUserSurveyState)
+	if !ok {
+		w.askUserSurveyAnswers.Delete(toolUseID)
+		return sdk.PromptResponse{}, false, fmt.Errorf("invalid ask_user survey state")
+	}
+	question := askReq.Questions[questionIndex].Question
+	answer, ok := state.Answers[question]
+	if !ok {
+		return sdk.PromptResponse{}, false, fmt.Errorf("missing ask_user survey answer for %q", question)
+	}
+	if questionIndex == len(askReq.Questions)-1 {
+		w.askUserSurveyAnswers.Delete(toolUseID)
+	}
+	return sdk.PromptResponse{Value: answer}, true, nil
 }
 
 // AnswerAskUser resolves a pending ask_user_question prompt.
@@ -2086,20 +2626,13 @@ func convertSDKMessages(sessionID string, sdkMsgs []sdk.Message) []message.Messa
 			}
 		case sdk.RoleAssistant:
 			msg.Role = message.Assistant
-			if m.Metadata != nil && m.Metadata.StopReason != "" {
-				finishReason := sdkStopToFinish(m.Metadata.StopReason)
-				msg.Parts = append(msg.Parts, message.Finish{
-					Reason: finishReason,
-					Time:   ts,
-				})
-			}
+			// Append content blocks in their natural order, then append Finish last.
 			for _, block := range m.Content {
 				switch b := block.(type) {
 				case sdk.TextContent:
-					// Insert text before the Finish part if present.
-					msg.Parts = prependPart(msg.Parts, message.TextContent{Text: b.Text})
+					msg.Parts = append(msg.Parts, message.TextContent{Text: b.Text})
 				case sdk.ThinkingContent:
-					msg.Parts = prependPart(msg.Parts, message.ReasoningContent{Thinking: b.Thinking})
+					msg.Parts = append(msg.Parts, message.ReasoningContent{Thinking: b.Thinking})
 				case sdk.ToolUseContent:
 					inputJSON, _ := json.Marshal(b.Input)
 					tc := message.ToolCall{
@@ -2108,9 +2641,9 @@ func convertSDKMessages(sessionID string, sdkMsgs []sdk.Message) []message.Messa
 						Input:    string(inputJSON),
 						Finished: true,
 					}
-					msg.Parts = prependPart(msg.Parts, tc)
+					msg.Parts = append(msg.Parts, tc)
 					if r, ok := resultMap[b.ID]; ok {
-						msg.Parts = prependPart(msg.Parts, message.ToolResult{
+						msg.Parts = append(msg.Parts, message.ToolResult{
 							ToolCallID: b.ID,
 							Name:       b.Name,
 							Content:    r.content,
@@ -2119,6 +2652,13 @@ func convertSDKMessages(sessionID string, sdkMsgs []sdk.Message) []message.Messa
 						})
 					}
 				}
+			}
+			if m.Metadata != nil && m.Metadata.StopReason != "" {
+				finishReason := sdkStopToFinish(m.Metadata.StopReason)
+				msg.Parts = append(msg.Parts, message.Finish{
+					Reason: finishReason,
+					Time:   ts,
+				})
 			}
 		}
 

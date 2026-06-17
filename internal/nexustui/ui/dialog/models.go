@@ -174,20 +174,10 @@ func (m *Models) HandleMsg(msg tea.Msg) Action {
 			return ActionClose{}
 		case key.Matches(msg, m.keyMap.Previous):
 			m.list.Focus()
-			if m.list.IsSelectedFirst() {
-				m.list.SelectLast()
-			} else {
-				m.list.SelectPrev()
-			}
-			m.list.ScrollToSelected()
+			m.list.SelectPrevCyclic()
 		case key.Matches(msg, m.keyMap.Next):
 			m.list.Focus()
-			if m.list.IsSelectedLast() {
-				m.list.SelectFirst()
-			} else {
-				m.list.SelectNext()
-			}
-			m.list.ScrollToSelected()
+			m.list.SelectNextCyclic()
 		case key.Matches(msg, m.keyMap.Select, m.keyMap.Edit):
 			selectedItem := m.list.SelectedItem()
 			if selectedItem == nil {

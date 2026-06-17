@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"strings"
+	"sync"
 
 	tool "github.com/EngineerProjects/nexus-engine/internal/tools/registry"
 	"github.com/EngineerProjects/nexus-engine/internal/types"
@@ -13,6 +14,7 @@ import (
 
 // MCPClientManager manages MCP server connections
 type MCPClientManager struct {
+	mu      sync.RWMutex
 	clients map[string]*Client
 }
 
@@ -28,12 +30,16 @@ func GlobalMCPManager() *MCPClientManager {
 
 // GetClient returns an MCP client by server name
 func (m *MCPClientManager) GetClient(serverName string) (*Client, bool) {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
 	client, ok := m.clients[serverName]
 	return client, ok
 }
 
 // ListServers returns all connected server names
 func (m *MCPClientManager) ListServers() []string {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
 	servers := make([]string, 0, len(m.clients))
 	for name := range m.clients {
 		servers = append(servers, name)
@@ -165,7 +171,7 @@ func (t *MCPTool) ValidateInput(ctx context.Context, input map[string]any) (map[
 // CheckPermissions checks tool-specific permissions
 func (t *MCPTool) CheckPermissions(ctx context.Context, input map[string]any, toolCtx tool.ToolUseContext) types.PermissionResult {
 	// MCP tool access requires explicit permission
-	return types.PermissionResult{Behavior: types.PermissionBehaviorAsk}
+	return types.PermissionResult{Behavior: types.PermissionBehaviorPassthrough}
 }
 
 // IsConcurrencySafe returns whether the tool can run concurrently

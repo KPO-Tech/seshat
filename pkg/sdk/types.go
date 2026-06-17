@@ -85,6 +85,7 @@ type (
 	MCPIntegrationResult   = mcp.IntegrationResult
 	MCPServerConfig        = mcp.ServerConfig
 	MCPServerResult        = mcp.ServerResult
+	MCPTransportType       = mcp.TransportType
 	MonitoringSystem       = monitoring.System
 	RuntimeEventQueue      = execution.RuntimeEventQueue
 	RuntimeEventQueueStats = execution.RuntimeEventQueueStats
@@ -146,10 +147,12 @@ const (
 	ExecutionModePlan            = modes.ExecutionModePlan
 	ExecutionModePairProgramming = modes.ExecutionModePairProgramming
 
-	PermissionModeAuto      = types.PermissionModeAuto
-	PermissionModeBypass    = types.PermissionModeBypass
-	PermissionModeOnRequest = types.PermissionModeOnRequest
-	PermissionModeNever     = types.PermissionModeNever
+	PermissionModeAuto        = types.PermissionModeAuto
+	PermissionModeBypass      = types.PermissionModeBypass
+	PermissionModeOnRequest   = types.PermissionModeOnRequest
+	PermissionModeNever       = types.PermissionModeNever
+	PermissionModeAcceptEdits = types.PermissionModeAcceptEdits
+	PermissionModeGranular    = types.PermissionModeGranular
 
 	SessionStatusActive = types.SessionStatusActive
 	SessionStatusClosed = types.SessionStatusClosed
@@ -194,6 +197,11 @@ const (
 	RuntimeEventTypePlanStatusChanged    = types.RuntimeEventTypePlanStatusChanged
 	RuntimeEventTypeExecutionModeChanged = types.RuntimeEventTypeExecutionModeChanged
 	RuntimeEventTypeTaskChanged          = types.RuntimeEventTypeTaskChanged
+	RuntimeEventTypeBrowserSession       = types.RuntimeEventTypeBrowserSession
+	RuntimeEventTypeBrowserAction        = types.RuntimeEventTypeBrowserAction
+	RuntimeEventTypeBrowserPage          = types.RuntimeEventTypeBrowserPage
+	RuntimeEventTypeBrowserSnapshot      = types.RuntimeEventTypeBrowserSnapshot
+	RuntimeEventTypeBrowserScreenshot    = types.RuntimeEventTypeBrowserScreenshot
 
 	// HookEvent constants — lifecycle events emitted throughout the engine.
 	HookEventSessionStart       = types.HookEventSessionStart
@@ -234,6 +242,8 @@ const (
 	HookEventWorktreeCreate     = types.HookEventWorktreeCreate
 	HookEventWorktreeRemove     = types.HookEventWorktreeRemove
 	HookEventInstructionsLoaded = types.HookEventInstructionsLoaded
+	HookEventCwdChanged         = types.HookEventCwdChanged
+	HookEventFileChanged        = types.HookEventFileChanged
 
 	// HookState constants
 	HookStateActive   = hooks.HookStateActive
@@ -246,4 +256,10 @@ const (
 	PermissionBehaviorDeny        = types.PermissionBehaviorDeny
 	PermissionBehaviorAsk         = types.PermissionBehaviorAsk
 	PermissionBehaviorPassthrough = types.PermissionBehaviorPassthrough
+
+	// MCPTransport constants
+	MCPTransportStdio     MCPTransportType = mcp.TransportTypeStdio
+	MCPTransportHTTP      MCPTransportType = mcp.TransportTypeHTTP
+	MCPTransportSSE       MCPTransportType = mcp.TransportTypeSSE
+	MCPTransportWebSocket MCPTransportType = mcp.TransportTypeWebSocket
 )

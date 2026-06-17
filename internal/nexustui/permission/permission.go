@@ -2,16 +2,22 @@ package permission
 
 import (
 	"context"
+	"fmt"
 	"os"
 	"path/filepath"
 	"slices"
 	"sync"
 	"sync/atomic"
+	"time"
 
 	"github.com/EngineerProjects/nexus-engine/internal/nexustui/csync"
 	"github.com/EngineerProjects/nexus-engine/internal/nexustui/pubsub"
 	"github.com/google/uuid"
 )
+
+// permissionRequestTimeout is the maximum time to wait for a user to respond
+// to a permission dialog before auto-denying with a clear error message.
+const permissionRequestTimeout = 5 * time.Minute
 
 // hookApprovalKey is the unexported context key used to mark a tool call as
 // pre-approved by a PreToolUse hook. The value is the tool call ID so an
@@ -274,6 +280,14 @@ func (s *permissionService) Request(ctx context.Context, opts CreatePermissionRe
 		return false, ctx.Err()
 	case granted := <-respCh:
 		return granted, nil
+	case <-time.After(permissionRequestTimeout):
+		// Auto-deny after timeout so the tool call gets a clear error instead
+		// of blocking indefinitely when the user is not at the terminal.
+		s.notificationBroker.Publish(pubsub.CreatedEvent, PermissionNotification{
+			ToolCallID: opts.ToolCallID,
+			Denied:     true,
+		})
+		return false, fmt.Errorf("permission request for %q timed out after %v — no response received; re-run the tool or approve the request", opts.ToolName, permissionRequestTimeout)
 	}
 }
 

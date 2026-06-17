@@ -123,6 +123,9 @@ type Styles struct {
 		PromptYoloIconBlurred lipgloss.Style
 		PromptYoloDotsFocused lipgloss.Style
 		PromptYoloDotsBlurred lipgloss.Style
+
+		// Status line shown above the input box while the agent is working.
+		WorkingStatus lipgloss.Style
 	}
 
 	// Radio
@@ -251,11 +254,13 @@ type Styles struct {
 		DoneLabel            lipgloss.Style // "done" text at end of assistant turn
 		DoneDots             lipgloss.Style // "·····" fill between done label and right edge
 
-		// Thinking section styles
-		ThinkingBox            lipgloss.Style // Background for thinking content
+		// Thinking section styles — no border box, left-bar accent in expanded mode
+		ThinkingText           lipgloss.Style // Expanded thinking body (italic, subtle, indented)
+		ThinkingLeftBar        lipgloss.Style // Left accent bar for expanded text
 		ThinkingTruncationHint lipgloss.Style // "… (N lines hidden)" hint
-		ThinkingFooterTitle    lipgloss.Style // "Thought for" text
-		ThinkingFooterDuration lipgloss.Style // Duration value
+		ThinkingFooterTitle    lipgloss.Style // "Thought for" / "Thinking..." label
+		ThinkingFooterDuration lipgloss.Style // Duration / counter value
+		ThinkingExpandHint     lipgloss.Style // "click to expand" affordance
 		AssistantInfoIcon      lipgloss.Style
 		AssistantInfoModel     lipgloss.Style
 		AssistantInfoProvider  lipgloss.Style
@@ -380,10 +385,17 @@ type Styles struct {
 		WebFetchPrompt lipgloss.Style // Fetch prompt context line (subtle)
 
 		// Ask user question
-		AskUserCursor        lipgloss.Style // ▶ focused option cursor (accent)
-		AskUserOptionFocused lipgloss.Style // focused option label (bright)
-		AskUserFooter        lipgloss.Style // keyboard hint line (most subtle)
-		AskUserHistory       lipgloss.Style // answered Q→A history lines (subtle)
+		AskUserCursor         lipgloss.Style // ▶ focused option cursor (accent)
+		AskUserOptionFocused  lipgloss.Style // focused option label (bright)
+		AskUserOptionSelected lipgloss.Style // selected (but not focused) option label
+		AskUserCheckOn        lipgloss.Style // [✓] checked checkbox (accent)
+		AskUserCheckOff       lipgloss.Style // [ ] unchecked checkbox (subtle)
+		AskUserCount          lipgloss.Style // "(N selected)" counter
+		AskUserFooter         lipgloss.Style // keyboard hint line (most subtle)
+		AskUserHistory        lipgloss.Style // answered Q→A history lines (subtle)
+
+		// Pending tool animation
+		RunningStatus lipgloss.Style // "running... (3s)" text beside pending tool name
 	}
 
 	// Dialog styles
@@ -523,6 +535,10 @@ type Styles struct {
 		Normal  lipgloss.Style
 		Focused lipgloss.Style
 		Match   lipgloss.Style
+		Desc    lipgloss.Style
+		Icon    lipgloss.Style
+		Bar     lipgloss.Style
+		Border  lipgloss.Style
 	}
 
 	// Attachments styles

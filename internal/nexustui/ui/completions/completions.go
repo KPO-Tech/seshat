@@ -19,7 +19,7 @@ import (
 
 const (
 	minHeight = 1
-	maxHeight = 10
+	maxHeight = 5
 	minWidth  = 10
 	maxWidth  = 100
 
@@ -44,9 +44,15 @@ type CompletionItemsLoadedMsg struct {
 	Resources []ResourceCompletionValue
 }
 
+// Styles bundles everything needed to render the popup and its items.
+type Styles struct {
+	ItemStyles
+	Border lipgloss.Style
+}
+
 // Completions represents the completions popup component.
 type Completions struct {
-	// Popup dimensions
+	// Popup dimensions (content only; Render() adds the border on top)
 	width  int
 	height int
 
@@ -60,10 +66,7 @@ type Completions struct {
 	// List component
 	list *list.FilterableList
 
-	// Styling
-	normalStyle  lipgloss.Style
-	focusedStyle lipgloss.Style
-	matchStyle   lipgloss.Style
+	styles Styles
 
 	allItems []list.FilterableItem
 	filtered []list.FilterableItem
@@ -96,27 +99,23 @@ var namePriorityRules = []namePriorityRule{
 }
 
 // New creates a new completions component.
-func New(normalStyle, focusedStyle, matchStyle lipgloss.Style) *Completions {
+func New(styles Styles) *Completions {
 	l := list.NewFilterableList()
 	l.SetGap(0)
 	l.SetReverse(true)
 
 	return &Completions{
-		keyMap:       DefaultKeyMap(),
-		list:         l,
-		normalStyle:  normalStyle,
-		focusedStyle: focusedStyle,
-		matchStyle:   matchStyle,
+		keyMap: DefaultKeyMap(),
+		list:   l,
+		styles: styles,
 	}
 }
 
 // SetStyles updates the styles used when rendering completion items.
 // Existing items are not restyled; subsequent SetItems calls pick up the
 // new styles.
-func (c *Completions) SetStyles(normalStyle, focusedStyle, matchStyle lipgloss.Style) {
-	c.normalStyle = normalStyle
-	c.focusedStyle = focusedStyle
-	c.matchStyle = matchStyle
+func (c *Completions) SetStyles(styles Styles) {
+	c.styles = styles
 }
 
 // IsOpen returns whether the completions popup is open.
@@ -129,10 +128,21 @@ func (c *Completions) Query() string {
 	return c.query
 }
 
-// Size returns the visible size of the popup.
+// Size returns the full on-screen size of the popup, including the border
+// and the scrollbar column (when shown).
 func (c *Completions) Size() (width, height int) {
-	visible := len(c.filtered)
-	return c.width, min(visible, c.height)
+	visible := min(len(c.filtered), c.height)
+	w := c.width
+	if c.hasScrollbar() {
+		w++
+	}
+	return w + 2, visible + 2 // +2 each axis for the border
+}
+
+// hasScrollbar reports whether there are more filtered items than fit in
+// the visible height.
+func (c *Completions) hasScrollbar() bool {
+	return len(c.filtered) > c.height
 }
 
 // KeyMap returns the key bindings.
@@ -162,28 +172,31 @@ func (c *Completions) SetItems(files []FileCompletionValue, resources []Resource
 
 	// Add files first.
 	for _, file := range files {
-		item := NewCompletionItem(
-			file.Path,
-			file,
-			c.normalStyle,
-			c.focusedStyle,
-			c.matchStyle,
-		)
-		items = append(items, item)
+		items = append(items, NewCompletionItem(file.Path, "", file, c.styles.ItemStyles))
 	}
 
 	// Add MCP resources.
 	for _, resource := range resources {
-		item := NewCompletionItem(
-			resource.MCPName+"/"+cmp.Or(resource.Title, resource.URI),
-			resource,
-			c.normalStyle,
-			c.focusedStyle,
-			c.matchStyle,
-		)
-		items = append(items, item)
+		name := resource.MCPName + "/" + cmp.Or(resource.Title, resource.URI)
+		items = append(items, NewCompletionItem(name, "", resource, c.styles.ItemStyles))
 	}
 
+	c.openWith(items)
+}
+
+// SetSkillItems sets the skill items and opens the popup. Unlike SetItems,
+// the data is already resident in memory (loaded once at startup), so no
+// filesystem scan or [tea.Cmd] is needed.
+func (c *Completions) SetSkillItems(skillItems []SkillCompletionValue) {
+	items := make([]list.FilterableItem, 0, len(skillItems))
+	for _, sk := range skillItems {
+		items = append(items, NewCompletionItem("/"+sk.Name, sk.Description, sk, c.styles.ItemStyles))
+	}
+	c.openWith(items)
+}
+
+// openWith populates the list with items and opens the popup.
+func (c *Completions) openWith(items []list.FilterableItem) {
 	c.open = true
 	c.query = ""
 	c.allItems = items
@@ -271,21 +284,45 @@ func hasPathSegment(pathLower, queryLower string) bool {
 	}), queryLower)
 }
 
+// prefixWidth must match the bar+icon+gap prefix renderItem draws before
+// the name column.
+const prefixWidth = 3
+
 func (c *Completions) updateSize() {
 	items := c.filtered
 	start, end := c.list.VisibleItemIndices()
-	width := 0
+	const descGap = 2
+
+	maxNameW, maxDescW := 0, 0
 	for i := start; i <= end; i++ {
 		item := c.list.ItemAt(i)
 		if item == nil {
 			continue
 		}
-		s := item.(interface{ Text() string }).Text()
-		width = max(width, ansi.StringWidth(s))
+		maxNameW = max(maxNameW, ansi.StringWidth(item.(interface{ Text() string }).Text()))
+		if d, ok := item.(interface{ Desc() string }); ok {
+			maxDescW = max(maxDescW, ansi.StringWidth(d.Desc()))
+		}
+	}
+
+	width := 0
+	if maxNameW > 0 {
+		width = prefixWidth + maxNameW
+		if maxDescW > 0 {
+			width += descGap + maxDescW
+		}
 	}
 	c.width = ordered.Clamp(width+2, int(minWidth), int(maxWidth))
 	c.height = ordered.Clamp(len(items), int(minHeight), int(maxHeight))
 	c.list.SetSize(c.width, c.height)
+
+	// Align descriptions into a shared column across all visible rows.
+	for i := start; i <= end; i++ {
+		if item, ok := c.list.ItemAt(i).(*CompletionItem); ok {
+			item.SetNameColumnWidth(maxNameW)
+		}
+	}
+
 	c.list.SelectFirst()
 	c.list.ScrollToSelected()
 }
@@ -385,23 +422,57 @@ func (c *Completions) selectCurrent(keepOpen bool) tea.Msg {
 			Value:    item,
 			KeepOpen: keepOpen,
 		}
+	case SkillCompletionValue:
+		return SelectionMsg[SkillCompletionValue]{
+			Value:    item,
+			KeepOpen: keepOpen,
+		}
 	default:
 		return nil
 	}
 }
 
-// Render renders the completions popup.
+// Render renders the completions popup: a bordered box around the item
+// list, with a scrollbar in the right margin when there are more items
+// than fit in the visible height.
 func (c *Completions) Render() string {
-	if !c.open {
+	if !c.open || len(c.filtered) == 0 {
 		return ""
 	}
 
-	items := c.filtered
-	if len(items) == 0 {
+	content := c.list.List.Render()
+	if sb := c.scrollbar(); sb != "" {
+		content = lipgloss.JoinHorizontal(lipgloss.Top, content, sb)
+	}
+	return c.styles.Border.Render(content)
+}
+
+// scrollbar renders a thin vertical scrollbar reflecting the current
+// scroll position, or "" when everything fits in view.
+func (c *Completions) scrollbar() string {
+	contentSize := len(c.filtered)
+	if c.height <= 0 || contentSize <= c.height {
 		return ""
 	}
 
-	return c.list.List.Render()
+	start, _ := c.list.VisibleItemIndices()
+	thumbSize := max(1, c.height*c.height/contentSize)
+	maxOffset := contentSize - c.height
+	trackSpace := c.height - thumbSize
+	thumbPos := 0
+	if trackSpace > 0 && maxOffset > 0 {
+		thumbPos = min(trackSpace, start*trackSpace/maxOffset)
+	}
+
+	lines := make([]string, c.height)
+	for i := range c.height {
+		if i >= thumbPos && i < thumbPos+thumbSize {
+			lines[i] = c.styles.Bar.Render("┃")
+		} else {
+			lines[i] = c.styles.Desc.Render("│")
+		}
+	}
+	return strings.Join(lines, "\n")
 }
 
 func loadFiles(depth, limit int) []FileCompletionValue {

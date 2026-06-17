@@ -6,6 +6,7 @@ import (
 	"log/slog"
 	"reflect"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/EngineerProjects/nexus-engine/internal/types"
@@ -182,6 +183,7 @@ type AsyncAgentManager struct {
 
 	// Worker pool for event dispatch
 	workerPoolSize int
+	agentCounter   atomic.Int64
 	workersWg      sync.WaitGroup
 
 	// Tracks active agent goroutines so Shutdown can wait for them to finish
@@ -214,9 +216,18 @@ func NewAsyncAgentManager() *AsyncAgentManager {
 	return manager
 }
 
-// SetWorkerPoolSize sets the size of the worker pool for event dispatch
+// SetWorkerPoolSize sets the size of the worker pool for event dispatch.
+// It drains existing workers before launching the new pool.
 func (m *AsyncAgentManager) SetWorkerPoolSize(size int) {
+	// Cancel the current dispatcher context so existing workers exit cleanly.
+	m.dispatcherCancel()
 	m.workersWg.Wait()
+
+	// Create a fresh context for the new worker pool.
+	ctx, cancel := context.WithCancel(context.Background())
+	m.dispatcherCtx = ctx
+	m.dispatcherCancel = cancel
+
 	m.workerPoolSize = size
 	m.startEventDispatcher()
 }
@@ -910,9 +921,11 @@ func (a *AsyncAgent) GetDuration() time.Duration {
 // Utility Functions
 // ---------------------------------------------------------------------------
 
-// generateAgentID generates a unique agent ID
+var globalAgentCounter atomic.Int64
+
+// generateAgentID generates a unique agent ID using a monotonic counter.
 func generateAgentID(agentType string) string {
-	return fmt.Sprintf("%s-%d", agentType, time.Now().UnixNano())
+	return fmt.Sprintf("%s-%d", agentType, globalAgentCounter.Add(1))
 }
 
 // Default async manager instance

@@ -109,28 +109,34 @@ func (m *MCPClientManager) Connect(ctx context.Context, config ConnectServerConf
 	}
 
 	// Store the client
+	m.mu.Lock()
 	m.clients[config.Name] = client
+	m.mu.Unlock()
 
 	return nil
 }
 
 // Disconnect disconnects from an MCP server
 func (m *MCPClientManager) Disconnect(serverName string) error {
+	m.mu.Lock()
 	client, ok := m.clients[serverName]
 	if !ok {
+		m.mu.Unlock()
 		return fmt.Errorf("server '%s' not connected", serverName)
 	}
+	delete(m.clients, serverName)
+	m.mu.Unlock()
 
 	if err := client.Close(); err != nil {
 		return fmt.Errorf("failed to close MCP client: %w", err)
 	}
-
-	delete(m.clients, serverName)
 	return nil
 }
 
 // GetConnectedServers returns all connected server names
 func (m *MCPClientManager) GetConnectedServers() []string {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
 	servers := make([]string, 0, len(m.clients))
 	for name := range m.clients {
 		servers = append(servers, name)
@@ -140,7 +146,9 @@ func (m *MCPClientManager) GetConnectedServers() []string {
 
 // GetServerTools returns all tools from a connected server
 func (m *MCPClientManager) GetServerTools(ctx context.Context, serverName string) ([]Tool, error) {
+	m.mu.RLock()
 	client, ok := m.clients[serverName]
+	m.mu.RUnlock()
 	if !ok {
 		return nil, fmt.Errorf("server '%s' not connected", serverName)
 	}
@@ -150,9 +158,16 @@ func (m *MCPClientManager) GetServerTools(ctx context.Context, serverName string
 
 // AllTools returns all tools from all connected servers as native tools
 func (m *MCPClientManager) AllTools(ctx context.Context, registry *tool.Registry) ([]tool.Tool, error) {
+	m.mu.RLock()
+	snapshot := make(map[string]*Client, len(m.clients))
+	for name, c := range m.clients {
+		snapshot[name] = c
+	}
+	m.mu.RUnlock()
+
 	allTools := make([]tool.Tool, 0)
 
-	for serverName, client := range m.clients {
+	for serverName, client := range snapshot {
 		mcpTools, err := client.ListTools(ctx)
 		if err != nil {
 			continue

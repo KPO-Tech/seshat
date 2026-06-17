@@ -11,7 +11,6 @@ type KeyMap struct {
 		AddImage    key.Binding
 		PasteImage  key.Binding
 		MentionFile key.Binding
-		Skills      key.Binding
 		Commands    key.Binding
 
 		// Attachments key maps
@@ -86,6 +85,10 @@ func DefaultKeyMap() KeyMap {
 		),
 		Models: key.NewBinding(
 			key.WithKeys("ctrl+m", "ctrl+l"),
+			// "ctrl+m" is indistinguishable from Enter on terminals without
+			// key disambiguation support, so default to the key that always
+			// works; ui.go upgrades this to "ctrl+m" once the terminal
+			// proves (via KeyboardEnhancementsMsg) that it can tell them apart.
 			key.WithHelp("ctrl+l", "models"),
 		),
 		Suspend: key.NewBinding(
@@ -144,10 +147,6 @@ func DefaultKeyMap() KeyMap {
 	km.Editor.MentionFile = key.NewBinding(
 		key.WithKeys("@"),
 		key.WithHelp("@", "mention file"),
-	)
-	km.Editor.Skills = key.NewBinding(
-		key.WithKeys("/"),
-		key.WithHelp("/", "skills"),
 	)
 	km.Editor.Commands = key.NewBinding(
 		key.WithKeys("\\"),

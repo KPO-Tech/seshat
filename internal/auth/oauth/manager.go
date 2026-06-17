@@ -72,24 +72,20 @@ func (m *OAuthManager) Complete(ctx context.Context, token *Token) error {
 	return nil
 }
 
-// GetToken returns a valid token, refreshing if necessary
+// GetToken returns a valid token, refreshing if necessary.
+// Uses a write lock throughout so refresh() can safely mutate m.token / m.refreshAt.
 func (m *OAuthManager) GetToken(ctx context.Context) (string, error) {
-	m.mu.RLock()
-	defer m.mu.RUnlock()
+	m.mu.Lock()
+	defer m.mu.Unlock()
 
-	// Check if we need to refresh
 	if m.refreshToken != "" && !m.refreshAt.IsZero() && time.Now().After(m.refreshAt) {
-		// Try to refresh
-		m.mu.RUnlock()
 		newToken, err := m.refresh(ctx)
-		m.mu.RLock()
 		if err != nil {
 			return "", err
 		}
 		return newToken.AccessToken, nil
 	}
 
-	// Return current token if valid
 	if m.token != nil && !m.token.IsExpired() {
 		return m.token.AccessToken, nil
 	}
