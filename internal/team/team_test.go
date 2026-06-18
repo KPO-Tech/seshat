@@ -3,22 +3,16 @@ package team_test
 import (
 	"context"
 	"errors"
-	"sync"
 	"testing"
-	"time"
-
-	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/require"
 
 	"github.com/EngineerProjects/nexus-engine/internal/agent"
 	"github.com/EngineerProjects/nexus-engine/internal/db"
-	"github.com/EngineerProjects/nexus-engine/internal/mailbox"
 	"github.com/EngineerProjects/nexus-engine/internal/team"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
-// ─── helpers ─────────────────────────────────────────────────────────────────
-
-func setup(t *testing.T) (*team.Dispatcher, *agent.ProfileRegistry, *mailbox.SQLiteMailbox) {
+func setupTeamRegistry(t *testing.T) (*team.TeamRegistry, *agent.ProfileRegistry) {
 	t.Helper()
 	database, err := db.Open(context.Background(), db.Config{
 		Driver:      db.DriverSQLite,
@@ -28,246 +22,186 @@ func setup(t *testing.T) (*team.Dispatcher, *agent.ProfileRegistry, *mailbox.SQL
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = database.Close() })
 
-	reg := agent.NewProfileRegistry(database)
-	require.NoError(t, reg.Seed(context.Background()))
+	profiles := agent.NewProfileRegistry(database)
+	require.NoError(t, profiles.Seed(context.Background()))
 
-	lister := func(ctx context.Context, teamID string) ([]string, error) {
-		profiles, err := reg.FindByTeam(ctx, teamID)
-		if err != nil {
-			return nil, err
-		}
-		ids := make([]string, len(profiles))
-		for i, p := range profiles {
-			ids[i] = p.ID
-		}
-		return ids, nil
+	teams := team.NewTeamRegistry(database, profiles)
+	return teams, profiles
+}
+
+// ─── NewTeam ─────────────────────────────────────────────────────────────────
+
+func TestNewTeam_GeneratesUUID(t *testing.T) {
+	a := team.NewTeam("Alpha", "")
+	b := team.NewTeam("Beta", "")
+	if a.ID == "" || b.ID == "" {
+		t.Fatal("NewTeam must generate a non-empty ID")
 	}
-
-	mb := mailbox.New(database, lister)
-	d := team.NewDispatcher(reg, mb)
-	return d, reg, mb
+	if a.ID == b.ID {
+		t.Fatal("NewTeam must generate unique IDs")
+	}
 }
 
-// ─── Dispatcher.Send ─────────────────────────────────────────────────────────
+// ─── Create / Get ─────────────────────────────────────────────────────────────
 
-func TestDispatcher_Send(t *testing.T) {
+func TestTeamRegistry_CreateAndGet(t *testing.T) {
 	ctx := context.Background()
-	d, reg, mb := setup(t)
+	reg, _ := setupTeamRegistry(t)
 
-	profiles, err := reg.List(ctx)
+	tm := team.NewTeam("Product", "Product squad")
+	require.NoError(t, reg.Create(ctx, tm))
+
+	got, err := reg.Get(ctx, tm.ID)
 	require.NoError(t, err)
-	require.GreaterOrEqual(t, len(profiles), 2)
-
-	from, to := profiles[0].ID, profiles[1].ID
-	require.NoError(t, d.Send(ctx, from, to, "Do the thing", "Details."))
-
-	msgs, err := mb.Receive(ctx, to)
-	require.NoError(t, err)
-	require.Len(t, msgs, 1)
-	assert.Equal(t, mailbox.KindTask, msgs[0].Kind)
-	assert.Equal(t, from, msgs[0].FromAgent)
-	assert.Equal(t, "Do the thing", msgs[0].Subject)
+	assert.Equal(t, tm.ID, got.ID)
+	assert.Equal(t, "Product", got.Name)
+	assert.Equal(t, "Product squad", got.Description)
 }
 
-func TestDispatcher_Send_EmptyIDs(t *testing.T) {
+func TestTeamRegistry_GetByName(t *testing.T) {
 	ctx := context.Background()
-	d, _, _ := setup(t)
-	assert.Error(t, d.Send(ctx, "", "to", "s", "b"))
-	assert.Error(t, d.Send(ctx, "from", "", "s", "b"))
+	reg, _ := setupTeamRegistry(t)
+
+	tm := team.NewTeam("Engineering", "")
+	require.NoError(t, reg.Create(ctx, tm))
+
+	got, err := reg.GetByName(ctx, "Engineering")
+	require.NoError(t, err)
+	assert.Equal(t, tm.ID, got.ID)
 }
 
-// ─── Dispatcher.Reply ─────────────────────────────────────────────────────────
-
-func TestDispatcher_Reply(t *testing.T) {
+func TestTeamRegistry_Get_NotFound(t *testing.T) {
 	ctx := context.Background()
-	d, reg, mb := setup(t)
+	reg, _ := setupTeamRegistry(t)
 
-	profiles, _ := reg.List(ctx)
-	from, to := profiles[0].ID, profiles[1].ID
-
-	require.NoError(t, d.Send(ctx, from, to, "Original task", ""))
-	msgs, _ := mb.Receive(ctx, to)
-	require.Len(t, msgs, 1)
-	original := msgs[0]
-
-	require.NoError(t, d.Reply(ctx, to, from, original.ID, "Re: Original task", "Done."))
-
-	replies, err := mb.Receive(ctx, from)
-	require.NoError(t, err)
-	require.Len(t, replies, 1)
-	assert.Equal(t, mailbox.KindReply, replies[0].Kind)
-	assert.Equal(t, original.ID, replies[0].ReplyTo)
-}
-
-func TestDispatcher_Reply_EmptyReplyTo(t *testing.T) {
-	ctx := context.Background()
-	d, _, _ := setup(t)
-	assert.Error(t, d.Reply(ctx, "a", "b", "", "s", "b"))
-}
-
-// ─── Dispatcher.Broadcast ────────────────────────────────────────────────────
-
-func TestDispatcher_Broadcast(t *testing.T) {
-	ctx := context.Background()
-	d, reg, mb := setup(t)
-
-	aria := agent.NewAgentProfile("Aria", "researcher", "")
-	aria.TeamID = "alpha"
-	kai := agent.NewAgentProfile("Kai", "engineer", "")
-	kai.TeamID = "alpha"
-	nexus := agent.NewAgentProfile("Nexus", "manager", "")
-	nexus.TeamID = "alpha"
-	require.NoError(t, reg.Register(ctx, aria))
-	require.NoError(t, reg.Register(ctx, kai))
-	require.NoError(t, reg.Register(ctx, nexus))
-
-	require.NoError(t, d.Broadcast(ctx, nexus.ID, "alpha", "Stand-up", "Daily sync at 09:00."))
-
-	ariaInbox, err := mb.Receive(ctx, aria.ID)
-	require.NoError(t, err)
-	assert.Len(t, ariaInbox, 1)
-
-	kaiInbox, err := mb.Receive(ctx, kai.ID)
-	require.NoError(t, err)
-	assert.Len(t, kaiInbox, 1)
-
-	// Sender must not receive its own broadcast.
-	nexusInbox, err := mb.Receive(ctx, nexus.ID)
-	require.NoError(t, err)
-	assert.Empty(t, nexusInbox)
-}
-
-func TestDispatcher_Broadcast_EmptyTeamID(t *testing.T) {
-	ctx := context.Background()
-	d, _, _ := setup(t)
-	assert.Error(t, d.Broadcast(ctx, "from", "", "s", "b"))
-}
-
-// ─── Dispatcher.Assign ───────────────────────────────────────────────────────
-
-func TestDispatcher_Assign_ByRole(t *testing.T) {
-	ctx := context.Background()
-	d, reg, mb := setup(t)
-
-	researchers, err := reg.FindByRole(ctx, "researcher")
-	require.NoError(t, err)
-	require.Len(t, researchers, 1)
-	aria := researchers[0]
-
-	managers, err := reg.FindByRole(ctx, "manager")
-	require.NoError(t, err)
-	from := managers[0].ID
-
-	require.NoError(t, d.Assign(ctx, from, "researcher", "", "Research Go generics", ""))
-
-	inbox, err := mb.Receive(ctx, aria.ID)
-	require.NoError(t, err)
-	require.Len(t, inbox, 1)
-	assert.Equal(t, "Research Go generics", inbox[0].Subject)
-}
-
-func TestDispatcher_Assign_ByRoleAndTeam(t *testing.T) {
-	ctx := context.Background()
-	d, reg, mb := setup(t)
-
-	r1 := agent.NewAgentProfile("Maria", "researcher", "")
-	r1.TeamID = "alpha"
-	r2 := agent.NewAgentProfile("Faouziath", "researcher", "")
-	r2.TeamID = "beta"
-	require.NoError(t, reg.Register(ctx, r1))
-	require.NoError(t, reg.Register(ctx, r2))
-
-	require.NoError(t, d.Assign(ctx, "system", "researcher", "beta", "Beta task", ""))
-
-	r1Inbox, err := mb.Receive(ctx, r1.ID)
-	require.NoError(t, err)
-	assert.Empty(t, r1Inbox)
-
-	r2Inbox, err := mb.Receive(ctx, r2.ID)
-	require.NoError(t, err)
-	assert.Len(t, r2Inbox, 1)
-}
-
-func TestDispatcher_Assign_NoMatch(t *testing.T) {
-	ctx := context.Background()
-	d, _, _ := setup(t)
-	err := d.Assign(ctx, "from", "unicorn", "", "s", "b")
+	_, err := reg.Get(ctx, "nonexistent-uuid")
 	require.Error(t, err)
-	var noAgent *team.ErrNoAgentForRole
-	assert.True(t, errors.As(err, &noAgent))
-	assert.Equal(t, "unicorn", noAgent.Role)
+	assert.True(t, errors.Is(err, team.ErrTeamNotFound))
 }
 
-// ─── TeamBus ─────────────────────────────────────────────────────────────────
-
-func TestTeamBus_DeliversMessages(t *testing.T) {
+func TestTeamRegistry_Create_EmptyName(t *testing.T) {
 	ctx := context.Background()
-	database, err := db.Open(context.Background(), db.Config{
-		Driver:      db.DriverSQLite,
-		DSN:         ":memory:",
-		AutoMigrate: true,
-	})
-	require.NoError(t, err)
-	t.Cleanup(func() { _ = database.Close() })
+	reg, _ := setupTeamRegistry(t)
 
-	reg := agent.NewProfileRegistry(database)
-	require.NoError(t, reg.Seed(ctx))
-	mb := mailbox.New(database, nil)
-
-	var (
-		mu       sync.Mutex
-		received []mailbox.Message
-	)
-	handler := func(_ context.Context, _ agent.AgentProfile, msg mailbox.Message) {
-		mu.Lock()
-		received = append(received, msg)
-		mu.Unlock()
-	}
-
-	bus := team.NewTeamBus(reg, mb, handler, 50*time.Millisecond)
-	require.NoError(t, bus.Start(ctx))
-	t.Cleanup(bus.Stop)
-
-	researchers, err := reg.FindByRole(ctx, "researcher")
-	require.NoError(t, err)
-	require.Len(t, researchers, 1)
-
-	msg := mailbox.NewMessage(mailbox.KindTask, "system", researchers[0].ID, "Research task", "Go generics.")
-	require.NoError(t, mb.Send(ctx, msg))
-
-	deadline := time.Now().Add(500 * time.Millisecond)
-	for time.Now().Before(deadline) {
-		mu.Lock()
-		n := len(received)
-		mu.Unlock()
-		if n > 0 {
-			break
-		}
-		time.Sleep(10 * time.Millisecond)
-	}
-
-	mu.Lock()
-	defer mu.Unlock()
-	require.Len(t, received, 1)
-	assert.Equal(t, msg.ID, received[0].ID)
+	err := reg.Create(ctx, team.NewTeam("", ""))
+	require.Error(t, err)
 }
 
-func TestTeamBus_Start_Idempotent(t *testing.T) {
+func TestTeamRegistry_Create_DuplicateName(t *testing.T) {
 	ctx := context.Background()
-	database, err := db.Open(context.Background(), db.Config{
-		Driver:      db.DriverSQLite,
-		DSN:         ":memory:",
-		AutoMigrate: true,
-	})
+	reg, _ := setupTeamRegistry(t)
+
+	require.NoError(t, reg.Create(ctx, team.NewTeam("Shared", "first")))
+	err := reg.Create(ctx, team.NewTeam("Shared", "second"))
+	require.Error(t, err, "duplicate team name must be rejected")
+}
+
+// ─── List ─────────────────────────────────────────────────────────────────────
+
+func TestTeamRegistry_List(t *testing.T) {
+	ctx := context.Background()
+	reg, _ := setupTeamRegistry(t)
+
+	require.NoError(t, reg.Create(ctx, team.NewTeam("Zebra", "")))
+	require.NoError(t, reg.Create(ctx, team.NewTeam("Alpha", "")))
+	require.NoError(t, reg.Create(ctx, team.NewTeam("Mango", "")))
+
+	teams, err := reg.List(ctx)
 	require.NoError(t, err)
-	t.Cleanup(func() { _ = database.Close() })
+	require.Len(t, teams, 3)
+	assert.Equal(t, "Alpha", teams[0].Name)
+	assert.Equal(t, "Mango", teams[1].Name)
+	assert.Equal(t, "Zebra", teams[2].Name)
+}
 
-	reg := agent.NewProfileRegistry(database)
-	require.NoError(t, reg.Seed(ctx))
-	mb := mailbox.New(database, nil)
+// ─── Update ───────────────────────────────────────────────────────────────────
 
-	bus := team.NewTeamBus(reg, mb, nil, 50*time.Millisecond)
-	require.NoError(t, bus.Start(ctx))
-	require.NoError(t, bus.Start(ctx), "second Start must be a no-op")
-	bus.Stop()
+func TestTeamRegistry_Update(t *testing.T) {
+	ctx := context.Background()
+	reg, _ := setupTeamRegistry(t)
+
+	tm := team.NewTeam("OldName", "old desc")
+	require.NoError(t, reg.Create(ctx, tm))
+
+	tm.Name = "NewName"
+	tm.Description = "new desc"
+	require.NoError(t, reg.Update(ctx, tm))
+
+	got, err := reg.Get(ctx, tm.ID)
+	require.NoError(t, err)
+	assert.Equal(t, "NewName", got.Name)
+	assert.Equal(t, "new desc", got.Description)
+}
+
+// ─── Delete ───────────────────────────────────────────────────────────────────
+
+func TestTeamRegistry_Delete(t *testing.T) {
+	ctx := context.Background()
+	reg, _ := setupTeamRegistry(t)
+
+	tm := team.NewTeam("Temp", "")
+	require.NoError(t, reg.Create(ctx, tm))
+	require.NoError(t, reg.Delete(ctx, tm.ID))
+
+	_, err := reg.Get(ctx, tm.ID)
+	assert.True(t, errors.Is(err, team.ErrTeamNotFound))
+}
+
+// ─── AddMember / RemoveMember / Members ──────────────────────────────────────
+
+func TestTeamRegistry_AddAndRemoveMember(t *testing.T) {
+	ctx := context.Background()
+	reg, profiles := setupTeamRegistry(t)
+
+	tm := team.NewTeam("Alpha", "")
+	require.NoError(t, reg.Create(ctx, tm))
+
+	all, err := profiles.List(ctx)
+	require.NoError(t, err)
+	require.NotEmpty(t, all)
+	aria := all[0]
+
+	require.NoError(t, reg.AddMember(ctx, tm.ID, aria.ID))
+
+	members, err := reg.Members(ctx, tm.ID)
+	require.NoError(t, err)
+	require.Len(t, members, 1)
+	assert.Equal(t, aria.ID, members[0].ID)
+
+	require.NoError(t, reg.RemoveMember(ctx, aria.ID))
+
+	members, err = reg.Members(ctx, tm.ID)
+	require.NoError(t, err)
+	assert.Empty(t, members)
+}
+
+func TestTeamRegistry_AddMember_ReassignsTeam(t *testing.T) {
+	ctx := context.Background()
+	reg, profiles := setupTeamRegistry(t)
+
+	alpha := team.NewTeam("Alpha", "")
+	beta := team.NewTeam("Beta", "")
+	require.NoError(t, reg.Create(ctx, alpha))
+	require.NoError(t, reg.Create(ctx, beta))
+
+	all, err := profiles.List(ctx)
+	require.NoError(t, err)
+	aria := all[0]
+
+	require.NoError(t, reg.AddMember(ctx, alpha.ID, aria.ID))
+	require.NoError(t, reg.AddMember(ctx, beta.ID, aria.ID))
+
+	alphaMembers, _ := reg.Members(ctx, alpha.ID)
+	betaMembers, _ := reg.Members(ctx, beta.ID)
+	assert.Empty(t, alphaMembers, "agent should no longer be in alpha after re-assignment")
+	assert.Len(t, betaMembers, 1)
+}
+
+func TestTeamRegistry_AddMember_EmptyArgs(t *testing.T) {
+	ctx := context.Background()
+	reg, _ := setupTeamRegistry(t)
+
+	assert.Error(t, reg.AddMember(ctx, "", "agent-id"))
+	assert.Error(t, reg.AddMember(ctx, "team-id", ""))
+	assert.Error(t, reg.RemoveMember(ctx, ""))
 }
