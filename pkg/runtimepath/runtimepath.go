@@ -66,7 +66,7 @@ func StorageDir(root string) string { return Join(root, "storage") }
 
 func TmpDir(root string) string { return Join(root, "tmp") }
 
-func BackendDBPath(root string) string { return Join(root, "data", "nexus.db") }
+func BackendDBPath(root string) string { return Join(root, "nexus.db") }
 
 func HNSWDataDir(root string) string { return Join(root, "data", "hnsw") }
 
