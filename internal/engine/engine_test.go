@@ -4077,6 +4077,87 @@ func TestToolContextCarriesConfiguredWorkingDirectory(t *testing.T) {
 	}
 }
 
+// ─── Engine.Fork ─────────────────────────────────────────────────────────────
+
+func TestEngineFork_IsolatesLoop(t *testing.T) {
+	parent := NewEngine(nil, nil, nil, prompt.NewAssembler(), nil, nil, nil, DefaultConfig(), nil, nil)
+	child := parent.Fork("You are a test agent.", "")
+	if child.loop == nil {
+		t.Fatal("forked engine must have a loop")
+	}
+	if child.loop == parent.loop {
+		t.Fatal("forked engine must have an independent loop, not the parent's")
+	}
+}
+
+func TestEngineFork_SetsSystemPrompt(t *testing.T) {
+	parent := NewEngine(nil, nil, nil, prompt.NewAssembler(), nil, nil, nil, DefaultConfig(), nil, nil)
+	child := parent.Fork("Agent persona here.", "")
+	if child.config.SystemPromptTemplate != "Agent persona here." {
+		t.Fatalf("expected system prompt %q, got %q", "Agent persona here.", child.config.SystemPromptTemplate)
+	}
+}
+
+func TestEngineFork_OverridesModel(t *testing.T) {
+	cfg := DefaultConfig()
+	cfg.Model = types.ModelIdentifier{Provider: "anthropic", Model: "claude-3-5-sonnet-20241022"}
+	parent := NewEngine(nil, nil, nil, prompt.NewAssembler(), nil, nil, nil, cfg, nil, nil)
+
+	child := parent.Fork("", "openai:gpt-4o")
+	if string(child.config.Model.Provider) != "openai" {
+		t.Fatalf("expected provider %q, got %q", "openai", child.config.Model.Provider)
+	}
+	if child.config.Model.Model != "gpt-4o" {
+		t.Fatalf("expected model %q, got %q", "gpt-4o", child.config.Model.Model)
+	}
+}
+
+func TestEngineFork_KeepsParentModelWhenEmpty(t *testing.T) {
+	cfg := DefaultConfig()
+	cfg.Model = types.ModelIdentifier{Provider: "anthropic", Model: "claude-opus-4-8"}
+	parent := NewEngine(nil, nil, nil, prompt.NewAssembler(), nil, nil, nil, cfg, nil, nil)
+
+	child := parent.Fork("", "")
+	if child.config.Model.Model != "claude-opus-4-8" {
+		t.Fatalf("expected parent model to be preserved, got %q", child.config.Model.Model)
+	}
+}
+
+func TestEngineFork_SharesReadOnlyResources(t *testing.T) {
+	client := providers.NewClient("key", "anthropic")
+	reg := registry.NewRegistry()
+	parent := NewEngine(client, nil, nil, prompt.NewAssembler(), nil, reg, nil, DefaultConfig(), nil, nil)
+
+	child := parent.Fork("", "")
+	if child.apiClient != parent.apiClient {
+		t.Error("forked engine must share the parent apiClient")
+	}
+	if child.toolRegistry != parent.toolRegistry {
+		t.Error("forked engine must share the parent toolRegistry")
+	}
+}
+
+func TestForkParseModel(t *testing.T) {
+	fallback := types.ModelIdentifier{Provider: "anthropic", Model: "claude-3-5-sonnet-20241022"}
+	cases := []struct {
+		raw          string
+		wantProvider string
+		wantModel    string
+	}{
+		{"anthropic:claude-opus-4-8", "anthropic", "claude-opus-4-8"},
+		{"openai:gpt-4o", "openai", "gpt-4o"},
+		{"", "anthropic", "claude-3-5-sonnet-20241022"},
+		{"bare-model", "anthropic", "bare-model"},
+	}
+	for _, tc := range cases {
+		got := forkParseModel(tc.raw, fallback)
+		if string(got.Provider) != tc.wantProvider || got.Model != tc.wantModel {
+			t.Errorf("forkParseModel(%q): got %s:%s, want %s:%s",
+				tc.raw, got.Provider, got.Model, tc.wantProvider, tc.wantModel)
+		}
+	}
+}
+
 func firstUserText(messages []types.Message) string {
 	for _, message := range messages {
 		if message.Role != types.RoleUser {
