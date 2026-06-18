@@ -162,5 +162,11 @@ func rowsToMessages(rows []db.GMailboxMessage) []Message {
 	return msgs
 }
 
+// PendingCounts returns the unread message count per agent for the given IDs.
+// Agents with zero unread messages are absent from the map.
+func (m *SQLiteMailbox) PendingCounts(ctx context.Context, agentIDs []string) (map[string]int, error) {
+	return m.db.CountUnreadByAgents(ctx, agentIDs)
+}
+
 // compile-time check: SQLiteMailbox implements Mailbox.
 var _ Mailbox = (*SQLiteMailbox)(nil)

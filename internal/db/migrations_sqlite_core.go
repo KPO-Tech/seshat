@@ -79,6 +79,11 @@ func sqliteCoreMigrations() []schemaMigration {
 			Scope: migrationScopeCoreSQLite,
 			Run:   migrateSQLiteLongtermMemory,
 		},
+		{
+			ID:    "20260618_013_teams",
+			Scope: migrationScopeCoreSQLite,
+			Run:   migrateSQLiteTeams,
+		},
 	}
 }
 
@@ -332,6 +337,10 @@ func migrateSQLiteSessionTasks(ctx context.Context, db *DB) error {
 		}
 	}
 	return nil
+}
+
+func migrateSQLiteTeams(ctx context.Context, db *DB) error {
+	return db.gormDB.WithContext(ctx).AutoMigrate(&GTeam{})
 }
 
 func migrateSQLiteLongtermMemory(ctx context.Context, db *DB) error {

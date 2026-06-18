@@ -95,4 +95,10 @@ type Mailbox interface {
 
 	// Delete removes a message permanently.
 	Delete(ctx context.Context, msgID string) error
+
+	// PendingCounts returns the number of unread messages per agent for the
+	// given agent IDs. Agents with zero unread messages are absent from the
+	// returned map (treat missing keys as 0). Used by Dispatcher to route
+	// tasks to the least-loaded available agent.
+	PendingCounts(ctx context.Context, agentIDs []string) (map[string]int, error)
 }
