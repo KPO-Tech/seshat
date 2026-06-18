@@ -11,6 +11,7 @@ package team
 import (
 	"context"
 	"fmt"
+	"math/rand"
 	"strings"
 
 	"github.com/EngineerProjects/nexus-engine/internal/agent"
@@ -90,13 +91,50 @@ func (d *Dispatcher) Assign(ctx context.Context, fromID, role, teamID, subject, 
 		return &ErrNoAgentForRole{Role: role, TeamID: teamID}
 	}
 
-	// Simple strategy: first match. Load-balancing comes later.
-	target := profiles[0]
+	target := leastLoaded(ctx, profiles, d.mailbox)
 	msg := mailbox.NewMessage(mailbox.KindTask, fromID, target.ID, subject, body)
 	if teamID != "" {
 		msg.TeamID = teamID
 	}
 	return d.mailbox.Send(ctx, msg)
+}
+
+// leastLoaded returns the agent from candidates with the fewest unread messages.
+// When multiple agents share the minimum, one is chosen at random for uniform
+// spread. Falls back to a random candidate when PendingCounts fails.
+func leastLoaded(ctx context.Context, candidates []agent.AgentProfile, mb mailbox.Mailbox) agent.AgentProfile {
+	if len(candidates) == 1 {
+		return candidates[0]
+	}
+
+	ids := make([]string, len(candidates))
+	for i, p := range candidates {
+		ids[i] = p.ID
+	}
+
+	counts, err := mb.PendingCounts(ctx, ids)
+	if err != nil {
+		// Degrade gracefully: pick at random rather than blocking assignment.
+		return candidates[rand.Intn(len(candidates))]
+	}
+
+	// Find the minimum pending count across all candidates.
+	minCount := -1
+	for _, id := range ids {
+		c := counts[id] // 0 when absent (no unread messages)
+		if minCount < 0 || c < minCount {
+			minCount = c
+		}
+	}
+
+	// Collect all agents tied at the minimum and pick one at random.
+	var tied []agent.AgentProfile
+	for _, p := range candidates {
+		if counts[p.ID] == minCount {
+			tied = append(tied, p)
+		}
+	}
+	return tied[rand.Intn(len(tied))]
 }
 
 // ErrNoAgentForRole is returned by Assign when no agent matches the criteria.

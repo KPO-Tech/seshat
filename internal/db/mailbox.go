@@ -117,6 +117,37 @@ func (db *DB) GetTeamAgents(ctx context.Context, teamID string) ([]string, error
 	return agents, rows.Err()
 }
 
+// CountUnreadByAgents returns a map of agentID → unread message count for each
+// ID in the given slice. Agents with zero unread messages are absent from the
+// result map (treat missing keys as 0). A single GROUP BY query is used
+// regardless of how many agent IDs are provided.
+func (db *DB) CountUnreadByAgents(ctx context.Context, agentIDs []string) (map[string]int, error) {
+	if len(agentIDs) == 0 {
+		return map[string]int{}, nil
+	}
+	rows, err := db.gormDB.WithContext(ctx).
+		Model(&GMailboxMessage{}).
+		Select("to_agent, COUNT(*) as cnt").
+		Where("to_agent IN ? AND read_at IS NULL", agentIDs).
+		Group("to_agent").
+		Rows()
+	if err != nil {
+		return nil, fmt.Errorf("count unread by agents: %w", err)
+	}
+	defer rows.Close()
+
+	counts := make(map[string]int, len(agentIDs))
+	for rows.Next() {
+		var agentID string
+		var cnt int
+		if err := rows.Scan(&agentID, &cnt); err != nil {
+			return nil, fmt.Errorf("scan unread count: %w", err)
+		}
+		counts[agentID] = cnt
+	}
+	return counts, rows.Err()
+}
+
 // DeleteMessage removes a message record permanently.
 func (db *DB) DeleteMessage(ctx context.Context, msgID string) error {
 	result := db.gormDB.WithContext(ctx).Delete(&GMailboxMessage{}, "id = ?", msgID)
