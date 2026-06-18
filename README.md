@@ -330,11 +330,51 @@ Full architecture diagrams (Mermaid): [`docs/vision/diagrams.md`](./docs/vision/
 
 ---
 
-## 🧩 Building a Product on Top
+## 🌐 The Nexus Ecosystem
 
-nexus-engine is the headless runtime — no users, no billing, no access control.
+nexus-engine is the **headless runtime**: pure Go, no UI, no users, no billing. It is the foundation everything else builds on.
 
-**[nexus-ai](https://github.com/EngineerProjects/nexus-ai)** is the full production platform built on top: multi-user auth, organizations, workspaces, per-user provider credentials, REST + SSE HTTP API, desktop app, and more — all open-source (AGPL-3.0).
+### 🖥️ nexus-ai — Desktop & Platform
+
+**[→ nexus-ai](https://github.com/EngineerProjects/nexus-ai)** is the full production platform built on top of this engine. If you want a ready-to-use application rather than a library, that is where you want to go.
+
+| | nexus-engine (this repo) | nexus-ai |
+|---|---|---|
+| **What it is** | Go runtime + SDK + CLI | Desktop app + REST API platform |
+| **Stack** | Go | Go (API) + TypeScript/React/Electron (desktop) |
+| **License** | Apache 2.0 | AGPL-3.0 |
+| **Who it's for** | Developers embedding agents in their own apps | End users, teams, self-hosters |
+| **Includes** | Engine, tools, providers, gRPC, CLI/TUI | Multi-user auth, workspaces, knowledge base, scheduler, desktop UI |
+
+**What nexus-ai gives you today:**
+- 🖥️ Native desktop app (Electron + React) with chat, tool views, plans, settings and a visual skills creator
+- 👥 Multi-user backend with organizations, workspaces, per-user API keys, quotas and audit log
+- 📡 REST + SSE HTTP API compatible with the Anthropic `/v1/messages` format
+- 📚 Knowledge base with hybrid BM25 + vector search and file ingestion
+- ⏰ Scheduled tasks, memories, plans and MCP server management
+
+**Coming next:**
+- 🤝 Agent teams: persistent groups of specialized agents collaborating on shared missions, each with its own inbox, role and memory
+- 🤖 Automation and background workflows triggered by schedule, events or voice
+- 🖼️ Image generation integrated directly into the chat and workspace
+- 🎙️ Voice input and audio output so you can talk to your agents naturally
+- 🌐 A multi-workspace environment covering code, research, creation and learning, all sharing the same runtime and data layer
+
+### 🤝 Contribution split
+
+| If you want to... | Contribute to... |
+|---|---|
+| Improve execution speed, reduce latency, optimize the agent loop | **nexus-engine** (Go) |
+| Add a new LLM provider or tool | **nexus-engine** (Go) |
+| Expose new capabilities in the SDK or gRPC API | **nexus-engine** (Go) |
+| Improve the desktop UI, add new views, fix UX | **nexus-ai** (TypeScript/React) |
+| Build features like agent teams, automation or scheduling | **nexus-ai** (Go API + React) |
+
+The engine is intentionally kept minimal and fast. If you need something from the SDK that is not exposed yet, open an issue and we will prioritize it.
+
+### 📦 Prebuilt binaries (coming soon)
+
+You will soon be able to download a single binary to use the CLI or embed the SDK in your application without building from source. Watch this repo for releases.
 
 ---
 
