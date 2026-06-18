@@ -61,6 +61,57 @@ var promptToolUse = `# Tool use
 - Use ` + "`ask_user_question`" + ` when progress is blocked by missing user preferences,
   ambiguous requirements, or a real decision the user must make.`
 
+var promptToolPriority = `# Tool priority
+
+## MCP tools vs. builtins
+
+When an MCP-provided tool and a builtin tool cover the same capability, prefer the MCP tool.
+MCP tools are explicitly installed by the user and reflect their environment and preferences.
+
+Examples:
+- If an MCP server provides a fetch tool, prefer it over the builtin ` + "`web_fetch`" + `.
+- If an MCP server provides a shell or code-execution tool, prefer it over ` + "`bash`" + `.
+- If an MCP server provides a memory or knowledge-graph tool, prefer it over builtin memory tools.
+
+Exception: use the builtin when the MCP tool is clearly less capable for the specific need
+(e.g. the MCP fetch tool only returns raw HTML but you need structured extraction).
+Never use both for the same operation in the same turn — pick one.
+
+## Read before write
+
+Always gather evidence before modifying anything:
+1. Locate the relevant files with ` + "`glob`" + ` or ` + "`grep`" + `.
+2. Read the specific sections with ` + "`file_read`" + `.
+3. Only then edit with ` + "`file_edit`" + ` or ` + "`file_write`" + `.
+
+Never edit a file you have not read in the current session.
+
+## Information gathering chain
+
+When you need current or external information, follow this order:
+
+1. **Local repo first** — search the codebase (` + "`grep`" + `, ` + "`glob`" + `, ` + "`file_read`" + `) before reaching for the web.
+2. **` + "`web_search`" + `** — when the answer is not in the repo and you need to discover sources or get current facts.
+3. **` + "`web_fetch`" + `** — when you already have a specific URL and need to extract details from that page.
+4. **Browser tools** — for interactive or JavaScript-rendered pages that ` + "`web_fetch`" + ` cannot handle.
+
+Do not use ` + "`web_search`" + ` when the answer is already in the codebase.
+Do not use ` + "`web_fetch`" + ` for initial discovery — use ` + "`web_search`" + ` first to find the right URL.
+
+## Destructive tool caution
+
+Before running any tool that modifies files, runs shell commands, or has side effects:
+- Confirm you have read the relevant context.
+- Prefer the least-destructive option (` + "`file_edit`" + ` over ` + "`file_write`" + `, targeted bash over broad scripts).
+- For operations visible outside the current session (git push, PR creation, external API calls),
+  always confirm with the user before proceeding.
+
+## ask_user_question as last resort
+
+Use ` + "`ask_user_question`" + ` only when a decision cannot be resolved from the repository,
+tool output, or reasonable defaults. Do not ask for approval of steps that are already
+clear from the request. Do not ask about things you can verify yourself.`
+
 var promptWorkflow = `# Mono-run workflow
 
 Follow this default workflow unless the request is clearly trivial:
@@ -305,6 +356,14 @@ var stableSystemPromptSections = []Section{
 		Name:      "tool_use",
 		Content:   promptToolUse,
 		Priority:  900,
+		Cacheable: true,
+		Enabled:   true,
+	},
+	{
+		Type:      SectionTypeDefault,
+		Name:      "tool_priority",
+		Content:   promptToolPriority,
+		Priority:  899,
 		Cacheable: true,
 		Enabled:   true,
 	},

@@ -1,114 +1,102 @@
 package providers
 
 import (
-	"encoding/json"
-	"fmt"
-	"io"
-	"net/http"
-	"os"
 	"strings"
 	"time"
+
+	"github.com/EngineerProjects/nexus-engine/internal/web/searxng"
 )
 
-const searxngMaxRetries = 2
-
-// SearXNGProvider supports self-hosted/open-source metasearch backends.
+// SearXNGProvider wraps the full-featured searxng.Client and satisfies SearchProvider.
+// It ports all key behaviours from the mcp-searxng TypeScript server:
+//   - HTML fallback when the instance does not serve JSON (always enabled)
+//   - Basic auth (SEARXNG_AUTH_USERNAME / AUTH_USERNAME)
+//   - Full search params (language, time_range, safesearch, categories, engines)
+//   - Custom User-Agent and proxy support
+//   - Configurable timeout (SEARXNG_TIMEOUT_MS)
 type SearXNGProvider struct {
-	baseURL    string
-	httpClient *http.Client
+	client *searxng.Client
 }
 
+// NewSearXNGProvider creates a provider configured from environment variables.
+// Reads SEARXNG_URL or SEARXNG_BASE_URL for the instance base URL.
 func NewSearXNGProvider() *SearXNGProvider {
-	return NewSearXNGProviderWithBaseURL(os.Getenv("SEARXNG_BASE_URL"))
+	return &SearXNGProvider{client: searxng.NewClient()}
 }
 
+// NewSearXNGProviderWithBaseURL creates a provider targeting a specific URL.
 func NewSearXNGProviderWithBaseURL(baseURL string) *SearXNGProvider {
-	return &SearXNGProvider{
-		baseURL:    strings.TrimRight(strings.TrimSpace(baseURL), "/"),
-		httpClient: &http.Client{Timeout: 20 * time.Second},
-	}
+	return &SearXNGProvider{client: searxng.NewClientWithURL(baseURL)}
 }
 
-func (p *SearXNGProvider) Name() string {
-	return "searxng"
+// NewSearXNGProviderWithConfig creates a provider with explicit URL and optional Basic Auth credentials.
+// username and password are empty when the SearXNG instance has no HTTP Basic Auth.
+func NewSearXNGProviderWithConfig(baseURL, username, password string) *SearXNGProvider {
+	return &SearXNGProvider{client: searxng.NewClientWithURLAndAuth(baseURL, username, password)}
 }
 
-func (p *SearXNGProvider) IsConfigured() bool {
-	return p.baseURL != ""
-}
+func (p *SearXNGProvider) Name() string { return "searxng" }
+
+func (p *SearXNGProvider) IsConfigured() bool { return p.client.IsConfigured() }
 
 func (p *SearXNGProvider) Search(input SearchInput) (ProviderOutput, error) {
 	start := time.Now()
-	if !p.IsConfigured() {
-		return ProviderOutput{}, fmt.Errorf("SearXNG base URL not configured (set SEARXNG_BASE_URL)")
-	}
 
-	var lastErr error
-	for attempt := range searxngMaxRetries {
-		if attempt > 0 {
-			time.Sleep(500 * time.Millisecond)
-		}
-		out, err := p.searchOnce(input)
-		if err == nil {
-			out.DurationSeconds = time.Since(start).Seconds()
-			return out, nil
-		}
-		lastErr = err
-	}
-	return ProviderOutput{}, lastErr
-}
-
-func (p *SearXNGProvider) searchOnce(input SearchInput) (ProviderOutput, error) {
-	req, err := http.NewRequestWithContext(input.ctx(), http.MethodGet, p.baseURL+"/search", nil)
+	resp, err := p.client.Search(searxng.SearchInput{
+		Query: input.Query,
+	})
 	if err != nil {
 		return ProviderOutput{}, err
 	}
-	q := req.URL.Query()
-	q.Set("q", input.Query)
-	q.Set("format", "json")
-	req.URL.RawQuery = q.Encode()
-	req.Header.Set("User-Agent", "NexusAI-WebSearch/1.0")
 
-	resp, err := p.httpClient.Do(req)
-	if err != nil {
-		return ProviderOutput{}, fmt.Errorf("could not reach SearXNG at %s: %w", p.baseURL, err)
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode >= 400 {
-		return ProviderOutput{}, fmt.Errorf("SearXNG returned status %d — is the instance running at %s?", resp.StatusCode, p.baseURL)
-	}
-
-	// Guard against HTML error pages that some instances return instead of JSON.
-	ct := resp.Header.Get("Content-Type")
-	if !strings.Contains(ct, "json") {
-		preview, _ := io.ReadAll(io.LimitReader(resp.Body, 256))
-		return ProviderOutput{}, fmt.Errorf("SearXNG returned non-JSON response (%s) — ensure format=json is enabled on the instance: %q", ct, string(preview))
-	}
-
-	var payload struct {
-		Results []struct {
-			Title   string `json:"title"`
-			URL     string `json:"url"`
-			Content string `json:"content"`
-			Engine  string `json:"engine"`
-		} `json:"results"`
-	}
-	if err := json.NewDecoder(resp.Body).Decode(&payload); err != nil {
-		return ProviderOutput{}, fmt.Errorf("failed to decode SearXNG response: %w", err)
-	}
-
-	hits := make([]SearchHit, 0, len(payload.Results))
-	for _, item := range payload.Results {
+	hits := make([]SearchHit, 0, len(resp.Results))
+	for _, r := range resp.Results {
+		// Apply domain allow/block filters (handled by the search service layer,
+		// but we respect them here too for defence in depth).
+		if len(input.AllowedDomains) > 0 && !matchesDomainList(r.URL, input.AllowedDomains) {
+			continue
+		}
+		if matchesDomainList(r.URL, input.BlockedDomains) {
+			continue
+		}
 		hits = append(hits, SearchHit{
-			Title:       strings.TrimSpace(item.Title),
-			URL:         strings.TrimSpace(item.URL),
-			Description: strings.TrimSpace(item.Content),
-			Source:      strings.TrimSpace(item.Engine),
+			Title:       r.Title,
+			URL:         r.URL,
+			Description: r.Content,
+			Source:      r.Engine,
 		})
 	}
+
 	return ProviderOutput{
-		Hits:         hits,
-		ProviderName: "searxng",
+		Hits:            hits,
+		ProviderName:    "searxng",
+		DurationSeconds: time.Since(start).Seconds(),
 	}, nil
+}
+
+// matchesDomainList reports whether rawURL's host matches any entry in the list.
+func matchesDomainList(rawURL string, domains []string) bool {
+	if len(domains) == 0 {
+		return false
+	}
+	// Extract host from URL cheaply (avoid a full url.Parse on every hit).
+	host := rawURL
+	if idx := strings.Index(host, "://"); idx >= 0 {
+		host = host[idx+3:]
+	}
+	if idx := strings.IndexByte(host, '/'); idx >= 0 {
+		host = host[:idx]
+	}
+	if idx := strings.IndexByte(host, ':'); idx >= 0 {
+		host = host[:idx] // strip port
+	}
+	host = strings.ToLower(host)
+
+	for _, d := range domains {
+		d = strings.ToLower(strings.TrimPrefix(d, "."))
+		if host == d || strings.HasSuffix(host, "."+d) {
+			return true
+		}
+	}
+	return false
 }

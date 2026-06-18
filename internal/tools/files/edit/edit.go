@@ -22,15 +22,20 @@ const (
 	ToolName = "edit_file"
 
 	// ToolDescription is the description of the edit tool
-	ToolDescription = "Edit a file by replacing text. Finds and replaces 'old_string' with 'new_string'. Use replace_all to replace all occurrences.\n\n" +
-		"Usage:\n" +
-		"- You must use your FileRead tool at least once in the conversation before editing. This tool will error if you attempt an edit without reading the file.\n" +
-		"- When editing text from Read tool output, ensure you preserve the exact indentation (tabs/spaces) as it appears AFTER the line number prefix. The line number prefix format is: line number + arrow (or spaces + line number + arrow). Everything after that is the actual file content to match. Never include any part of the line number prefix in the old_string or new_string.\n" +
-		"- ALWAYS prefer editing existing files in the codebase. NEVER write new files unless explicitly required.\n" +
-		"- Only use emojis if the user explicitly requests it. Avoid adding emojis to files unless asked.\n" +
-		"- The edit will FAIL if `old_string` is not unique in the file. Either provide a larger string with more surrounding context to make it unique or use `replace_all` to change every instance of `old_string`.\n" +
-		"- Use `replace_all` for replacing and renaming strings across the file. This parameter is useful if you want to rename a variable for instance.\n" +
-		"- Use the smallest old_string that's clearly unique - usually 2-4 adjacent lines is sufficient. Avoid including 10+ lines of context when less uniquely identifies the target.\n"
+	ToolDescription = "Edit an existing file by replacing an exact string with a new one. The canonical tool for all partial modifications to existing files.\n\n" +
+		"## When to use\n\n" +
+		"- Modifying any part of an existing file: function bodies, config values, imports, constants\n" +
+		"- Renaming a symbol across a file (use replace_all)\n" +
+		"- Any edit where you are changing less than the whole file\n\n" +
+		"## When NOT to use\n\n" +
+		"- Complete file rewrites — use FileWrite instead\n" +
+		"- Creating a new file — use FileWrite instead\n\n" +
+		"## Rules\n\n" +
+		"- You must read the file with FileRead before editing. This tool errors if you have not read the file first.\n" +
+		"- Match indentation exactly as it appears in the file (tabs vs. spaces). Never include line-number prefixes from Read output in old_string or new_string.\n" +
+		"- old_string must be unique in the file. If it appears more than once, provide more surrounding lines for context, or use replace_all.\n" +
+		"- Use replace_all to rename a variable or string across the entire file.\n" +
+		"- Use the smallest old_string that is clearly unique — 2–4 adjacent lines is usually enough.\n"
 
 	leftSingleCurlyQuote  = '‘'
 	rightSingleCurlyQuote = '’'

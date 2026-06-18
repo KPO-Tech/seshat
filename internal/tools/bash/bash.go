@@ -802,19 +802,23 @@ func (b *cappedBuffer) String() string {
 const ToolName = "bash"
 
 // Description is the tool description.
-const Description = `Execute shell commands in the current directory. Supports explicit background execution and basic execution metadata.
+const Description = `Execute shell commands in the current directory. Supports background execution and returns stdout/stderr with exit code.
 
-Executes a given bash command and returns its output.
+The working directory persists between commands but shell state does not. The environment is initialized from the user's profile (bash or zsh).
 
-The working directory persists between commands, but shell state does not. The shell environment is initialized from the user's profile (bash or zsh).
+## When to use
 
-Important: avoid using this tool to run find, grep, cat, head, tail, sed, awk, or echo commands unless explicitly instructed or after you have verified that a dedicated tool cannot accomplish your task. Prefer the dedicated tools instead:
-- File search: use Glob (not find or ls)
+Use Bash when no dedicated tool covers the operation: running build systems, package managers, git commands, test runners, CLI tools, process management, or one-off scripts.
+
+## When NOT to use
+
+Prefer dedicated tools over Bash whenever a dedicated tool exists — they are safer, parse output correctly, and respect permission boundaries:
+- File discovery: use Glob (not find or ls)
 - Content search: use Grep (not grep or rg)
 - Read files: use FileRead (not cat/head/tail)
 - Edit files: use FileEdit (not sed/awk)
-- Write files: use FileWrite (not echo >/cat <<EOF)
-- Communication: output text directly (not echo/printf)
+- Write files: use FileWrite (not echo > / cat <<EOF)
+- MCP tools: if an MCP-provided tool covers the same operation, prefer the MCP tool over a Bash equivalent
 
 Instructions:
 - If your command will create new directories or files, first use this tool to run ls to verify the parent directory exists and is the correct location.

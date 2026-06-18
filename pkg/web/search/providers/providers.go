@@ -76,3 +76,7 @@ func NewSearXNGProvider() *internalproviders.SearXNGProvider {
 func NewSearXNGProviderWithBaseURL(baseURL string) *internalproviders.SearXNGProvider {
 	return internalproviders.NewSearXNGProviderWithBaseURL(baseURL)
 }
+
+func NewSearXNGProviderWithConfig(baseURL, username, password string) *internalproviders.SearXNGProvider {
+	return internalproviders.NewSearXNGProviderWithConfig(baseURL, username, password)
+}

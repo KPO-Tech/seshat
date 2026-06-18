@@ -778,43 +778,52 @@ const (
 	// ToolDescription is the human-readable description of what the grep tool does
 	ToolDescription = `Search for text patterns in files using regular expressions.
 
-This tool searches file contents for matching regex patterns, similar to the 'grep' command.
+Powered by ripgrep. Use this tool to locate symbols, references, patterns, or any text across the codebase. Prefer it over Bash grep or rg for all content searches.
 
-**
-- pattern (required): The regular expression pattern to search for
+## When to use
+
+- Finding where a function, type, or variable is defined or referenced
+- Locating all usages of a constant, error message, or config key
+- Scanning logs or output files for error patterns
+- Narrowing down files before reading them
+
+## Do NOT use
+
+- To find files by name or extension — use Glob instead
+- When you already know the exact file — read it directly
+
+## Parameters
+
+- pattern (required): Regular expression to search for
 - path (optional): File or directory to search in. Defaults to current working directory.
-- output_mode (optional): Output mode
-  - "content": Shows matching lines with context (supports -A/-B/-C, -n, head_limit)
-  - "files_with_matches": Shows only file paths (supports head_limit)
-  - "count": Shows match counts per file (supports head_limit)
-  - Defaults to "files_with_matches"
-- glob (optional): Glob pattern to filter files (e.g. "*.go", "*.{ts,tsx}")
-- -i (optional): Case insensitive search
-- -n (optional): Show line numbers (only for content mode, default: true)
-- -C (optional): Number of lines before and after each match
-- -A (optional): Number of lines after each match
-- -B (optional): Number of lines before each match
-- head_limit (optional): Limit output to first N lines/entries (default: 250, 0 = unlimited)
-- offset (optional): Skip first N lines/entries before applying head_limit (default: 0)
+- output_mode (optional): Controls what is returned
+  - "content" — matching lines with surrounding context (default when you need to read the match)
+  - "files_with_matches" — only file paths (default; use to discover which files match)
+  - "count" — match counts per file
+- glob (optional): Filter files by extension or name pattern (e.g. "*.go", "*.{ts,tsx}")
+- -i (optional): Case-insensitive search
+- -n (optional): Include line numbers in content mode (default: true)
+- -C / -A / -B (optional): Context lines around each match (before+after / after / before)
+- head_limit (optional): Max lines/entries to return (default: 250, 0 = unlimited)
+- offset (optional): Skip first N entries before applying head_limit
 
-**
-- mode: The output mode used
-- numFiles: Number of files with matches
-- filenames: Array of file paths that matched
-- content: Matching content (only for content mode)
-- numLines: Number of matching lines (only for content mode)
-- counts: Match counts per file (only for count mode)
-- durationMs: Time taken to execute the search
-- truncated: Whether results were truncated
+## Output
 
-**
-- Find "TODO" comments: pattern="TODO", output_mode="content"
-- Count errors in logs: pattern="ERROR", output_mode="count", path="logs/"
-- Search TypeScript files: pattern="interface", glob="*.ts"
+- filenames: Files that contain at least one match
+- content: Matching lines with context (content mode only)
+- counts: Per-file match counts (count mode only)
+- numFiles, numLines, durationMs, truncated
 
-**
-- Uses ripgrep for fast searching
-- Automatically excludes .git, .svn, node_modules, etc.
-- Supports extended regular expressions
-- Results limited to prevent excessive output`
+## Examples
+
+- Find a function definition: pattern="func NewSession", glob="*.go"
+- Find TODO comments with context: pattern="TODO", output_mode="content", -C=2
+- Count errors by file: pattern="ERROR", output_mode="count", path="logs/"
+- Search only TypeScript: pattern="interface User", glob="*.ts"
+
+## Notes
+
+- Automatically excludes .git, node_modules, vendor, and other noise dirs
+- Supports full extended regex (ERE)
+- Results are capped to prevent excessive output — use head_limit=0 to override`
 )

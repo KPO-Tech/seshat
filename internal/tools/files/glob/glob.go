@@ -559,28 +559,46 @@ const (
 	SearchHint = "find files using glob patterns"
 
 	// ToolDescription is the human-readable description of what the glob tool does
-	ToolDescription = `Find files in the workspace using glob patterns.
+	ToolDescription = `Find files in the workspace by name or extension using glob patterns.
 
-This tool searches for files matching a glob pattern (e.g., "*.go", "**/*.md", "src/**/*.ts").
+Use this tool to discover which files exist matching a pattern before reading or editing them. Prefer it over Bash find or ls for file discovery.
 
-**
-- pattern (required): The glob pattern to match files against
-- path (optional): The directory to search in. Defaults to current working directory
+## When to use
 
-**
-- filenames: Array of file paths that match the pattern
-- numFiles: Total number of files found
-- durationMs: Time taken to execute the search in milliseconds
-- truncated: Whether results were truncated (limited to 100 files)
+- Finding all files of a given type: "*.go", "**/*.ts", "**/*.test.js"
+- Locating a file when you know part of its name or path
+- Checking whether a specific file or directory exists
+- Building a list of files to process or read
 
-**
-- pattern: "*.go" → finds all Go files in current directory
-- pattern: "**/*.md" → finds all Markdown files recursively
-- pattern: "src/**/*.ts" → finds all TypeScript files in src directory
+## Do NOT use
 
-**
-- Results are limited to 100 files to prevent excessive output
-- Uses standard glob patterns with ** for recursive matching
-- Returns relative paths from the search directory
-- Search is case-sensitive on Unix, case-insensitive on Windows`
+- To search file contents — use Grep for that
+- When you already know the full file path — read it directly
+
+## Parameters
+
+- pattern (required): Glob pattern to match against file paths
+  - "*" matches any file in the current directory
+  - "**/*.go" matches all Go files recursively
+  - "src/**/*.{ts,tsx}" matches TypeScript files under src/
+- path (optional): Directory to search from. Defaults to current working directory.
+
+## Output
+
+- filenames: Matching file paths (relative to search directory)
+- numFiles: Total matches found
+- durationMs: Search duration in milliseconds
+- truncated: True when more than 100 files matched (results are capped)
+
+## Examples
+
+- All Go files: pattern="**/*.go"
+- All Markdown files: pattern="**/*.md"
+- Test files only: pattern="**/*_test.go"
+- Files in a specific dir: pattern="internal/tools/**/*.go", path="."
+
+## Notes
+
+- Case-sensitive on Linux, case-insensitive on macOS/Windows
+- Results are capped at 100 — narrow the pattern if truncated`
 )

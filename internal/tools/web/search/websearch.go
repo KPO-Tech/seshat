@@ -203,10 +203,25 @@ func (t *Tool) IsReadOnly(input map[string]any) bool {
 	return true
 }
 
-// IsEnabled always returns true. The tool is always registered; it fails gracefully at
-// call time if no providers are configured (env or DB-backed).
+// IsEnabled always returns true so that web_search is registered in the
+// session tool map at session creation time. Actual provider availability
+// is checked at request time via IsAvailableNow, which is called by
+// EffectiveToolSurface after any per-request runner has been injected.
 func (t *Tool) IsEnabled() bool {
 	return true
+}
+
+// IsAvailableNow returns true when a search provider is actually available
+// at the current moment — either because a per-request runner was injected
+// by the backend (DB-backed providers) or because at least one env-based
+// provider is configured (TAVILY_API_KEY, EXA_API_KEY, etc.).
+// This is the dynamic check used to hide the tool from the model when no
+// provider is configured, without interfering with session map registration.
+func (t *Tool) IsAvailableNow() bool {
+	if t.runner != nil {
+		return true
+	}
+	return searchcore.IsEnabled()
 }
 
 // FormatResult serialises the tool output into the tool_result content string.

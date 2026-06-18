@@ -2,6 +2,7 @@ package builtin
 
 import (
 	"context"
+	"fmt"
 
 	bashTool "github.com/EngineerProjects/nexus-engine/internal/tools/bash"
 	editTool "github.com/EngineerProjects/nexus-engine/internal/tools/files/edit"
@@ -13,6 +14,10 @@ import (
 	fileReadTool "github.com/EngineerProjects/nexus-engine/internal/tools/files/read"
 	readURLTool "github.com/EngineerProjects/nexus-engine/internal/tools/files/read_url"
 	writeTool "github.com/EngineerProjects/nexus-engine/internal/tools/files/write"
+	calculatorTool "github.com/EngineerProjects/nexus-engine/internal/tools/math/calculator"
+	financialTool "github.com/EngineerProjects/nexus-engine/internal/tools/math/financial"
+	statisticsTool "github.com/EngineerProjects/nexus-engine/internal/tools/math/statistics"
+	unitsTool "github.com/EngineerProjects/nexus-engine/internal/tools/math/units"
 	tool "github.com/EngineerProjects/nexus-engine/internal/tools/registry"
 	agentsTool "github.com/EngineerProjects/nexus-engine/internal/tools/special/agents"
 	askUserQuestionTool "github.com/EngineerProjects/nexus-engine/internal/tools/special/ask_user"
@@ -161,6 +166,23 @@ func RegisterBuiltinToolsWithConfig(reg *tool.Registry, config *Config) error {
 			continue // Skip tools that couldn't be created (e.g., missing required config)
 		}
 		if err := reg.Register(builtinTool); err != nil {
+			return err
+		}
+	}
+
+	// Math tools use factory functions that return (Tool, error).
+	mathFactories := []func() (tool.Tool, error){
+		calculatorTool.New,
+		unitsTool.New,
+		statisticsTool.New,
+		financialTool.New,
+	}
+	for _, factory := range mathFactories {
+		t, err := factory()
+		if err != nil {
+			return fmt.Errorf("failed to build math tool: %w", err)
+		}
+		if err := reg.Register(t); err != nil {
 			return err
 		}
 	}

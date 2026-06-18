@@ -21,14 +21,16 @@ const (
 	ToolName = "write_file"
 
 	// ToolDescription is the description of the write tool
-	ToolDescription = "Write content to a file. Creates the file if it does not exist, or overwrites it if it does. Use with caution - this replaces the entire file content.\n\n" +
-		"Writes a file to the local filesystem.\n\n" +
-		"Usage:\n" +
-		"- This tool will overwrite the existing file if there is one at the provided path.\n" +
-		"- If this is an existing file, you must use the Read tool first to read the file's contents. This tool will fail if you did not read the file first.\n" +
-		"- Prefer the Edit tool for modifying existing files - it only sends the diff. Only use this tool to create new files or for complete rewrites.\n" +
-		"- Never create documentation files (*.md) or README files unless explicitly requested by the user.\n" +
-		"- Only use emojis if the user explicitly requests it. Avoid writing emojis to files unless asked.\n"
+	ToolDescription = "Write the full content of a file. Creates a new file or completely replaces an existing one.\n\n" +
+		"## When to use\n\n" +
+		"- Creating a new file that does not yet exist\n" +
+		"- Rewriting a file from scratch when the changes are so extensive that FileEdit would require many individual edits\n\n" +
+		"## When NOT to use\n\n" +
+		"- Partial modifications to existing files — use FileEdit instead (safer, only sends the diff)\n" +
+		"- Never create documentation (*.md) or README files unless explicitly requested\n\n" +
+		"## Rules\n\n" +
+		"- If the file already exists, you must read it with FileRead first. This tool errors if you modify an existing file without reading it first.\n" +
+		"- This replaces the entire file content. Double-check you are not discarding sections you intended to keep.\n"
 	patchContextLines = 3
 )
 

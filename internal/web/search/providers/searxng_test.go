@@ -5,36 +5,39 @@ import (
 	"net/http"
 	"strings"
 	"testing"
+
+	"github.com/EngineerProjects/nexus-engine/internal/web/searxng"
 )
 
 func searxngProvider(transport roundTripFunc) *SearXNGProvider {
 	return &SearXNGProvider{
-		baseURL:    "http://localhost:8080",
-		httpClient: &http.Client{Transport: transport},
+		client: searxng.NewClientForTest("http://localhost:8080", transport),
 	}
 }
 
-func TestSearXNGRejectsNonJSONContentType(t *testing.T) {
+// TestSearXNGHTMLFallbackOnNonJSONBody verifies that when the instance returns HTML
+// instead of JSON, the client falls back to HTML parsing and returns zero hits
+// (rather than erroring out) — the fallback is always active.
+func TestSearXNGHTMLFallbackOnNonJSONBody(t *testing.T) {
 	p := searxngProvider(func(req *http.Request) (*http.Response, error) {
 		return &http.Response{
 			StatusCode: http.StatusOK,
-			Body:       io.NopCloser(strings.NewReader("<html>Captcha</html>")),
+			Body:       io.NopCloser(strings.NewReader("<html><body>Captcha</body></html>")),
 			Header:     http.Header{"Content-Type": {"text/html; charset=utf-8"}},
 		}, nil
 	})
-	_, err := p.Search(SearchInput{Query: "test"})
-	if err == nil {
-		t.Fatal("expected error for non-JSON response")
+	out, err := p.Search(SearchInput{Query: "test"})
+	if err != nil {
+		t.Fatalf("unexpected error with HTML fallback: %v", err)
 	}
-	if !strings.Contains(err.Error(), "non-JSON") {
-		t.Fatalf("expected non-JSON error, got: %v", err)
+	// Captcha page has no .result articles, so hits should be empty.
+	if len(out.Hits) != 0 {
+		t.Fatalf("expected 0 hits from captcha page, got %d", len(out.Hits))
 	}
 }
 
 func TestSearXNGReturns5xxError(t *testing.T) {
-	calls := 0
 	p := searxngProvider(func(req *http.Request) (*http.Response, error) {
-		calls++
 		return &http.Response{
 			StatusCode: http.StatusServiceUnavailable,
 			Body:       io.NopCloser(strings.NewReader("")),
@@ -44,9 +47,6 @@ func TestSearXNGReturns5xxError(t *testing.T) {
 	_, err := p.Search(SearchInput{Query: "test"})
 	if err == nil {
 		t.Fatal("expected error for 5xx")
-	}
-	if calls != searxngMaxRetries {
-		t.Fatalf("expected %d attempts, got %d", searxngMaxRetries, calls)
 	}
 }
 
