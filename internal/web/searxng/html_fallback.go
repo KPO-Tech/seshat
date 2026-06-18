@@ -21,7 +21,7 @@ func parseHTMLSearchResults(html, query string) (*SearchResponse, error) {
 		return nil, err
 	}
 
-	var results []WebResult
+	results := make([]WebResult, 0)
 
 	// Try article.result first (standard SearXNG), fall back to .result
 	sel := doc.Find("article.result")

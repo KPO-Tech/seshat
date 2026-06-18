@@ -8,9 +8,8 @@ import (
 )
 
 // SearXNGProvider wraps the full-featured searxng.Client and satisfies SearchProvider.
-// It replaces the previous minimal implementation with one that ports all key
-// behaviours from the mcp-searxng TypeScript server:
-//   - HTML fallback when the instance does not serve JSON (set SEARXNG_HTML_FALLBACK=true)
+// It ports all key behaviours from the mcp-searxng TypeScript server:
+//   - HTML fallback when the instance does not serve JSON (always enabled)
 //   - Basic auth (SEARXNG_AUTH_USERNAME / AUTH_USERNAME)
 //   - Full search params (language, time_range, safesearch, categories, engines)
 //   - Custom User-Agent and proxy support

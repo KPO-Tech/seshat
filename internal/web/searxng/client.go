@@ -4,8 +4,8 @@
 // Key behaviours ported from the MCP:
 //   - Full search parameter support (language, time_range, safesearch,
 //     categories, engines, pageno, num_results, min_score)
-//   - HTML fallback: when the instance returns 403/404 or a non-JSON body,
-//     the client retries without format=json and parses the HTML DOM
+//   - HTML fallback: always active — when the instance returns 403/404 or a
+//     non-JSON body, the client retries without format=json and parses the HTML DOM
 //   - Basic authentication via SEARXNG_AUTH_USERNAME / SEARXNG_AUTH_PASSWORD
 //     (or AUTH_USERNAME / AUTH_PASSWORD for MCP compatibility)
 //   - Custom User-Agent via SEARXNG_USER_AGENT / USER_AGENT
@@ -144,7 +144,7 @@ func (c *Client) Search(input SearchInput) (*SearchResponse, error) {
 	var data *SearchResponse
 
 	if !resp.ok {
-		if c.htmlFallbackEnabled() && c.shouldFallbackForStatus(resp.status) {
+		if c.shouldFallbackForStatus(resp.status) {
 			data, err = c.htmlFallback(input)
 			if err != nil {
 				return nil, err
@@ -267,15 +267,10 @@ func (c *Client) doRequest(u string) (rawResponse, error) {
 }
 
 func (c *Client) parseJSONOrHTMLFallback(resp rawResponse, input SearchInput) (*SearchResponse, error) {
-	// Check Content-Type or try JSON decode directly.
 	var data SearchResponse
 	if err := json.Unmarshal(resp.body, &data); err != nil {
-		// JSON decode failed — body may be HTML.
-		if c.htmlFallbackEnabled() {
-			return c.htmlFallback(input)
-		}
-		return nil, fmt.Errorf("SearXNG returned non-JSON response — ensure format=json is enabled on the instance or set SEARXNG_HTML_FALLBACK=true: %q",
-			truncatePreview(resp.body, 256))
+		// JSON decode failed (body is HTML or an error page) — always try HTML fallback.
+		return c.htmlFallback(input)
 	}
 	data.SourceFormat = "json"
 	return &data, nil
@@ -337,10 +332,6 @@ func (c *Client) buildSearchURL(input SearchInput, withJSON bool) string {
 
 	ref.RawQuery = q.Encode()
 	return ref.String()
-}
-
-func (c *Client) htmlFallbackEnabled() bool {
-	return os.Getenv("SEARXNG_HTML_FALLBACK") == "true"
 }
 
 func (c *Client) shouldFallbackForStatus(status int) bool {
