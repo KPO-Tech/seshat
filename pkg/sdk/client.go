@@ -21,7 +21,7 @@ import (
 	coretasks "github.com/EngineerProjects/nexus-engine/internal/runtime/tasks"
 	"github.com/EngineerProjects/nexus-engine/internal/storage"
 	"github.com/EngineerProjects/nexus-engine/internal/tools/registry"
-	agentTool "github.com/EngineerProjects/nexus-engine/internal/tools/special/agents"
+	agentTool "github.com/EngineerProjects/nexus-engine/internal/tools/agents"
 	"github.com/EngineerProjects/nexus-engine/internal/tools/system/mcp"
 	taskTool "github.com/EngineerProjects/nexus-engine/internal/tools/task"
 	"github.com/EngineerProjects/nexus-engine/internal/types"

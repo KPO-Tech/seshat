@@ -1,5 +1,4 @@
-// Package ttstool provides the text_to_speech tool backed by tts.Generation.
-package ttstool
+package multimedia
 
 import (
 	"context"
@@ -14,8 +13,8 @@ import (
 )
 
 const (
-	ToolName        = "text_to_speech"
-	ToolDescription = `Convert text to speech audio using the configured TTS provider.
+	ttsToolName = "text_to_speech"
+	ttsDesc     = `Convert text to speech audio using the configured TTS provider.
 
 Returns a JSON object with:
 - "provider": which provider synthesised the audio (e.g. "openai")
@@ -25,17 +24,17 @@ Returns a JSON object with:
 - "characters_used": number of input characters consumed`
 )
 
-// Tool implements the text_to_speech built-in tool.
-type Tool struct{ generator tts.Generation }
+// TTSTool implements the text_to_speech built-in tool.
+type TTSTool struct{ generator tts.Generation }
 
-// NewTool creates a text_to_speech Tool. Disabled (IsEnabled=false) when generator is nil.
-func NewTool(generator tts.Generation) *Tool { return &Tool{generator: generator} }
+// NewTTSTool creates a text_to_speech Tool. Disabled (IsEnabled=false) when generator is nil.
+func NewTTSTool(generator tts.Generation) *TTSTool { return &TTSTool{generator: generator} }
 
-func (t *Tool) Definition() tool.Definition {
+func (t *TTSTool) Definition() tool.Definition {
 	return tool.Definition{
-		Name:        ToolName,
+		Name:        ttsToolName,
 		DisplayName: "Text to Speech",
-		Description: ToolDescription,
+		Description: ttsDesc,
 		Category:    "audio",
 		InputSchema: schema.FromMap(map[string]any{
 			"type": "object",
@@ -51,7 +50,7 @@ func (t *Tool) Definition() tool.Definition {
 	}
 }
 
-func (t *Tool) Call(ctx context.Context, input tool.CallInput, _ types.CanUseToolFn) (tool.CallResult, error) {
+func (t *TTSTool) Call(ctx context.Context, input tool.CallInput, _ types.CanUseToolFn) (tool.CallResult, error) {
 	if t.generator == nil {
 		return tool.CallResult{Error: fmt.Errorf("text_to_speech: no TTS provider configured")}, nil
 	}
@@ -74,17 +73,17 @@ func (t *Tool) Call(ctx context.Context, input tool.CallInput, _ types.CanUseToo
 	return tool.CallResult{Data: result, ContentType: tool.ContentTypeJSON, Content: string(encoded)}, nil
 }
 
-func (t *Tool) Description(_ context.Context) (string, error) { return ToolDescription, nil }
-func (t *Tool) ValidateInput(_ context.Context, in map[string]any) (map[string]any, error) {
+func (t *TTSTool) Description(_ context.Context) (string, error) { return ttsDesc, nil }
+func (t *TTSTool) ValidateInput(_ context.Context, in map[string]any) (map[string]any, error) {
 	return in, nil
 }
-func (t *Tool) CheckPermissions(_ context.Context, _ map[string]any, _ tool.ToolUseContext) types.PermissionResult {
+func (t *TTSTool) CheckPermissions(_ context.Context, _ map[string]any, _ tool.ToolUseContext) types.PermissionResult {
 	return types.PermissionResult{Behavior: types.PermissionBehaviorAllow}
 }
-func (t *Tool) IsConcurrencySafe(_ map[string]any) bool { return true }
-func (t *Tool) IsReadOnly(_ map[string]any) bool        { return true }
-func (t *Tool) IsEnabled() bool                         { return t.generator != nil }
-func (t *Tool) FormatResult(data any) string {
+func (t *TTSTool) IsConcurrencySafe(_ map[string]any) bool { return true }
+func (t *TTSTool) IsReadOnly(_ map[string]any) bool        { return true }
+func (t *TTSTool) IsEnabled() bool                         { return t.generator != nil }
+func (t *TTSTool) FormatResult(data any) string {
 	if m, ok := data.(map[string]any); ok {
 		ct, _ := m["content_type"].(string)
 		chars, _ := m["characters_used"].(int)
@@ -92,4 +91,4 @@ func (t *Tool) FormatResult(data any) string {
 	}
 	return fmt.Sprintf("%v", data)
 }
-func (t *Tool) BackfillInput(_ context.Context, in map[string]any) map[string]any { return in }
+func (t *TTSTool) BackfillInput(_ context.Context, in map[string]any) map[string]any { return in }

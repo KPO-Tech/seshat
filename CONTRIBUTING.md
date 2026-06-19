@@ -103,11 +103,31 @@ See [`docs/architecture.md`](./docs/architecture.md) and [`docs/team.md`](./docs
 
 ### Adding a new tool
 
-1. Create `internal/tools/<category>/<toolname>/tool.go`.
+The tool tree under `internal/tools/` is organised by category:
+
+| Directory | Contains |
+|---|---|
+| `bash/` | Shell execution, background tasks, monitor |
+| `files/` | Read, write, edit, grep, glob, patch, fs |
+| `math/` | Calculator, units, statistics, financial |
+| `multimedia/` | generate_image, text_to_speech, speech_to_text |
+| `notebook/` | Jupyter notebook + kernel tools |
+| `social/` | Hacker News, dev.to (and planned: Reddit, Twitter…) |
+| `agents/` | spawn_agent, wait_agent, list_agents, send_message, close |
+| `special/` | LSP, FIM, RAG, memory, worktree, ask_user, plan, goal |
+| `system/` | MCP, skills, nexusskill |
+| `task/` | Task management (create/update/list/stop/get) |
+| `web/` | browser, fetch, search |
+
+**Steps to add a standalone tool:**
+
+1. Create `internal/tools/<category>/<toolname>.go` (or a sub-package if the tool has >1 file).
 2. Implement the `tool.Tool` interface (see [`docs/tools.md`](./docs/tools.md)).
 3. Register in `internal/tools/builtin/builtin.go`.
 4. Add to the built-in tools reference in `docs/tools.md`.
-5. Write at least one test in `<toolname>/tool_test.go`.
+5. Write at least one test.
+
+**Adding a tool to a consolidated package** (`multimedia/`, `bash/`, `agents/`): add a new `.go` file inside the existing package directory, then register the constructor in `builtin.go`. No new sub-directory needed.
 
 ### Adding a new provider
 

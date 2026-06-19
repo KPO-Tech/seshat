@@ -21,19 +21,16 @@ import (
 	tool "github.com/EngineerProjects/nexus-engine/internal/tools/registry"
 	devtoTool "github.com/EngineerProjects/nexus-engine/internal/tools/social/devto"
 	hnTool "github.com/EngineerProjects/nexus-engine/internal/tools/social/hackernews"
-	agentsTool "github.com/EngineerProjects/nexus-engine/internal/tools/special/agents"
+	agentsTool "github.com/EngineerProjects/nexus-engine/internal/tools/agents"
+	multimediaTool "github.com/EngineerProjects/nexus-engine/internal/tools/multimedia"
 	askUserQuestionTool "github.com/EngineerProjects/nexus-engine/internal/tools/special/ask_user"
 	fimtool "github.com/EngineerProjects/nexus-engine/internal/tools/special/fim"
 	goalTool "github.com/EngineerProjects/nexus-engine/internal/tools/special/goal"
-	imagegenTool "github.com/EngineerProjects/nexus-engine/internal/tools/special/imagegen"
 	lspTool "github.com/EngineerProjects/nexus-engine/internal/tools/special/lsp"
 	memoryTool "github.com/EngineerProjects/nexus-engine/internal/tools/special/memory"
-	monitorTool "github.com/EngineerProjects/nexus-engine/internal/tools/special/monitor"
 	ragTool "github.com/EngineerProjects/nexus-engine/internal/tools/special/rag"
 	requestPermissionsTool "github.com/EngineerProjects/nexus-engine/internal/tools/special/request_permissions"
-	stttool "github.com/EngineerProjects/nexus-engine/internal/tools/special/stt"
 	toolSearchTool "github.com/EngineerProjects/nexus-engine/internal/tools/special/tool_search"
-	ttstool "github.com/EngineerProjects/nexus-engine/internal/tools/special/tts"
 	worktreeTool "github.com/EngineerProjects/nexus-engine/internal/tools/special/worktree"
 	"github.com/EngineerProjects/nexus-engine/internal/tools/system/mcp"
 	nexusSkillTool "github.com/EngineerProjects/nexus-engine/internal/tools/system/nexusskill"
@@ -126,7 +123,7 @@ func RegisterBuiltinToolsWithConfig(reg *tool.Registry, config *Config) error {
 		browsercore.NewWaitTool(config.BrowserManager),
 		browsercore.NewScreenshotTool(config.BrowserManager),
 		lspTool.NewLspTool(config.WorkingDir),
-		monitorTool.NewMonitorTool(config.WorkingDir),
+		bashTool.NewMonitorTool(config.WorkingDir),
 		taskTool.NewTaskStopTool(),
 		taskTool.NewTaskListTool(),
 		taskTool.NewTaskGetTool(),
@@ -145,9 +142,9 @@ func RegisterBuiltinToolsWithConfig(reg *tool.Registry, config *Config) error {
 		worktreeTool.NewExitWorktreeTool(worktreeTool.DefaultExitWorktreeConfig()),
 		ragTool.NewSearchTool(config.RAGService),
 		ragTool.NewIngestTool(config.RAGService),
-		imagegenTool.NewTool(config.ImageGenerator),
-		ttstool.NewTool(config.TTSGenerator),
-		stttool.NewTool(config.STTTranscriber),
+		multimediaTool.NewImageGenTool(config.ImageGenerator),
+		multimediaTool.NewTTSTool(config.TTSGenerator),
+		multimediaTool.NewSTTTool(config.STTTranscriber),
 		fimtool.New(config.FIMCompleter),
 		requestPermissionsTool.NewTool(),
 		memoryTool.NewCreateEntitiesTool(config.LongTermMemory),
