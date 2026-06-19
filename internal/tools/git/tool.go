@@ -72,10 +72,10 @@ func (t *StatusTool) ValidateInput(_ context.Context, in map[string]any) (map[st
 func (t *StatusTool) CheckPermissions(_ context.Context, in map[string]any, _ tool.ToolUseContext) types.PermissionResult {
 	return types.Passthrough(in)
 }
-func (t *StatusTool) IsConcurrencySafe(_ map[string]any) bool { return true }
-func (t *StatusTool) IsReadOnly(_ map[string]any) bool        { return true }
-func (t *StatusTool) IsEnabled() bool                         { return false }
-func (t *StatusTool) FormatResult(data any) string            { return fmt.Sprintf("%v", data) }
+func (t *StatusTool) IsConcurrencySafe(_ map[string]any) bool                           { return true }
+func (t *StatusTool) IsReadOnly(_ map[string]any) bool                                  { return true }
+func (t *StatusTool) IsEnabled() bool                                                   { return false }
+func (t *StatusTool) FormatResult(data any) string                                      { return fmt.Sprintf("%v", data) }
 func (t *StatusTool) BackfillInput(_ context.Context, in map[string]any) map[string]any { return in }
 
 // ─── git_log ─────────────────────────────────────────────────────────────────
@@ -131,10 +131,10 @@ func (t *LogTool) ValidateInput(_ context.Context, in map[string]any) (map[strin
 func (t *LogTool) CheckPermissions(_ context.Context, in map[string]any, _ tool.ToolUseContext) types.PermissionResult {
 	return types.Passthrough(in)
 }
-func (t *LogTool) IsConcurrencySafe(_ map[string]any) bool { return true }
-func (t *LogTool) IsReadOnly(_ map[string]any) bool        { return true }
-func (t *LogTool) IsEnabled() bool                         { return false }
-func (t *LogTool) FormatResult(data any) string            { return fmt.Sprintf("%v", data) }
+func (t *LogTool) IsConcurrencySafe(_ map[string]any) bool                           { return true }
+func (t *LogTool) IsReadOnly(_ map[string]any) bool                                  { return true }
+func (t *LogTool) IsEnabled() bool                                                   { return false }
+func (t *LogTool) FormatResult(data any) string                                      { return fmt.Sprintf("%v", data) }
 func (t *LogTool) BackfillInput(_ context.Context, in map[string]any) map[string]any { return in }
 
 // ─── git_diff ────────────────────────────────────────────────────────────────
@@ -188,10 +188,10 @@ func (t *DiffTool) ValidateInput(_ context.Context, in map[string]any) (map[stri
 func (t *DiffTool) CheckPermissions(_ context.Context, in map[string]any, _ tool.ToolUseContext) types.PermissionResult {
 	return types.Passthrough(in)
 }
-func (t *DiffTool) IsConcurrencySafe(_ map[string]any) bool { return true }
-func (t *DiffTool) IsReadOnly(_ map[string]any) bool        { return true }
-func (t *DiffTool) IsEnabled() bool                         { return false }
-func (t *DiffTool) FormatResult(data any) string            { return fmt.Sprintf("%v", data) }
+func (t *DiffTool) IsConcurrencySafe(_ map[string]any) bool                           { return true }
+func (t *DiffTool) IsReadOnly(_ map[string]any) bool                                  { return true }
+func (t *DiffTool) IsEnabled() bool                                                   { return false }
+func (t *DiffTool) FormatResult(data any) string                                      { return fmt.Sprintf("%v", data) }
 func (t *DiffTool) BackfillInput(_ context.Context, in map[string]any) map[string]any { return in }
 
 // ─── git_commit ───────────────────────────────────────────────────────────────
@@ -247,10 +247,10 @@ func (t *CommitTool) ValidateInput(_ context.Context, in map[string]any) (map[st
 func (t *CommitTool) CheckPermissions(_ context.Context, in map[string]any, _ tool.ToolUseContext) types.PermissionResult {
 	return types.Passthrough(in)
 }
-func (t *CommitTool) IsConcurrencySafe(_ map[string]any) bool { return false }
-func (t *CommitTool) IsReadOnly(_ map[string]any) bool        { return false }
-func (t *CommitTool) IsEnabled() bool                         { return false }
-func (t *CommitTool) FormatResult(data any) string            { return fmt.Sprintf("%v", data) }
+func (t *CommitTool) IsConcurrencySafe(_ map[string]any) bool                           { return false }
+func (t *CommitTool) IsReadOnly(_ map[string]any) bool                                  { return false }
+func (t *CommitTool) IsEnabled() bool                                                   { return false }
+func (t *CommitTool) FormatResult(data any) string                                      { return fmt.Sprintf("%v", data) }
 func (t *CommitTool) BackfillInput(_ context.Context, in map[string]any) map[string]any { return in }
 
 // ─── git_branch ───────────────────────────────────────────────────────────────
@@ -307,8 +307,8 @@ func (t *BranchTool) ValidateInput(_ context.Context, in map[string]any) (map[st
 func (t *BranchTool) CheckPermissions(_ context.Context, in map[string]any, _ tool.ToolUseContext) types.PermissionResult {
 	return types.Passthrough(in)
 }
-func (t *BranchTool) IsConcurrencySafe(_ map[string]any) bool { return true }
-func (t *BranchTool) IsReadOnly(_ map[string]any) bool        { return false }
-func (t *BranchTool) IsEnabled() bool                         { return false }
-func (t *BranchTool) FormatResult(data any) string            { return fmt.Sprintf("%v", data) }
+func (t *BranchTool) IsConcurrencySafe(_ map[string]any) bool                           { return true }
+func (t *BranchTool) IsReadOnly(_ map[string]any) bool                                  { return false }
+func (t *BranchTool) IsEnabled() bool                                                   { return false }
+func (t *BranchTool) FormatResult(data any) string                                      { return fmt.Sprintf("%v", data) }
 func (t *BranchTool) BackfillInput(_ context.Context, in map[string]any) map[string]any { return in }

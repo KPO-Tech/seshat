@@ -89,8 +89,8 @@ func (t *SendTool) ValidateInput(_ context.Context, in map[string]any) (map[stri
 func (t *SendTool) CheckPermissions(_ context.Context, in map[string]any, _ tool.ToolUseContext) types.PermissionResult {
 	return types.Passthrough(in)
 }
-func (t *SendTool) IsConcurrencySafe(_ map[string]any) bool { return false }
-func (t *SendTool) IsReadOnly(_ map[string]any) bool        { return false }
-func (t *SendTool) IsEnabled() bool { return false }
-func (t *SendTool) FormatResult(data any) string            { return fmt.Sprintf("%v", data) }
+func (t *SendTool) IsConcurrencySafe(_ map[string]any) bool                           { return false }
+func (t *SendTool) IsReadOnly(_ map[string]any) bool                                  { return false }
+func (t *SendTool) IsEnabled() bool                                                   { return false }
+func (t *SendTool) FormatResult(data any) string                                      { return fmt.Sprintf("%v", data) }
 func (t *SendTool) BackfillInput(_ context.Context, in map[string]any) map[string]any { return in }
