@@ -28,6 +28,7 @@ import (
 	emailTool "github.com/EngineerProjects/nexus-engine/internal/tools/notifications/email"
 	slackTool "github.com/EngineerProjects/nexus-engine/internal/tools/notifications/slack"
 	telegramTool "github.com/EngineerProjects/nexus-engine/internal/tools/notifications/telegram"
+	whatsappTool "github.com/EngineerProjects/nexus-engine/internal/tools/notifications/whatsapp"
 	askUserQuestionTool "github.com/EngineerProjects/nexus-engine/internal/tools/special/ask_user"
 	fimtool "github.com/EngineerProjects/nexus-engine/internal/tools/special/fim"
 	goalTool "github.com/EngineerProjects/nexus-engine/internal/tools/special/goal"
@@ -180,6 +181,7 @@ func RegisterBuiltinToolsWithConfig(reg *tool.Registry, config *Config) error {
 		discordTool.NewSendTool(),
 		telegramTool.NewSendTool(),
 		emailTool.NewSendTool(),
+		whatsappTool.NewSendTool(),
 
 		// Social / community tools (fully implemented, no auth required)
 		hnTool.NewSearchTool(),
