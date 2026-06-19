@@ -1,5 +1,4 @@
-// Package stttool provides the speech_to_text tool backed by stt.SpeechToText.
-package stttool
+package multimedia
 
 import (
 	"context"
@@ -14,8 +13,8 @@ import (
 )
 
 const (
-	ToolName        = "speech_to_text"
-	ToolDescription = `Transcribe audio to text using the configured STT provider (Whisper or equivalent).
+	sttToolName = "speech_to_text"
+	sttDesc     = `Transcribe audio to text using the configured STT provider (Whisper or equivalent).
 
 Input: base64-encoded audio bytes (MP3, WAV, WebM, M4A supported).
 
@@ -27,17 +26,17 @@ Returns a JSON object with:
 - "provider": which provider performed the transcription`
 )
 
-// Tool implements the speech_to_text built-in tool.
-type Tool struct{ transcriber stt.SpeechToText }
+// STTTool implements the speech_to_text built-in tool.
+type STTTool struct{ transcriber stt.SpeechToText }
 
-// NewTool creates a speech_to_text Tool. Disabled when transcriber is nil.
-func NewTool(transcriber stt.SpeechToText) *Tool { return &Tool{transcriber: transcriber} }
+// NewSTTTool creates a speech_to_text Tool. Disabled when transcriber is nil.
+func NewSTTTool(transcriber stt.SpeechToText) *STTTool { return &STTTool{transcriber: transcriber} }
 
-func (t *Tool) Definition() tool.Definition {
+func (t *STTTool) Definition() tool.Definition {
 	return tool.Definition{
-		Name:        ToolName,
+		Name:        sttToolName,
 		DisplayName: "Speech to Text",
-		Description: ToolDescription,
+		Description: sttDesc,
 		Category:    "audio",
 		InputSchema: schema.FromMap(map[string]any{
 			"type": "object",
@@ -57,7 +56,7 @@ func (t *Tool) Definition() tool.Definition {
 	}
 }
 
-func (t *Tool) Call(ctx context.Context, input tool.CallInput, _ types.CanUseToolFn) (tool.CallResult, error) {
+func (t *STTTool) Call(ctx context.Context, input tool.CallInput, _ types.CanUseToolFn) (tool.CallResult, error) {
 	if t.transcriber == nil {
 		return tool.CallResult{Error: fmt.Errorf("speech_to_text: no STT provider configured")}, nil
 	}
@@ -84,17 +83,17 @@ func (t *Tool) Call(ctx context.Context, input tool.CallInput, _ types.CanUseToo
 	return tool.CallResult{Data: result, ContentType: tool.ContentTypeJSON, Content: string(encoded)}, nil
 }
 
-func (t *Tool) Description(_ context.Context) (string, error) { return ToolDescription, nil }
-func (t *Tool) ValidateInput(_ context.Context, in map[string]any) (map[string]any, error) {
+func (t *STTTool) Description(_ context.Context) (string, error) { return sttDesc, nil }
+func (t *STTTool) ValidateInput(_ context.Context, in map[string]any) (map[string]any, error) {
 	return in, nil
 }
-func (t *Tool) CheckPermissions(_ context.Context, _ map[string]any, _ tool.ToolUseContext) types.PermissionResult {
+func (t *STTTool) CheckPermissions(_ context.Context, _ map[string]any, _ tool.ToolUseContext) types.PermissionResult {
 	return types.PermissionResult{Behavior: types.PermissionBehaviorAllow}
 }
-func (t *Tool) IsConcurrencySafe(_ map[string]any) bool { return true }
-func (t *Tool) IsReadOnly(_ map[string]any) bool        { return true }
-func (t *Tool) IsEnabled() bool                         { return t.transcriber != nil }
-func (t *Tool) FormatResult(data any) string {
+func (t *STTTool) IsConcurrencySafe(_ map[string]any) bool { return true }
+func (t *STTTool) IsReadOnly(_ map[string]any) bool        { return true }
+func (t *STTTool) IsEnabled() bool                         { return t.transcriber != nil }
+func (t *STTTool) FormatResult(data any) string {
 	if m, ok := data.(map[string]any); ok {
 		if text, ok := m["text"].(string); ok && text != "" {
 			if len(text) > 120 {
@@ -105,4 +104,4 @@ func (t *Tool) FormatResult(data any) string {
 	}
 	return fmt.Sprintf("%v", data)
 }
-func (t *Tool) BackfillInput(_ context.Context, in map[string]any) map[string]any { return in }
+func (t *STTTool) BackfillInput(_ context.Context, in map[string]any) map[string]any { return in }

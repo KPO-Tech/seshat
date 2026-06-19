@@ -4,34 +4,39 @@ import (
 	"context"
 	"fmt"
 
+	agentsTool "github.com/EngineerProjects/nexus-engine/internal/tools/agents"
 	bashTool "github.com/EngineerProjects/nexus-engine/internal/tools/bash"
 	editTool "github.com/EngineerProjects/nexus-engine/internal/tools/files/edit"
 	fsTool "github.com/EngineerProjects/nexus-engine/internal/tools/files/fs"
 	globTool "github.com/EngineerProjects/nexus-engine/internal/tools/files/glob"
 	grepTool "github.com/EngineerProjects/nexus-engine/internal/tools/files/grep"
-	notebookTool "github.com/EngineerProjects/nexus-engine/internal/tools/files/notebook"
 	patchTool "github.com/EngineerProjects/nexus-engine/internal/tools/files/patch"
 	fileReadTool "github.com/EngineerProjects/nexus-engine/internal/tools/files/read"
 	readURLTool "github.com/EngineerProjects/nexus-engine/internal/tools/files/read_url"
 	writeTool "github.com/EngineerProjects/nexus-engine/internal/tools/files/write"
+	gitTool "github.com/EngineerProjects/nexus-engine/internal/tools/git"
 	calculatorTool "github.com/EngineerProjects/nexus-engine/internal/tools/math/calculator"
 	financialTool "github.com/EngineerProjects/nexus-engine/internal/tools/math/financial"
 	statisticsTool "github.com/EngineerProjects/nexus-engine/internal/tools/math/statistics"
 	unitsTool "github.com/EngineerProjects/nexus-engine/internal/tools/math/units"
+	multimediaTool "github.com/EngineerProjects/nexus-engine/internal/tools/multimedia"
+	notebookTool "github.com/EngineerProjects/nexus-engine/internal/tools/notebook"
+	discordTool "github.com/EngineerProjects/nexus-engine/internal/tools/notifications/discord"
+	emailTool "github.com/EngineerProjects/nexus-engine/internal/tools/notifications/email"
+	slackTool "github.com/EngineerProjects/nexus-engine/internal/tools/notifications/slack"
+	telegramTool "github.com/EngineerProjects/nexus-engine/internal/tools/notifications/telegram"
+	whatsappTool "github.com/EngineerProjects/nexus-engine/internal/tools/notifications/whatsapp"
 	tool "github.com/EngineerProjects/nexus-engine/internal/tools/registry"
-	agentsTool "github.com/EngineerProjects/nexus-engine/internal/tools/special/agents"
+	devtoTool "github.com/EngineerProjects/nexus-engine/internal/tools/social/devto"
+	hnTool "github.com/EngineerProjects/nexus-engine/internal/tools/social/hackernews"
 	askUserQuestionTool "github.com/EngineerProjects/nexus-engine/internal/tools/special/ask_user"
 	fimtool "github.com/EngineerProjects/nexus-engine/internal/tools/special/fim"
 	goalTool "github.com/EngineerProjects/nexus-engine/internal/tools/special/goal"
-	imagegenTool "github.com/EngineerProjects/nexus-engine/internal/tools/special/imagegen"
 	lspTool "github.com/EngineerProjects/nexus-engine/internal/tools/special/lsp"
 	memoryTool "github.com/EngineerProjects/nexus-engine/internal/tools/special/memory"
-	monitorTool "github.com/EngineerProjects/nexus-engine/internal/tools/special/monitor"
 	ragTool "github.com/EngineerProjects/nexus-engine/internal/tools/special/rag"
 	requestPermissionsTool "github.com/EngineerProjects/nexus-engine/internal/tools/special/request_permissions"
-	stttool "github.com/EngineerProjects/nexus-engine/internal/tools/special/stt"
 	toolSearchTool "github.com/EngineerProjects/nexus-engine/internal/tools/special/tool_search"
-	ttstool "github.com/EngineerProjects/nexus-engine/internal/tools/special/tts"
 	worktreeTool "github.com/EngineerProjects/nexus-engine/internal/tools/special/worktree"
 	"github.com/EngineerProjects/nexus-engine/internal/tools/system/mcp"
 	nexusSkillTool "github.com/EngineerProjects/nexus-engine/internal/tools/system/nexusskill"
@@ -95,9 +100,13 @@ func RegisterBuiltinToolsWithConfig(reg *tool.Registry, config *Config) error {
 		fsTool.NewGetMetadataTool(config.WorkingDir),
 		fsTool.NewListDirectoryTool(config.WorkingDir),
 		fsTool.NewRemoveTool(config.WorkingDir),
-		notebookTool.NewEditTool(),
 		notebookTool.NewCreateTool(),
+		notebookTool.NewReadTool(),
 		notebookTool.NewWriteTool(),
+		notebookTool.NewEditTool(),
+		notebookTool.NewExecuteTool(),
+		notebookTool.NewRunTool(),
+		notebookTool.NewKernelTool(),
 		askUserQuestionTool.NewTool(askUserConfig),
 		webfetchTool.NewTool(webFetchConfig),
 		webSearchTool.NewTool(),
@@ -120,7 +129,7 @@ func RegisterBuiltinToolsWithConfig(reg *tool.Registry, config *Config) error {
 		browsercore.NewWaitTool(config.BrowserManager),
 		browsercore.NewScreenshotTool(config.BrowserManager),
 		lspTool.NewLspTool(config.WorkingDir),
-		monitorTool.NewMonitorTool(config.WorkingDir),
+		bashTool.NewMonitorTool(config.WorkingDir),
 		taskTool.NewTaskStopTool(),
 		taskTool.NewTaskListTool(),
 		taskTool.NewTaskGetTool(),
@@ -139,9 +148,9 @@ func RegisterBuiltinToolsWithConfig(reg *tool.Registry, config *Config) error {
 		worktreeTool.NewExitWorktreeTool(worktreeTool.DefaultExitWorktreeConfig()),
 		ragTool.NewSearchTool(config.RAGService),
 		ragTool.NewIngestTool(config.RAGService),
-		imagegenTool.NewTool(config.ImageGenerator),
-		ttstool.NewTool(config.TTSGenerator),
-		stttool.NewTool(config.STTTranscriber),
+		multimediaTool.NewImageGenTool(config.ImageGenerator),
+		multimediaTool.NewTTSTool(config.TTSGenerator),
+		multimediaTool.NewSTTTool(config.STTTranscriber),
 		fimtool.New(config.FIMCompleter),
 		requestPermissionsTool.NewTool(),
 		memoryTool.NewCreateEntitiesTool(config.LongTermMemory),
@@ -159,6 +168,29 @@ func RegisterBuiltinToolsWithConfig(reg *tool.Registry, config *Config) error {
 		agentsTool.NewSendAgentMessageTool(),
 		agentsTool.NewCloseAgentTool(),
 		// agentTool (synchronous): registered separately in sdk/client.go after engine creation.
+
+		// VCS — git tools (stubs, IsEnabled=false until implemented via os/exec)
+		gitTool.NewStatusTool(),
+		gitTool.NewLogTool(),
+		gitTool.NewDiffTool(),
+		gitTool.NewCommitTool(),
+		gitTool.NewBranchTool(),
+
+		// Notifications — messaging platforms (stubs, IsEnabled=false until implemented)
+		slackTool.NewSendTool(),
+		discordTool.NewSendTool(),
+		telegramTool.NewSendTool(),
+		emailTool.NewSendTool(),
+		whatsappTool.NewSendTool(),
+
+		// Social / community tools (fully implemented, no auth required)
+		hnTool.NewSearchTool(),
+		hnTool.NewStoriesTool(),
+		hnTool.NewItemTool(),
+		devtoTool.NewFeedTool(),
+		devtoTool.NewArticleTool(),
+		devtoTool.NewPublishTool(),
+		// Reddit, Twitter, LinkedIn, WhatsApp: stubs disabled until implemented (IsEnabled=false)
 	}
 
 	for _, builtinTool := range tools {

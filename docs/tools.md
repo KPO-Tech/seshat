@@ -55,31 +55,66 @@ A turn's tool uses may contain multiple concurrent batches interleaved with seri
 
 ## Built-in tools reference
 
+Tools marked **stub** are registered but `IsEnabled()` returns `false` — they appear here so contributors know where to implement them. See their package-level doc comments for implementation notes.
+
+---
+
 ### File tools (`internal/tools/files/`)
 
 | Tool | Description |
 |---|---|
-| `Read` | Read file content (text, image, PDF). Respects line limits and cancellation. |
-| `Edit` | Replace a string in a file with proper line-range targeting. |
-| `Write` | Create or overwrite a file. |
-| `Glob` | List files matching a glob pattern. |
-| `Grep` | Search file content with regex. |
-| `NotebookEdit` | Edit a Jupyter notebook cell. |
+| `file_read` | Read file content — text, image (PNG/JPG), or PDF. Supports line-range limits. |
+| `file_write` | Create or fully overwrite a file. |
+| `file_edit` | Replace an exact string in a file (string-targeted, not line-based). |
+| `file_patch` | Apply a unified diff patch to a file. |
+| `glob` | List files matching a glob pattern relative to the working directory. |
+| `grep` | Search file content with a regular expression. |
+| `fs_create_directory` | Create a directory (and parents) if it does not exist. |
+| `fs_get_metadata` | Stat a path — size, permissions, mod time, type. |
+| `fs_list_directory` | List directory contents (non-recursive by default). |
+| `fs_remove` | Delete a file or empty directory. |
+| `read_url` | Fetch a URL and return its content as Markdown or plain text. |
+
+---
 
 ### Bash tool (`internal/tools/bash/`)
 
 | Tool | Description |
 |---|---|
-| `Bash` | Execute a shell command with stdout/stderr capture. Includes safety scanner for dangerous patterns and background job tracking. |
+| `bash` | Execute a shell command. Captures stdout/stderr, supports background jobs and timeouts. Includes a safety scanner for dangerous patterns. |
+| `bash_write_stdin` | Write data to a running background job's stdin. |
+| `bash_job_output` | Read buffered stdout/stderr from a background job. |
+| `bash_job_kill` | Send SIGTERM/SIGKILL to a background job. |
+| `monitor` | Start a shell command and stream its stdout line-by-line as notifications. Designed for log tailing, build watching, and long-running processes. |
+
+---
+
+### Notebook tools (`internal/tools/notebook/`)
+
+Interact with Jupyter notebooks and live kernels. The kernel sub-tools require a running Jupyter server — set `JUPYTER_SERVER_URL` and `JUPYTER_TOKEN`.
+
+| Tool | Description |
+|---|---|
+| `notebook_create` | Create a new `.ipynb` file with optional initial cells. Fails if file already exists. |
+| `notebook_read` | Read notebook cells, outputs, and kernel metadata. Supports index-based filtering. |
+| `notebook_write` | Create or fully overwrite a notebook (for programmatic generation). |
+| `notebook_edit` | Edit cells in place — replace/insert/delete. Supports single-op or batch `ops[]` array. |
+| `notebook_execute` | Execute cells via a live Jupyter kernel and write outputs back to the notebook file. |
+| `notebook_run` | Run arbitrary code in a kernel without creating/modifying a notebook file. |
+| `notebook_kernel` | Manage Jupyter kernels — list/start/restart/interrupt/stop. |
+
+---
 
 ### Web tools (`internal/tools/web/`)
 
 | Tool | Description |
 |---|---|
-| `WebFetch` | HTTP fetch with markdown conversion and response caching. |
-| `WebSearch` | Web search. Backends: DuckDuckGo, Exa, Jina, Tavily. |
+| `web_fetch` | HTTP fetch with Markdown conversion, response caching, and Docling PDF support. |
+| `web_search` | Web search. Backends: DuckDuckGo (default), Exa, Jina, Tavily, SearXNG. |
 
-### Browser tools
+---
+
+### Browser tools (`internal/tools/web/browser/`)
 
 Browser automation via Playwright (go-rod). Available when a browser instance is configured.
 
@@ -104,90 +139,162 @@ Browser automation via Playwright (go-rod). Available when a browser instance is
 | `browser_set_network_policy` | Allow/deny requests by domain |
 | `browser_get_network_policy` | Read the current network policy |
 
-### Special tools (`internal/tools/special/`)
+---
+
+### Math tools (`internal/tools/math/`)
 
 | Tool | Description |
 |---|---|
-| `ask_user` | Prompt for user input during a session |
-| `todo_write` / `todo_read` | Manage a structured task list within the session |
-| `lsp` | Language Server Protocol integration (go-to-definition, hover, diagnostics, rename) |
-| `worktree_enter` / `worktree_exit` | Enter/exit a git worktree (isolated branch) |
-| `tool_search` | Search available (including deferred) tools by keyword |
-| `monitor` | Monitor a background process |
-| `spawn_agent` / `wait_agent` | Spawn a sub-agent with isolated context; wait for its result |
-| `send_agent_message` / `close_agent` | Communicate with or close a running sub-agent |
-| `plan_mode_enter` / `plan_mode_exit` | Switch the session execution mode |
-| `plan_submit` | Submit a plan for user review |
-| `request_permissions` | Request additional permissions at runtime |
+| `calculator` | Evaluate arithmetic and algebraic expressions. Supports variables, functions, and unit-aware evaluation. |
+| `unit_convert` | Convert values between units (length, mass, temperature, speed, …). |
+| `statistics` | Descriptive statistics — mean, median, std dev, percentiles, correlation. |
+| `financial` | Financial calculations — compound interest, NPV, IRR, amortisation. |
 
-### Memory tools (long-term memory)
+---
 
-Available when `EnableMemory: true` (default).
+### Social tools (`internal/tools/social/`)
 
-| Tool | Description |
-|---|---|
-| `memory_create_entities` | Create named entities in the knowledge graph |
-| `memory_add_observations` | Add observations to existing entities |
-| `memory_search_nodes` | Semantic search across the knowledge graph |
-| `memory_open_nodes` | Retrieve specific nodes by name |
+Tools for community and developer platforms. Read-only tools require no credentials.
 
-### RAG tools
-
-| Tool | Description |
-|---|---|
-| `rag_search` | Semantic search across indexed documents |
-| `rag_ingest` | Ingest a file or directory into the vector store |
-
-### Image generation
-
-Enabled when an image provider is configured (`ClientConfig` → `BuiltinConfig.ImageGenerator`).
-
-| Tool | Input | Output |
+| Tool | Status | Description |
 |---|---|---|
-| `generate_image` | `prompt: string` | `provider`, `model`, `image_base64` or `image_url`, `mime_type`, `revised_prompt` |
+| `hn_search` | ✅ live | Full-text search of Hacker News stories and comments via Algolia. |
+| `hn_stories` | ✅ live | Fetch HN feed — top/new/best/ask/show/job stories. |
+| `hn_item` | ✅ live | Get a story with its full comment thread. |
+| `devto_feed` | ✅ live | Browse dev.to articles by tag, popularity, or date. |
+| `devto_article` | ✅ live | Fetch a single dev.to article by ID or URL. |
+| `devto_publish` | ✅ live | Publish or update a dev.to article (requires `DEV_TO_API_KEY`). |
+| `reddit_search` | stub | Search Reddit posts and comments (requires `REDDIT_CLIENT_ID`). |
+| `reddit_posts` | stub | Browse subreddit posts by sort (hot/new/top). |
+| `twitter_search` | stub | Search tweets (requires `TWITTER_BEARER_TOKEN`). |
+| `twitter_tweet` | stub | Post a tweet (requires OAuth 1.0a). |
 
-Providers implemented: **OpenAI** (DALL-E 3), **Google Gemini** (Imagen).
+---
 
-The tool is always registered but `IsEnabled()` returns `false` when no generator is configured — it will not appear in the tool list sent to the LLM.
+### Notification tools (`internal/tools/notifications/`)
 
-### Audio tools
+Direct-messaging channels — one-way delivery to a person or system. All require credentials; all registered as stubs until implemented.
 
-Enabled when audio providers are configured.
+| Tool | Status | Env vars | Description |
+|---|---|---|---|
+| `slack_send` | stub | `SLACK_WEBHOOK_URL` or `SLACK_BOT_TOKEN` | Send to a Slack channel via Incoming Webhook or Bot API. Supports Block Kit. |
+| `discord_send` | stub | `DISCORD_WEBHOOK_URL` or `DISCORD_BOT_TOKEN` | Send to a Discord channel via webhook or Bot API. Supports embeds. |
+| `telegram_send` | stub | `TELEGRAM_BOT_TOKEN` | Send via Telegram Bot API. HTML and MarkdownV2 parse modes. |
+| `email_send` | stub | `SMTP_HOST`, `SMTP_USER`, `SMTP_PASSWORD` | Send email via SMTP (net/smtp, no extra deps). Supports HTML + plain multipart. |
+| `whatsapp_send` | stub | `WHATSAPP_PHONE_NUMBER_ID`, `WHATSAPP_TOKEN` | Send via WhatsApp Business Cloud API. Supports text and approved templates. |
 
-| Tool | Input | Output |
+---
+
+### VCS tools (`internal/tools/git/`)
+
+Structured git operations — return typed JSON, not raw text. Requires the `git` binary on PATH. All registered as stubs until implemented via `os/exec`.
+
+| Tool | Status | Description |
 |---|---|---|
-| `text_to_speech` | `text: string` | `provider`, `model`, `audio_base64`, `content_type`, `characters_used` |
-| `speech_to_text` | `audio_base64: string`, `mime_type?: string` | `text`, `language`, `duration`, `model`, `provider` |
+| `git_status` | stub | Working tree status — staged, unstaged, untracked, ahead/behind. |
+| `git_log` | stub | Commit history with filters (branch, since, author, grep). |
+| `git_diff` | stub | Diff between refs or working tree. Returns structured file list + patches. |
+| `git_commit` | stub | Stage files and create a commit. `RequiresPermission: true`. |
+| `git_branch` | stub | List, create, switch, or delete branches. |
 
-Supported formats for `speech_to_text`: MP3, WAV, WebM, M4A.
+---
 
-Provider implemented: **OpenAI** (TTS-1/TTS-1-HD for synthesis, Whisper for transcription).
+### Multimedia tools (`internal/tools/multimedia/`)
 
-Both tools are always registered but disabled when no provider is configured.
+Always registered; `IsEnabled()` returns `false` when no provider is configured.
+
+| Tool | Env var | Description |
+|---|---|---|
+| `generate_image` | `OPENAI_API_KEY` | Generate an image from a text prompt. Returns base64 or URL. |
+| `text_to_speech` | `OPENAI_API_KEY` | Synthesise speech audio from text. Returns base64-encoded audio. |
+| `speech_to_text` | `OPENAI_API_KEY` | Transcribe audio to text via Whisper. Input: base64-encoded audio. |
+
+Provider implemented: **OpenAI** (DALL-E 3 for images, TTS-1/TTS-1-HD for synthesis, Whisper for transcription).
+
+---
+
+### Agent tools (`internal/tools/agents/`)
+
+| Tool | Description |
+|---|---|
+| `spawn_agent` | Launch a sub-agent with isolated context, tool set, and system prompt. Returns an agent ID. |
+| `wait_agent` | Block until a sub-agent completes; returns its final output. |
+| `resume_agent` | Resume a previously paused sub-agent with a new message. |
+| `list_agents` | List all active sub-agents and their current status. |
+| `send_agent_message` | Send a message to a running sub-agent. |
+| `close_agent` | Terminate a sub-agent and release its resources. |
+
+---
+
+### Goal tools (`internal/tools/special/goal/`)
+
+| Tool | Description |
+|---|---|
+| `goal_create` | Create a tracked goal with title, description, and optional sub-goals. |
+| `goal_get` | Retrieve the current state of a goal and its sub-goals. |
+| `goal_update` | Update goal status (in_progress, completed, abandoned) or details. |
+
+---
+
+### Memory tools (`internal/tools/special/memory/`)
+
+Available when long-term memory is configured.
+
+| Tool | Description |
+|---|---|
+| `memory_create_entities` | Create named entities in the knowledge graph. |
+| `memory_add_observations` | Add observations to existing entities. |
+| `memory_search_nodes` | Semantic search across the knowledge graph. |
+| `memory_open_nodes` | Retrieve specific nodes by name. |
+
+---
+
+### RAG tools (`internal/tools/special/rag/`)
+
+| Tool | Description |
+|---|---|
+| `rag_search` | Semantic search across indexed documents. |
+| `rag_ingest` | Ingest a file or directory into the vector store. |
+
+---
 
 ### System tools (`internal/tools/system/`)
 
 | Tool | Description |
 |---|---|
-| `MCP*` | Exposes MCP server resources as callable tools. |
-| `EnterPlanMode` / `ExitPlanMode` | Switch the session execution mode. |
-| `PairProgramming` | Toggle pair-programming collaboration mode. |
-| `Skill*` | Run a bundled or MCP-discovered skill. |
+| `mcp_*` | Exposes MCP server tools. Each connected MCP server contributes one or more tools prefixed with the server name. |
+| `nexus_list_skills` | List available skills with name and description. |
+| `nexus_read_skill` | Read the full content of a skill file. |
+| `nexus_validate_skill` | Validate a skill file for structural correctness. |
+| `skill_run` | Invoke a skill by name with optional arguments. |
+
+---
 
 ### Task tools (`internal/tools/task/`)
 
 | Tool | Description |
 |---|---|
-| `TaskCreate` | Create a session-scoped tracked task for execution progress. |
-| `TaskList` | List tracked session tasks and, when requested, background runtime tasks. |
-| `TaskGet` | Fetch details for a tracked session task, with background-task fallback. |
-| `TaskUpdate` | Update tracked task status, details, and dependencies. |
-| `TaskStop` | Stop tracking a session task, with background-task fallback for runtime jobs. |
-| `TaskOutput` | Get the output of a background runtime task. |
+| `task_create` | Create a session-scoped tracked task for execution progress. |
+| `task_list` | List tracked session tasks and, when requested, background runtime tasks. |
+| `task_get` | Fetch details for a tracked session task. |
+| `task_update` | Update tracked task status, details, and dependencies. |
+| `task_stop` | Stop tracking a session task. |
+| `task_output` | Get the output of a background runtime task. |
 
-### Agent tool (`internal/tools/agent/`)
+---
 
-Runs a sub-agent (skill) in isolation with its own transcript and memory adapter. Results are returned as tool output.
+### Special tools (`internal/tools/special/`)
+
+| Tool | Description |
+|---|---|
+| `ask_user` | Prompt the user for input during a session. Supports timeout. |
+| `lsp` | Language Server Protocol — go-to-definition, hover, diagnostics, rename. |
+| `worktree_enter` / `worktree_exit` | Enter/exit a git worktree (isolated branch checkout). |
+| `tool_search` | Search available tools by keyword, including deferred ones. |
+| `plan_mode_enter` / `plan_mode_exit` | Switch to plan mode (no execution, only planning). |
+| `plan_submit` | Submit a plan for user review and approval. |
+| `request_permissions` | Request additional permissions at runtime. |
+| `fim` | Fill-in-the-middle code completion at the cursor position. |
 
 ---
 
@@ -200,13 +307,13 @@ func (t *MyTool) Definition() tool.Definition {
     return tool.Definition{
         Name:        "my_tool",
         Description: "Does something useful.",
-        InputSchema: map[string]any{
+        InputSchema: schema.FromMap(map[string]any{
             "type": "object",
             "properties": map[string]any{
                 "input": map[string]any{"type": "string"},
             },
             "required": []string{"input"},
-        },
+        }),
         IsReadOnly:        true,
         IsConcurrencySafe: true,
     }
@@ -220,13 +327,16 @@ func (t *MyTool) Call(ctx context.Context, input tool.CallInput, _ types.CanUseT
 // ... implement remaining interface methods
 ```
 
-Register before creating sessions:
+Register in `internal/tools/builtin/builtin.go`:
 
 ```go
-client.RegisterTool(&MyTool{})
-// or per-session:
-session.RegisterTool(&MyTool{})
+tools := []tool.Tool{
+    // ...
+    &MyTool{},
+}
 ```
+
+See [`CONTRIBUTING.md`](../CONTRIBUTING.md) for the full tool-addition checklist.
 
 ---
 
@@ -234,7 +344,7 @@ session.RegisterTool(&MyTool{})
 
 The `Registry` (`internal/tools/registry/`) holds all available tools. Tools can be:
 
-- **Eager**: available from session start
-- **Deferred**: not included in the initial tool list; revealed by `ToolSearch` during a session
+- **Eager**: available from session start (included in every tool list sent to the LLM)
+- **Deferred**: not included in the initial tool list; revealed by `tool_search` during a session
 
-The `ToolSearch` tool returns tool names matching a query. The loop then resolves them from the registry and adds them to the active tool surface for the remainder of the turn.
+Deferred tools are useful for large tool sets — they keep the initial context small while still making every tool discoverable.
