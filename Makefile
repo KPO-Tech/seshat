@@ -1,8 +1,9 @@
-CMD_CLI  := ./cmd/cli
-CMD_GRPC := ./cmd/grpc
+CMD_CLI       := ./cmd/cli
+CMD_GRPC      := ./cmd/grpc
+CMD_SLACK_BOT := ./cmd/slack-bot
 
-.PHONY: all build build-cli build-grpc build_linux test test-race fmt vet lint tidy clean hooks \
-        setup install-python start-docling
+.PHONY: all build build-cli build-grpc build-slack-bot build_linux test test-race fmt vet lint tidy clean hooks \
+        setup install-python start-docling slack-bot
 
 # ── Default ────────────────────────────────────────────────────────────────────
 
@@ -31,13 +32,20 @@ setup:
 
 # ── Build ──────────────────────────────────────────────────────────────────────
 
-build: build-cli build-grpc
+build: build-cli build-grpc build-slack-bot
 
 build-cli:
 	go build -o bin/nexus $(CMD_CLI)
 
 build-grpc:
 	go build -o bin/nexus-grpc $(CMD_GRPC)
+
+build-slack-bot:
+	go build -o bin/nexus-slack $(CMD_SLACK_BOT)
+
+slack-bot:
+	@export $$(grep -v '^#' private/.env.slack | xargs) && \
+	go run $(CMD_SLACK_BOT)
 
 build_linux:
 	go build -o /tmp/nexus $(CMD_CLI)

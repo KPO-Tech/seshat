@@ -311,6 +311,20 @@ func canonicalResponseFromOpenAIChoice(responseID string, model types.ModelIdent
 	}, nil
 }
 
+// rawToString extracts a plain string from a json.RawMessage.
+// Returns "" if the value is null, an array, or any non-string JSON type.
+// This handles providers (e.g. Mistral) that send "content": [] during tool calls.
+func rawToString(raw json.RawMessage) string {
+	if len(raw) == 0 {
+		return ""
+	}
+	var s string
+	if err := json.Unmarshal(raw, &s); err == nil {
+		return s
+	}
+	return ""
+}
+
 func normalizeOpenAIStopReason(reason string, content []types.ContentBlock) string {
 	if types.ContentBlocksContainToolUse(content) {
 		return types.StopReasonToolUse
@@ -394,8 +408,9 @@ func (c *Client) createOpenAIStreamResult(ctx context.Context, req types.APIRequ
 				ID      string `json:"id"`
 				Choices []struct {
 					Delta struct {
-						Content          string `json:"content"`
-						ReasoningContent string `json:"reasoning_content"`
+						// Content can be a string or an empty array (Mistral tool-call chunks).
+						Content          json.RawMessage `json:"content"`
+						ReasoningContent string          `json:"reasoning_content"`
 						ToolCalls        []struct {
 							Index    int    `json:"index"`
 							ID       string `json:"id"`
@@ -427,11 +442,11 @@ func (c *Client) createOpenAIStreamResult(ctx context.Context, req types.APIRequ
 					emitStreamChunk(onChunk, streamChunk)
 					collected = append(collected, streamChunk)
 				}
-				if choice.Delta.Content != "" {
-					text.WriteString(choice.Delta.Content)
+				if contentStr := rawToString(choice.Delta.Content); contentStr != "" {
+					text.WriteString(contentStr)
 					streamChunk := types.APIResponseChunk{
 						Type:      types.APIChunkTypeContentBlockDelta,
-						Delta:     choice.Delta.Content,
+						Delta:     contentStr,
 						DeltaType: "text_delta",
 					}
 					emitStreamChunk(onChunk, streamChunk)
