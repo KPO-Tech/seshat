@@ -300,9 +300,10 @@ func (b *bot) onMessage(ctx context.Context, channel, replyTS, text string) {
 	}
 
 	// ── Live callbacks ─────────────────────────────────────────────────────────
-	// callbackMu ensures a single active set of callbacks at a time.
 	b.callbackMu.Lock()
 	state := &requestState{}
+	var artifactsMu sync.Mutex
+	var artifactPaths []string // browser screenshots collected during the turn
 
 	b.nexus.SetResponseChunkFn(func(chunk sdk.ResponseChunk) {
 		if chunk.Delta != "" {
@@ -311,9 +312,10 @@ func (b *bot) onMessage(ctx context.Context, channel, replyTS, text string) {
 	})
 
 	b.nexus.SetRuntimeEventFn(func(evt sdk.RuntimeEvent) {
-		if evt.ToolProgress != nil {
+		switch evt.Type {
+		case sdk.RuntimeEventTypeToolProgress:
 			tp := evt.ToolProgress
-			if tp.Stage == sdk.ToolProgressStageRunning {
+			if tp != nil && tp.Stage == sdk.ToolProgressStageRunning && !isPlanModeTool(tp.ToolName) {
 				icon := toolIcon(tp.ToolName)
 				msg := tp.Message
 				if msg == "" {
@@ -321,6 +323,21 @@ func (b *bot) onMessage(ctx context.Context, channel, replyTS, text string) {
 				}
 				state.setStatus(fmt.Sprintf("%s _%s_", icon, msg))
 				log.Printf("[nexus-bot] tool: %s — %s", tp.ToolName, msg)
+			}
+
+		case sdk.RuntimeEventTypePlanSubmitted:
+			state.setStatus("📋 _Planning..._")
+
+		case sdk.RuntimeEventTypeExecutionModeChanged:
+			if evt.ExecutionMode == "execute" {
+				state.setStatus("⚡ _Executing plan..._")
+			}
+
+		case sdk.RuntimeEventTypeBrowserScreenshot:
+			if evt.Browser != nil && evt.Browser.PersistedPath != "" {
+				artifactsMu.Lock()
+				artifactPaths = append(artifactPaths, evt.Browser.PersistedPath)
+				artifactsMu.Unlock()
 			}
 		}
 	})
@@ -358,7 +375,7 @@ func (b *bot) onMessage(ctx context.Context, channel, replyTS, text string) {
 		ThreadTS: replyTS,
 	})
 
-	t0 := time.Now()
+	startTime := time.Now()
 	resp, err := session.SubmitMessage(msgCtx, query)
 
 	close(done)
@@ -377,7 +394,7 @@ func (b *bot) onMessage(ctx context.Context, channel, replyTS, text string) {
 		answer = "_No response generated._"
 	}
 
-	elapsed := time.Since(t0).Round(time.Millisecond)
+	elapsed := time.Since(startTime).Round(time.Millisecond)
 	footer := fmt.Sprintf("\n\n_— Nexus for Slack · %dms_", elapsed.Milliseconds())
 
 	if tools := extractToolsUsed(resp); len(tools) > 0 {
@@ -396,6 +413,12 @@ func (b *bot) onMessage(ctx context.Context, channel, replyTS, text string) {
 			log.Printf("[nexus-bot] post continuation: %v", err)
 		}
 	}
+
+	// Upload files created during this turn (workdir + session artifacts + screenshots).
+	artifactsMu.Lock()
+	collected := append([]string(nil), artifactPaths...)
+	artifactsMu.Unlock()
+	go b.uploadTurnArtifacts(ctx, channel, replyTS, session.GetID(), startTime, collected)
 }
 
 func (b *bot) getOrCreateSession(ctx context.Context, channelID string) (*sdk.Session, error) {
@@ -491,13 +514,24 @@ func extractAnswer(resp *sdk.SessionResponse) string {
 	return strings.TrimSpace(sb.String())
 }
 
-// extractToolsUsed returns deduplicated tool names called during the response.
+// isPlanModeTool returns true for tools that are internal plan-mode mechanics
+// and should not be surfaced to users in the Slack UI.
+func isPlanModeTool(name string) bool {
+	switch name {
+	case "enter_plan_mode", "exit_plan_mode", "submit_plan", "request_permissions":
+		return true
+	}
+	return false
+}
+
+// extractToolsUsed returns deduplicated visible tool names called during the response.
+// Internal plan-mode and permission tools are excluded.
 func extractToolsUsed(resp *sdk.SessionResponse) []string {
 	seen := map[string]bool{}
 	var tools []string
 	for _, msg := range resp.Messages {
 		for _, block := range msg.Content {
-			if tu, ok := block.(sdk.ToolUseContent); ok && !seen[tu.Name] {
+			if tu, ok := block.(sdk.ToolUseContent); ok && !seen[tu.Name] && !isPlanModeTool(tu.Name) {
 				seen[tu.Name] = true
 				tools = append(tools, tu.Name)
 			}
