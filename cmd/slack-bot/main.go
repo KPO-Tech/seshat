@@ -6,14 +6,19 @@ import (
 	"log"
 	"os"
 	"os/signal"
+	"path/filepath"
 	"regexp"
 	"strings"
 	"sync"
 	"syscall"
 	"time"
 
+	dbpkg "github.com/EngineerProjects/nexus-engine/internal/db"
+	longtermStore "github.com/EngineerProjects/nexus-engine/internal/memory/longterm"
 	"github.com/EngineerProjects/nexus-engine/internal/providers"
+	"github.com/EngineerProjects/nexus-engine/internal/tools/system/mcp"
 	engineconfig "github.com/EngineerProjects/nexus-engine/pkg/config"
+	"github.com/EngineerProjects/nexus-engine/pkg/runtimepath"
 	"github.com/EngineerProjects/nexus-engine/pkg/sdk"
 	slackgo "github.com/slack-go/slack"
 	"github.com/slack-go/slack/slackevents"
@@ -26,8 +31,33 @@ const defaultModel = "mistral:mistral-small-latest"
 // Slack rate-limits UpdateMessage; 1.5s is safe.
 const streamInterval = 1500 * time.Millisecond
 
-// slackMaxLen is the Slack text field character limit for chat.update / chat.postMessage.
+// slackMaxLen is the Slack text field character limit.
 const slackMaxLen = 2900
+
+// requestState holds per-request live state for the Slack placeholder.
+type requestState struct {
+	mu         sync.Mutex
+	statusLine string // from RuntimeEventFn (tool progress)
+	accText    string // from ResponseChunkFn (streaming text)
+}
+
+func (r *requestState) setStatus(line string) {
+	r.mu.Lock()
+	r.statusLine = line
+	r.mu.Unlock()
+}
+
+func (r *requestState) addChunk(delta string) {
+	r.mu.Lock()
+	r.accText += delta
+	r.mu.Unlock()
+}
+
+func (r *requestState) snapshot() (status, text string) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	return r.statusLine, r.accText
+}
 
 type bot struct {
 	nexus *sdk.Client
@@ -36,12 +66,17 @@ type bot struct {
 	mu       sync.Mutex
 	sessions map[string]sdk.SessionID // channelID → nexus sessionID
 
-	// streamMu serialises SetResponseChunkFn so concurrent requests don't
-	// overwrite each other's streaming callback.
-	streamMu sync.Mutex
+	// callbackMu serialises SetResponseChunkFn / SetRuntimeEventFn so concurrent
+	// channel messages don't overwrite each other's per-request callbacks.
+	callbackMu sync.Mutex
 }
 
 func main() {
+	// Pin runtime root to nexus-cli config dir, same as cmd/cli.
+	if os.Getenv(runtimepath.EnvRuntimeRoot) == "" {
+		os.Setenv(runtimepath.EnvRuntimeRoot, runtimepath.DefaultConfigDir("nexus-cli"))
+	}
+
 	botToken := mustEnv("NEXUS_SLACK_BOT_TOKEN")
 	appToken := mustEnv("NEXUS_SLACK_APP_TOKEN")
 
@@ -65,26 +100,53 @@ func main() {
 		providerCfg.BaseURL = cfg.ProviderBaseURL
 	}
 
+	// Long-term memory backed by SQLite (separate file from sessions).
+	var ltMemory sdk.LongTermMemory
+	memDBPath := memoryDBPath()
+	if ltDB, err := dbpkg.Open(context.Background(), dbpkg.DefaultSQLiteConfig(memDBPath)); err == nil {
+		ltMemory = longtermStore.NewSQLiteStore(ltDB.SQL())
+		log.Printf("[nexus-bot] long-term memory: %s", memDBPath)
+	} else {
+		log.Printf("[nexus-bot] long-term memory unavailable: %v", err)
+	}
+
+	mcpServers := loadMCPServers(workdir())
+	if len(mcpServers) > 0 {
+		log.Printf("[nexus-bot] loaded %d MCP server(s)", len(mcpServers))
+	}
+
+	maxTokens := cfg.MaxTokens
+	if maxTokens == 0 {
+		maxTokens = 8192
+	}
+
 	slackPrompt := `You are Nexus, an AI assistant integrated into Slack via the Nexus Engine runtime.
 
-Key rules:
-- This is a PERSISTENT conversation. Each channel has one continuous session — prior messages are in your context.
-- NEVER repeat a web search you already performed in this conversation. Use existing search results from your context.
-- Be concise. Slack messages have a 3000-character limit — prefer bullet points over long prose.
-- When the user says "based on that" or "from this", they refer to your previous response in this conversation.
-- You can use all Nexus tools: web search, file operations, memory, sub-agents, and connected MCP servers.`
+Rules:
+- PERSISTENT conversation: each channel has one continuous session — prior messages are in your context.
+- NEVER repeat a search you already ran in this conversation. Use existing results from your context.
+- Be concise. Slack has a 3000-character limit — prefer bullet points over long prose.
+- "based on that" / "from this" refers to your previous response in this channel.
+- You have access to all Nexus tools: web search, file ops, memory, sub-agents, MCP servers.
+- Long-term memory is active: facts about users and projects are remembered across sessions.`
 
 	nexusClient, err := sdk.NewClient(&sdk.ClientConfig{
 		APIKey:            apiKey,
 		Model:             model,
+		MaxTokens:         maxTokens,
 		PermissionMode:    sdk.PermissionModeBypass,
 		AutoCompact:       true,
 		PersistSessions:   true,
 		SessionSQLitePath: nexusDBPath(),
 		WorkingDir:        workdir(),
 		ProviderConfig:    providerCfg,
+		MCPServers:        mcpServers,
+		LongTermMemory:    ltMemory,
 		PromptConfig: &sdk.PromptConfig{
 			AppendSystemPrompt: &slackPrompt,
+		},
+		OnSessionTitled: func(id sdk.SessionID, title string) {
+			log.Printf("[nexus-bot] session %s titled: %s", id, title)
 		},
 	})
 	if err != nil {
@@ -107,7 +169,7 @@ Key rules:
 	go handleSignals(cancel)
 	go b.handleEvents(ctx, sm)
 
-	log.Printf("[nexus-bot] ready — model: %s/%s", model.Provider, model.Model)
+	log.Printf("[nexus-bot] ready — model: %s/%s  max_tokens: %d", model.Provider, model.Model, maxTokens)
 	if err := sm.RunContext(ctx); err != nil && err != context.Canceled {
 		log.Fatalf("[nexus-bot] socket mode: %v", err)
 	}
@@ -158,8 +220,6 @@ func (b *bot) dispatch(ctx context.Context, ev slackevents.EventsAPIEvent) {
 		if inner.BotID != "" {
 			return
 		}
-		// Reply in the existing thread when @Nexus is mentioned inside one,
-		// otherwise start a new thread off the mention message.
 		replyTS := inner.ThreadTimeStamp
 		if replyTS == "" {
 			replyTS = inner.TimeStamp
@@ -167,7 +227,6 @@ func (b *bot) dispatch(ctx context.Context, ev slackevents.EventsAPIEvent) {
 		go b.onMessage(ctx, inner.Channel, replyTS, inner.Text)
 
 	case *slackevents.MessageEvent:
-		// DMs only — skip bot messages and subtypes (edits, joins, etc.)
 		if inner.BotID != "" || inner.SubType != "" {
 			return
 		}
@@ -201,39 +260,54 @@ func (b *bot) onMessage(ctx context.Context, channel, replyTS, text string) {
 		return
 	}
 
-	// ── Streaming ──────────────────────────────────────────────────────────────
-	// Accumulate text deltas and push to Slack every streamInterval.
-	// streamMu ensures a single active callback at a time (concurrent channels).
-	b.streamMu.Lock()
-	var (
-		accMu   sync.Mutex
-		accText string
-	)
+	// ── Live callbacks ─────────────────────────────────────────────────────────
+	// callbackMu ensures a single active set of callbacks at a time.
+	b.callbackMu.Lock()
+	state := &requestState{}
+
 	b.nexus.SetResponseChunkFn(func(chunk sdk.ResponseChunk) {
 		if chunk.Delta != "" {
-			accMu.Lock()
-			accText += chunk.Delta
-			accMu.Unlock()
+			state.addChunk(chunk.Delta)
 		}
 	})
-	b.streamMu.Unlock()
 
-	streamDone := make(chan struct{})
+	b.nexus.SetRuntimeEventFn(func(evt sdk.RuntimeEvent) {
+		if evt.ToolProgress != nil {
+			tp := evt.ToolProgress
+			if tp.Stage == sdk.ToolProgressStageRunning {
+				icon := toolIcon(tp.ToolName)
+				msg := tp.Message
+				if msg == "" {
+					msg = tp.ToolName + "..."
+				}
+				state.setStatus(fmt.Sprintf("%s _%s_", icon, msg))
+				log.Printf("[nexus-bot] tool: %s — %s", tp.ToolName, msg)
+			}
+		}
+	})
+	b.callbackMu.Unlock()
+
+	// ── Ticker: update placeholder every streamInterval ────────────────────────
+	done := make(chan struct{})
 	go func() {
 		ticker := time.NewTicker(streamInterval)
 		defer ticker.Stop()
-		var lastLen int
+		var lastDisplay string
 		for {
 			select {
-			case <-streamDone:
+			case <-done:
 				return
 			case <-ticker.C:
-				accMu.Lock()
-				t := accText
-				accMu.Unlock()
-				if len(t) > lastLen {
-					lastLen = len(t)
-					b.updateMsg(ctx, channel, thinkTS, slackTrunc(t, slackMaxLen-1)+"▌")
+				status, text := state.snapshot()
+				var display string
+				if text != "" {
+					display = slackTrunc(text, slackMaxLen-1) + "▌"
+				} else if status != "" {
+					display = ":hourglass_flowing_sand: " + status
+				}
+				if display != "" && display != lastDisplay {
+					lastDisplay = display
+					b.updateMsg(ctx, channel, thinkTS, display)
 				}
 			}
 		}
@@ -242,10 +316,11 @@ func (b *bot) onMessage(ctx context.Context, channel, replyTS, text string) {
 	t0 := time.Now()
 	resp, err := session.SubmitMessage(ctx, query)
 
-	close(streamDone)
-	b.streamMu.Lock()
+	close(done)
+	b.callbackMu.Lock()
 	b.nexus.SetResponseChunkFn(nil)
-	b.streamMu.Unlock()
+	b.nexus.SetRuntimeEventFn(nil)
+	b.callbackMu.Unlock()
 
 	if err != nil {
 		b.updateMsg(ctx, channel, thinkTS, fmt.Sprintf(":x: Agent error: %v", err))
@@ -265,7 +340,6 @@ func (b *bot) onMessage(ctx context.Context, channel, replyTS, text string) {
 		footer += fmt.Sprintf(" · 🔧 _%s_", strings.Join(tools, ", "))
 	}
 
-	// Split long responses into multiple thread messages.
 	chunks := splitForSlack(answer, footer, slackMaxLen)
 	b.updateMsg(ctx, channel, thinkTS, chunks[0])
 	for _, extra := range chunks[1:] {
@@ -300,11 +374,18 @@ func (b *bot) getOrCreateSession(ctx context.Context, channelID string) (*sdk.Se
 		return nil, err
 	}
 
+	// Give each channel its own working directory so file operations
+	// between channels don't interfere with each other.
+	channelDir := channelWorkdir(channelID)
+	if mkErr := os.MkdirAll(channelDir, 0o755); mkErr == nil {
+		s.SetWorkingDirectory(channelDir)
+	}
+
 	b.mu.Lock()
 	b.sessions[channelID] = s.GetID()
 	b.mu.Unlock()
 
-	log.Printf("[nexus-bot] new session %s for channel %s", s.GetID(), channelID)
+	log.Printf("[nexus-bot] new session %s for channel %s (workdir: %s)", s.GetID(), channelID, channelDir)
 	return s, nil
 }
 
@@ -318,18 +399,36 @@ func (b *bot) updateMsg(ctx context.Context, channel, ts, text string) {
 	}
 }
 
+// toolIcon returns a Slack emoji for a tool name.
+func toolIcon(name string) string {
+	switch {
+	case strings.Contains(name, "search"):
+		return "🔍"
+	case strings.Contains(name, "browser"), strings.Contains(name, "web_fetch"):
+		return "🌐"
+	case strings.Contains(name, "file"), strings.Contains(name, "read"), strings.Contains(name, "write"):
+		return "📄"
+	case strings.Contains(name, "memory"):
+		return "🧠"
+	case strings.Contains(name, "linkedin"):
+		return "💼"
+	case strings.Contains(name, "agent"):
+		return "🤖"
+	case strings.Contains(name, "code"), strings.Contains(name, "exec"):
+		return "⚙️"
+	default:
+		return "🔧"
+	}
+}
+
 // extractAnswer pulls only the current-turn assistant text from the session response.
-// resp.Messages contains the full conversation history; we skip everything up to
-// and including the last user message so we never repeat previous assistant turns.
 func extractAnswer(resp *sdk.SessionResponse) string {
-	// Find the index of the last user message.
 	lastUserIdx := -1
 	for i, msg := range resp.Messages {
 		if msg.Role == sdk.RoleUser {
 			lastUserIdx = i
 		}
 	}
-
 	var sb strings.Builder
 	for i, msg := range resp.Messages {
 		if i <= lastUserIdx {
@@ -363,7 +462,6 @@ func extractToolsUsed(resp *sdk.SessionResponse) []string {
 }
 
 // mdToMrkdwn converts standard Markdown to Slack mrkdwn.
-// Slack uses *bold*, _italic_, ~strike~, `code`, ```block```, <url|text>.
 var (
 	reMdBoldItalic = regexp.MustCompile(`\*\*\*(.+?)\*\*\*`)
 	reMdBold       = regexp.MustCompile(`\*\*(.+?)\*\*`)
@@ -384,7 +482,6 @@ func mdToMrkdwn(s string) string {
 }
 
 // splitForSlack splits answer+footer into chunks that fit within maxLen.
-// The footer is appended to the last chunk only.
 func splitForSlack(answer, footer string, maxLen int) []string {
 	if len(answer)+len(footer) <= maxLen {
 		return []string{answer + footer}
@@ -392,8 +489,7 @@ func splitForSlack(answer, footer string, maxLen int) []string {
 	var chunks []string
 	remaining := answer
 	for len(remaining) > 0 {
-		limit := maxLen
-		isLast := len(remaining) <= limit
+		isLast := len(remaining) <= maxLen
 		if isLast {
 			if len(remaining)+len(footer) <= maxLen {
 				chunks = append(chunks, remaining+footer)
@@ -403,9 +499,8 @@ func splitForSlack(answer, footer string, maxLen int) []string {
 			}
 			break
 		}
-		// prefer cutting at a newline within the last 300 chars
-		cut := limit
-		for i := cut; i > limit-300 && i > 0; i-- {
+		cut := maxLen
+		for i := cut; i > maxLen-300 && i > 0; i-- {
 			if remaining[i] == '\n' {
 				cut = i + 1
 				break
@@ -417,7 +512,7 @@ func splitForSlack(answer, footer string, maxLen int) []string {
 	return chunks
 }
 
-// slackTrunc truncates s to max runes, cutting at a word boundary when possible.
+// slackTrunc truncates s to max bytes, cutting at a word boundary when possible.
 func slackTrunc(s string, max int) string {
 	if len(s) <= max {
 		return s
@@ -460,12 +555,53 @@ func resolveModel(cfg engineconfig.Config) sdk.ModelIdentifier {
 	return model
 }
 
+// loadMCPServers reads MCP configs and converts them to sdk.MCPServerConfig.
+func loadMCPServers(cwd string) []sdk.MCPServerConfig {
+	result := mcp.LoadMcpConfigs(cwd)
+	var servers []sdk.MCPServerConfig
+	for name, scoped := range result.Servers {
+		cfg := scoped.McpServerConfig
+		srv := sdk.MCPServerConfig{
+			Name:    name,
+			Command: cfg.Command,
+			Args:    cfg.Args,
+			URL:     cfg.URL,
+			Env:     cfg.Env,
+			Headers: cfg.Headers,
+		}
+		switch cfg.Type {
+		case mcp.ServerTypeHTTP:
+			srv.Transport = sdk.MCPTransportHTTP
+		case mcp.ServerTypeSSE:
+			srv.Transport = sdk.MCPTransportSSE
+		case mcp.ServerTypeWebSocket:
+			srv.Transport = sdk.MCPTransportWebSocket
+		default:
+			srv.Transport = sdk.MCPTransportStdio
+		}
+		servers = append(servers, srv)
+	}
+	return servers
+}
+
 func nexusDBPath() string {
 	if p := os.Getenv("NEXUS_SLACK_DB_PATH"); p != "" {
 		return p
 	}
+	return filepath.Join(slackDataDir(), "sessions.db")
+}
+
+func memoryDBPath() string {
+	return filepath.Join(slackDataDir(), "memory.db")
+}
+
+func channelWorkdir(channelID string) string {
+	return filepath.Join(slackDataDir(), "workspaces", channelID)
+}
+
+func slackDataDir() string {
 	home, _ := os.UserHomeDir()
-	return home + "/.config/nexus-slack/sessions.db"
+	return filepath.Join(home, ".config", "nexus-slack")
 }
 
 func workdir() string {
