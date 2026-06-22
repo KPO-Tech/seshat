@@ -106,9 +106,40 @@ seshat is the **headless runtime**: pure Go, no UI, no users, no billing. It is 
 
 The engine is intentionally kept minimal and fast. If you need something from the SDK that is not exposed yet, open an issue and we will prioritize it.
 
-### 📦 Prebuilt binaries (coming soon)
+### 📦 Installation
 
-You will soon be able to download a single binary to use the CLI or embed the SDK in your application without building from source. Watch this repo for releases.
+**End users — one command, fully configured:**
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/EngineerProjects/seshat/main/scripts/install.sh | bash
+```
+
+Downloads the right binary for your platform, adds it to your PATH, installs `uv` and `docling-serve` for document processing, and leaves the runtime directory (`~/.config/seshat-cli/`) ready. The DB and sessions are created on first run.
+
+Options:
+```bash
+NO_PYTHON=1    bash <(curl -fsSL ...)   # skip uv + docling (minimal install)
+VERSION=v0.1.0 bash <(curl -fsSL ...)   # pin a specific version
+```
+
+**Developers — Go toolchain:**
+
+```bash
+# Install the CLI binary
+go install github.com/EngineerProjects/seshat/cmd/cli@latest
+
+# Then set up document processing if needed
+seshat setup
+
+# Or check what is already installed
+seshat setup --check
+```
+
+**SDK — embed in your Go application:**
+
+```bash
+go get github.com/EngineerProjects/seshat@latest
+```
 
 ---
 
@@ -118,20 +149,16 @@ You will soon be able to download a single binary to use the CLI or embed the SD
 
 An AI agent in your terminal. Multi-provider, local-first, skills-aware.
 
-**Build from source**
+**Install**
 
 ```bash
-git clone https://github.com/EngineerProjects/seshat
-cd seshat
-make build           # produces bin/seshat and bin/seshat-grpc
-```
+# End users — full setup in one command:
+curl -fsSL https://raw.githubusercontent.com/EngineerProjects/seshat/main/scripts/install.sh | bash
 
-Add `bin/` to your PATH, or copy `bin/seshat` to `/usr/local/bin`:
-
-```bash
-export PATH="$PATH:$(pwd)/bin"
-# or
-sudo cp bin/seshat /usr/local/bin/seshat
+# Developers — binary only via Go toolchain:
+go install github.com/EngineerProjects/seshat/cmd/cli@latest
+seshat setup          # install uv + docling-serve afterwards if needed
+seshat setup --check  # check what is already configured
 ```
 
 **Configure a provider**
@@ -139,20 +166,20 @@ sudo cp bin/seshat /usr/local/bin/seshat
 ```bash
 seshat config --provider anthropic --api-key sk-ant-...
 seshat config --model anthropic:claude-sonnet-4-20250514
-
 seshat config --print
 ```
 
 **Run**
 
 ```bash
-seshat chat                                        # interactive TUI session
-seshat chat --resume <session-id>                  # resume a specific session
-seshat chat --continue                             # resume the most recent session
-seshat run "list all TODO comments in this codebase"  # one-shot task
-seshat sessions list                               # browse past sessions
-seshat sessions list --status active               # active sessions only
-seshat help                                        # full command reference
+seshat chat                                            # interactive TUI session
+seshat chat --resume <session-id>                      # resume a specific session
+seshat chat --continue                                 # resume the most recent session
+seshat run "list all TODO comments in this codebase"   # one-shot task
+seshat sessions list                                   # browse past sessions
+seshat setup --check                                   # show uv / docling status
+seshat version                                         # print installed version
+seshat help                                            # full command reference
 ```
 
 Sessions are persisted locally in SQLite. Skills are loaded from `.seshat/skills/` in your project. The full tool set is available: file edits, sandboxed bash, web search, browser, MCP servers, sub-agents.
@@ -309,31 +336,27 @@ Full model listings and capabilities: [`docs/providers.md`](./docs/providers.md)
 ## 🚀 Quick Start
 
 ```bash
-# 1. Clone and build
-git clone https://github.com/EngineerProjects/seshat
-cd seshat
-make build                    # produces bin/seshat and bin/seshat-grpc
-export PATH="$PATH:$(pwd)/bin"
+# 1. Install
+curl -fsSL https://raw.githubusercontent.com/EngineerProjects/seshat/main/scripts/install.sh | bash
 
-# 2. Set your API key and model
+# Reload your shell (or open a new terminal) if prompted, then:
+
+# 2. Configure your provider
 seshat config --provider anthropic --api-key sk-ant-...
 seshat config --model anthropic:claude-sonnet-4-20250514
 
 # 3. Start chatting
-seshat chat                          # new session
+seshat chat                          # new session (opens TUI)
 seshat chat --continue               # resume last session
 seshat chat --resume <session-id>    # resume a specific session
-
-# One-shot task in the current directory
-seshat run "list all TODO comments in this codebase"
-
-# Start the gRPC server (port 50051)
-ANTHROPIC_API_KEY=sk-ant-... ./bin/seshat-grpc
+seshat run "list all TODO comments in this codebase"  # one-shot task
 ```
 
 > **No API key?** Use Ollama for free local inference:
 > `seshat config --provider ollama --model ollama:llama3.2`
 > (requires [Ollama](https://ollama.com) running locally)
+
+> **Developers building from source:** see the [Development](#️-development) section below.
 
 ---
 
@@ -396,30 +419,45 @@ Full architecture diagrams (Mermaid): [`docs/vision/diagrams.md`](./docs/vision/
 
 ## 🛠️ Development
 
-### First-time setup
+### First-time setup (build from source)
 
 ```bash
 # Linux / macOS — installs all dependencies, builds, wires git hooks
+git clone https://github.com/EngineerProjects/seshat
+cd seshat
 make setup
 
 # Windows (PowerShell — make is not available by default on Windows)
 powershell -ExecutionPolicy Bypass -File scripts\setup.ps1
 ```
 
-`make setup` handles everything: Go version check, ripgrep, uv, Python venv with docling-serve, and the final build.
+`make setup` handles everything: Go version check, ripgrep, uv, Python venv with docling-serve, and the final build. Binaries land in `bin/`.
 
 ### Daily commands
 
 ```bash
-make build         # build CLI and gRPC binaries to bin/
-make test          # run all tests
-make test-race     # run tests with race detector
-make lint          # golangci-lint
-make fmt           # gofmt
-make hooks         # (re-)install git pre-commit hooks
-make install-deps  # install ripgrep only (included in make setup)
+make build           # build CLI and gRPC binaries to bin/
+make test            # run all tests
+make test-race       # run tests with race detector
+make lint            # golangci-lint
+make fmt             # gofmt
+make hooks           # (re-)install git pre-commit hooks
 make install-python  # install/update the Python venv + docling-serve only
 make start-docling   # start docling-serve manually (auto-started by seshat chat)
+make clean           # remove bin/
+make clean-runtime   # erase runtime data (~/.config/seshat-cli)
+make clean-all       # both
+```
+
+### seshat setup (runtime, not source)
+
+When the CLI is installed via `curl | bash` or `go install`, use the built-in setup command to manage the Python environment:
+
+```bash
+seshat setup                      # install uv + docling-serve
+seshat setup --check              # show status without installing
+seshat setup --python 3.12        # use a specific Python version
+seshat setup --extras gpu         # GPU-accelerated docling
 ```
 
 ### Runtime data directory
