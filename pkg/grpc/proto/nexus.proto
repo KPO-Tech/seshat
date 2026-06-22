@@ -12,7 +12,7 @@ syntax = "proto3";
 package nexus;
 
 // Option pour générer le code Go
-option go_package = "github.com/EngineerProjects/nexus-engine/pkg/grpc/nexus";
+option go_package = "github.com/EngineerProjects/seshat/pkg/grpc/nexus";
 
 // ============================================================================
 // Services

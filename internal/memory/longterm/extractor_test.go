@@ -294,7 +294,7 @@ func TestExtractor_StoresExtractedEntities(t *testing.T) {
 	err := ex.Extract(context.Background(), "user-store", msgs)
 	require.NoError(t, err)
 
-	graph, err := store.SearchNodes(context.Background(), "user-store", "nexus")
+	graph, err := store.SearchNodes(context.Background(), "user-store", "seshat")
 	require.NoError(t, err)
 	require.Len(t, graph.Entities, 1)
 	require.Equal(t, "seshat", graph.Entities[0].Name)

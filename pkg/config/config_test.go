@@ -153,7 +153,7 @@ func TestEffectiveRuntimePathsUseUnifiedRoot(t *testing.T) {
 	if got := EffectiveRuntimeRoot(cfg); got != "/tmp/nexus-runtime" {
 		t.Fatalf("unexpected runtime root: %q", got)
 	}
-	if got := EffectiveDBPath(cfg); got != "/tmp/nexus-runtime/nexus.db" {
+	if got := EffectiveDBPath(cfg); got != "/tmp/nexus-runtime/seshat.db" {
 		t.Fatalf("unexpected db path: %q", got)
 	}
 	if got := EffectiveStorageLocalPath(cfg); got != "/tmp/nexus-runtime/storage" {

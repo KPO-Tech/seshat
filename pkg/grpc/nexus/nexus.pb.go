@@ -2417,7 +2417,7 @@ const file_nexus_proto_rawDesc = "" +
 	"\x04Grep\x12\x16.nexus.FileGrepRequest\x1a\x17.nexus.FileGrepResponse2\x86\x01\n" +
 	"\rSystemService\x12/\n" +
 	"\x04Bash\x12\x12.nexus.BashRequest\x1a\x13.nexus.BashResponse\x12D\n" +
-	"\rGetSystemInfo\x12\x18.nexus.SystemInfoRequest\x1a\x19.nexus.SystemInfoResponseB9Z7github.com/EngineerProjects/seshat/pkg/grpc/nexusb\x06proto3"
+	"\rGetSystemInfo\x12\x18.nexus.SystemInfoRequest\x1a\x19.nexus.SystemInfoResponseB3Z1github.com/EngineerProjects/seshat/pkg/grpc/nexusb\x06proto3"
 
 var (
 	file_nexus_proto_rawDescOnce sync.Once
