@@ -85,7 +85,7 @@ func (s *ChromaStore) Upsert(ctx context.Context, records []Record) error {
 			for k, v := range r.Metadata {
 				m[k] = v
 			}
-			m["_nexus_ns"] = r.Namespace
+			m["_seshat_ns"] = r.Namespace
 			metas[i] = m
 		}
 		body := map[string]any{
@@ -362,7 +362,7 @@ func parseChromaQueryResponse(namespace string, resp map[string]any) ([]SearchRe
 		if i < len(metas) {
 			if m, ok := metas[i].(map[string]any); ok {
 				for k, v := range m {
-					if k == "_nexus_ns" {
+					if k == "_seshat_ns" {
 						continue
 					}
 					r.Metadata[k] = fmt.Sprintf("%v", v)
@@ -401,7 +401,7 @@ func parseChromaGetResponse(namespace string, resp map[string]any) ([]Record, er
 		if i < len(metasRaw) {
 			if m, ok := metasRaw[i].(map[string]any); ok {
 				for k, v := range m {
-					if k == "_nexus_ns" {
+					if k == "_seshat_ns" {
 						continue
 					}
 					r.Metadata[k] = fmt.Sprintf("%v", v)

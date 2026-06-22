@@ -13,8 +13,8 @@ import (
 
 const (
 	qdrantPayloadKeyText     = "_text"
-	qdrantPayloadKeySeshatNS = "_nexus_ns"
-	qdrantPayloadKeySeshatID = "_nexus_id"
+	qdrantPayloadKeySeshatNS = "_seshat_ns"
+	qdrantPayloadKeySeshatID = "_seshat_id"
 )
 
 // QdrantConfig holds connection parameters for the Qdrant gRPC client.
@@ -31,7 +31,7 @@ type QdrantConfig struct {
 // Namespace mapping: each Seshat namespace becomes a Qdrant collection named
 // "{prefix}{namespace}". Seshat string keys are converted to deterministic
 // uint64 point IDs via SHA-256 (first 8 bytes), with the original key stored
-// in the point payload under _nexus_id so it can be round-tripped.
+// in the point payload under _seshat_id so it can be round-tripped.
 //
 // Metadata is stored in the point payload as individual string fields (Qdrant
 // does not support nested JSONB natively in gRPC filters).

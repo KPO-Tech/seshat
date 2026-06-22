@@ -120,7 +120,7 @@ type Config struct {
 	// Hooks — user-defined shell commands that fire on lifecycle events.
 	// Currently supported event: pre_tool_use (fires before every tool call).
 	//
-	// Example .nexus.yaml:
+	// Example .seshat.yaml:
 	//   hooks:
 	//     pre_tool_use:
 	//       - command: "jq '.command' && exit 0"
@@ -200,7 +200,7 @@ func LoadInto(config *Config) error {
 	// CLI sets SESHAT_RUNTIME_ROOT=~/.config/seshat-cli before calling Load().
 	v.SetConfigName("config")
 	v.AddConfigPath(runtimepath.ResolveRoot(""))
-	// Fallback: legacy ~/.nexus.yaml for migration
+
 	v.AddConfigPath("$HOME")
 
 	v.BindEnv("runtime_root", runtimepath.EnvRuntimeRoot)
@@ -273,14 +273,7 @@ func LoadInto(config *Config) error {
 
 	if err := v.ReadInConfig(); err != nil {
 		if _, ok := err.(viper.ConfigFileNotFoundError); ok {
-			// Primary config not found — try legacy ~/.nexus.yaml as a one-time fallback.
-			if home, herr := os.UserHomeDir(); herr == nil {
-				legacy := filepath.Join(home, ".nexus.yaml")
-				if _, serr := os.Stat(legacy); serr == nil {
-					v.SetConfigFile(legacy)
-					_ = v.ReadInConfig() //nolint:errcheck // best-effort legacy read
-				}
-			}
+			// Config not found — no fallback, config is optional.
 		} else {
 			return fmt.Errorf("failed to read config: %w", err)
 		}
@@ -293,7 +286,7 @@ func LoadInto(config *Config) error {
 	config.RuntimeRoot = runtimepath.ResolveRoot(config.RuntimeRoot)
 
 	// Evaluate any $(...) shell substitutions in credential fields.
-	// This allows api_key: "$(vault kv get -field=token secret/api)" in .nexus.yaml.
+	// This allows api_key: "$(vault kv get -field=token secret/api)" in .seshat.yaml.
 	ExpandShellValues(config)
 
 	ApplyRuntimeEnv(*config)

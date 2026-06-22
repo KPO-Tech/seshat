@@ -8,7 +8,8 @@ import (
 	"gorm.io/gorm"
 )
 
-const migrationTableName = "nexus_schema_migrations"
+const migrationTableName = "seshat_schema_migrations"
+const legacyMigrationTableName = "nexus_schema_migrations"
 
 const migrationScopeCoreSQLite = "core_sqlite"
 
@@ -71,8 +72,29 @@ func (db *DB) applyMigrations(ctx context.Context, migrations []schemaMigration)
 }
 
 func (db *DB) ensureMigrationTable(ctx context.Context) error {
+	// One-time rename: if the legacy table exists and the new one does not,
+	// rename it so existing migration records are preserved across the rebrand.
+	if err := db.renameLegacyMigrationTable(ctx); err != nil {
+		return wrapErr("rename legacy migration table", err)
+	}
 	if err := db.gormDB.WithContext(ctx).AutoMigrate(&gSchemaMigration{}); err != nil {
 		return wrapErr("automigrate migration table", err)
+	}
+	return nil
+}
+
+func (db *DB) renameLegacyMigrationTable(ctx context.Context) error {
+	gdb := db.gormDB.WithContext(ctx)
+	// Check whether the new table already exists — nothing to do if it does.
+	if gdb.Migrator().HasTable(migrationTableName) {
+		return nil
+	}
+	// If the legacy table exists, rename it to the new name.
+	if gdb.Migrator().HasTable(legacyMigrationTableName) {
+		return gdb.Exec(fmt.Sprintf(
+			"ALTER TABLE %s RENAME TO %s",
+			legacyMigrationTableName, migrationTableName,
+		)).Error
 	}
 	return nil
 }

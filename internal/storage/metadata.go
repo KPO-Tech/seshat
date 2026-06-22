@@ -12,7 +12,7 @@ import (
 	"time"
 )
 
-const metadataPrefix = "__nexus_meta__"
+const metadataPrefix = "__seshat_meta__"
 
 func metadataKeyForArtifact(key string) string {
 	cleaned := strings.Trim(strings.TrimSpace(key), "/")

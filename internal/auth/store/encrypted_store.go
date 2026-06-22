@@ -23,7 +23,7 @@ import (
 // encryptedEnvelope is the on-disk format for encrypted credentials.
 // Files without this wrapper are treated as plaintext (migration path).
 type encryptedEnvelope struct {
-	Version int    `json:"__nexus_v"`
+	Version int    `json:"__seshat_v"`
 	Data    string `json:"data"` // base64(nonce || ciphertext)
 }
 
@@ -221,7 +221,7 @@ func deriveKey() ([]byte, error) {
 		return raw, nil
 	}
 	seed := machineID()
-	h := sha256.Sum256([]byte("nexus-auth-key-v1\x00" + seed))
+	h := sha256.Sum256([]byte("seshat-auth-key-v1\x00" + seed))
 	return h[:], nil
 }
 
