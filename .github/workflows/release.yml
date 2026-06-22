@@ -9,8 +9,8 @@ permissions:
   contents: write
 
 jobs:
-  release:
-    name: Build and publish binaries
+  build:
+    name: Build ${{ matrix.suffix }}
     runs-on: ubuntu-latest
     strategy:
       matrix:
@@ -73,7 +73,7 @@ jobs:
 
   publish:
     name: Publish GitHub Release
-    needs: release
+    needs: build
     runs-on: ubuntu-latest
     steps:
       - uses: actions/download-artifact@v4
@@ -82,8 +82,13 @@ jobs:
           path: dist/
           merge-multiple: true
 
+      - name: Generate checksums
+        working-directory: dist
+        run: sha256sum * > SHA256SUMS.txt
+
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
-          files: dist/**
+          files: |
+            dist/**
           generate_release_notes: true

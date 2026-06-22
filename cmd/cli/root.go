@@ -25,6 +25,9 @@ func execute(ctx context.Context, args []string, stdin io.Reader, stdout, stderr
 		return runMemory(args[1:], stdout, stderr)
 	case "login":
 		return runLogin(ctx, args[1:], stdout, stderr)
+	case "version", "--version", "-v":
+		fmt.Fprintln(stdout, version)
+		return nil
 	case "help", "-h", "--help":
 		printUsage(stdout)
 		return nil
@@ -63,4 +66,6 @@ func printUsage(out io.Writer) {
 	fmt.Fprintln(out, "  seshat login   [--provider openai|anthropic] [--client-id ID]")
 	fmt.Fprintln(out, "                Authenticate via browser using your ChatGPT subscription.")
 	fmt.Fprintln(out, "                Runs a device-code flow — no API key required.")
+	fmt.Fprintln(out, "")
+	fmt.Fprintln(out, "  seshat version  Print the current version.")
 }

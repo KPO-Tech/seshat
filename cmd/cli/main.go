@@ -9,6 +9,9 @@ import (
 	"github.com/EngineerProjects/seshat/pkg/runtimepath"
 )
 
+// version is set at build time via -ldflags "-X main.version=v1.2.3".
+var version = "dev"
+
 func main() {
 	// Pin the CLI runtime root to the platform config dir (seshat-cli),
 	// isolated from the seshat-product backend (seshat). SESHAT_RUNTIME_ROOT takes precedence.
