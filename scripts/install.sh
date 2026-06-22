@@ -167,63 +167,32 @@ case ":$PATH:" in
         ;;
 esac
 
-# ── Python / docling setup ────────────────────────────────────────────────────
+# ── Python / docling setup via seshat setup ──────────────────────────────────
+# Use the freshly installed binary so the logic lives in one place.
+SESHAT_BIN="$INSTALL_DIR/seshat"
+export PATH="$INSTALL_DIR:$HOME/.local/bin:$HOME/.cargo/bin:$PATH"
+
 if [ "$NO_PYTHON" = "1" ]; then
     warn "Skipping Python setup (NO_PYTHON=1)"
+    warn "Run 'seshat setup' later to enable document processing."
 else
     step "Setting up Python environment (uv + docling-serve)"
-    info "Runtime root: $RUNTIME_ROOT"
 
-    # Install uv if missing
-    if command -v uv &>/dev/null; then
-        success "uv already installed: $(uv --version)"
-    else
-        info "Installing uv..."
-        if command -v curl &>/dev/null; then
-            curl -LsSf https://astral.sh/uv/install.sh | sh
-        else
-            wget -qO- https://astral.sh/uv/install.sh | sh
-        fi
-        export PATH="$HOME/.cargo/bin:$HOME/.local/bin:$PATH"
-        command -v uv &>/dev/null || {
-            error "uv installed but not found on PATH — reopen your terminal and re-run."
-            exit 1
-        }
-        success "uv installed: $(uv --version)"
-    fi
+    SETUP_ARGS=""
+    [ -n "$PYTHON_VERSION" ] && SETUP_ARGS="$SETUP_ARGS --python $PYTHON_VERSION"
+    [ -n "$DOCLING_EXTRAS" ] && SETUP_ARGS="$SETUP_ARGS --extras $DOCLING_EXTRAS"
 
-    # Create venv
-    VENV_DIR="$RUNTIME_ROOT/.venv"
-    mkdir -p "$RUNTIME_ROOT"
-
-    if [ -d "$VENV_DIR" ]; then
-        info "Python venv already exists — skipping creation"
-    else
-        info "Creating Python $PYTHON_VERSION venv at $VENV_DIR ..."
-        uv venv "$VENV_DIR" --python "$PYTHON_VERSION" --seed
-        success "Venv created"
-    fi
-
-    # Install docling-serve
-    PACKAGE="docling-serve"
-    [ -n "$DOCLING_EXTRAS" ] && PACKAGE="docling-serve[$DOCLING_EXTRAS]"
-    info "Installing $PACKAGE ..."
-    uv pip install --python "$VENV_DIR/bin/python" "$PACKAGE"
-
-    [ -x "$VENV_DIR/bin/docling-serve" ] \
-        || { error "docling-serve not found after install — check the output above."; exit 1; }
-    success "docling-serve ready"
+    # shellcheck disable=SC2086
+    SESHAT_RUNTIME_ROOT="$RUNTIME_ROOT" "$SESHAT_BIN" setup $SETUP_ARGS
 fi
 
 # ── Done ──────────────────────────────────────────────────────────────────────
 echo ""
 echo -e "${GREEN}${BOLD}✓ Seshat $VERSION installed successfully${NC}"
 echo ""
-echo "  Binary:       $INSTALL_DIR/seshat"
-echo "  Runtime:      $RUNTIME_ROOT  (DB + sessions created on first run)"
-if [ "$NO_PYTHON" != "1" ]; then
-echo "  Docling venv: $RUNTIME_ROOT/.venv"
-fi
+echo "  Binary:  $INSTALL_DIR/seshat"
+echo "  Runtime: $RUNTIME_ROOT"
+echo "           (DB + sessions are created automatically on first run)"
 echo ""
 
 if [ "${RELOAD_NEEDED:-0}" = "1" ]; then
