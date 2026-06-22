@@ -17,6 +17,17 @@
 
 set -euo pipefail
 
+# Portable SHA256 check: sha256sum (Linux) or shasum -a 256 (macOS)
+_sha256check() {
+    if command -v sha256sum &>/dev/null; then
+        sha256sum --check --status
+    elif command -v shasum &>/dev/null; then
+        shasum -a 256 --check --status
+    else
+        error "No SHA256 tool found (sha256sum or shasum)" ; exit 1
+    fi
+}
+
 REPO="EngineerProjects/seshat"
 BINARY="seshat"
 INSTALL_DIR="${INSTALL_DIR:-$HOME/.local/bin}"
@@ -104,7 +115,7 @@ _dl "$BASE_URL/SHA256SUMS.txt"   "$TMP_DIR/SHA256SUMS.txt"
 # ── Verify checksum ───────────────────────────────────────────────────────────
 step "Verifying checksum"
 
-(cd "$TMP_DIR" && grep "$BIN_ASSET" SHA256SUMS.txt | sha256sum --check --status) \
+(cd "$TMP_DIR" && grep "$BIN_ASSET" SHA256SUMS.txt | _sha256check) \
     || { error "Checksum verification failed — aborting."; exit 1; }
 success "Checksum OK"
 

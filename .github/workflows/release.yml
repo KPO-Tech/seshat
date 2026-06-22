@@ -13,6 +13,7 @@ jobs:
     name: Build ${{ matrix.suffix }}
     runs-on: ubuntu-latest
     strategy:
+      fail-fast: false
       matrix:
         include:
           - goos: linux
@@ -27,10 +28,6 @@ jobs:
           - goos: darwin
             goarch: arm64
             suffix: darwin-arm64
-          - goos: windows
-            goarch: amd64
-            suffix: windows-amd64
-            ext: .exe
 
     steps:
       - uses: actions/checkout@v4
@@ -50,7 +47,7 @@ jobs:
           go build \
             -trimpath \
             -ldflags="-s -w -X main.version=${{ github.ref_name }}" \
-            -o dist/seshat-${{ matrix.suffix }}${{ matrix.ext || '' }} \
+            -o dist/seshat-${{ matrix.suffix }} \
             ./cmd/cli
 
       - name: Build gRPC server
@@ -62,7 +59,7 @@ jobs:
           go build \
             -trimpath \
             -ldflags="-s -w -X main.version=${{ github.ref_name }}" \
-            -o dist/seshat-grpc-${{ matrix.suffix }}${{ matrix.ext || '' }} \
+            -o dist/seshat-grpc-${{ matrix.suffix }} \
             ./cmd/grpc
 
       - name: Upload artifacts
@@ -89,6 +86,5 @@ jobs:
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
-          files: |
-            dist/**
+          files: dist/**
           generate_release_notes: true
