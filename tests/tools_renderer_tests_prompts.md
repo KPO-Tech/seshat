@@ -1,4 +1,4 @@
-# Nexus TUI — Test Prompts
+# Seshat TUI — Test Prompts
 
 Chaque section cible un groupe de tools précis.
 Toujours exécuter les appels dans l'ordre indiqué, sans commenter entre les étapes.
@@ -420,7 +420,7 @@ Exécute les appels dans cet ordre exact :
      header: "Nom"
      options:
        - label: "nexus-core"
-       - label: "nexus-engine-v2"
+       - label: "seshat-v2"
    → attendu : option "Other" ajoutée automatiquement en bas
    → attendu : sélection "Other" → focus éditeur texte → réponse custom dans l'historique Q→A
 
@@ -449,7 +449,7 @@ Exécute les étapes dans cet ordre exact :
        # Plan de test TUI
 
        ## Contexte
-       Ce plan valide le flow submit_plan dans le TUI Nexus.
+       Ce plan valide le flow submit_plan dans le TUI Seshat.
 
        ## Étapes
        1. Vérifier que le dialog de review s'ouvre
@@ -622,7 +622,7 @@ Exécute ces appels dans cet ordre exact, sans commenter entre les étapes.
 
 1. memory_create_entities — crée 3 entités :
      entities:
-       - name: "nexus-engine"
+       - name: "seshat"
          entity_type: "project"
          observations:
            - "TUI terminal écrit en Go avec bubbletea"
@@ -635,7 +635,7 @@ Exécute ces appels dans cet ordre exact, sans commenter entre les étapes.
          entity_type: "library"
    → attendu : header "✓ Create Memory  3 entities"
    → attendu : body = liste 3 lignes :
-       nexus-engine (project) · 2 obs
+       seshat (project) · 2 obs
        Alice (person) · 1 ob
        bubbletea (library)
 
@@ -644,7 +644,7 @@ Exécute ces appels dans cet ordre exact, sans commenter entre les étapes.
        - entity_name: "bubbletea"
          contents:
            - "Framework TUI de Charmbracelet"
-           - "Utilisé par nexus-engine pour le rendu terminal"
+           - "Utilisé par seshat pour le rendu terminal"
        - entity_name: "Alice"
          contents:
            - "Préfère les interfaces en ligne de commande"
@@ -664,7 +664,7 @@ Exécute ces appels dans cet ordre exact, sans commenter entre les étapes.
    → attendu : aucun body
 
 5. memory_open_nodes — ouvre des nœuds par nom exact :
-     names: ["nexus-engine", "Alice"]
+     names: ["seshat", "Alice"]
    → attendu : header "✓ Memory Open  2 nodes" (+ relations si présentes)
    → attendu : body = liste 2 lignes avec nom + type + obs count
 
@@ -737,12 +737,12 @@ Travaille uniquement dans /tmp. Exécute ces appels dans cet ordre exact.
 1. docx — créer un nouveau document :
      document_path: "/tmp/test_nexus.docx"
      action: "create"
-     content: "Nexus Engine — rapport de test TUI"
+     content: "Seshat — rapport de test TUI"
      bold: true
      font_size: 18
      alignment: "center"
      title: "Rapport TUI"
-     author: "Nexus Agent"
+     author: "Seshat Agent"
    → attendu : header "✓ Docx  create  ~/test_nexus.docx"
    → attendu : body = "Message: Document created successfully"
 
@@ -764,7 +764,7 @@ Travaille uniquement dans /tmp. Exécute ces appels dans cet ordre exact.
 4. docx — remplacer le premier paragraphe :
      document_path: "/tmp/test_nexus.docx"
      action: "replace"
-     content: "Nexus Engine v2 — rapport de test TUI (mis à jour)"
+     content: "Seshat v2 — rapport de test TUI (mis à jour)"
    → attendu : header "✓ Docx  replace  ~/test_nexus.docx"
    → attendu : body = "Message: Content replaced successfully"
 

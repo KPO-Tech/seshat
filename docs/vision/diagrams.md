@@ -1,4 +1,4 @@
-# Nexus — Architecture Diagrams
+# Seshat — Architecture Diagrams
 
 Rendered images are in `docs/images/`. Remaining sequence diagrams are in Mermaid (render with [mermaid.live](https://mermaid.live) or VS Code extension).
 
@@ -14,12 +14,12 @@ The full system at target state: engine, product layer, SDK ecosystem, and consu
 
 ---
 
-## 2. nexus-engine internal architecture
+## 2. seshat internal architecture
 
 Package-level dependency map inside the engine.
 
 <p align="center">
-  <img src="../images/architecture_nexus-engine.png" alt="nexus-engine internal architecture" width="900">
+  <img src="../images/architecture_seshat.png" alt="seshat internal architecture" width="900">
 </p>
 
 ---
@@ -122,7 +122,7 @@ One-shot and parallel delegation patterns.
 ```mermaid
 sequenceDiagram
     participant Orch as Orchestrator session
-    participant Engine as nexus-engine
+    participant Engine as seshat
     participant SA1 as Sub-agent 1\n(isolated session)
     participant SA2 as Sub-agent 2\n(isolated session)
     participant SA3 as Sub-agent 3\n(isolated session)

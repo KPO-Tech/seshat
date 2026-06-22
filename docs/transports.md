@@ -1,8 +1,8 @@
 # Transports & Setup
 
-This document covers the gRPC server, proto codegen, and environment configuration for nexus-engine.
+This document covers the gRPC server, proto codegen, and environment configuration for seshat.
 
-> The HTTP REST/SSE API (`cmd/api`) is part of **[nexus-ai](https://github.com/EngineerProjects/nexus-ai)**, not nexus-engine. See nexus-ai documentation for that surface.
+> The HTTP REST/SSE API (`cmd/api`) is part of **[seshat-ai](https://github.com/EngineerProjects/seshat-ai)**, not seshat. See seshat-ai documentation for that surface.
 
 ---
 
@@ -61,13 +61,13 @@ OLLAMA_API_KEY=...            # optional, only needed if Ollama requires auth
 NEXUS_MODEL=anthropic:claude-sonnet-4-6   # default model (provider:model)
 NEXUS_API_KEY=...                          # alternative to provider-specific key
 NEXUS_CWD=/path/to/working/directory      # agent working directory
-NEXUS_DB_PATH=/tmp/nexus/nexus.sqlite     # SQLite database path
+SESHAT_DB_PATH=/tmp/seshat/seshat.sqlite     # SQLite database path
 NEXUS_DEBUG=true                          # verbose logging
 NEXUS_PROVIDER_BASE_URL=...               # custom provider base URL
 WEB_SEARCH_PROVIDER=tavily                # web search provider
 ```
 
-The config loader reads, in order: environment variables → `.env` in the current directory → `~/.nexus.yaml`.
+The config loader reads, in order: environment variables → `.env` in the current directory → `~/.seshat.yaml`.
 
 ---
 
@@ -78,7 +78,7 @@ The config loader reads, in order: environment variables → `.env` in the curre
 ```bash
 go run ./cmd/grpc   # port 50051
 # or
-make build-grpc && ./bin/nexus-engine-grpc
+make build-grpc && ./bin/seshat-grpc
 ```
 
 ### Service: `nexus.NexusService`
@@ -160,9 +160,9 @@ PATH="$HOME/go/bin:$HOME/.local/bin:$PATH" \
 protoc \
   --proto_path=pkg/grpc/proto \
   --go_out=. \
-  --go_opt=module=github.com/EngineerProjects/nexus-engine \
+  --go_opt=module=github.com/EngineerProjects/seshat \
   --go-grpc_out=. \
-  --go-grpc_opt=module=github.com/EngineerProjects/nexus-engine \
+  --go-grpc_opt=module=github.com/EngineerProjects/seshat \
   pkg/grpc/proto/nexus.proto
 ```
 

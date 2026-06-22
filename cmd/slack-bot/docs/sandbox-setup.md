@@ -16,10 +16,10 @@ https://nexus-axh6106.slack.com
 
 ## Step 3 — Make the bot accessible
 
-Make sure `@Nexus` is added to a public channel the judges can see.
+Make sure `@Seshat` is added to a public channel the judges can see.
 Either `#general` or create a dedicated `#nexus-demo` channel.
 
-Judges should be able to type `@Nexus hello` and get a response.
+Judges should be able to type `@Seshat hello` and get a response.
 
 ## Step 4 — Keep the bot running
 

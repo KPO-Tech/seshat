@@ -3,7 +3,7 @@
 ## Installation
 
 ```go
-import "github.com/EngineerProjects/nexus-engine/pkg/sdk"
+import "github.com/EngineerProjects/seshat/pkg/sdk"
 ```
 
 ---
@@ -69,7 +69,7 @@ client, err := sdk.NewClient(&sdk.ClientConfig{
 ```go
 store, err := sdk.NewArtifactStoreFromConfig(sdk.StorageConfig{
     Provider:  sdk.StorageProviderLocal,
-    LocalPath: "/tmp/nexus-artifacts",
+    LocalPath: "/tmp/seshat-artifacts",
 })
 
 client, err := sdk.NewClient(&sdk.ClientConfig{
@@ -332,7 +332,7 @@ if err := client.MemoryInitError(); err != nil {
 
 Three memory tiers are loaded automatically:
 - **Project memory** — scoped to the current working directory
-- **User memory** — user-wide (`~/.nexus/memory/`)
+- **User memory** — user-wide (`~/.seshat/memory/`)
 - **Cross-session** — patterns learned across all sessions
 
 ---
@@ -432,7 +432,7 @@ Tracked: API request counts/latency, tool call counts/latency, permission denial
 ### OpenTelemetry tracing
 
 ```go
-import "github.com/EngineerProjects/nexus-engine/internal/monitoring"
+import "github.com/EngineerProjects/seshat/internal/monitoring"
 
 shutdown, err := monitoring.InitTracer(ctx, "my-service")
 defer shutdown(ctx)

@@ -1,12 +1,12 @@
-# Agent Instructions — Nexus Engine
+# Agent Instructions — Seshat
 
-This file provides guidance for AI agents (Nexus, Claude Code, Codex, or similar) working on this repository. Read it before making any changes.
+This file provides guidance for AI agents (Seshat, Claude Code, Codex, or similar) working on this repository. Read it before making any changes.
 
 ---
 
 ## Project overview
 
-nexus-engine is an open-source Go AI agent runtime. It has no concept of users, organizations, or billing — those live in nexus-product (a separate private repository). The engine exposes three entry points: `cmd/cli` (terminal), `cmd/grpc` (gRPC server), and `pkg/sdk` (Go SDK for embedding).
+seshat is an open-source Go AI agent runtime. It has no concept of users, organizations, or billing — those live in nexus-product (a separate private repository). The engine exposes three entry points: `cmd/cli` (terminal), `cmd/grpc` (gRPC server), and `pkg/sdk` (Go SDK for embedding).
 
 ---
 

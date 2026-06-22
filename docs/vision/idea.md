@@ -1,4 +1,4 @@
-# The Idea Behind Nexus Engine
+# The Idea Behind Seshat
 
 ## The problem
 
@@ -10,7 +10,7 @@ On the other end: **developer frameworks** (LangGraph, OpenAI Agents SDK, Claude
 
 Between the two, something is missing: **a runtime**. A self-contained, deployable binary that turns an LLM into a capable agent — with real tools, real permissions, real sessions — that you can call from anywhere, in any language, through any interface.
 
-That is Nexus Engine.
+That is Seshat.
 
 ---
 
@@ -92,18 +92,18 @@ A capable agent runtime needs to handle five things well:
 
 **5. Observability** — When an agent does something unexpected, you need to understand why. Structured runtime events, turn-level tracing, tool call logs, and token usage metrics are the minimum required to debug and improve agentic behavior.
 
-Nexus Engine is designed around these five requirements. Every architectural decision traces back to making one of them work correctly under real conditions.
+Seshat is designed around these five requirements. Every architectural decision traces back to making one of them work correctly under real conditions.
 
 ---
 
-## What nexus-engine is not
+## What seshat is not
 
-**Not a framework.** You don't build your agent logic inside nexus-engine. You call nexus-engine from your code (SDK), from your service (gRPC), or from your terminal (CLI). The runtime handles execution; your code handles intent.
+**Not a framework.** You don't build your agent logic inside seshat. You call seshat from your code (SDK), from your service (gRPC), or from your terminal (CLI). The runtime handles execution; your code handles intent.
 
-**Not a product.** nexus-engine has no concept of users, organizations, billing, or access control. Those belong in a product layer built on top.
+**Not a product.** seshat has no concept of users, organizations, billing, or access control. Those belong in a product layer built on top.
 
-**Not a Python/TypeScript library.** nexus-engine is a Go runtime exposed via interfaces. Python and TypeScript consumers call it through gRPC, not by importing it.
+**Not a Python/TypeScript library.** seshat is a Go runtime exposed via interfaces. Python and TypeScript consumers call it through gRPC, not by importing it.
 
-**Not a chatbot.** nexus-engine is not optimized for single-turn Q&A. It is optimized for multi-turn agentic sessions where the model uses tools to accomplish a goal.
+**Not a chatbot.** seshat is not optimized for single-turn Q&A. It is optimized for multi-turn agentic sessions where the model uses tools to accomplish a goal.
 
 **Not complete.** The runtime is in active development. Some capabilities (autonomous long-running agents, team coordination) are future work. The current focus is making the single-agent, single-session path robust enough for daily production use.

@@ -10,7 +10,7 @@ labels: bug
 
 ## Environment
 
-- nexus-engine version / commit:
+- seshat version / commit:
 - Go version:
 - OS:
 - Provider used:

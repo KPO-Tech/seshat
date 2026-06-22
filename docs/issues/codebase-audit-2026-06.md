@@ -1,4 +1,4 @@
-# Codebase Audit — Nexus Engine CLI (June 2026)
+# Codebase Audit — Seshat CLI (June 2026)
 
 Audit statique complet de `internal/`, `cmd/`, `pkg/` effectué après la session
 d'optimisation DB + HNSW. Chaque finding est classé **NOW** (à corriger dans le sprint

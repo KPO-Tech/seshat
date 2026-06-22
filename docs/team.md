@@ -1,6 +1,6 @@
 # Multi-Agent Teams
 
-Nexus supports running **teams of persistent agents** that communicate asynchronously through a mailbox system. Each agent has a named identity, a role, and a system prompt — and can send tasks, replies, and broadcasts to other agents without being co-located or running at the same time.
+Seshat supports running **teams of persistent agents** that communicate asynchronously through a mailbox system. Each agent has a named identity, a role, and a system prompt — and can send tasks, replies, and broadcasts to other agents without being co-located or running at the same time.
 
 ---
 
@@ -96,14 +96,14 @@ internal/team  →  internal/mailbox
 
 ```go
 import (
-    "github.com/EngineerProjects/nexus-engine/internal/agent"
-    "github.com/EngineerProjects/nexus-engine/internal/db"
+    "github.com/EngineerProjects/seshat/internal/agent"
+    "github.com/EngineerProjects/seshat/internal/db"
 )
 
-database, _ := db.Open(ctx, db.Config{Driver: db.DriverSQLite, DSN: "nexus.db", AutoMigrate: true})
+database, _ := db.Open(ctx, db.Config{Driver: db.DriverSQLite, DSN: "seshat.db", AutoMigrate: true})
 
 registry := agent.NewProfileRegistry(database)
-registry.Seed(ctx) // inserts built-in profiles (Nexus, Aria, Kai) if absent
+registry.Seed(ctx) // inserts built-in profiles (Seshat, Aria, Kai) if absent
 
 // Create a custom agent
 maria := agent.NewAgentProfile("Maria", "researcher", `
@@ -119,7 +119,7 @@ registry.Register(ctx, maria)
 ### 2. Wire up the mailbox
 
 ```go
-import "github.com/EngineerProjects/nexus-engine/internal/mailbox"
+import "github.com/EngineerProjects/seshat/internal/mailbox"
 
 // agentLister resolves team members for broadcast expansion
 agentLister := func(ctx context.Context, teamID string) ([]string, error) {
@@ -140,7 +140,7 @@ mb := mailbox.New(database, agentLister)
 ### 3. Create a Dispatcher and send messages
 
 ```go
-import "github.com/EngineerProjects/nexus-engine/internal/team"
+import "github.com/EngineerProjects/seshat/internal/team"
 
 dispatcher := team.NewDispatcher(registry, mb)
 
@@ -184,7 +184,7 @@ Three profiles are seeded automatically on first use. Their UUIDs are fixed so t
 
 | UUID suffix | Nickname | Role | Description |
 |---|---|---|---|
-| `...000001` | Nexus | manager | Coordinates the team, delegates, synthesises results |
+| `...000001` | Seshat | manager | Coordinates the team, delegates, synthesises results |
 | `...000002` | Aria | researcher | Web search, document analysis, structured summaries |
 | `...000003` | Kai | engineer | Code implementation, review, debugging |
 

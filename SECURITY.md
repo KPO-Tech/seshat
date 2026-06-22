@@ -35,7 +35,7 @@ Security issues we want to know about:
 - **Credential leakage** — API keys or OAuth tokens exposed in logs, error messages, or persisted sessions in plaintext.
 - **MCP prompt injection** — malicious tool results that cause the agent to exfiltrate data or execute unintended actions.
 - **gRPC / HTTP exposure** — unauthenticated endpoints that allow arbitrary agent execution on a deployed instance.
-- **Session isolation** — ways to read or write another user's session data when nexus-engine is deployed as a shared service.
+- **Session isolation** — ways to read or write another user's session data when seshat is deployed as a shared service.
 
 Out of scope for this repository:
 
@@ -48,12 +48,12 @@ Out of scope for this repository:
 
 ## Security model
 
-nexus-engine is a **local-first** runtime. By default:
+seshat is a **local-first** runtime. By default:
 
 - It runs as the invoking user — no privilege escalation.
 - Bash commands are sandboxed on Linux via **Landlock** (kernel-level filesystem isolation scoped to the working directory).
 - No telemetry is sent anywhere.
-- Credentials are read from environment variables or the local `~/.nexus/auth.json` store — never sent to external services except the configured LLM provider.
+- Credentials are read from environment variables or the local `~/.seshat/auth.json` store — never sent to external services except the configured LLM provider.
 - The gRPC server (`cmd/grpc`) has **no authentication layer** and is intended for local or trusted-network use only. Do not expose it publicly without adding your own auth proxy.
 
 When deploying as a shared service (via nexus-product), additional security controls (user auth, session isolation, encrypted credential storage) are the responsibility of the product layer.

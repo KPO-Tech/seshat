@@ -1,8 +1,8 @@
 <p align="center">
-  <img src="docs/images/nexus.png" alt="Nexus Engine" width="120">
+  <img src="docs/images/nexus.png" alt="Seshat" width="120">
 </p>
 
-<h1 align="center">Nexus Engine</h1>
+<h1 align="center">Seshat</h1>
 
 <p align="center">
   <b>Open-source Go runtime for AI agents</b><br>
@@ -21,7 +21,7 @@
 
 ## 🖥️ Terminal UI
 
-`nexus chat` drops you into a full-featured terminal interface built for long-running agent sessions.
+`seshat chat` drops you into a full-featured terminal interface built for long-running agent sessions.
 
 <table>
   <tr>
@@ -58,21 +58,21 @@
 
 > **Keyboard shortcuts:** `ctrl+p` settings · `ctrl+m` models · `ctrl+s` sessions · `ctrl+,` providers · `ctrl+n` new session · `ctrl+t` tasks · `ctrl+u` copy last response · `ctrl+y` toggle yolo · `ctrl+o` open editor · `ctrl+g` help · `ctrl+c` quit
 
-> **Clipboard note (Linux):** selection copy works best when `wl-clipboard` (Wayland) or `xclip`/`xsel` (X11) is installed. Without a system clipboard backend, Nexus can request terminal clipboard access but cannot guarantee a real system copy.
+> **Clipboard note (Linux):** selection copy works best when `wl-clipboard` (Wayland) or `xclip`/`xsel` (X11) is installed. Without a system clipboard backend, Seshat can request terminal clipboard access but cannot guarantee a real system copy.
 
 > **Compaction note:** transcript compaction is automatic today. A dedicated manual compact action is planned for the TUI once the runtime exposes a real manual-compaction hook.
 
 ---
 
-## 🌐 The Nexus Ecosystem
+## 🌐 The Seshat Ecosystem
 
-nexus-engine is the **headless runtime**: pure Go, no UI, no users, no billing. It is the foundation everything else builds on.
+seshat is the **headless runtime**: pure Go, no UI, no users, no billing. It is the foundation everything else builds on.
 
-### 🖥️ nexus-ai — Desktop & Platform
+### 🖥️ seshat-ai — Desktop & Platform
 
-**[→ nexus-ai](https://github.com/EngineerProjects/nexus-ai)** is the full production platform built on top of this engine. If you want a ready-to-use application rather than a library, that is where you want to go.
+**[→ seshat-ai](https://github.com/EngineerProjects/seshat-ai)** is the full production platform built on top of this engine. If you want a ready-to-use application rather than a library, that is where you want to go.
 
-| | nexus-engine (this repo) | nexus-ai |
+| | seshat (this repo) | seshat-ai |
 |---|---|---|
 | **What it is** | Go runtime + SDK + CLI | Desktop app + REST API platform |
 | **Stack** | Go | Go (API) + TypeScript/React/Electron (desktop) |
@@ -80,7 +80,7 @@ nexus-engine is the **headless runtime**: pure Go, no UI, no users, no billing. 
 | **Who it's for** | Developers embedding agents in their own apps | End users, teams, self-hosters |
 | **Includes** | Engine, tools, providers, gRPC, CLI/TUI | Multi-user auth, workspaces, knowledge base, scheduler, desktop UI |
 
-**What nexus-ai gives you today:**
+**What seshat-ai gives you today:**
 - 🖥️ Native desktop app (Electron + React) with chat, tool views, plans, settings and a visual skills creator
 - 👥 Multi-user backend with organizations, workspaces, per-user API keys, quotas and audit log
 - 📡 REST + SSE HTTP API compatible with the Anthropic `/v1/messages` format
@@ -98,11 +98,11 @@ nexus-engine is the **headless runtime**: pure Go, no UI, no users, no billing. 
 
 | If you want to... | Contribute to... |
 |---|---|
-| Improve execution speed, reduce latency, optimize the agent loop | **nexus-engine** (Go) |
-| Add a new LLM provider or tool | **nexus-engine** (Go) |
-| Expose new capabilities in the SDK or gRPC API | **nexus-engine** (Go) |
-| Improve the desktop UI, add new views, fix UX | **nexus-ai** (TypeScript/React) |
-| Build features like agent teams, automation or scheduling | **nexus-ai** (Go API + React) |
+| Improve execution speed, reduce latency, optimize the agent loop | **seshat** (Go) |
+| Add a new LLM provider or tool | **seshat** (Go) |
+| Expose new capabilities in the SDK or gRPC API | **seshat** (Go) |
+| Improve the desktop UI, add new views, fix UX | **seshat-ai** (TypeScript/React) |
+| Build features like agent teams, automation or scheduling | **seshat-ai** (Go API + React) |
 
 The engine is intentionally kept minimal and fast. If you need something from the SDK that is not exposed yet, open an issue and we will prioritize it.
 
@@ -114,61 +114,61 @@ You will soon be able to download a single binary to use the CLI or embed the SD
 
 ## 🔀 Three Ways to Use It
 
-### 1. 💻 CLI — `nexus`
+### 1. 💻 CLI — `seshat`
 
 An AI agent in your terminal. Multi-provider, local-first, skills-aware.
 
 **Build from source**
 
 ```bash
-git clone https://github.com/EngineerProjects/nexus-engine
-cd nexus-engine
-make build           # produces bin/nexus and bin/nexus-grpc
+git clone https://github.com/EngineerProjects/seshat
+cd seshat
+make build           # produces bin/seshat and bin/seshat-grpc
 ```
 
-Add `bin/` to your PATH, or copy `bin/nexus` to `/usr/local/bin`:
+Add `bin/` to your PATH, or copy `bin/seshat` to `/usr/local/bin`:
 
 ```bash
 export PATH="$PATH:$(pwd)/bin"
 # or
-sudo cp bin/nexus /usr/local/bin/nexus
+sudo cp bin/seshat /usr/local/bin/seshat
 ```
 
 **Configure a provider**
 
 ```bash
-nexus config --provider anthropic --api-key sk-ant-...
-nexus config --model anthropic:claude-sonnet-4-20250514
+seshat config --provider anthropic --api-key sk-ant-...
+seshat config --model anthropic:claude-sonnet-4-20250514
 
-nexus config --print
+seshat config --print
 ```
 
 **Run**
 
 ```bash
-nexus chat                                        # interactive TUI session
-nexus chat --resume <session-id>                  # resume a specific session
-nexus chat --continue                             # resume the most recent session
-nexus run "list all TODO comments in this codebase"  # one-shot task
-nexus sessions list                               # browse past sessions
-nexus sessions list --status active               # active sessions only
-nexus help                                        # full command reference
+seshat chat                                        # interactive TUI session
+seshat chat --resume <session-id>                  # resume a specific session
+seshat chat --continue                             # resume the most recent session
+seshat run "list all TODO comments in this codebase"  # one-shot task
+seshat sessions list                               # browse past sessions
+seshat sessions list --status active               # active sessions only
+seshat help                                        # full command reference
 ```
 
-Sessions are persisted locally in SQLite. Skills are loaded from `.nexus/skills/` in your project. The full tool set is available: file edits, sandboxed bash, web search, browser, MCP servers, sub-agents.
+Sessions are persisted locally in SQLite. Skills are loaded from `.seshat/skills/` in your project. The full tool set is available: file edits, sandboxed bash, web search, browser, MCP servers, sub-agents.
 
 ---
 
 ### 2. 🌐 gRPC Server
 
-Run nexus-engine as a gRPC service and generate clients for any language.
+Run seshat as a gRPC service and generate clients for any language.
 
 ```bash
 # Development
 ANTHROPIC_API_KEY=sk-ant-... go run ./cmd/grpc
 
 # From build
-ANTHROPIC_API_KEY=sk-ant-... ./bin/nexus-grpc
+ANTHROPIC_API_KEY=sk-ant-... ./bin/seshat-grpc
 ```
 
 Server starts on `:50051`. The contract lives in `pkg/grpc/proto/nexus.proto`. Generate a client for Python, TypeScript, Java, Rust, or any gRPC-supported language:
@@ -190,11 +190,11 @@ One runtime. Every language.
 Embed the full runtime in your own Go application.
 
 ```bash
-go get github.com/EngineerProjects/nexus-engine/pkg/sdk
+go get github.com/EngineerProjects/seshat/pkg/sdk
 ```
 
 ```go
-import "github.com/EngineerProjects/nexus-engine/pkg/sdk"
+import "github.com/EngineerProjects/seshat/pkg/sdk"
 
 client, err := sdk.NewClient(&sdk.ClientConfig{
     APIKey: os.Getenv("ANTHROPIC_API_KEY"),
@@ -212,9 +212,9 @@ fmt.Println(resp.Content)
 
 ---
 
-## 📊 How Nexus Engine Compares
+## 📊 How Seshat Compares
 
-| Feature | **nexus-engine** | Claude Agent SDK | OpenAI Agents SDK | LangGraph | CrewAI |
+| Feature | **seshat** | Claude Agent SDK | OpenAI Agents SDK | LangGraph | CrewAI |
 |---|:---:|:---:|:---:|:---:|:---:|
 | Language | **Go** | Python/TS | Python | Python | Python |
 | Single binary (no deps) | ✅ | ❌ | ❌ | ❌ | ❌ |
@@ -252,9 +252,9 @@ fmt.Println(resp.Content)
 ## 🗂️ Repository Structure
 
 ```
-nexus-engine/
+seshat/
 ├── cmd/
-│   ├── cli/              ← nexus CLI entrypoint (TUI + one-shot commands)
+│   ├── cli/              ← seshat CLI entrypoint (TUI + one-shot commands)
 │   └── grpc/             ← gRPC server entrypoint
 ├── pkg/                  ← public API (safe to import from outside)
 │   ├── sdk/              ← Go SDK: Client, sessions, streaming, callbacks
@@ -278,7 +278,7 @@ nexus-engine/
 └── internal/             ← private implementation (do not import directly)
 ```
 
-> nexus-ai and any third-party consumer must import `pkg/*` only, never `internal/*`.
+> seshat-ai and any third-party consumer must import `pkg/*` only, never `internal/*`.
 
 ---
 
@@ -310,29 +310,29 @@ Full model listings and capabilities: [`docs/providers.md`](./docs/providers.md)
 
 ```bash
 # 1. Clone and build
-git clone https://github.com/EngineerProjects/nexus-engine
-cd nexus-engine
-make build                    # produces bin/nexus and bin/nexus-grpc
+git clone https://github.com/EngineerProjects/seshat
+cd seshat
+make build                    # produces bin/seshat and bin/seshat-grpc
 export PATH="$PATH:$(pwd)/bin"
 
 # 2. Set your API key and model
-nexus config --provider anthropic --api-key sk-ant-...
-nexus config --model anthropic:claude-sonnet-4-20250514
+seshat config --provider anthropic --api-key sk-ant-...
+seshat config --model anthropic:claude-sonnet-4-20250514
 
 # 3. Start chatting
-nexus chat                          # new session
-nexus chat --continue               # resume last session
-nexus chat --resume <session-id>    # resume a specific session
+seshat chat                          # new session
+seshat chat --continue               # resume last session
+seshat chat --resume <session-id>    # resume a specific session
 
 # One-shot task in the current directory
-nexus run "list all TODO comments in this codebase"
+seshat run "list all TODO comments in this codebase"
 
 # Start the gRPC server (port 50051)
-ANTHROPIC_API_KEY=sk-ant-... ./bin/nexus-grpc
+ANTHROPIC_API_KEY=sk-ant-... ./bin/seshat-grpc
 ```
 
 > **No API key?** Use Ollama for free local inference:
-> `nexus config --provider ollama --model ollama:llama3.2`
+> `seshat config --provider ollama --model ollama:llama3.2`
 > (requires [Ollama](https://ollama.com) running locally)
 
 ---
@@ -342,13 +342,13 @@ ANTHROPIC_API_KEY=sk-ant-... ./bin/nexus-grpc
 Skills are Markdown files that encode expertise injected into the agent's system prompt at runtime.
 
 ```
-.nexus/skills/
+.seshat/skills/
   go-conventions.md     # "always use context.Context as the first parameter..."
   git-workflow.md       # "never commit to main, always open a PR, squash before merge..."
   security-rules.md     # "never log secrets, validate all external input at boundaries..."
 ```
 
-The official skill collection is [nexus-skills](https://github.com/EngineerProjects/nexus-skills), installable from any URL directly from the CLI.
+The official skill collection is [seshat-skills](https://github.com/EngineerProjects/seshat-skills), installable from any URL directly from the CLI.
 
 ---
 
@@ -371,7 +371,7 @@ client, _ := sdk.NewClient(&sdk.ClientConfig{
 ## 🏗️ Architecture
 
 <p align="center">
-  <img src="docs/images/ideal_vision.png" alt="Nexus Engine Architecture" width="800">
+  <img src="docs/images/ideal_vision.png" alt="Seshat Architecture" width="800">
 </p>
 
 Full architecture diagrams (Mermaid): [`docs/vision/diagrams.md`](./docs/vision/diagrams.md).
@@ -419,32 +419,32 @@ make fmt           # gofmt
 make hooks         # (re-)install git pre-commit hooks
 make install-deps  # install ripgrep only (included in make setup)
 make install-python  # install/update the Python venv + docling-serve only
-make start-docling   # start docling-serve manually (auto-started by nexus chat)
+make start-docling   # start docling-serve manually (auto-started by seshat chat)
 ```
 
 ### Runtime data directory
 
-Nexus stores sessions, config, and the Python venv under a platform-appropriate directory:
+Seshat stores sessions, config, and the Python venv under a platform-appropriate directory:
 
 | OS | Default path |
 |---|---|
-| Linux | `~/.config/nexus-cli/` (respects `$XDG_CONFIG_HOME`) |
-| macOS | `~/.config/nexus-cli/` |
-| Windows | `%APPDATA%\nexus-cli\` |
+| Linux | `~/.config/seshat-cli/` (respects `$XDG_CONFIG_HOME`) |
+| macOS | `~/.config/seshat-cli/` |
+| Windows | `%APPDATA%\seshat-cli\` |
 
-Override with `NEXUS_RUNTIME_ROOT=/your/path nexus chat`.
+Override with `SESHAT_RUNTIME_ROOT=/your/path seshat chat`.
 
 ### Runtime dependencies
 
 > **ripgrep** — the `glob` and `grep` tools require [`ripgrep`](https://github.com/BurntSushi/ripgrep) (`rg`). Included in `make setup`; install separately with `make install-deps`.
 
-> **docling-serve** (optional) — enables the `read_document_url` tool for PDF/DOCX conversion. Included in `make setup` via `uv` (no system Python required). Nexus auto-starts it on launch when installed.
+> **docling-serve** (optional) — enables the `read_document_url` tool for PDF/DOCX conversion. Included in `make setup` via `uv` (no system Python required). Seshat auto-starts it on launch when installed.
 
 ### OS compatibility
 
 > **Linux** — primary development and testing platform. Fully supported.
 >
-> **macOS** — code is written to support macOS and basic testing has been done, but **macOS support is not yet fully validated**. If you hit an issue, please [open a report](https://github.com/EngineerProjects/nexus-engine/issues).
+> **macOS** — code is written to support macOS and basic testing has been done, but **macOS support is not yet fully validated**. If you hit an issue, please [open a report](https://github.com/EngineerProjects/seshat/issues).
 >
 > **Windows** — PowerShell setup script included and paths are handled (`%APPDATA%`), but **Windows support has not been tested yet**. Contributions and test reports welcome.
 

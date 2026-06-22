@@ -112,7 +112,7 @@ Key remaining items:
 
 ## Short summary
 
-The active workstream is about making the Nexus TUI feel like a real execution workspace,
+The active workstream is about making the Seshat TUI feel like a real execution workspace,
 not just a transcript renderer.
 
 The `task_*` system is now persistent, session-scoped, tool-consistent, and visibly integrated.
@@ -283,4 +283,4 @@ These changes are on branch `feat/tui-subagent-inline-streaming`, commit `2cb950
 - Message model: `internal/nexustui/message/content.go` — `Message.Parts []Part` where `Part` can be `TextContent`, `ReasoningContent`, `ToolCall`, `ToolResult`
 - Providers: OpenAI-compatible streaming via SSE; tool calls and text deltas arrive as separate events and are assembled into `Parts` by the provider client
 - Branch: `feat/tui-subagent-inline-streaming`
-- Go module: `github.com/EngineerProjects/nexus-engine`
+- Go module: `github.com/EngineerProjects/seshat`

@@ -1,6 +1,6 @@
 # Quickstart
 
-Get Nexus Engine running in under 5 minutes.
+Get Seshat running in under 5 minutes.
 
 ---
 
@@ -15,8 +15,8 @@ Get Nexus Engine running in under 5 minutes.
 ## 1. Clone and build
 
 ```bash
-git clone https://github.com/EngineerProjects/nexus-engine
-cd nexus-engine
+git clone https://github.com/EngineerProjects/seshat
+cd seshat
 make build
 ```
 
@@ -24,8 +24,8 @@ This produces two binaries in `bin/`:
 
 | Binary | Purpose |
 |---|---|
-| `bin/nexus` | Interactive CLI — chat, run tools, manage sessions |
-| `bin/nexus-grpc` | gRPC server — embed in larger systems |
+| `bin/seshat` | Interactive CLI — chat, run tools, manage sessions |
+| `bin/seshat-grpc` | gRPC server — embed in larger systems |
 
 ---
 
@@ -77,13 +77,13 @@ These tools are registered automatically but only activate when the matching key
 
 ```bash
 # Start an interactive session
-./bin/nexus chat
+./bin/seshat chat
 
 # Run a one-shot prompt (headless)
-./bin/nexus run "Summarise the last 10 commits in this repo"
+./bin/seshat run "Summarise the last 10 commits in this repo"
 
 # Start the gRPC server
-./bin/nexus-grpc --port 50051
+./bin/seshat-grpc --port 50051
 ```
 
 ---
@@ -91,7 +91,7 @@ These tools are registered automatically but only activate when the matching key
 ## 6. Run as a library (SDK)
 
 ```go
-import "github.com/EngineerProjects/nexus-engine/pkg/sdk"
+import "github.com/EngineerProjects/seshat/pkg/sdk"
 
 client, err := sdk.NewClient(sdk.DefaultClientConfig())
 if err != nil { ... }
@@ -126,6 +126,6 @@ export JUPYTER_TOKEN=<token from jupyter output>
 
 - [`docs/tools.md`](./docs/tools.md) — full built-in tool reference
 - [`docs/providers.md`](./docs/providers.md) — all supported models and env vars
-- [`docs/sdk.md`](./docs/sdk.md) — embedding Nexus Engine in your application
+- [`docs/sdk.md`](./docs/sdk.md) — embedding Seshat in your application
 - [`CONTRIBUTING.md`](./CONTRIBUTING.md) — how to add tools, providers, and submit PRs
 - [`docs/architecture.md`](./docs/architecture.md) — internal package map

@@ -1,4 +1,4 @@
-# Contributing to Nexus Engine
+# Contributing to Seshat
 
 Thank you for your interest in contributing. This guide covers everything you need to get started.
 
@@ -47,8 +47,8 @@ feature branches on top of a diverged `dev`.
 ### Clone and build
 
 ```bash
-git clone https://github.com/EngineerProjects/nexus-engine
-cd nexus-engine
+git clone https://github.com/EngineerProjects/seshat
+cd seshat
 
 # Install git pre-commit hooks (run once)
 make hooks
@@ -204,7 +204,7 @@ Additional review checklist:
 
 ## What we will not merge
 
-- Features that move `internal/backend` concerns into nexus-engine (auth, users, orgs, billing).
+- Features that move `internal/backend` concerns into seshat (auth, users, orgs, billing).
 - Provider-specific logic that bypasses the adapter interface.
 - External HTTP calls in the main execution path without explicit user configuration.
 - Changes that disable or weaken the permission system by default.

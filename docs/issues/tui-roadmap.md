@@ -1,6 +1,6 @@
 # TUI Roadmap
 
-This note tracks the current UX progress of the Nexus CLI TUI and the next interaction work.
+This note tracks the current UX progress of the Seshat CLI TUI and the next interaction work.
 
 ## Completed
 
@@ -41,7 +41,7 @@ This note tracks the current UX progress of the Nexus CLI TUI and the next inter
 - Status: done
 
 ### 7. Config/credentials isolation (CLI vs backend)
-- CLI sets `NEXUS_RUNTIME_ROOT` → `~/.config/nexus-cli`; backend stays on `~/.config/nexus`.
+- CLI sets `NEXUS_RUNTIME_ROOT` → `~/.config/seshat-cli`; backend stays on `~/.config/seshat`.
 - `LoadInto()` uses `runtimepath.ResolveRoot("")` instead of a hardcoded path.
 - `ParseModelIdentifier("")` returns an empty `ModelIdentifier{}` instead of the Anthropic SDK default.
 - No provider configured at startup → welcome screen shows `ctrl+p` hint instead of auto-opening settings.
@@ -169,9 +169,9 @@ Status: planned
 
 **Plan file location** (finalized):
 ```
-{working_dir}/.nexus/plans/{short_session_id}/{workspace_slug}_{YYYYMMDD-HHMMSS}.md
+{working_dir}/.seshat/plans/{short_session_id}/{workspace_slug}_{YYYYMMDD-HHMMSS}.md
 ```
-- `.nexus/plans/` → hidden project-scoped folder, unambiguous TUI detection pattern.
+- `.seshat/plans/` → hidden project-scoped folder, unambiguous TUI detection pattern.
 - `{short_session_id}/` subfolder → groups all revisions of a session together.
 - `{workspace_slug}_{YYYYMMDD-HHMMSS}.md` → each review revision gets a new timestamped file.
 - Multiple revisions per session are supported (Review → Claude rewrites → new file → overlay again).
@@ -181,7 +181,7 @@ Status: planned
 - Latest plan file = most recent `.md` in the session subfolder (sorted by filename/mtime).
 - On session resume: if `plan_status` is `pending` or `reviewing`, re-show the overlay.
 
-**Trigger**: A `write` tool call completes AND the written path matches `**/.nexus/plans/**/*.md`.
+**Trigger**: A `write` tool call completes AND the written path matches `**/.seshat/plans/**/*.md`.
   - No plan-mode-active check needed — the path pattern is unambiguous.
 
 **Flow**:
@@ -235,5 +235,5 @@ Status: planned (low effort)
 ## Reference
 
 - Crush (`/home/amiche/Projects/AI/ai/nexus-product/helps/crush`) remains the primary reference for tool row style, thinking blocks, and animation patterns.
-- Nexus intentionally diverges from Crush on markdown heading presentation and chat chrome.
+- Seshat intentionally diverges from Crush on markdown heading presentation and chat chrome.
 - `AGENTS.md` stays focused on engineering rules; roadmap items belong here.

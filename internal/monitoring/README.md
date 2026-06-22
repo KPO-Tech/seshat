@@ -1,6 +1,6 @@
-# Monitoring System for Nexus Engine
+# Monitoring System for Seshat
 
-A comprehensive monitoring and observability system for Nexus Engine providing metrics, logging, and instrumentation.
+A comprehensive monitoring and observability system for Seshat providing metrics, logging, and instrumentation.
 
 ## Components
 
@@ -195,7 +195,7 @@ go tool cover -html=coverage.html
 ### 1. Basic Setup
 
 ```go
-import "github.com/EngineerProjects/Nexus_ai/apps/nexus-engine/internal/monitoring"
+import "github.com/EngineerProjects/Nexus_ai/apps/seshat/internal/monitoring"
 
 func main() {
     // Create logger
@@ -305,7 +305,7 @@ labels := map[string]string{
 // Bad - too generic
 labels := map[string]string{
     "env": "production",
-    "app": "nexus-engine",
+    "app": "seshat",
 }
 ```
 
@@ -396,7 +396,7 @@ internal/monitoring/
 
 ## License
 
-This monitoring system is part of Nexus Engine and follows the same license terms.
+This monitoring system is part of Seshat and follows the same license terms.
 
 ## Contributing
 

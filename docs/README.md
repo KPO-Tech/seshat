@@ -1,6 +1,6 @@
-# Nexus Engine — Documentation
+# Seshat — Documentation
 
-Technical documentation for the nexus-engine runtime. For project overview and quick start, see the [root README](../README.md).
+Technical documentation for the seshat runtime. For project overview and quick start, see the [root README](../README.md).
 
 ## Contents
 
@@ -19,7 +19,7 @@ Technical documentation for the nexus-engine runtime. For project overview and q
 
 ```
 cmd/
-  cli/       Interactive terminal agent (nexus binary)
+  cli/       Interactive terminal agent (seshat binary)
   grpc/      gRPC server (port 50051)
 
 pkg/
@@ -27,7 +27,7 @@ pkg/
   grpc/      gRPC proto bindings (generated stubs + .proto)
   mcp/       MCP protocol wrapper
   skills/    Skills loading and resolution
-  config/    Config loader (env, .env, .nexus.yaml)
+  config/    Config loader (env, .env, .seshat.yaml)
 
 internal/
   engine/      Session lifecycle, main query loop

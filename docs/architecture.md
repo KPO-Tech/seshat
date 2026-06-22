@@ -1,4 +1,4 @@
-# Nexus Engine — Architecture
+# Seshat — Architecture
 
 ## Table of Contents
 
@@ -17,9 +17,9 @@
 
 ## 1. Overview
 
-Nexus Engine is a **headless AI coding runtime**. It connects an LLM provider to a set of tools (file system, bash, web, LSP, etc.) and orchestrates multi-turn conversations where the model can invoke tools, observe results, and continue reasoning.
+Seshat is a **headless AI coding runtime**. It connects an LLM provider to a set of tools (file system, bash, web, LSP, etc.) and orchestrates multi-turn conversations where the model can invoke tools, observe results, and continue reasoning.
 
-The engine exposes two built-in entry points. A third (HTTP REST + SSE) is provided by [nexus-ai](https://github.com/EngineerProjects/nexus-ai) and built on top of the Go SDK.
+The engine exposes two built-in entry points. A third (HTTP REST + SSE) is provided by [seshat-ai](https://github.com/EngineerProjects/seshat-ai) and built on top of the Go SDK.
 
 ```
               ┌─────────────┐                           ┌──────────────┐
@@ -69,9 +69,9 @@ The system is organized in four layers:
 
 ```
             ╔══════════════════════════════════════════════════════════════════╗
-            ║  ENTRY POINTS (nexus-engine)                                     ║
+            ║  ENTRY POINTS (seshat)                                     ║
             ║  cmd/cli (terminal) · cmd/grpc (gRPC :50051)                     ║
-            ║  + cmd/api (HTTP+SSE) lives in nexus-ai, uses pkg/sdk            ║
+            ║  + cmd/api (HTTP+SSE) lives in seshat-ai, uses pkg/sdk            ║
             ╚══════════════════════════╤═══════════════════════════════════════╝
                                       │ uses
             ╔══════════════════════════▼═══════════════════════════════════════╗
@@ -251,7 +251,7 @@ The engine reads instruction files from the working directory in priority order:
 ```
 1. NEXUS.md
 2. AGENTS.md
-3. .nexus/instructions.md
+3. .seshat/instructions.md
 ```
 
 Content is capped at 32 KB with line-boundary truncation.
@@ -522,8 +522,8 @@ State is saved after each turn to the configured backend:
 
 | Backend | Path | Notes |
 |---|---|---|
-| SQLite | `~/.nexus/sessions.db` | Default; supports `session_metadata`, `session_transcript_entries`, `session_checkpoints` |
-| Filesystem | `.nexus/sessions/` | JSON files per session |
+| SQLite | `~/.seshat/sessions.db` | Default; supports `session_metadata`, `session_transcript_entries`, `session_checkpoints` |
+| Filesystem | `.seshat/sessions/` | JSON files per session |
 | Memory | — | Testing only |
 
 ### Compaction

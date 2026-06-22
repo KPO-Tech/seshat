@@ -75,7 +75,7 @@ When the engine starts a session it looks for an instruction file in the working
 ```
 1. NEXUS.md
 2. AGENTS.md
-3. .nexus/instructions.md
+3. .seshat/instructions.md
 ```
 
 The first non-empty file wins. Content is truncated at 32 KB at the last newline. The content is injected into `{{project_instructions_block}}` at priority 775 (between runtime_guidance and stage_overlay).

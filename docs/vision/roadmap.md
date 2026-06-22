@@ -1,4 +1,4 @@
-# Nexus Engine — Roadmap
+# Seshat — Roadmap
 
 ## Guiding rule
 
@@ -130,11 +130,11 @@ Earliest realistic start: Q4 2026.
 
 ### Level 1
 
-A developer runs `nexus run "write tests for the auth module"` and gets a pull request — correct tests, in their coding style, within their project's conventions — without manual intervention. They review the result like a colleague's PR, not a code generator's output.
+A developer runs `seshat run "write tests for the auth module"` and gets a pull request — correct tests, in their coding style, within their project's conventions — without manual intervention. They review the result like a colleague's PR, not a code generator's output.
 
 ### Level 2
 
-A developer runs `nexus run "research these 5 competitors and write a comparison report"`. The agent spawns five sub-agents in parallel, one per competitor, collects their findings, and writes the report. Total time: 4 minutes instead of 2 hours. The orchestrator's reasoning is visible in the session trace.
+A developer runs `seshat run "research these 5 competitors and write a comparison report"`. The agent spawns five sub-agents in parallel, one per competitor, collects their findings, and writes the report. Total time: 4 minutes instead of 2 hours. The orchestrator's reasoning is visible in the session trace.
 
 ### Level 3
 

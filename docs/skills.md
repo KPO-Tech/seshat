@@ -1,12 +1,12 @@
 # Writing Skills
 
-Skills are reusable Markdown files that inject structured instructions into an agent session. They are Nexus's primary extension mechanism for teams: a skill defines a task template, its tool access, lifecycle hooks, and optional shell setup — all in one file.
+Skills are reusable Markdown files that inject structured instructions into an agent session. They are Seshat's primary extension mechanism for teams: a skill defines a task template, its tool access, lifecycle hooks, and optional shell setup — all in one file.
 
 ---
 
 ## Quick start
 
-Create a file anywhere under `.claude/skills/` in your project (or `~/.nexus/skills/user/` for personal skills):
+Create a file anywhere under `.claude/skills/` in your project (or `~/.seshat/skills/user/` for personal skills):
 
 ```markdown
 ---
@@ -208,9 +208,9 @@ Skills are loaded from multiple directories with clear precedence:
 | Directory | Source | Who manages it |
 |---|---|---|
 | `{project}/.claude/skills/` | Project | Team (committed to repo) |
-| `~/.nexus/skills/user/` | Personal | Individual developer |
-| `~/.nexus/skills/managed/` | Admin | Platform operators |
-| `~/.nexus/bundled-skills/` | Bundled | Nexus built-ins |
+| `~/.seshat/skills/user/` | Personal | Individual developer |
+| `~/.seshat/skills/managed/` | Admin | Platform operators |
+| `~/.seshat/bundled-skills/` | Bundled | Seshat built-ins |
 
 Project skills override personal skills with the same name.
 

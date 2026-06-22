@@ -6,11 +6,11 @@ Reference for tool developers who need to persist files produced during agent ex
 
 ## Directory layout
 
-All data lives under `~/.config/nexus-cli/` (or `$NEXUS_RUNTIME_ROOT`).
+All data lives under `~/.config/seshat-cli/` (or `$NEXUS_RUNTIME_ROOT`).
 
 ```
-~/.config/nexus-cli/
-├── nexus.db                  ← SQLite: sessions, transcripts, credentials
+~/.config/seshat-cli/
+├── seshat.db                  ← SQLite: sessions, transcripts, credentials
 ├── secret.key                ← AES-256 encryption key (0600)
 ├── logs/
 │   └── app.log
@@ -158,7 +158,7 @@ For S3 storage, `client.DeleteSession` additionally calls `store.List("sessions/
 Access paths from application code via `cmd/cli/appdir`:
 
 ```go
-appdir.Root()                          // ~/.config/nexus-cli/
+appdir.Root()                          // ~/.config/seshat-cli/
 appdir.SessionDir(id)                  // sessions/{id}/
 appdir.SessionScreenshotsDir(id)       // sessions/{id}/screenshots/
 appdir.SessionPlansDir(id)             // sessions/{id}/plans/

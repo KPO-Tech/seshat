@@ -1,22 +1,22 @@
-# Nexus CLI — Database Schema & Configuration Reference
+# Seshat CLI — Database Schema & Configuration Reference
 
-> Scope: CLI only (`~/.config/nexus-cli/`). The backend server uses a separate
+> Scope: CLI only (`~/.config/seshat-cli/`). The backend server uses a separate
 > schema managed in the private product repository.
 
 ---
 
 ## 1. Runtime Root & File Layout
 
-The CLI sets `NEXUS_RUNTIME_ROOT=~/.config/nexus-cli` before calling
+The CLI sets `SESHAT_RUNTIME_ROOT=~/.config/seshat-cli` before calling
 `pkg/config.Load()`. Everything is derived from that root.
 
 ```
-~/.config/nexus-cli/               ← NEXUS_RUNTIME_ROOT (CLI)
+~/.config/seshat-cli/               ← SESHAT_RUNTIME_ROOT (CLI)
 ├── config.yaml                    ← optional YAML config file
 ├── data/
-│   └── nexus.db                   ← single SQLite file (all persistence)
-│   └── nexus.db-shm               ← WAL shared-memory file (auto-managed)
-│   └── nexus.db-wal               ← WAL journal (auto-managed)
+│   └── seshat.db                   ← single SQLite file (all persistence)
+│   └── seshat.db-shm               ← WAL shared-memory file (auto-managed)
+│   └── seshat.db-wal               ← WAL journal (auto-managed)
 ├── skills/                        ← cloned skill repositories
 ├── cache/
 ├── logs/
@@ -25,7 +25,7 @@ The CLI sets `NEXUS_RUNTIME_ROOT=~/.config/nexus-cli` before calling
     ├── tasks/
     └── bash-tasks/
 
-~/.config/nexus/                   ← DEFAULT runtime root (server / general)
+~/.config/seshat/                   ← DEFAULT runtime root (server / general)
 └── secret.key                     ← 32-byte AES-256 encryption key (0600)
                                       shared between CLI and server on the
                                       same machine — intentional design
@@ -35,8 +35,8 @@ The CLI sets `NEXUS_RUNTIME_ROOT=~/.config/nexus-cli` before calling
 
 | Function | Returns |
 |---|---|
-| `ResolveRoot(explicit)` | Resolves root: explicit → `NEXUS_RUNTIME_ROOT` → `~/.config/nexus` → `$TMP/nexus` |
-| `BackendDBPath(root)` | `<root>/data/nexus.db` |
+| `ResolveRoot(explicit)` | Resolves root: explicit → `SESHAT_RUNTIME_ROOT` → `~/.config/seshat` → `$TMP/seshat` |
+| `BackendDBPath(root)` | `<root>/data/seshat.db` |
 | `DataDir(root)` | `<root>/data` |
 | `SkillsDir(root)` | `<root>/skills` |
 | `PlansDir(root)` | `<root>/plans` |
@@ -312,7 +312,7 @@ CREATE TABLE credentials (
 );
 ```
 
-**Encryption**: AES-256-GCM. Key file: `~/.config/nexus/secret.key` (32 bytes, mode 0600).
+**Encryption**: AES-256-GCM. Key file: `~/.config/seshat/secret.key` (32 bytes, mode 0600).
 
 **Credential keys used by the CLI**:
 
@@ -542,12 +542,12 @@ rolled back and startup aborts. Migrations are idempotent (all DDL uses
 
 ```
 cmd/cli main()
-  └─ os.Setenv("NEXUS_RUNTIME_ROOT", "~/.config/nexus-cli")
+  └─ os.Setenv("SESHAT_RUNTIME_ROOT", "~/.config/seshat-cli")
        └─ pkg/config.Load()
-            └─ viper reads ~/.config/nexus-cli/config.yaml   (if present)
+            └─ viper reads ~/.config/seshat-cli/config.yaml   (if present)
             └─ viper reads env vars (prefix: NEXUS_)
             └─ config.RuntimeRoot = runtimepath.ResolveRoot("")
-                 → "~/.config/nexus-cli"
+                 → "~/.config/seshat-cli"
             └─ ExpandShellValues(config)    -- resolves $(...) in yaml values
             └─ ApplyRuntimeEnv(config)      -- sets env vars for sub-packages
 
@@ -556,7 +556,7 @@ cmd/cli main()
                  → config.SessionDBPath  if set (NEXUS_SESSION_DB_PATH)
                  → config.DBPath         if set (NEXUS_DB_PATH)
                  → runtimepath.BackendDBPath(config.RuntimeRoot)
-                      → ~/.config/nexus-cli/data/nexus.db
+                      → ~/.config/seshat-cli/data/seshat.db
             └─ db.Open(ctx, db.DefaultSQLiteConfig(path))
                  → applies all pragmas
                  → runs sqliteCoreMigrations()
@@ -564,7 +564,7 @@ cmd/cli main()
 
        └─ loadCredsIntoConfig(config, database)
             -- pulls api_key, model, search keys from credentials table
-            -- decrypts with AES-256-GCM key from ~/.config/nexus/secret.key
+            -- decrypts with AES-256-GCM key from ~/.config/seshat/secret.key
 
        └─ ApplySearchKeys(config)
             -- sets TAVILY_API_KEY, EXA_API_KEY, JINA_API_KEY env vars
@@ -572,7 +572,7 @@ cmd/cli main()
 
 ---
 
-## 8. Config File (`~/.config/nexus-cli/config.yaml`)
+## 8. Config File (`~/.config/seshat-cli/config.yaml`)
 
 Secrets are **never stored** in this file (`stripRuntimeSecrets()` removes them
 before saving). Use the TUI settings screen or `NEXUS_*` env vars instead.
@@ -612,7 +612,7 @@ hooks:
 
 | Field | Env var | Default | Notes |
 |---|---|---|---|
-| `runtime_root` | `NEXUS_RUNTIME_ROOT` | `~/.config/nexus` | CLI overrides to `~/.config/nexus-cli` |
+| `runtime_root` | `SESHAT_RUNTIME_ROOT` | `~/.config/seshat` | CLI overrides to `~/.config/seshat-cli` |
 | `cwd` | `NEXUS_CWD` | `.` | Working directory for file tools |
 | `model` | `NEXUS_MODEL` | `""` | Format: `provider:model` or bare model name |
 | `max_tokens` | — | `4096` | Max output tokens per turn |
@@ -629,7 +629,7 @@ hooks:
 | `debug` | `NEXUS_DEBUG` | `false` | Verbose logging |
 | `web_search_provider` | `WEB_SEARCH_PROVIDER` | `"auto"` | Active search provider |
 | `skill_repos` | `NEXUS_SKILL_REPOS` | `""` | Comma-separated git URLs to clone |
-| `default_skill_repo` | `NEXUS_DEFAULT_SKILL_REPO` | canonical nexus-skills URL | Set to `"none"` to disable |
+| `default_skill_repo` | `SESHAT_DEFAULT_SKILL_REPO` | canonical seshat-skills URL | Set to `"none"` to disable |
 | `hooks` | — | `{}` | Lifecycle hook commands |
 
 ---
@@ -693,7 +693,7 @@ provider_resource     → ANTHROPIC_FOUNDRY_RESOURCE
 **Encryption flow**:
 ```
 loadOrCreateEncryptionKey()
-  1. Read ~/.config/nexus/secret.key (32 bytes)
+  1. Read ~/.config/seshat/secret.key (32 bytes)
   2. If absent, try legacy ~/.nexus_secret (migration)
   3. If absent, generate new key with crypto/rand, write with mode 0600
 
@@ -705,8 +705,8 @@ decryptAESGCM(key, encoded)
   → base64-decode → split nonce | ciphertext → GCM.Open → plaintext
 ```
 
-**Key note**: The secret key lives in `~/.config/nexus/secret.key` even when
-the CLI uses `~/.config/nexus-cli/data/nexus.db`. This is intentional — both
+**Key note**: The secret key lives in `~/.config/seshat/secret.key` even when
+the CLI uses `~/.config/seshat-cli/data/seshat.db`. This is intentional — both
 CLI and server on the same machine share one key so credentials can be
 migrated or shared between the two DB files if needed.
 
@@ -718,7 +718,7 @@ cookie in the CLI flow.
 
 ## 11. Skills System
 
-**Location**: `~/.config/nexus-cli/skills/<repo-name>/`
+**Location**: `~/.config/seshat-cli/skills/<repo-name>/`
 
 Skills are cloned git repositories. Each skill is a YAML file:
 
@@ -736,7 +736,7 @@ content: |
 | Field | Purpose |
 |---|---|
 | `NEXUS_SKILL_REPOS` | Comma-separated git URLs cloned at startup |
-| `NEXUS_DEFAULT_SKILL_REPO` | Official nexus-skills repo (auto-cloned on first boot) |
+| `SESHAT_DEFAULT_SKILL_REPO` | Official seshat-skills repo (auto-cloned on first boot) |
 | `NEXUS_FEATURED_SKILL_REPOS` | Shown as installable catalog in the UI |
 | `NEXUS_SKILL_REPO_HOSTS` | Allowed git hosts for skill installation (default: github.com, gitlab.com, bitbucket.org, codeberg.org) |
 
