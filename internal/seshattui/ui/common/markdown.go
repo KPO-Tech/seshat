@@ -10,7 +10,7 @@ import (
 	"github.com/alecthomas/chroma/v2/formatters"
 )
 
-const formatterName = "nexus"
+const formatterName = "seshat"
 
 func init() {
 	// NOTE: Glamour does not offer us an option to pass the formatter

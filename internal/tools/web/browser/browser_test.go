@@ -321,7 +321,7 @@ func TestTypeToolPassesTextAndClear(t *testing.T) {
 			if revision != "rev-2" {
 				t.Fatalf("unexpected revision: %s", revision)
 			}
-			if text != "hello nexus" {
+			if text != "hello seshat" {
 				t.Fatalf("unexpected text: %s", text)
 			}
 			if !clear {
@@ -335,7 +335,7 @@ func TestTypeToolPassesTextAndClear(t *testing.T) {
 	}
 
 	res, err := NewTypeTool(fake).Call(context.Background(), tool.CallInput{
-		Parsed: map[string]any{"page_id": "page-1", "element_id": "e2", "revision": "rev-2", "text": "hello nexus", "clear": true},
+		Parsed: map[string]any{"page_id": "page-1", "element_id": "e2", "revision": "rev-2", "text": "hello seshat", "clear": true},
 		ToolContext: &tool.ToolUseContext{
 			SessionID: "sess-1",
 		},

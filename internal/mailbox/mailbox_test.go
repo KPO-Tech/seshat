@@ -166,14 +166,14 @@ func TestThread(t *testing.T) {
 	ctx := context.Background()
 	mb := newMailbox(t)
 
-	root := mailbox.NewMessage(mailbox.KindTask, "nexus", "aria", "Research Go generics", "")
+	root := mailbox.NewMessage(mailbox.KindTask, "seshat", "aria", "Research Go generics", "")
 	require.NoError(t, mb.Send(ctx, root))
 
-	reply := mailbox.NewMessage(mailbox.KindReply, "aria", "nexus", "Re: Research Go generics", "Done.")
+	reply := mailbox.NewMessage(mailbox.KindReply, "aria", "seshat", "Re: Research Go generics", "Done.")
 	reply.ReplyTo = root.ID
 	require.NoError(t, mb.Send(ctx, reply))
 
-	unrelated := mailbox.NewMessage(mailbox.KindTask, "nexus", "kai", "Other task", "")
+	unrelated := mailbox.NewMessage(mailbox.KindTask, "seshat", "kai", "Other task", "")
 	require.NoError(t, mb.Send(ctx, unrelated))
 
 	thread, err := mb.Thread(ctx, root.ID)
@@ -210,28 +210,28 @@ func TestDelete_NotFound(t *testing.T) {
 func TestBroadcast(t *testing.T) {
 	ctx := context.Background()
 
-	team := map[string]bool{"aria": true, "kai": true, "nexus": true}
+	team := map[string]bool{"aria": true, "kai": true, "seshat": true}
 	lister := func(_ context.Context, teamID string) ([]string, error) {
 		if teamID == "alpha" {
-			return []string{"aria", "kai", "nexus"}, nil
+			return []string{"aria", "kai", "seshat"}, nil
 		}
 		return nil, nil
 	}
 	mb := mailbox.New(openTestDB(t), lister)
 
-	msg := mailbox.NewMessage(mailbox.KindBroadcast, "nexus", "*", "Stand-up", "Daily stand-up at 09:00.")
+	msg := mailbox.NewMessage(mailbox.KindBroadcast, "seshat", "*", "Stand-up", "Daily stand-up at 09:00.")
 	msg.TeamID = "alpha"
 	require.NoError(t, mb.Send(ctx, msg))
 
-	// nexus is the sender — should NOT receive its own broadcast.
-	delete(team, "nexus")
+	// seshat is the sender — should NOT receive its own broadcast.
+	delete(team, "seshat")
 
 	for agentID := range team {
 		msgs, err := mb.Receive(ctx, agentID)
 		require.NoError(t, err)
 		require.Len(t, msgs, 1, "agent %s should have 1 unread message", agentID)
 		assert.Equal(t, mailbox.KindBroadcast, msgs[0].Kind)
-		assert.Equal(t, "nexus", msgs[0].FromAgent)
+		assert.Equal(t, "seshat", msgs[0].FromAgent)
 		assert.Equal(t, agentID, msgs[0].ToAgent)
 	}
 }
@@ -240,7 +240,7 @@ func TestBroadcast_NoLister(t *testing.T) {
 	ctx := context.Background()
 	mb := mailbox.New(openTestDB(t), nil)
 
-	msg := mailbox.NewMessage(mailbox.KindBroadcast, "nexus", "*", "s", "b")
+	msg := mailbox.NewMessage(mailbox.KindBroadcast, "seshat", "*", "s", "b")
 	msg.TeamID = "alpha"
 	err := mb.Send(ctx, msg)
 	assert.Error(t, err)
@@ -251,7 +251,7 @@ func TestBroadcast_RequiresTeamID(t *testing.T) {
 	lister := func(_ context.Context, _ string) ([]string, error) { return nil, nil }
 	mb := mailbox.New(openTestDB(t), lister)
 
-	msg := mailbox.NewMessage(mailbox.KindBroadcast, "nexus", "*", "s", "b")
+	msg := mailbox.NewMessage(mailbox.KindBroadcast, "seshat", "*", "s", "b")
 	// TeamID intentionally empty
 	err := mb.Send(ctx, msg)
 	assert.Error(t, err)
@@ -263,8 +263,8 @@ func TestInbox_Isolation(t *testing.T) {
 	ctx := context.Background()
 	mb := newMailbox(t)
 
-	require.NoError(t, mb.Send(ctx, mailbox.NewMessage(mailbox.KindTask, "nexus", "aria", "for aria", "")))
-	require.NoError(t, mb.Send(ctx, mailbox.NewMessage(mailbox.KindTask, "nexus", "kai", "for kai", "")))
+	require.NoError(t, mb.Send(ctx, mailbox.NewMessage(mailbox.KindTask, "seshat", "aria", "for aria", "")))
+	require.NoError(t, mb.Send(ctx, mailbox.NewMessage(mailbox.KindTask, "seshat", "kai", "for kai", "")))
 
 	ariaMsgs, err := mb.Receive(ctx, "aria")
 	require.NoError(t, err)

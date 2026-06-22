@@ -199,18 +199,18 @@ func TestSearchNodesTool_FindsEntityByName(t *testing.T) {
 	ctx := ctxWithUser("user-3")
 	callTool(t, memtool.NewCreateEntitiesTool(store), ctx, map[string]any{
 		"entities": []any{
-			map[string]any{"name": "nexus", "entity_type": "project"},
+			map[string]any{"name": "seshat", "entity_type": "project"},
 			map[string]any{"name": "other", "entity_type": "misc"},
 		},
 	})
 
-	result := callTool(t, memtool.NewSearchNodesTool(store), ctx, map[string]any{"query": "nexus"})
+	result := callTool(t, memtool.NewSearchNodesTool(store), ctx, map[string]any{"query": "seshat"})
 	require.False(t, result.IsError())
 
 	var graph longterm.Graph
 	require.NoError(t, json.Unmarshal([]byte(result.Content), &graph))
 	require.Len(t, graph.Entities, 1)
-	require.Equal(t, "nexus", graph.Entities[0].Name)
+	require.Equal(t, "seshat", graph.Entities[0].Name)
 }
 
 func TestOpenNodesTool_ExactLookup(t *testing.T) {

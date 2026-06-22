@@ -372,7 +372,7 @@ func createSession(ctx context.Context, name string, m config.MCPConfig, resolve
 
 	client := mcp.NewClient(
 		&mcp.Implementation{
-			Name:    "nexus",
+			Name:    "seshat",
 			Version: version.Version,
 			Title:   "Seshat",
 		},

@@ -44,7 +44,7 @@ func TestHTMLToMarkdownFallsBackToStructuredContent(t *testing.T) {
     <div class="sidebar">Version switcher</div>
     <div class="documentation">
       <h2>Browser Session</h2>
-      <p>Each Nexus session owns an isolated browser context.</p>
+      <p>Each Seshat session owns an isolated browser context.</p>
       <p>Inactive sessions are reaped automatically.</p>
     </div>
   </body>

@@ -177,7 +177,7 @@ func (ch *Channel) buildMessage(msgType, channel string, content any, msgID stri
 		Header: msgHeader{
 			MsgID:    msgID,
 			Session:  ch.session,
-			Username: "nexus",
+			Username: "seshat",
 			Date:     time.Now().UTC().Format(time.RFC3339),
 			MsgType:  msgType,
 			Version:  "5.3",

@@ -10,7 +10,7 @@ import (
 // used to format diff outputs.
 func DiffFormatter(s *styles.Styles) *diffview.DiffView {
 	formatDiff := diffview.New()
-	style := chroma.MustNewStyle("nexus", s.ChromaTheme())
+	style := chroma.MustNewStyle("seshat", s.ChromaTheme())
 	diff := formatDiff.ChromaStyle(style).Style(s.Diff).TabWidth(4)
 	return diff
 }

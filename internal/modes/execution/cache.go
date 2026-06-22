@@ -14,7 +14,7 @@ import (
 // WordList is used to generate human-readable mode file slugs.
 var WordList = []string{
 	"algorithm", "cascade", "discovery", "element", "focus", "galaxy", "horizon", "insight",
-	"journey", "kernel", "launch", "momentum", "nexus", "orbit", "prism", "quest",
+	"journey", "kernel", "launch", "momentum", "seshat", "orbit", "prism", "quest",
 	"resonance", "spectrum", "tempo", "unity", "vertex", "wavelength", "zenith", "apex",
 	"bridge", "chronicle", "dynamics", "eclipse", "fusion", "genesis", "harmonic", "infinity",
 	"junction", "kinesis", "lucid", "meridian", "novel", "origins", "paradigm", "quantum",

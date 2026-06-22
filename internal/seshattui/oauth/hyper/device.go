@@ -49,7 +49,7 @@ func InitiateDeviceAuth(ctx context.Context) (*DeviceAuthResponse, error) {
 	}
 
 	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("User-Agent", "nexus")
+	req.Header.Set("User-Agent", "seshat")
 
 	client := &http.Client{Timeout: 30 * time.Second}
 	resp, err := client.Do(req)
@@ -124,7 +124,7 @@ func pollOnce(ctx context.Context, deviceCode string) (TokenResponse, error) {
 	}
 
 	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("User-Agent", "nexus")
+	req.Header.Set("User-Agent", "seshat")
 
 	client := &http.Client{Timeout: 30 * time.Second}
 	resp, err := client.Do(req)
@@ -167,7 +167,7 @@ func ExchangeToken(ctx context.Context, refreshToken string) (*oauth.Token, erro
 	}
 
 	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("User-Agent", "nexus")
+	req.Header.Set("User-Agent", "seshat")
 
 	client := &http.Client{Timeout: 30 * time.Second}
 	resp, err := client.Do(req)
@@ -224,7 +224,7 @@ func IntrospectToken(ctx context.Context, accessToken string) (*IntrospectTokenR
 	}
 
 	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("User-Agent", "nexus")
+	req.Header.Set("User-Agent", "seshat")
 
 	client := &http.Client{Timeout: 30 * time.Second}
 	resp, err := client.Do(req)

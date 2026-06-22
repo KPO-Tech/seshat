@@ -280,7 +280,7 @@ func (m *WebSearchConfig) verify() tea.Msg {
 	if value == "" {
 		err = fmt.Errorf("%s is required", strings.ToLower(m.fieldLabel))
 	} else {
-		input := searchproviders.SearchInput{Query: "nexus"}
+		input := searchproviders.SearchInput{Query: "seshat"}
 		switch m.providerID {
 		case "tavily":
 			_, err = searchproviders.NewTavilyProviderWithAPIKey(value).Search(input)

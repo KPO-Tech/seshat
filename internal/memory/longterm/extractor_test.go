@@ -286,7 +286,7 @@ func TestExtractor_StoresExtractedEntities(t *testing.T) {
 	ex := longterm.NewExtractor(store, caller, cfg)
 
 	msgs := conversation(
-		"I prefer Go over Python for the nexus-engine backend.",
+		"I prefer Go over Python for the seshat backend.",
 		"Understood. Go is a great choice for performance-critical backends.",
 		"We're also adding FTS5 hybrid search to the RAG pipeline.",
 		"Excellent improvement! Hybrid search combines vector and BM25 scoring.",

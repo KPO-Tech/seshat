@@ -48,7 +48,7 @@ func TestGetProviderChainAutoPrefersConfiguredAPIsBeforeBestEffortProviders(t *t
 }
 
 func TestRunSearchAutoFallsBackFromEmptySearXNGResult(t *testing.T) {
-	output, err := RunSearch(SearchInput{Query: "nexus ai"}, []SearchProvider{
+	output, err := RunSearch(SearchInput{Query: "seshat ai"}, []SearchProvider{
 		stubProvider{
 			name:       "searxng",
 			configured: true,
@@ -78,7 +78,7 @@ func TestRunSearchAutoFallsBackFromEmptySearXNGResult(t *testing.T) {
 }
 
 func TestRunSearchAutoDoesNotFallbackFromEmptyAPISearchResult(t *testing.T) {
-	output, err := RunSearch(SearchInput{Query: "nexus ai"}, []SearchProvider{
+	output, err := RunSearch(SearchInput{Query: "seshat ai"}, []SearchProvider{
 		stubProvider{
 			name:       "tavily",
 			configured: true,
@@ -108,7 +108,7 @@ func TestRunSearchAutoDoesNotFallbackFromEmptyAPISearchResult(t *testing.T) {
 }
 
 func TestRunSearchAutoFallsThroughOnErrors(t *testing.T) {
-	output, err := RunSearch(SearchInput{Query: "nexus ai"}, []SearchProvider{
+	output, err := RunSearch(SearchInput{Query: "seshat ai"}, []SearchProvider{
 		stubProvider{name: "exa", configured: true, err: errors.New("boom")},
 		stubProvider{
 			name:       "jina",

@@ -48,7 +48,7 @@ Requires TWITTER_BEARER_TOKEN.
 
 Parameters:
 - query:    Twitter search query, supports operators (required)
-            Examples: "nexus-engine", "#golang lang:en", "from:user -is:retweet"
+            Examples: "seshat", "#golang lang:en", "from:user -is:retweet"
 - limit:    max tweets to return (1-100, default: 10)
 - sort:     "recency" | "relevancy" (default: recency)`
 )

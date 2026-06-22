@@ -75,7 +75,7 @@ func TestApplyRuntimeEnvFromConfig(t *testing.T) {
 
 func TestSaveAtWritesLoadableConfig(t *testing.T) {
 	dir := t.TempDir()
-	path := filepath.Join(dir, ".nexus.yaml")
+	path := filepath.Join(dir, ".seshat.yaml")
 
 	cfg := Config{
 		Model:             "openai:gpt-5.5",
@@ -173,7 +173,7 @@ func TestEffectiveSessionDBPathPrefersExplicitSessionPath(t *testing.T) {
 
 func TestLoadIntoBindsBackendAndSessionDBEnv(t *testing.T) {
 	t.Setenv("SESHAT_DB_DRIVER", "postgres")
-	t.Setenv("SESHAT_DB_DSN", "postgres://user:pass@localhost:5432/nexus")
+	t.Setenv("SESHAT_DB_DSN", "postgres://user:pass@localhost:5432/seshat")
 	t.Setenv("SESHAT_DB_AUTO_MIGRATE", "false")
 	t.Setenv("SESHAT_SESSION_DB_PATH", "/tmp/runtime.sqlite")
 
@@ -185,7 +185,7 @@ func TestLoadIntoBindsBackendAndSessionDBEnv(t *testing.T) {
 	if cfg.DBDriver != "postgres" {
 		t.Fatalf("unexpected db driver: %q", cfg.DBDriver)
 	}
-	if cfg.DBDSN != "postgres://user:pass@localhost:5432/nexus" {
+	if cfg.DBDSN != "postgres://user:pass@localhost:5432/seshat" {
 		t.Fatalf("unexpected db dsn: %q", cfg.DBDSN)
 	}
 	if cfg.DBAutoMigrate {
