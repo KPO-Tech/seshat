@@ -63,15 +63,15 @@ This means agents that:
 
 We are building the foundation. Seshat today is a solid, production-grade runtime: persistent sessions, 60+ tools, 15 LLM providers, MCP client, RAG, skills, gRPC API, sandboxed execution. It is already useful as a standalone CLI, an embeddable Go SDK, or the engine behind [seshat-ai](https://github.com/EngineerProjects/seshat-ai).
 
-The team primitives — mailboxes, roles, missions, structured inter-agent communication — are the next major layer. We are designing them now, informed by how real organizations function.
+The team primitives (mailboxes, roles, missions, structured inter-agent communication) are the next major layer. We are designing them now, informed by how real organizations function.
 
 ---
 
-### 🤝 An open project — all ideas welcome
+### 🤝 An open project: all ideas welcome
 
 **This is an open research and engineering project as much as a software one.** The ecosystem we want to build is ambitious, and no single perspective has all the answers.
 
-If you have ideas about how agents should collaborate, how human team structures map to agentic systems, what organizational patterns are worth modeling, or what the ecosystem is still missing — your input is genuinely valuable.
+If you have ideas about how agents should collaborate, how human team structures map to agentic systems, what organizational patterns are worth modeling, or what the ecosystem is still missing: your input is genuinely valuable.
 
 👉 Open a [Discussion](https://github.com/EngineerProjects/seshat/discussions), an issue, or a PR. Every suggestion is read.
 
