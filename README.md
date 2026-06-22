@@ -25,17 +25,17 @@
 
 ---
 
-## Why Seshat
+## 🤔 Why Seshat
 
 The agentic AI space is moving fast. Dozens of frameworks have emerged — LangChain, LangGraph, CrewAI, AutoGen, and many others. Almost all of them are Python-first. That works fine for experimentation, but it creates real friction the moment you want to ship something: dependency hell, slow startup, heavy containers, difficult embedding in existing services.
 
-**Go changes the equation.** A single statically linked binary. No runtime, no venv, no dependency manager. Low latency, predictable memory, easy deployment anywhere — from a Raspberry Pi to a Kubernetes cluster. Seshat brings that to agentic AI.
+**⚡ Go changes the equation.** A single statically linked binary. No runtime, no venv, no dependency manager. Low latency, predictable memory, easy deployment anywhere — from a Raspberry Pi to a Kubernetes cluster. Seshat brings that to agentic AI.
 
 But the choice of language is the smaller part of the story.
 
 ---
 
-### The real gap: agents don't know how to work together
+### 🚧 The real gap: agents don't know how to work together
 
 Individual agents have become impressive. They can reason for hours, use tools, write code, search the web, produce deliverables. The frontier has moved. The hard unsolved problem is no longer *what a single agent can do* — it is **how multiple agents can work together in a coherent, observable, and economically useful way**.
 
@@ -43,7 +43,7 @@ Most current systems handle this with pipelines, handoffs, or orchestration grap
 
 ---
 
-### The thesis behind this project
+### 🧠 The thesis behind this project
 
 We believe the right model for agent collaboration is not the workflow graph — it is the **human organization**.
 
@@ -51,19 +51,31 @@ Real teams don't communicate through function calls. They have roles, responsibi
 
 Seshat is being built around this idea: **study how humans work in teams — in companies, research groups, or any collaborative setting — and reproduce those coordination patterns with autonomous agents.**
 
-This means agents that communicate through structured messages, not just function calls. Agents that can send a report, schedule a review, claim a task, escalate a blocker, or update a shared mission memory. Agents that have an identity, a role, and a history — not just a prompt and a response.
+This means agents that:
+- 📬 communicate through structured messages, not just function calls
+- 📋 can send a report, schedule a review, claim a task, or escalate a blocker
+- 🧩 have an identity, a role, and a history — not just a prompt and a response
+- 🗂️ share a mission memory that keeps decisions, constraints, and objectives alive across the team
 
 ---
 
-### Where we are and where we're going
+### 🗺️ Where we are and where we're going
 
 We are building the foundation. Seshat today is a solid, production-grade runtime: persistent sessions, 60+ tools, 15 LLM providers, MCP client, RAG, skills, gRPC API, sandboxed execution. It is already useful as a standalone CLI, an embeddable Go SDK, or the engine behind [seshat-ai](https://github.com/EngineerProjects/seshat-ai).
 
 The team primitives — mailboxes, roles, missions, structured inter-agent communication — are the next major layer. We are designing them now, informed by how real organizations function.
 
-**This is an open research and engineering project as much as a software one.** If you have ideas about how agents should collaborate, how human team structures map to agentic systems, or what organizational patterns are worth modeling — your input is genuinely valuable. Open a [Discussion](https://github.com/EngineerProjects/seshat/discussions), an issue, or a PR.
+---
 
-We are building this together.
+### 🤝 An open project — all ideas welcome
+
+**This is an open research and engineering project as much as a software one.** The ecosystem we want to build is ambitious, and no single perspective has all the answers.
+
+If you have ideas about how agents should collaborate, how human team structures map to agentic systems, what organizational patterns are worth modeling, or what the ecosystem is still missing — your input is genuinely valuable.
+
+👉 Open a [Discussion](https://github.com/EngineerProjects/seshat/discussions), an issue, or a PR. Every suggestion is read.
+
+We are building this together. 🚀
 
 ---
 
