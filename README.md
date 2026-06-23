@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="docs/images/nexus.png" alt="Seshat" width="120">
+  <img src="docs/images/seshat.png" alt="Seshat" width="120">
 </p>
 
 <h1 align="center">Seshat</h1>
@@ -10,6 +10,7 @@
 </p>
 
 <p align="center">
+  <a href="https://seshat-ai.com"><b>🌐 Website</b></a> ·
   <a href="https://github.com/EngineerProjects/seshat/discussions"><b>💬 Discussions</b></a> ·
   <a href="https://github.com/EngineerProjects/seshat/issues"><b>🐛 Issues</b></a> ·
   <a href="https://github.com/EngineerProjects/seshat-ai"><b>🖥️ seshat-ai</b></a>
