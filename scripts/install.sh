@@ -109,7 +109,7 @@ trap 'rm -rf "$TMP_DIR"' EXIT
 _dl() { command -v curl &>/dev/null && curl -fsSL "$1" -o "$2" || wget -qO "$2" "$1"; }
 
 info "Binary:    $BIN_ASSET"
-_dl "$BASE_URL/$BIN_ASSET"       "$TMP_DIR/$BINARY"
+_dl "$BASE_URL/$BIN_ASSET"       "$TMP_DIR/$BIN_ASSET"
 _dl "$BASE_URL/SHA256SUMS.txt"   "$TMP_DIR/SHA256SUMS.txt"
 
 # ── Verify checksum ───────────────────────────────────────────────────────────
@@ -123,8 +123,8 @@ success "Checksum OK"
 step "Installing binary"
 
 mkdir -p "$INSTALL_DIR"
-chmod +x "$TMP_DIR/$BINARY"
-mv "$TMP_DIR/$BINARY" "$INSTALL_DIR/$BINARY"
+chmod +x "$TMP_DIR/$BIN_ASSET"
+mv "$TMP_DIR/$BIN_ASSET" "$INSTALL_DIR/$BINARY"
 success "Installed: $INSTALL_DIR/$BINARY"
 
 # ── Add to PATH in shell profile ──────────────────────────────────────────────
