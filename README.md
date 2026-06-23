@@ -66,6 +66,8 @@ We are building the foundation. Seshat today is a solid, production-grade runtim
 
 The team primitives (mailboxes, roles, missions, structured inter-agent communication) are the next major layer. We are designing them now, informed by how real organizations function.
 
+Beyond these layers, the shape of the platform will be defined as much by the community as by any central roadmap. Domain experts in healthcare, education, legal, finance, logistics, or any other professional field will propose and contribute specialized integrations tailored to the realities of their industry. Seshat is not a product with a fixed scope. It is an OS for agentic services: an open foundation on which any application can be built for any use case, by the people who understand that use case well enough to build it right.
+
 ---
 
 ### 🤝 An open project: all ideas welcome
