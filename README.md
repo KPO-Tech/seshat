@@ -5,7 +5,7 @@
 <h1 align="center">Seshat</h1>
 
 <p align="center">
-  <b>Open-source Go runtime for AI agents</b><br>
+  <b>Open-source Go Agent Runtime for autonomous AI systems</b><br>
   <i>Built for the age of agent teams, not just single agents.</i>
 </p>
 
@@ -477,6 +477,10 @@ Full architecture diagrams (Mermaid): [`docs/vision/diagrams.md`](./docs/vision/
 | [Skills](./docs/skills.md) | Skills system, loading order, injection |
 | [Transports & Setup](./docs/transports.md) | gRPC setup, proto codegen, env vars |
 | [Multi-Agent Teams](./docs/team.md) | Agent profiles, mailbox, dispatcher, TeamBus |
+| [Memory and Compaction](./docs/memory.md) | Session memory, context compaction, memory tool |
+| [MCP Client](./docs/mcp.md) | MCP protocol, transports, server configuration |
+| [RAG System](./docs/rag.md) | Chunking, embeddings, hybrid search, document ingestion |
+| [Planning Mode](./docs/planning.md) | Execution modes: execute, plan, pair-programming |
 
 ---
 
