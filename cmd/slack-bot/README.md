@@ -8,7 +8,7 @@ Slack bot that brings the full Seshat agent runtime into a Slack workspace.
 - Routes each message to a persistent Seshat session (one session per Slack channel)
 - The agent has access to all built-in Seshat tools: web search, file ops, browser, math, notebooks, memory, RAG, sub-agents, and any connected MCP server
 - Posts a "thinking..." placeholder immediately, then updates it with the final response
-- Sessions are persisted in SQLite — context is remembered across restarts
+- Sessions are persisted in SQLite; context is remembered across restarts
 
 ## Architecture
 
@@ -32,8 +32,8 @@ Slack Workspace
 
 | Variable | Description |
 |---|---|
-| `NEXUS_SLACK_BOT_TOKEN` | `xoxb-...` — Bot User OAuth Token from api.slack.com → Install App |
-| `NEXUS_SLACK_APP_TOKEN` | `xapp-...` — App-Level Token with `connections:write` scope (Socket Mode) |
+| `NEXUS_SLACK_BOT_TOKEN` | `xoxb-...` - Bot User OAuth Token from api.slack.com (Install App) |
+| `NEXUS_SLACK_APP_TOKEN` | `xapp-...` - App-Level Token with `connections:write` scope (Socket Mode) |
 
 All other config (LLM provider, API keys, search backends) is loaded from the standard Seshat env vars. See `private/.env.dev`.
 
