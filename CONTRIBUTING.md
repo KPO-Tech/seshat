@@ -2,6 +2,20 @@
 
 Thank you for your interest in contributing. This guide covers everything you need to get started.
 
+Seshat is an open-source Go agent runtime for autonomous AI systems, multi-agent orchestration, workflow automation, MCP integrations, RAG pipelines, CLI apps, and embeddable SDK use cases. Contributions are welcome across the runtime core, tool system, provider adapters, memory, permissions, gRPC surfaces, and developer documentation.
+
+---
+
+## Where to contribute
+
+- **Runtime core** — session loop, prompt assembly, execution orchestration, permissions, memory lifecycle, and runtime architecture.
+- **Providers and model routing** — LLM provider adapters, auth flows, model metadata, fallback behavior, and transport compatibility.
+- **Tools and automation** — built-in tools, tool surfaces, shell and file automation, MCP clients, and external integrations.
+- **Agent teams** — mailbox-driven coordination, team primitives, structured delegation, and future multi-agent collaboration layers.
+- **Docs and developer experience** — CLI docs, Go SDK docs, gRPC/API docs, examples, tutorials, and architecture explanations.
+
+If you want to help but are unsure where to begin, open a discussion on the project vision, the agent runtime roadmap, or a specific automation or integration use case.
+
 ---
 
 ## Branching strategy
