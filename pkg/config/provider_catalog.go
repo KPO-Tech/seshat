@@ -117,7 +117,7 @@ func ProviderCredentialEnvVars(provider sdk.APIProvider) []string {
 	case sdk.APIProviderOpenAI:
 		return []string{"OPENAI_API_KEY"}
 	case sdk.APIProviderCodex:
-		return []string{"CODEX_API_KEY"}
+		return []string{"CODEX_API_KEY", "CODEX_ACCESS_TOKEN"}
 	case sdk.APIProviderGemini:
 		return []string{"GOOGLE_API_KEY", "GOOGLE_GEMINI_API_KEY"}
 	case sdk.APIProviderZAi:

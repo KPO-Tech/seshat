@@ -534,3 +534,24 @@ func TestQueryStreamOverGRPCEmitsProtocolMessagesWithResolvedModel(t *testing.T)
 		t.Fatalf("expected client close once, got %d", fakeClient.closeCalls)
 	}
 }
+
+func TestBuildSDKClientConfigUsesExplicitAPIKeyWithoutHostProviderSetup(t *testing.T) {
+	t.Setenv("OPENAI_API_KEY", "")
+	t.Setenv("ANTHROPIC_API_KEY", "")
+	t.Setenv("CODEX_API_KEY", "")
+	t.Setenv("CODEX_ACCESS_TOKEN", "")
+
+	cfg, err := buildSDKClientConfig(appconfig.Config{}, &pb.QueryRequest{
+		Model:  "codex:gpt-5.3-codex",
+		ApiKey: "oauth-bearer-token",
+	})
+	if err != nil {
+		t.Fatalf("buildSDKClientConfig: %v", err)
+	}
+	if cfg.APIKey != "oauth-bearer-token" {
+		t.Fatalf("expected explicit api key to win, got %q", cfg.APIKey)
+	}
+	if cfg.Model.Provider != sdk.APIProviderCodex {
+		t.Fatalf("expected codex provider, got %q", cfg.Model.Provider)
+	}
+}

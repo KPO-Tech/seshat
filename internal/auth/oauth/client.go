@@ -39,7 +39,8 @@ type Config struct {
 // Issuer: https://auth.openai.com
 func DefaultOpenAIConfig() *Config {
 	return &Config{
-		BaseURL: "https://auth.openai.com",
+		BaseURL:  "https://auth.openai.com",
+		ClientID: "app_EMoamEEZ73f0CkXaXp7hrann",
 		// Browser PKCE flow
 		AuthURL:  "https://auth.openai.com/oauth/authorize",
 		TokenURL: "https://auth.openai.com/oauth/token",

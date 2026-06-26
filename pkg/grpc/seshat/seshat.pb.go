@@ -11,7 +11,7 @@
 // versions:
 // 	protoc-gen-go v1.36.11
 // 	protoc        v7.34.1
-// source: seshat.proto
+// source: pkg/grpc/proto/seshat.proto
 
 package seshat
 
@@ -41,13 +41,14 @@ type QueryRequest struct {
 	// Paramètres optionnels
 	Temperature   float32 `protobuf:"fixed32,10,opt,name=temperature,proto3" json:"temperature,omitempty"`             // Temperature (0.0 - 1.0)
 	MaxTokens     int32   `protobuf:"varint,11,opt,name=max_tokens,json=maxTokens,proto3" json:"max_tokens,omitempty"` // Nombre max de tokens en sortie
+	ApiKey        string  `protobuf:"bytes,12,opt,name=api_key,json=apiKey,proto3" json:"api_key,omitempty"`           // Clé API ou bearer token OAuth explicite pour cette requête
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
 
 func (x *QueryRequest) Reset() {
 	*x = QueryRequest{}
-	mi := &file_seshat_proto_msgTypes[0]
+	mi := &file_pkg_grpc_proto_seshat_proto_msgTypes[0]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -59,7 +60,7 @@ func (x *QueryRequest) String() string {
 func (*QueryRequest) ProtoMessage() {}
 
 func (x *QueryRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_seshat_proto_msgTypes[0]
+	mi := &file_pkg_grpc_proto_seshat_proto_msgTypes[0]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -72,7 +73,7 @@ func (x *QueryRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use QueryRequest.ProtoReflect.Descriptor instead.
 func (*QueryRequest) Descriptor() ([]byte, []int) {
-	return file_seshat_proto_rawDescGZIP(), []int{0}
+	return file_pkg_grpc_proto_seshat_proto_rawDescGZIP(), []int{0}
 }
 
 func (x *QueryRequest) GetPrompt() string {
@@ -124,6 +125,13 @@ func (x *QueryRequest) GetMaxTokens() int32 {
 	return 0
 }
 
+func (x *QueryRequest) GetApiKey() string {
+	if x != nil {
+		return x.ApiKey
+	}
+	return ""
+}
+
 // Requête pour lister les skills
 type ListSkillsRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
@@ -134,7 +142,7 @@ type ListSkillsRequest struct {
 
 func (x *ListSkillsRequest) Reset() {
 	*x = ListSkillsRequest{}
-	mi := &file_seshat_proto_msgTypes[1]
+	mi := &file_pkg_grpc_proto_seshat_proto_msgTypes[1]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -146,7 +154,7 @@ func (x *ListSkillsRequest) String() string {
 func (*ListSkillsRequest) ProtoMessage() {}
 
 func (x *ListSkillsRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_seshat_proto_msgTypes[1]
+	mi := &file_pkg_grpc_proto_seshat_proto_msgTypes[1]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -159,7 +167,7 @@ func (x *ListSkillsRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListSkillsRequest.ProtoReflect.Descriptor instead.
 func (*ListSkillsRequest) Descriptor() ([]byte, []int) {
-	return file_seshat_proto_rawDescGZIP(), []int{1}
+	return file_pkg_grpc_proto_seshat_proto_rawDescGZIP(), []int{1}
 }
 
 func (x *ListSkillsRequest) GetSourceFilter() string {
@@ -179,7 +187,7 @@ type GetSkillDetailsRequest struct {
 
 func (x *GetSkillDetailsRequest) Reset() {
 	*x = GetSkillDetailsRequest{}
-	mi := &file_seshat_proto_msgTypes[2]
+	mi := &file_pkg_grpc_proto_seshat_proto_msgTypes[2]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -191,7 +199,7 @@ func (x *GetSkillDetailsRequest) String() string {
 func (*GetSkillDetailsRequest) ProtoMessage() {}
 
 func (x *GetSkillDetailsRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_seshat_proto_msgTypes[2]
+	mi := &file_pkg_grpc_proto_seshat_proto_msgTypes[2]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -204,7 +212,7 @@ func (x *GetSkillDetailsRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetSkillDetailsRequest.ProtoReflect.Descriptor instead.
 func (*GetSkillDetailsRequest) Descriptor() ([]byte, []int) {
-	return file_seshat_proto_rawDescGZIP(), []int{2}
+	return file_pkg_grpc_proto_seshat_proto_rawDescGZIP(), []int{2}
 }
 
 func (x *GetSkillDetailsRequest) GetName() string {
@@ -223,7 +231,7 @@ type ListMCPRequest struct {
 
 func (x *ListMCPRequest) Reset() {
 	*x = ListMCPRequest{}
-	mi := &file_seshat_proto_msgTypes[3]
+	mi := &file_pkg_grpc_proto_seshat_proto_msgTypes[3]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -235,7 +243,7 @@ func (x *ListMCPRequest) String() string {
 func (*ListMCPRequest) ProtoMessage() {}
 
 func (x *ListMCPRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_seshat_proto_msgTypes[3]
+	mi := &file_pkg_grpc_proto_seshat_proto_msgTypes[3]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -248,7 +256,7 @@ func (x *ListMCPRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListMCPRequest.ProtoReflect.Descriptor instead.
 func (*ListMCPRequest) Descriptor() ([]byte, []int) {
-	return file_seshat_proto_rawDescGZIP(), []int{3}
+	return file_pkg_grpc_proto_seshat_proto_rawDescGZIP(), []int{3}
 }
 
 // Requête pour connecter un serveur MCP
@@ -267,7 +275,7 @@ type ConnectMCPRequest struct {
 
 func (x *ConnectMCPRequest) Reset() {
 	*x = ConnectMCPRequest{}
-	mi := &file_seshat_proto_msgTypes[4]
+	mi := &file_pkg_grpc_proto_seshat_proto_msgTypes[4]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -279,7 +287,7 @@ func (x *ConnectMCPRequest) String() string {
 func (*ConnectMCPRequest) ProtoMessage() {}
 
 func (x *ConnectMCPRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_seshat_proto_msgTypes[4]
+	mi := &file_pkg_grpc_proto_seshat_proto_msgTypes[4]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -292,7 +300,7 @@ func (x *ConnectMCPRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ConnectMCPRequest.ProtoReflect.Descriptor instead.
 func (*ConnectMCPRequest) Descriptor() ([]byte, []int) {
-	return file_seshat_proto_rawDescGZIP(), []int{4}
+	return file_pkg_grpc_proto_seshat_proto_rawDescGZIP(), []int{4}
 }
 
 func (x *ConnectMCPRequest) GetName() string {
@@ -354,7 +362,7 @@ type DisconnectMCPRequest struct {
 
 func (x *DisconnectMCPRequest) Reset() {
 	*x = DisconnectMCPRequest{}
-	mi := &file_seshat_proto_msgTypes[5]
+	mi := &file_pkg_grpc_proto_seshat_proto_msgTypes[5]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -366,7 +374,7 @@ func (x *DisconnectMCPRequest) String() string {
 func (*DisconnectMCPRequest) ProtoMessage() {}
 
 func (x *DisconnectMCPRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_seshat_proto_msgTypes[5]
+	mi := &file_pkg_grpc_proto_seshat_proto_msgTypes[5]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -379,7 +387,7 @@ func (x *DisconnectMCPRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use DisconnectMCPRequest.ProtoReflect.Descriptor instead.
 func (*DisconnectMCPRequest) Descriptor() ([]byte, []int) {
-	return file_seshat_proto_rawDescGZIP(), []int{5}
+	return file_pkg_grpc_proto_seshat_proto_rawDescGZIP(), []int{5}
 }
 
 func (x *DisconnectMCPRequest) GetName() string {
@@ -398,7 +406,7 @@ type GetModelsRequest struct {
 
 func (x *GetModelsRequest) Reset() {
 	*x = GetModelsRequest{}
-	mi := &file_seshat_proto_msgTypes[6]
+	mi := &file_pkg_grpc_proto_seshat_proto_msgTypes[6]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -410,7 +418,7 @@ func (x *GetModelsRequest) String() string {
 func (*GetModelsRequest) ProtoMessage() {}
 
 func (x *GetModelsRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_seshat_proto_msgTypes[6]
+	mi := &file_pkg_grpc_proto_seshat_proto_msgTypes[6]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -423,7 +431,7 @@ func (x *GetModelsRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetModelsRequest.ProtoReflect.Descriptor instead.
 func (*GetModelsRequest) Descriptor() ([]byte, []int) {
-	return file_seshat_proto_rawDescGZIP(), []int{6}
+	return file_pkg_grpc_proto_seshat_proto_rawDescGZIP(), []int{6}
 }
 
 // Requête pour health check
@@ -435,7 +443,7 @@ type HealthCheckRequest struct {
 
 func (x *HealthCheckRequest) Reset() {
 	*x = HealthCheckRequest{}
-	mi := &file_seshat_proto_msgTypes[7]
+	mi := &file_pkg_grpc_proto_seshat_proto_msgTypes[7]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -447,7 +455,7 @@ func (x *HealthCheckRequest) String() string {
 func (*HealthCheckRequest) ProtoMessage() {}
 
 func (x *HealthCheckRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_seshat_proto_msgTypes[7]
+	mi := &file_pkg_grpc_proto_seshat_proto_msgTypes[7]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -460,7 +468,7 @@ func (x *HealthCheckRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use HealthCheckRequest.ProtoReflect.Descriptor instead.
 func (*HealthCheckRequest) Descriptor() ([]byte, []int) {
-	return file_seshat_proto_rawDescGZIP(), []int{7}
+	return file_pkg_grpc_proto_seshat_proto_rawDescGZIP(), []int{7}
 }
 
 // Réponse à une requête Query
@@ -481,7 +489,7 @@ type QueryResponse struct {
 
 func (x *QueryResponse) Reset() {
 	*x = QueryResponse{}
-	mi := &file_seshat_proto_msgTypes[8]
+	mi := &file_pkg_grpc_proto_seshat_proto_msgTypes[8]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -493,7 +501,7 @@ func (x *QueryResponse) String() string {
 func (*QueryResponse) ProtoMessage() {}
 
 func (x *QueryResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_seshat_proto_msgTypes[8]
+	mi := &file_pkg_grpc_proto_seshat_proto_msgTypes[8]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -506,7 +514,7 @@ func (x *QueryResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use QueryResponse.ProtoReflect.Descriptor instead.
 func (*QueryResponse) Descriptor() ([]byte, []int) {
-	return file_seshat_proto_rawDescGZIP(), []int{8}
+	return file_pkg_grpc_proto_seshat_proto_rawDescGZIP(), []int{8}
 }
 
 func (x *QueryResponse) GetContent() string {
@@ -577,7 +585,7 @@ type ChunkDelta struct {
 
 func (x *ChunkDelta) Reset() {
 	*x = ChunkDelta{}
-	mi := &file_seshat_proto_msgTypes[9]
+	mi := &file_pkg_grpc_proto_seshat_proto_msgTypes[9]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -589,7 +597,7 @@ func (x *ChunkDelta) String() string {
 func (*ChunkDelta) ProtoMessage() {}
 
 func (x *ChunkDelta) ProtoReflect() protoreflect.Message {
-	mi := &file_seshat_proto_msgTypes[9]
+	mi := &file_pkg_grpc_proto_seshat_proto_msgTypes[9]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -602,7 +610,7 @@ func (x *ChunkDelta) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ChunkDelta.ProtoReflect.Descriptor instead.
 func (*ChunkDelta) Descriptor() ([]byte, []int) {
-	return file_seshat_proto_rawDescGZIP(), []int{9}
+	return file_pkg_grpc_proto_seshat_proto_rawDescGZIP(), []int{9}
 }
 
 func (x *ChunkDelta) GetType() string {
@@ -648,7 +656,7 @@ type RuntimeEvent struct {
 
 func (x *RuntimeEvent) Reset() {
 	*x = RuntimeEvent{}
-	mi := &file_seshat_proto_msgTypes[10]
+	mi := &file_pkg_grpc_proto_seshat_proto_msgTypes[10]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -660,7 +668,7 @@ func (x *RuntimeEvent) String() string {
 func (*RuntimeEvent) ProtoMessage() {}
 
 func (x *RuntimeEvent) ProtoReflect() protoreflect.Message {
-	mi := &file_seshat_proto_msgTypes[10]
+	mi := &file_pkg_grpc_proto_seshat_proto_msgTypes[10]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -673,7 +681,7 @@ func (x *RuntimeEvent) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RuntimeEvent.ProtoReflect.Descriptor instead.
 func (*RuntimeEvent) Descriptor() ([]byte, []int) {
-	return file_seshat_proto_rawDescGZIP(), []int{10}
+	return file_pkg_grpc_proto_seshat_proto_rawDescGZIP(), []int{10}
 }
 
 func (x *RuntimeEvent) GetType() string {
@@ -779,7 +787,7 @@ type TokenUsage struct {
 
 func (x *TokenUsage) Reset() {
 	*x = TokenUsage{}
-	mi := &file_seshat_proto_msgTypes[11]
+	mi := &file_pkg_grpc_proto_seshat_proto_msgTypes[11]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -791,7 +799,7 @@ func (x *TokenUsage) String() string {
 func (*TokenUsage) ProtoMessage() {}
 
 func (x *TokenUsage) ProtoReflect() protoreflect.Message {
-	mi := &file_seshat_proto_msgTypes[11]
+	mi := &file_pkg_grpc_proto_seshat_proto_msgTypes[11]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -804,7 +812,7 @@ func (x *TokenUsage) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use TokenUsage.ProtoReflect.Descriptor instead.
 func (*TokenUsage) Descriptor() ([]byte, []int) {
-	return file_seshat_proto_rawDescGZIP(), []int{11}
+	return file_pkg_grpc_proto_seshat_proto_rawDescGZIP(), []int{11}
 }
 
 func (x *TokenUsage) GetInputTokens() int64 {
@@ -839,7 +847,7 @@ type ListSkillsResponse struct {
 
 func (x *ListSkillsResponse) Reset() {
 	*x = ListSkillsResponse{}
-	mi := &file_seshat_proto_msgTypes[12]
+	mi := &file_pkg_grpc_proto_seshat_proto_msgTypes[12]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -851,7 +859,7 @@ func (x *ListSkillsResponse) String() string {
 func (*ListSkillsResponse) ProtoMessage() {}
 
 func (x *ListSkillsResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_seshat_proto_msgTypes[12]
+	mi := &file_pkg_grpc_proto_seshat_proto_msgTypes[12]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -864,7 +872,7 @@ func (x *ListSkillsResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListSkillsResponse.ProtoReflect.Descriptor instead.
 func (*ListSkillsResponse) Descriptor() ([]byte, []int) {
-	return file_seshat_proto_rawDescGZIP(), []int{12}
+	return file_pkg_grpc_proto_seshat_proto_rawDescGZIP(), []int{12}
 }
 
 func (x *ListSkillsResponse) GetSkills() []*Skill {
@@ -895,7 +903,7 @@ type Skill struct {
 
 func (x *Skill) Reset() {
 	*x = Skill{}
-	mi := &file_seshat_proto_msgTypes[13]
+	mi := &file_pkg_grpc_proto_seshat_proto_msgTypes[13]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -907,7 +915,7 @@ func (x *Skill) String() string {
 func (*Skill) ProtoMessage() {}
 
 func (x *Skill) ProtoReflect() protoreflect.Message {
-	mi := &file_seshat_proto_msgTypes[13]
+	mi := &file_pkg_grpc_proto_seshat_proto_msgTypes[13]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -920,7 +928,7 @@ func (x *Skill) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Skill.ProtoReflect.Descriptor instead.
 func (*Skill) Descriptor() ([]byte, []int) {
-	return file_seshat_proto_rawDescGZIP(), []int{13}
+	return file_pkg_grpc_proto_seshat_proto_rawDescGZIP(), []int{13}
 }
 
 func (x *Skill) GetName() string {
@@ -969,7 +977,7 @@ type GetSkillDetailsResponse struct {
 
 func (x *GetSkillDetailsResponse) Reset() {
 	*x = GetSkillDetailsResponse{}
-	mi := &file_seshat_proto_msgTypes[14]
+	mi := &file_pkg_grpc_proto_seshat_proto_msgTypes[14]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -981,7 +989,7 @@ func (x *GetSkillDetailsResponse) String() string {
 func (*GetSkillDetailsResponse) ProtoMessage() {}
 
 func (x *GetSkillDetailsResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_seshat_proto_msgTypes[14]
+	mi := &file_pkg_grpc_proto_seshat_proto_msgTypes[14]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -994,7 +1002,7 @@ func (x *GetSkillDetailsResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetSkillDetailsResponse.ProtoReflect.Descriptor instead.
 func (*GetSkillDetailsResponse) Descriptor() ([]byte, []int) {
-	return file_seshat_proto_rawDescGZIP(), []int{14}
+	return file_pkg_grpc_proto_seshat_proto_rawDescGZIP(), []int{14}
 }
 
 func (x *GetSkillDetailsResponse) GetSkill() *Skill {
@@ -1022,7 +1030,7 @@ type ListMCPResponse struct {
 
 func (x *ListMCPResponse) Reset() {
 	*x = ListMCPResponse{}
-	mi := &file_seshat_proto_msgTypes[15]
+	mi := &file_pkg_grpc_proto_seshat_proto_msgTypes[15]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1034,7 +1042,7 @@ func (x *ListMCPResponse) String() string {
 func (*ListMCPResponse) ProtoMessage() {}
 
 func (x *ListMCPResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_seshat_proto_msgTypes[15]
+	mi := &file_pkg_grpc_proto_seshat_proto_msgTypes[15]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1047,7 +1055,7 @@ func (x *ListMCPResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListMCPResponse.ProtoReflect.Descriptor instead.
 func (*ListMCPResponse) Descriptor() ([]byte, []int) {
-	return file_seshat_proto_rawDescGZIP(), []int{15}
+	return file_pkg_grpc_proto_seshat_proto_rawDescGZIP(), []int{15}
 }
 
 func (x *ListMCPResponse) GetServers() []*MCPServer {
@@ -1077,7 +1085,7 @@ type MCPServer struct {
 
 func (x *MCPServer) Reset() {
 	*x = MCPServer{}
-	mi := &file_seshat_proto_msgTypes[16]
+	mi := &file_pkg_grpc_proto_seshat_proto_msgTypes[16]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1089,7 +1097,7 @@ func (x *MCPServer) String() string {
 func (*MCPServer) ProtoMessage() {}
 
 func (x *MCPServer) ProtoReflect() protoreflect.Message {
-	mi := &file_seshat_proto_msgTypes[16]
+	mi := &file_pkg_grpc_proto_seshat_proto_msgTypes[16]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1102,7 +1110,7 @@ func (x *MCPServer) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use MCPServer.ProtoReflect.Descriptor instead.
 func (*MCPServer) Descriptor() ([]byte, []int) {
-	return file_seshat_proto_rawDescGZIP(), []int{16}
+	return file_pkg_grpc_proto_seshat_proto_rawDescGZIP(), []int{16}
 }
 
 func (x *MCPServer) GetName() string {
@@ -1144,7 +1152,7 @@ type ConnectMCPResponse struct {
 
 func (x *ConnectMCPResponse) Reset() {
 	*x = ConnectMCPResponse{}
-	mi := &file_seshat_proto_msgTypes[17]
+	mi := &file_pkg_grpc_proto_seshat_proto_msgTypes[17]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1156,7 +1164,7 @@ func (x *ConnectMCPResponse) String() string {
 func (*ConnectMCPResponse) ProtoMessage() {}
 
 func (x *ConnectMCPResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_seshat_proto_msgTypes[17]
+	mi := &file_pkg_grpc_proto_seshat_proto_msgTypes[17]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1169,7 +1177,7 @@ func (x *ConnectMCPResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ConnectMCPResponse.ProtoReflect.Descriptor instead.
 func (*ConnectMCPResponse) Descriptor() ([]byte, []int) {
-	return file_seshat_proto_rawDescGZIP(), []int{17}
+	return file_pkg_grpc_proto_seshat_proto_rawDescGZIP(), []int{17}
 }
 
 func (x *ConnectMCPResponse) GetSuccess() bool {
@@ -1197,7 +1205,7 @@ type DisconnectMCPResponse struct {
 
 func (x *DisconnectMCPResponse) Reset() {
 	*x = DisconnectMCPResponse{}
-	mi := &file_seshat_proto_msgTypes[18]
+	mi := &file_pkg_grpc_proto_seshat_proto_msgTypes[18]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1209,7 +1217,7 @@ func (x *DisconnectMCPResponse) String() string {
 func (*DisconnectMCPResponse) ProtoMessage() {}
 
 func (x *DisconnectMCPResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_seshat_proto_msgTypes[18]
+	mi := &file_pkg_grpc_proto_seshat_proto_msgTypes[18]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1222,7 +1230,7 @@ func (x *DisconnectMCPResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use DisconnectMCPResponse.ProtoReflect.Descriptor instead.
 func (*DisconnectMCPResponse) Descriptor() ([]byte, []int) {
-	return file_seshat_proto_rawDescGZIP(), []int{18}
+	return file_pkg_grpc_proto_seshat_proto_rawDescGZIP(), []int{18}
 }
 
 func (x *DisconnectMCPResponse) GetSuccess() bool {
@@ -1249,7 +1257,7 @@ type GetModelsResponse struct {
 
 func (x *GetModelsResponse) Reset() {
 	*x = GetModelsResponse{}
-	mi := &file_seshat_proto_msgTypes[19]
+	mi := &file_pkg_grpc_proto_seshat_proto_msgTypes[19]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1261,7 +1269,7 @@ func (x *GetModelsResponse) String() string {
 func (*GetModelsResponse) ProtoMessage() {}
 
 func (x *GetModelsResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_seshat_proto_msgTypes[19]
+	mi := &file_pkg_grpc_proto_seshat_proto_msgTypes[19]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1274,7 +1282,7 @@ func (x *GetModelsResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetModelsResponse.ProtoReflect.Descriptor instead.
 func (*GetModelsResponse) Descriptor() ([]byte, []int) {
-	return file_seshat_proto_rawDescGZIP(), []int{19}
+	return file_pkg_grpc_proto_seshat_proto_rawDescGZIP(), []int{19}
 }
 
 func (x *GetModelsResponse) GetModels() []*ModelInfo {
@@ -1297,7 +1305,7 @@ type ModelInfo struct {
 
 func (x *ModelInfo) Reset() {
 	*x = ModelInfo{}
-	mi := &file_seshat_proto_msgTypes[20]
+	mi := &file_pkg_grpc_proto_seshat_proto_msgTypes[20]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1309,7 +1317,7 @@ func (x *ModelInfo) String() string {
 func (*ModelInfo) ProtoMessage() {}
 
 func (x *ModelInfo) ProtoReflect() protoreflect.Message {
-	mi := &file_seshat_proto_msgTypes[20]
+	mi := &file_pkg_grpc_proto_seshat_proto_msgTypes[20]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1322,7 +1330,7 @@ func (x *ModelInfo) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ModelInfo.ProtoReflect.Descriptor instead.
 func (*ModelInfo) Descriptor() ([]byte, []int) {
-	return file_seshat_proto_rawDescGZIP(), []int{20}
+	return file_pkg_grpc_proto_seshat_proto_rawDescGZIP(), []int{20}
 }
 
 func (x *ModelInfo) GetId() string {
@@ -1365,7 +1373,7 @@ type HealthCheckResponse struct {
 
 func (x *HealthCheckResponse) Reset() {
 	*x = HealthCheckResponse{}
-	mi := &file_seshat_proto_msgTypes[21]
+	mi := &file_pkg_grpc_proto_seshat_proto_msgTypes[21]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1377,7 +1385,7 @@ func (x *HealthCheckResponse) String() string {
 func (*HealthCheckResponse) ProtoMessage() {}
 
 func (x *HealthCheckResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_seshat_proto_msgTypes[21]
+	mi := &file_pkg_grpc_proto_seshat_proto_msgTypes[21]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1390,7 +1398,7 @@ func (x *HealthCheckResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use HealthCheckResponse.ProtoReflect.Descriptor instead.
 func (*HealthCheckResponse) Descriptor() ([]byte, []int) {
-	return file_seshat_proto_rawDescGZIP(), []int{21}
+	return file_pkg_grpc_proto_seshat_proto_rawDescGZIP(), []int{21}
 }
 
 func (x *HealthCheckResponse) GetStatus() string {
@@ -1425,7 +1433,7 @@ type FileReadRequest struct {
 
 func (x *FileReadRequest) Reset() {
 	*x = FileReadRequest{}
-	mi := &file_seshat_proto_msgTypes[22]
+	mi := &file_pkg_grpc_proto_seshat_proto_msgTypes[22]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1437,7 +1445,7 @@ func (x *FileReadRequest) String() string {
 func (*FileReadRequest) ProtoMessage() {}
 
 func (x *FileReadRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_seshat_proto_msgTypes[22]
+	mi := &file_pkg_grpc_proto_seshat_proto_msgTypes[22]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1450,7 +1458,7 @@ func (x *FileReadRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use FileReadRequest.ProtoReflect.Descriptor instead.
 func (*FileReadRequest) Descriptor() ([]byte, []int) {
-	return file_seshat_proto_rawDescGZIP(), []int{22}
+	return file_pkg_grpc_proto_seshat_proto_rawDescGZIP(), []int{22}
 }
 
 func (x *FileReadRequest) GetPath() string {
@@ -1485,7 +1493,7 @@ type FileReadResponse struct {
 
 func (x *FileReadResponse) Reset() {
 	*x = FileReadResponse{}
-	mi := &file_seshat_proto_msgTypes[23]
+	mi := &file_pkg_grpc_proto_seshat_proto_msgTypes[23]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1497,7 +1505,7 @@ func (x *FileReadResponse) String() string {
 func (*FileReadResponse) ProtoMessage() {}
 
 func (x *FileReadResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_seshat_proto_msgTypes[23]
+	mi := &file_pkg_grpc_proto_seshat_proto_msgTypes[23]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1510,7 +1518,7 @@ func (x *FileReadResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use FileReadResponse.ProtoReflect.Descriptor instead.
 func (*FileReadResponse) Descriptor() ([]byte, []int) {
-	return file_seshat_proto_rawDescGZIP(), []int{23}
+	return file_pkg_grpc_proto_seshat_proto_rawDescGZIP(), []int{23}
 }
 
 func (x *FileReadResponse) GetContent() string {
@@ -1544,7 +1552,7 @@ type FileWriteRequest struct {
 
 func (x *FileWriteRequest) Reset() {
 	*x = FileWriteRequest{}
-	mi := &file_seshat_proto_msgTypes[24]
+	mi := &file_pkg_grpc_proto_seshat_proto_msgTypes[24]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1556,7 +1564,7 @@ func (x *FileWriteRequest) String() string {
 func (*FileWriteRequest) ProtoMessage() {}
 
 func (x *FileWriteRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_seshat_proto_msgTypes[24]
+	mi := &file_pkg_grpc_proto_seshat_proto_msgTypes[24]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1569,7 +1577,7 @@ func (x *FileWriteRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use FileWriteRequest.ProtoReflect.Descriptor instead.
 func (*FileWriteRequest) Descriptor() ([]byte, []int) {
-	return file_seshat_proto_rawDescGZIP(), []int{24}
+	return file_pkg_grpc_proto_seshat_proto_rawDescGZIP(), []int{24}
 }
 
 func (x *FileWriteRequest) GetPath() string {
@@ -1596,7 +1604,7 @@ type FileWriteResponse struct {
 
 func (x *FileWriteResponse) Reset() {
 	*x = FileWriteResponse{}
-	mi := &file_seshat_proto_msgTypes[25]
+	mi := &file_pkg_grpc_proto_seshat_proto_msgTypes[25]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1608,7 +1616,7 @@ func (x *FileWriteResponse) String() string {
 func (*FileWriteResponse) ProtoMessage() {}
 
 func (x *FileWriteResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_seshat_proto_msgTypes[25]
+	mi := &file_pkg_grpc_proto_seshat_proto_msgTypes[25]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1621,7 +1629,7 @@ func (x *FileWriteResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use FileWriteResponse.ProtoReflect.Descriptor instead.
 func (*FileWriteResponse) Descriptor() ([]byte, []int) {
-	return file_seshat_proto_rawDescGZIP(), []int{25}
+	return file_pkg_grpc_proto_seshat_proto_rawDescGZIP(), []int{25}
 }
 
 func (x *FileWriteResponse) GetSuccess() bool {
@@ -1649,7 +1657,7 @@ type FileEditRequest struct {
 
 func (x *FileEditRequest) Reset() {
 	*x = FileEditRequest{}
-	mi := &file_seshat_proto_msgTypes[26]
+	mi := &file_pkg_grpc_proto_seshat_proto_msgTypes[26]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1661,7 +1669,7 @@ func (x *FileEditRequest) String() string {
 func (*FileEditRequest) ProtoMessage() {}
 
 func (x *FileEditRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_seshat_proto_msgTypes[26]
+	mi := &file_pkg_grpc_proto_seshat_proto_msgTypes[26]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1674,7 +1682,7 @@ func (x *FileEditRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use FileEditRequest.ProtoReflect.Descriptor instead.
 func (*FileEditRequest) Descriptor() ([]byte, []int) {
-	return file_seshat_proto_rawDescGZIP(), []int{26}
+	return file_pkg_grpc_proto_seshat_proto_rawDescGZIP(), []int{26}
 }
 
 func (x *FileEditRequest) GetPath() string {
@@ -1708,7 +1716,7 @@ type FileEditResponse struct {
 
 func (x *FileEditResponse) Reset() {
 	*x = FileEditResponse{}
-	mi := &file_seshat_proto_msgTypes[27]
+	mi := &file_pkg_grpc_proto_seshat_proto_msgTypes[27]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1720,7 +1728,7 @@ func (x *FileEditResponse) String() string {
 func (*FileEditResponse) ProtoMessage() {}
 
 func (x *FileEditResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_seshat_proto_msgTypes[27]
+	mi := &file_pkg_grpc_proto_seshat_proto_msgTypes[27]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1733,7 +1741,7 @@ func (x *FileEditResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use FileEditResponse.ProtoReflect.Descriptor instead.
 func (*FileEditResponse) Descriptor() ([]byte, []int) {
-	return file_seshat_proto_rawDescGZIP(), []int{27}
+	return file_pkg_grpc_proto_seshat_proto_rawDescGZIP(), []int{27}
 }
 
 func (x *FileEditResponse) GetSuccess() bool {
@@ -1760,7 +1768,7 @@ type FileGlobRequest struct {
 
 func (x *FileGlobRequest) Reset() {
 	*x = FileGlobRequest{}
-	mi := &file_seshat_proto_msgTypes[28]
+	mi := &file_pkg_grpc_proto_seshat_proto_msgTypes[28]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1772,7 +1780,7 @@ func (x *FileGlobRequest) String() string {
 func (*FileGlobRequest) ProtoMessage() {}
 
 func (x *FileGlobRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_seshat_proto_msgTypes[28]
+	mi := &file_pkg_grpc_proto_seshat_proto_msgTypes[28]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1785,7 +1793,7 @@ func (x *FileGlobRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use FileGlobRequest.ProtoReflect.Descriptor instead.
 func (*FileGlobRequest) Descriptor() ([]byte, []int) {
-	return file_seshat_proto_rawDescGZIP(), []int{28}
+	return file_pkg_grpc_proto_seshat_proto_rawDescGZIP(), []int{28}
 }
 
 func (x *FileGlobRequest) GetPattern() string {
@@ -1811,7 +1819,7 @@ type FileGlobResponse struct {
 
 func (x *FileGlobResponse) Reset() {
 	*x = FileGlobResponse{}
-	mi := &file_seshat_proto_msgTypes[29]
+	mi := &file_pkg_grpc_proto_seshat_proto_msgTypes[29]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1823,7 +1831,7 @@ func (x *FileGlobResponse) String() string {
 func (*FileGlobResponse) ProtoMessage() {}
 
 func (x *FileGlobResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_seshat_proto_msgTypes[29]
+	mi := &file_pkg_grpc_proto_seshat_proto_msgTypes[29]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1836,7 +1844,7 @@ func (x *FileGlobResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use FileGlobResponse.ProtoReflect.Descriptor instead.
 func (*FileGlobResponse) Descriptor() ([]byte, []int) {
-	return file_seshat_proto_rawDescGZIP(), []int{29}
+	return file_pkg_grpc_proto_seshat_proto_rawDescGZIP(), []int{29}
 }
 
 func (x *FileGlobResponse) GetFiles() []string {
@@ -1857,7 +1865,7 @@ type FileGrepRequest struct {
 
 func (x *FileGrepRequest) Reset() {
 	*x = FileGrepRequest{}
-	mi := &file_seshat_proto_msgTypes[30]
+	mi := &file_pkg_grpc_proto_seshat_proto_msgTypes[30]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1869,7 +1877,7 @@ func (x *FileGrepRequest) String() string {
 func (*FileGrepRequest) ProtoMessage() {}
 
 func (x *FileGrepRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_seshat_proto_msgTypes[30]
+	mi := &file_pkg_grpc_proto_seshat_proto_msgTypes[30]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1882,7 +1890,7 @@ func (x *FileGrepRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use FileGrepRequest.ProtoReflect.Descriptor instead.
 func (*FileGrepRequest) Descriptor() ([]byte, []int) {
-	return file_seshat_proto_rawDescGZIP(), []int{30}
+	return file_pkg_grpc_proto_seshat_proto_rawDescGZIP(), []int{30}
 }
 
 func (x *FileGrepRequest) GetPattern() string {
@@ -1915,7 +1923,7 @@ type FileGrepResponse struct {
 
 func (x *FileGrepResponse) Reset() {
 	*x = FileGrepResponse{}
-	mi := &file_seshat_proto_msgTypes[31]
+	mi := &file_pkg_grpc_proto_seshat_proto_msgTypes[31]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1927,7 +1935,7 @@ func (x *FileGrepResponse) String() string {
 func (*FileGrepResponse) ProtoMessage() {}
 
 func (x *FileGrepResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_seshat_proto_msgTypes[31]
+	mi := &file_pkg_grpc_proto_seshat_proto_msgTypes[31]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1940,7 +1948,7 @@ func (x *FileGrepResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use FileGrepResponse.ProtoReflect.Descriptor instead.
 func (*FileGrepResponse) Descriptor() ([]byte, []int) {
-	return file_seshat_proto_rawDescGZIP(), []int{31}
+	return file_pkg_grpc_proto_seshat_proto_rawDescGZIP(), []int{31}
 }
 
 func (x *FileGrepResponse) GetMatches() []*GrepMatch {
@@ -1961,7 +1969,7 @@ type GrepMatch struct {
 
 func (x *GrepMatch) Reset() {
 	*x = GrepMatch{}
-	mi := &file_seshat_proto_msgTypes[32]
+	mi := &file_pkg_grpc_proto_seshat_proto_msgTypes[32]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1973,7 +1981,7 @@ func (x *GrepMatch) String() string {
 func (*GrepMatch) ProtoMessage() {}
 
 func (x *GrepMatch) ProtoReflect() protoreflect.Message {
-	mi := &file_seshat_proto_msgTypes[32]
+	mi := &file_pkg_grpc_proto_seshat_proto_msgTypes[32]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1986,7 +1994,7 @@ func (x *GrepMatch) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GrepMatch.ProtoReflect.Descriptor instead.
 func (*GrepMatch) Descriptor() ([]byte, []int) {
-	return file_seshat_proto_rawDescGZIP(), []int{32}
+	return file_pkg_grpc_proto_seshat_proto_rawDescGZIP(), []int{32}
 }
 
 func (x *GrepMatch) GetFile() string {
@@ -2020,7 +2028,7 @@ type BashRequest struct {
 
 func (x *BashRequest) Reset() {
 	*x = BashRequest{}
-	mi := &file_seshat_proto_msgTypes[33]
+	mi := &file_pkg_grpc_proto_seshat_proto_msgTypes[33]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2032,7 +2040,7 @@ func (x *BashRequest) String() string {
 func (*BashRequest) ProtoMessage() {}
 
 func (x *BashRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_seshat_proto_msgTypes[33]
+	mi := &file_pkg_grpc_proto_seshat_proto_msgTypes[33]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2045,7 +2053,7 @@ func (x *BashRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use BashRequest.ProtoReflect.Descriptor instead.
 func (*BashRequest) Descriptor() ([]byte, []int) {
-	return file_seshat_proto_rawDescGZIP(), []int{33}
+	return file_pkg_grpc_proto_seshat_proto_rawDescGZIP(), []int{33}
 }
 
 func (x *BashRequest) GetCommand() string {
@@ -2073,7 +2081,7 @@ type BashResponse struct {
 
 func (x *BashResponse) Reset() {
 	*x = BashResponse{}
-	mi := &file_seshat_proto_msgTypes[34]
+	mi := &file_pkg_grpc_proto_seshat_proto_msgTypes[34]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2085,7 +2093,7 @@ func (x *BashResponse) String() string {
 func (*BashResponse) ProtoMessage() {}
 
 func (x *BashResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_seshat_proto_msgTypes[34]
+	mi := &file_pkg_grpc_proto_seshat_proto_msgTypes[34]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2098,7 +2106,7 @@ func (x *BashResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use BashResponse.ProtoReflect.Descriptor instead.
 func (*BashResponse) Descriptor() ([]byte, []int) {
-	return file_seshat_proto_rawDescGZIP(), []int{34}
+	return file_pkg_grpc_proto_seshat_proto_rawDescGZIP(), []int{34}
 }
 
 func (x *BashResponse) GetOutput() string {
@@ -2130,7 +2138,7 @@ type SystemInfoRequest struct {
 
 func (x *SystemInfoRequest) Reset() {
 	*x = SystemInfoRequest{}
-	mi := &file_seshat_proto_msgTypes[35]
+	mi := &file_pkg_grpc_proto_seshat_proto_msgTypes[35]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2142,7 +2150,7 @@ func (x *SystemInfoRequest) String() string {
 func (*SystemInfoRequest) ProtoMessage() {}
 
 func (x *SystemInfoRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_seshat_proto_msgTypes[35]
+	mi := &file_pkg_grpc_proto_seshat_proto_msgTypes[35]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2155,7 +2163,7 @@ func (x *SystemInfoRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SystemInfoRequest.ProtoReflect.Descriptor instead.
 func (*SystemInfoRequest) Descriptor() ([]byte, []int) {
-	return file_seshat_proto_rawDescGZIP(), []int{35}
+	return file_pkg_grpc_proto_seshat_proto_rawDescGZIP(), []int{35}
 }
 
 type SystemInfoResponse struct {
@@ -2170,7 +2178,7 @@ type SystemInfoResponse struct {
 
 func (x *SystemInfoResponse) Reset() {
 	*x = SystemInfoResponse{}
-	mi := &file_seshat_proto_msgTypes[36]
+	mi := &file_pkg_grpc_proto_seshat_proto_msgTypes[36]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2182,7 +2190,7 @@ func (x *SystemInfoResponse) String() string {
 func (*SystemInfoResponse) ProtoMessage() {}
 
 func (x *SystemInfoResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_seshat_proto_msgTypes[36]
+	mi := &file_pkg_grpc_proto_seshat_proto_msgTypes[36]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2195,7 +2203,7 @@ func (x *SystemInfoResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SystemInfoResponse.ProtoReflect.Descriptor instead.
 func (*SystemInfoResponse) Descriptor() ([]byte, []int) {
-	return file_seshat_proto_rawDescGZIP(), []int{36}
+	return file_pkg_grpc_proto_seshat_proto_rawDescGZIP(), []int{36}
 }
 
 func (x *SystemInfoResponse) GetOs() string {
@@ -2226,11 +2234,11 @@ func (x *SystemInfoResponse) GetMemoryTotal() int64 {
 	return 0
 }
 
-var File_seshat_proto protoreflect.FileDescriptor
+var File_pkg_grpc_proto_seshat_proto protoreflect.FileDescriptor
 
-const file_seshat_proto_rawDesc = "" +
+const file_pkg_grpc_proto_seshat_proto_rawDesc = "" +
 	"\n" +
-	"\fseshat.proto\x12\x06seshat\"\xca\x01\n" +
+	"\x1bpkg/grpc/proto/seshat.proto\x12\x06seshat\"\xe3\x01\n" +
 	"\fQueryRequest\x12\x16\n" +
 	"\x06prompt\x18\x01 \x01(\tR\x06prompt\x12\x14\n" +
 	"\x05model\x18\x02 \x01(\tR\x05model\x12\x14\n" +
@@ -2241,7 +2249,8 @@ const file_seshat_proto_rawDesc = "" +
 	"\vtemperature\x18\n" +
 	" \x01(\x02R\vtemperature\x12\x1d\n" +
 	"\n" +
-	"max_tokens\x18\v \x01(\x05R\tmaxTokens\"8\n" +
+	"max_tokens\x18\v \x01(\x05R\tmaxTokens\x12\x17\n" +
+	"\aapi_key\x18\f \x01(\tR\x06apiKey\"8\n" +
 	"\x11ListSkillsRequest\x12#\n" +
 	"\rsource_filter\x18\x01 \x01(\tR\fsourceFilter\",\n" +
 	"\x16GetSkillDetailsRequest\x12\x12\n" +
@@ -2420,19 +2429,19 @@ const file_seshat_proto_rawDesc = "" +
 	"\rGetSystemInfo\x12\x19.seshat.SystemInfoRequest\x1a\x1a.seshat.SystemInfoResponseB4Z2github.com/EngineerProjects/seshat/pkg/grpc/seshatb\x06proto3"
 
 var (
-	file_seshat_proto_rawDescOnce sync.Once
-	file_seshat_proto_rawDescData []byte
+	file_pkg_grpc_proto_seshat_proto_rawDescOnce sync.Once
+	file_pkg_grpc_proto_seshat_proto_rawDescData []byte
 )
 
-func file_seshat_proto_rawDescGZIP() []byte {
-	file_seshat_proto_rawDescOnce.Do(func() {
-		file_seshat_proto_rawDescData = protoimpl.X.CompressGZIP(unsafe.Slice(unsafe.StringData(file_seshat_proto_rawDesc), len(file_seshat_proto_rawDesc)))
+func file_pkg_grpc_proto_seshat_proto_rawDescGZIP() []byte {
+	file_pkg_grpc_proto_seshat_proto_rawDescOnce.Do(func() {
+		file_pkg_grpc_proto_seshat_proto_rawDescData = protoimpl.X.CompressGZIP(unsafe.Slice(unsafe.StringData(file_pkg_grpc_proto_seshat_proto_rawDesc), len(file_pkg_grpc_proto_seshat_proto_rawDesc)))
 	})
-	return file_seshat_proto_rawDescData
+	return file_pkg_grpc_proto_seshat_proto_rawDescData
 }
 
-var file_seshat_proto_msgTypes = make([]protoimpl.MessageInfo, 38)
-var file_seshat_proto_goTypes = []any{
+var file_pkg_grpc_proto_seshat_proto_msgTypes = make([]protoimpl.MessageInfo, 38)
+var file_pkg_grpc_proto_seshat_proto_goTypes = []any{
 	(*QueryRequest)(nil),            // 0: seshat.QueryRequest
 	(*ListSkillsRequest)(nil),       // 1: seshat.ListSkillsRequest
 	(*GetSkillDetailsRequest)(nil),  // 2: seshat.GetSkillDetailsRequest
@@ -2472,7 +2481,7 @@ var file_seshat_proto_goTypes = []any{
 	(*SystemInfoResponse)(nil),      // 36: seshat.SystemInfoResponse
 	nil,                             // 37: seshat.ConnectMCPRequest.EnvEntry
 }
-var file_seshat_proto_depIdxs = []int32{
+var file_pkg_grpc_proto_seshat_proto_depIdxs = []int32{
 	37, // 0: seshat.ConnectMCPRequest.env:type_name -> seshat.ConnectMCPRequest.EnvEntry
 	11, // 1: seshat.QueryResponse.token_usage:type_name -> seshat.TokenUsage
 	9,  // 2: seshat.QueryResponse.chunk:type_name -> seshat.ChunkDelta
@@ -2523,26 +2532,26 @@ var file_seshat_proto_depIdxs = []int32{
 	0,  // [0:11] is the sub-list for field type_name
 }
 
-func init() { file_seshat_proto_init() }
-func file_seshat_proto_init() {
-	if File_seshat_proto != nil {
+func init() { file_pkg_grpc_proto_seshat_proto_init() }
+func file_pkg_grpc_proto_seshat_proto_init() {
+	if File_pkg_grpc_proto_seshat_proto != nil {
 		return
 	}
 	type x struct{}
 	out := protoimpl.TypeBuilder{
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
-			RawDescriptor: unsafe.Slice(unsafe.StringData(file_seshat_proto_rawDesc), len(file_seshat_proto_rawDesc)),
+			RawDescriptor: unsafe.Slice(unsafe.StringData(file_pkg_grpc_proto_seshat_proto_rawDesc), len(file_pkg_grpc_proto_seshat_proto_rawDesc)),
 			NumEnums:      0,
 			NumMessages:   38,
 			NumExtensions: 0,
 			NumServices:   3,
 		},
-		GoTypes:           file_seshat_proto_goTypes,
-		DependencyIndexes: file_seshat_proto_depIdxs,
-		MessageInfos:      file_seshat_proto_msgTypes,
+		GoTypes:           file_pkg_grpc_proto_seshat_proto_goTypes,
+		DependencyIndexes: file_pkg_grpc_proto_seshat_proto_depIdxs,
+		MessageInfos:      file_pkg_grpc_proto_seshat_proto_msgTypes,
 	}.Build()
-	File_seshat_proto = out.File
-	file_seshat_proto_goTypes = nil
-	file_seshat_proto_depIdxs = nil
+	File_pkg_grpc_proto_seshat_proto = out.File
+	file_pkg_grpc_proto_seshat_proto_goTypes = nil
+	file_pkg_grpc_proto_seshat_proto_depIdxs = nil
 }

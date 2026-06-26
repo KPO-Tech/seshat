@@ -63,6 +63,7 @@ message QueryRequest {
     // Paramètres optionnels
     float temperature = 10;     // Temperature (0.0 - 1.0)
     int32 max_tokens = 11;       // Nombre max de tokens en sortie
+    string api_key = 12;           // Clé API ou bearer token OAuth explicite pour cette requête
 }
 
 // Requête pour lister les skills

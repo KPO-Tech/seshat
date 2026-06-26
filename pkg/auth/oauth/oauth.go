@@ -11,6 +11,11 @@ type (
 	TokenType          = internaloauth.TokenType
 )
 
+const (
+	TokenTypeAccess  = internaloauth.TokenTypeAccess
+	TokenTypeRefresh = internaloauth.TokenTypeRefresh
+)
+
 func DefaultOpenAIConfig() *Config {
 	return internaloauth.DefaultOpenAIConfig()
 }

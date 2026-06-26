@@ -645,9 +645,14 @@ func buildSDKClientConfig(hostConfig appconfig.Config, req *pb.QueryRequest) (*s
 	} else if hostConfig.MaxTokens > 0 {
 		cfg.MaxTokens = hostConfig.MaxTokens
 	}
-	cfg.APIKey = appconfig.ResolveAPIKey(hostConfig, cfg.Model.Provider)
-	if err := appconfig.ValidateProviderSetup(hostConfig, cfg.Model.Provider); err != nil {
-		return nil, err
+	explicitAPIKey := strings.TrimSpace(req.GetApiKey())
+	if explicitAPIKey != "" {
+		cfg.APIKey = explicitAPIKey
+	} else {
+		cfg.APIKey = appconfig.ResolveAPIKey(hostConfig, cfg.Model.Provider)
+		if err := appconfig.ValidateProviderSetup(hostConfig, cfg.Model.Provider); err != nil {
+			return nil, err
+		}
 	}
 	if hasStorageConfig(hostConfig) {
 		cfg.StorageConfig = &sdk.StorageConfig{

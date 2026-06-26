@@ -11,7 +11,7 @@
 // versions:
 // - protoc-gen-go-grpc v1.6.1
 // - protoc             v7.34.1
-// source: seshat.proto
+// source: pkg/grpc/proto/seshat.proto
 
 package seshat
 
@@ -456,7 +456,7 @@ var SeshatService_ServiceDesc = grpc.ServiceDesc{
 			ServerStreams: true,
 		},
 	},
-	Metadata: "seshat.proto",
+	Metadata: "pkg/grpc/proto/seshat.proto",
 }
 
 const (
@@ -714,7 +714,7 @@ var FileService_ServiceDesc = grpc.ServiceDesc{
 		},
 	},
 	Streams:  []grpc.StreamDesc{},
-	Metadata: "seshat.proto",
+	Metadata: "pkg/grpc/proto/seshat.proto",
 }
 
 const (
@@ -858,5 +858,5 @@ var SystemService_ServiceDesc = grpc.ServiceDesc{
 		},
 	},
 	Streams:  []grpc.StreamDesc{},
-	Metadata: "seshat.proto",
+	Metadata: "pkg/grpc/proto/seshat.proto",
 }
