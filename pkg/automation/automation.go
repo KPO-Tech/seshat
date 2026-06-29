@@ -108,6 +108,39 @@ func WithMetrics(fn func(Result)) Middleware      { return automation.WithMetric
 
 func DefaultOptions() Options { return automation.DefaultOptions() }
 
+// ─── Jobs & persistent scheduler ─────────────────────────────────────────────
+
+type (
+	TriggerType  = automation.TriggerType
+	Trigger      = automation.Trigger
+	AgentConfig  = automation.AgentConfig
+	JobStatus    = automation.JobStatus
+	Job          = automation.Job
+	RunStatus    = automation.RunStatus
+	JobRun       = automation.JobRun
+	JobStore     = automation.JobStore
+	DBJobStore   = automation.DBJobStore
+	JobScheduler = automation.JobScheduler
+)
+
+const (
+	TriggerTypeCron     = automation.TriggerTypeCron
+	TriggerTypeInterval = automation.TriggerTypeInterval
+	TriggerTypeOnce     = automation.TriggerTypeOnce
+	JobStatusActive     = automation.JobStatusActive
+	JobStatusPaused     = automation.JobStatusPaused
+	JobStatusInactive   = automation.JobStatusInactive
+	RunStatusRunning    = automation.RunStatusRunning
+	RunStatusSuccess    = automation.RunStatusSuccess
+	RunStatusError      = automation.RunStatusError
+)
+
+// NewJobScheduler builds a JobScheduler backed by store and runner.
+// To create a DBJobStore, use internal/automation.NewDBJobStore with a *db.DB.
+func NewJobScheduler(store JobStore, runner *Runner) *JobScheduler {
+	return automation.NewJobScheduler(store, runner)
+}
+
 // ─── ModelIdentifier re-export ────────────────────────────────────────────────
 
 type ModelIdentifier = sdk.ModelIdentifier

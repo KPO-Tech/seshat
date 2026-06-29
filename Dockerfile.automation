@@ -1,0 +1,33 @@
+# Build stage
+FROM golang:1.26-alpine AS builder
+
+WORKDIR /build
+
+# Cache module downloads separately from source
+COPY go.mod go.sum ./
+RUN go mod download
+
+# Copy source and build the automation daemon binary
+# modernc.org/sqlite is pure Go — no CGO or external SQLite libs needed.
+COPY . .
+RUN CGO_ENABLED=0 GOOS=linux \
+    go build -ldflags="-s -w" -o seshat-automation ./cmd/automation-server
+
+# Runtime stage — minimal image (no C runtime needed)
+FROM alpine:3.20
+
+RUN apk add --no-cache ca-certificates tzdata
+
+WORKDIR /app
+
+COPY --from=builder /build/seshat-automation .
+
+# Default data directory — mount a volume here for persistence
+RUN mkdir -p /data
+
+ENV SESHAT_AUTOMATION_DB_PATH=/data/automation.db
+ENV SESHAT_AUTOMATION_PORT=8090
+
+EXPOSE 8090
+
+ENTRYPOINT ["/app/seshat-automation"]

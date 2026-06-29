@@ -5,6 +5,7 @@ import (
 	"fmt"
 
 	agentsTool "github.com/EngineerProjects/seshat/internal/tools/agents"
+	automationTool "github.com/EngineerProjects/seshat/internal/tools/automation"
 	bashTool "github.com/EngineerProjects/seshat/internal/tools/bash"
 	editTool "github.com/EngineerProjects/seshat/internal/tools/files/edit"
 	fsTool "github.com/EngineerProjects/seshat/internal/tools/files/fs"
@@ -109,7 +110,7 @@ func RegisterBuiltinToolsWithConfig(reg *tool.Registry, config *Config) error {
 		notebookTool.NewKernelTool(),
 		askUserQuestionTool.NewTool(askUserConfig),
 		webfetchTool.NewTool(webFetchConfig),
-		webSearchTool.NewTool(),
+		newWebSearchTool(config.WebSearchKeys),
 		browsercore.NewOpenTool(config.BrowserManager),
 		browsercore.NewNavigateTool(config.BrowserManager),
 		browsercore.NewSnapshotTool(config.BrowserManager),
@@ -219,6 +220,30 @@ func RegisterBuiltinToolsWithConfig(reg *tool.Registry, config *Config) error {
 		}
 	}
 
+	// Automation tools — talk to seshat-automation daemon via HTTP.
+	automationCfg := automationTool.Config{
+		ServiceURL: config.AutomationServiceURL,
+		APIKey:     config.AutomationAPIKey,
+	}
+	automationFactories := []func(automationTool.Config) (tool.Tool, error){
+		automationTool.NewScheduleJobTool,
+		automationTool.NewListJobsTool,
+		automationTool.NewUpdateJobTool,
+		automationTool.NewDeleteJobTool,
+		automationTool.NewPauseJobTool,
+		automationTool.NewResumeJobTool,
+		automationTool.NewRunJobNowTool,
+	}
+	for _, factory := range automationFactories {
+		t, err := factory(automationCfg)
+		if err != nil {
+			return fmt.Errorf("failed to build automation tool: %w", err)
+		}
+		if err := reg.Register(t); err != nil {
+			return err
+		}
+	}
+
 	return nil
 }
 
@@ -234,6 +259,17 @@ func NewBuiltinRegistryWithConfig(config *Config) (*tool.Registry, error) {
 		return nil, err
 	}
 	return reg, nil
+}
+
+// newWebSearchTool creates a web_search tool and, when explicit provider keys
+// are provided, installs a per-execution runner so searches are isolated to
+// the owner's configured keys instead of the process-wide environment.
+func newWebSearchTool(keys map[string]string) *webSearchTool.Tool {
+	t := webSearchTool.NewTool()
+	if len(keys) > 0 {
+		t.SetRunner(webSearchTool.NewRunnerFromKeys(keys))
+	}
+	return t
 }
 
 func buildSubmitPlanConfig(config *Config) *planTool.SubmitPlanConfig {
