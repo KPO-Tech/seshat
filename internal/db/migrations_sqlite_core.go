@@ -84,6 +84,16 @@ func sqliteCoreMigrations() []schemaMigration {
 			Scope: migrationScopeCoreSQLite,
 			Run:   migrateSQLiteTeams,
 		},
+		{
+			ID:    "20260629_014_automation_jobs",
+			Scope: migrationScopeCoreSQLite,
+			Run:   migrateSQLiteAutomationJobs,
+		},
+		{
+			ID:    "20260629_015_automation_agent_slug",
+			Scope: migrationScopeCoreSQLite,
+			Run:   migrateSQLiteAutomationAgentSlug,
+		},
 	}
 }
 
@@ -341,6 +351,64 @@ func migrateSQLiteSessionTasks(ctx context.Context, db *DB) error {
 
 func migrateSQLiteTeams(ctx context.Context, db *DB) error {
 	return db.gormDB.WithContext(ctx).AutoMigrate(&GTeam{})
+}
+
+func migrateSQLiteAutomationJobs(ctx context.Context, db *DB) error {
+	statements := []string{
+		`CREATE TABLE IF NOT EXISTS automation_jobs (
+			id                    TEXT    PRIMARY KEY,
+			owner_id              TEXT    NOT NULL DEFAULT '',
+			name                  TEXT    NOT NULL,
+			description           TEXT    NOT NULL DEFAULT '',
+			trigger_type          TEXT    NOT NULL,
+			trigger_cron          TEXT    NOT NULL DEFAULT '',
+			trigger_interval_ns   INTEGER NOT NULL DEFAULT 0,
+			trigger_run_at        INTEGER,
+			agent_base_type       TEXT    NOT NULL DEFAULT '',
+			agent_tools_json      TEXT    NOT NULL DEFAULT '[]',
+			agent_skills_json     TEXT    NOT NULL DEFAULT '[]',
+			agent_model           TEXT    NOT NULL DEFAULT '',
+			agent_max_turns       INTEGER NOT NULL DEFAULT 0,
+			agent_system_prompt   TEXT    NOT NULL DEFAULT '',
+			task                  TEXT    NOT NULL,
+			status                TEXT    NOT NULL DEFAULT 'active',
+			last_run_at           INTEGER,
+			next_run_at           INTEGER,
+			last_run_status       TEXT    NOT NULL DEFAULT '',
+			created_at            INTEGER NOT NULL,
+			updated_at            INTEGER NOT NULL
+		)`,
+		`CREATE INDEX IF NOT EXISTS idx_automation_jobs_owner
+			ON automation_jobs(owner_id)`,
+		`CREATE INDEX IF NOT EXISTS idx_automation_jobs_status
+			ON automation_jobs(status)`,
+		`CREATE INDEX IF NOT EXISTS idx_automation_jobs_next_run
+			ON automation_jobs(next_run_at) WHERE status = 'active'`,
+		`CREATE TABLE IF NOT EXISTS automation_runs (
+			id          TEXT    PRIMARY KEY,
+			job_id      TEXT    NOT NULL REFERENCES automation_jobs(id) ON DELETE CASCADE,
+			started_at  INTEGER NOT NULL,
+			ended_at    INTEGER,
+			status      TEXT    NOT NULL,
+			output      TEXT    NOT NULL DEFAULT '',
+			error       TEXT    NOT NULL DEFAULT '',
+			created_at  INTEGER NOT NULL
+		)`,
+		`CREATE INDEX IF NOT EXISTS idx_automation_runs_job_id
+			ON automation_runs(job_id, started_at DESC)`,
+	}
+	for _, stmt := range statements {
+		if err := db.gormDB.WithContext(ctx).Exec(stmt).Error; err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func migrateSQLiteAutomationAgentSlug(ctx context.Context, db *DB) error {
+	return db.gormDB.WithContext(ctx).Exec(
+		`ALTER TABLE automation_jobs ADD COLUMN agent_slug TEXT NOT NULL DEFAULT ''`,
+	).Error
 }
 
 func migrateSQLiteLongtermMemory(ctx context.Context, db *DB) error {

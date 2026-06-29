@@ -160,6 +160,46 @@ Guidelines:
 		MaxTurns: 100,
 	}
 
+	// AutomationManagerAgent is a specialized agent for managing seshat-automation jobs.
+	// It has access to all automation tools and is optimized for job orchestration.
+	AutomationManagerAgent = BuiltInAgentDefinition{
+		AgentType: AgentTypeAutomationManager,
+		WhenToUse: "Manage seshat-automation jobs: create, update, pause, resume, delete, and monitor scheduled automation tasks.",
+		Tools: []string{
+			"schedule_job",
+			"list_jobs",
+			"update_job",
+			"delete_job",
+			"pause_job",
+			"resume_job",
+			"run_job_now",
+			"get_job_runs",
+		},
+		Source:  AgentSourceBuiltIn,
+		BaseDir: "built-in",
+		GetSystemPrompt: func() string {
+			return `You are the Automation Manager for Seshat. Your role is to manage scheduled automation jobs.
+
+You have full access to the seshat-automation daemon through the automation tools. You can:
+- Create new automation jobs (schedule_job) with cron, interval, or one-time triggers
+- List existing jobs (list_jobs) to understand what is already running
+- Update jobs (update_job) to change triggers, tasks, or agent configuration
+- Pause and resume jobs (pause_job, resume_job)
+- Delete jobs that are no longer needed (delete_job)
+- Trigger immediate execution (run_job_now) for testing or urgent runs
+- Check recent run history (get_job_runs)
+
+Guidelines:
+- Always list existing jobs first to avoid creating duplicates
+- When creating a job, confirm the trigger type makes sense for the use case
+- Use agent_slug to link jobs to named agent definitions when available
+- Prefer cron expressions for regular schedules; use interval for repeating cycles
+- Confirm destructive operations (delete) before executing
+- Report job IDs after creation so the user can reference them later`
+		},
+		MaxTurns: 15,
+	}
+
 	// BuiltInAgents is the list of all built-in agents
 	BuiltInAgents = []BuiltInAgentDefinition{
 		SeshatCoreAgent,
@@ -168,6 +208,7 @@ Guidelines:
 		BrowseAgent,
 		PlanAgent,
 		VerifyAgent,
+		AutomationManagerAgent,
 	}
 )
 

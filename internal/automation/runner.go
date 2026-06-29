@@ -16,6 +16,10 @@ type RunnerConfig struct {
 	Model          sdk.ModelIdentifier
 	ProviderConfig *providers.Config
 	MaxTokens      int
+	// WebSearchKeys provides per-owner web search provider keys.
+	// When set, the web_search tool uses these keys instead of reading from the
+	// process environment — required for safe multi-tenant execution.
+	WebSearchKeys map[string]string
 }
 
 // ExecuteConfig holds per-execution overrides applied on top of RunnerConfig.
@@ -67,6 +71,7 @@ func (r *Runner) Execute(ctx context.Context, w Workflow, ec ExecuteConfig) erro
 		EnableHooks:            false,
 		EnableMonitoring:       false,
 		ProviderConfig:         r.cfg.ProviderConfig,
+		WebSearchKeys:          r.cfg.WebSearchKeys,
 	}
 
 	if ec.StreamFn != nil {

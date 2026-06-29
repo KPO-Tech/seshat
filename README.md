@@ -5,8 +5,8 @@
 <h1 align="center">Seshat</h1>
 
 <p align="center">
-  <b>Open-source Go Agent Runtime for autonomous AI systems</b><br>
-  <i>Built for the age of agent teams, not just single agents.</i>
+  <b>Open-source Go agent runtime for governed, multi-provider, self-hostable execution</b><br>
+  <i>Built for serious agent work today, with a larger open-source vision behind it.</i>
 </p>
 
 <p align="center">
@@ -26,63 +26,57 @@
 
 ---
 
-## 🤔 Why Seshat
+## What Seshat Is Today
 
-The agentic AI space is moving fast. Dozens of frameworks have emerged — LangChain, LangGraph, CrewAI, AutoGen, and many others. Almost all of them are Python-first. That works fine for experimentation, but it creates real friction the moment you want to ship something: dependency hell, slow startup, heavy containers, difficult embedding in existing services.
+Seshat is an open-source Go agent runtime for people who need more than a chat shell and less vendor lock-in than a closed assistant.
 
-**⚡ Go changes the equation.** A single statically linked binary. No runtime, no venv, no dependency manager. Low latency, predictable memory, easy deployment anywhere — from a Raspberry Pi to a Kubernetes cluster. Seshat brings that to agentic AI.
+Its current wedge is concrete:
 
-But the choice of language is the smaller part of the story.
+- governed multi-turn agent execution
+- tools, files, sandboxed bash, web, browser, MCP, RAG, and skills
+- multi-provider routing with self-hosted and local-first deployment options
+- persistent sessions, permissions, recovery, and audit-friendly behavior
+- CLI/TUI, gRPC, and Go SDK surfaces on the same runtime core
 
----
+If you want the class of tool people reach for in products like Claude Code, but open, written in Go, multi-provider, and deployable under your own rules, this is the project.
 
-### 🚧 The real gap: agents don't know how to work together
+## Why This Exists
 
-Individual agents have become impressive. They can reason for hours, use tools, write code, search the web, produce deliverables. The frontier has moved. The hard unsolved problem is no longer *what a single agent can do* — it is **how multiple agents can work together in a coherent, observable, and economically useful way**.
+Most of the market still splits into two weak extremes:
 
-Most current systems handle this with pipelines, handoffs, or orchestration graphs. These are useful, but they remain technical constructs. They don't model *work* the way humans actually do it.
+- chat products that answer well but do not own serious execution
+- low-level frameworks that are flexible but too fragmented, too provider-shaped, or too awkward to ship as a real runtime
 
----
+Seshat is the missing middle layer: an execution runtime that can actually run agents, call tools, hold sessions, enforce permissions, recover from failures, and stay usable as infrastructure.
 
-### 🧠 The thesis behind this project
+## The Broader Open-Source Direction
 
-We believe the right model for agent collaboration is not the workflow graph — it is the **human organization**.
+The project still keeps a broader ambition, and that matters for the community.
 
-Real teams don't communicate through function calls. They have roles, responsibilities, inboxes, meetings, status reports, shared decisions, and a working memory of the mission. A project lead delegates tasks. A specialist delivers a report. A reviewer pushes back. A coordinator synthesizes. Information flows explicitly. Decisions are recorded. Nothing is lost in a black-box state machine.
+Seshat is not only about making one strong solo agent. The longer-term direction is organized agentic work: explicit roles, mission memory, structured coordination, durable teams, and an open foundation that others can extend through skills, MCP servers, SDK integrations, and domain-specific workflows.
 
-Seshat is being built around this idea: **study how humans work in teams — in companies, research groups, or any collaborative setting — and reproduce those coordination patterns with autonomous agents.**
+That larger vision belongs in the docs and in open-source discussion because contributors need the map, not only the current feature list.
 
-This means agents that:
-- 📬 communicate through structured messages, not just function calls
-- 📋 can send a report, schedule a review, claim a task, or escalate a blocker
-- 🧩 have an identity, a role, and a history — not just a prompt and a response
-- 🗂️ share a mission memory that keeps decisions, constraints, and objectives alive across the team
+- Product and runtime direction: https://seshat-ai.com/docs/learn/vision
+- Runtime concepts and architecture: https://seshat-ai.com/docs/concepts/what-is-seshat
+- Technical bets behind the project: https://seshat-ai.com/docs/learn/technical-hypotheses
 
----
+## Runtime First, Platform Above It
 
-### 🗺️ Where we are and where we're going
+`Seshat` is the runtime layer.
 
-We are building the foundation. Seshat today is a solid, production-grade runtime: persistent sessions, 60+ tools, 15 LLM providers, MCP client, RAG, skills, gRPC API, sandboxed execution. It is already useful as a standalone CLI, an embeddable Go SDK, or the engine behind [seshat-ai](https://github.com/EngineerProjects/seshat-ai).
+Use this repository if you want to:
 
-The team primitives (mailboxes, roles, missions, structured inter-agent communication) are the next major layer. We are designing them now, informed by how real organizations function.
+- run agents locally or self-host them under your own control
+- embed the runtime inside a Go application or internal system
+- extend providers, tools, permissions, MCP integration, or runtime behavior
 
-Beyond these layers, the shape of the platform will be defined as much by the community as by any central roadmap. Domain experts in healthcare, education, legal, finance, logistics, or any other professional field will propose and contribute specialized integrations tailored to the realities of their industry. Seshat is not a product with a fixed scope. It is an OS for agentic services: an open foundation on which any application can be built for any use case, by the people who understand that use case well enough to build it right.
-
----
-
-### 🤝 An open project: all ideas welcome
-
-**This is an open research and engineering project as much as a software one.** The ecosystem we want to build is ambitious, and no single perspective has all the answers.
-
-If you have ideas about how agents should collaborate, how human team structures map to agentic systems, what organizational patterns are worth modeling, or what the ecosystem is still missing: your input is genuinely valuable.
-
-👉 Open a [Discussion](https://github.com/EngineerProjects/seshat/discussions), an issue, or a PR. Every suggestion is read.
-
-We are building this together. 🚀
+If you want the full self-hosted platform layer for organizations, use [seshat-ai](https://github.com/EngineerProjects/seshat-ai): users, workspaces, REST API, knowledge base, scheduling, governance, and desktop product surfaces built on top of this engine.
 
 ---
 
 ## 🖥️ Terminal UI
+
 
 `seshat chat` drops you into a full-featured terminal interface built for long-running agent sessions.
 

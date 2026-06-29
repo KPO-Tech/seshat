@@ -203,6 +203,47 @@ func (t *Tool) IsReadOnly(input map[string]any) bool {
 	return true
 }
 
+// NewRunnerFromKeys builds a RunnerFn that uses explicit per-user provider
+// API keys instead of reading from process environment. This enables safe
+// concurrent job execution across multiple owners without os.Setenv races.
+// keys must be keyed by provider name: "tavily", "exa", "jina", "langsearch".
+func NewRunnerFromKeys(keys map[string]string) RunnerFn {
+	var chain []searchproviders.SearchProvider
+	if k := strings.TrimSpace(keys["tavily"]); k != "" {
+		chain = append(chain, searchproviders.NewTavilyProviderWithAPIKey(k))
+	}
+	if k := strings.TrimSpace(keys["exa"]); k != "" {
+		chain = append(chain, searchproviders.NewExaProviderWithAPIKey(k))
+	}
+	if k := strings.TrimSpace(keys["jina"]); k != "" {
+		chain = append(chain, searchproviders.NewJinaProviderWithAPIKey(k))
+	}
+	if k := strings.TrimSpace(keys["langsearch"]); k != "" {
+		chain = append(chain, searchproviders.NewLangSearchProviderWithAPIKey(k))
+	}
+
+	return func(ctx context.Context, query string, allowedDomains, blockedDomains []string) (Output, error) {
+		effective := searchproviders.GetProviderChain(searchproviders.ProviderModeAuto, chain)
+		if len(effective) == 0 {
+			return Output{}, fmt.Errorf("web search: no providers configured for this user")
+		}
+		providerOut, err := searchproviders.RunSearch(searchproviders.SearchInput{
+			Ctx:            ctx,
+			Query:          query,
+			AllowedDomains: allowedDomains,
+			BlockedDomains: blockedDomains,
+		}, effective, searchproviders.ProviderModeAuto)
+		if err != nil {
+			return Output{}, err
+		}
+		return searchcore.FinalizeOutput(searchcore.Input{
+			Query:          query,
+			AllowedDomains: append([]string(nil), allowedDomains...),
+			BlockedDomains: append([]string(nil), blockedDomains...),
+		}, providerOut), nil
+	}
+}
+
 // IsEnabled always returns true so that web_search is registered in the
 // session tool map at session creation time. Actual provider availability
 // is checked at request time via IsAvailableNow, which is called by

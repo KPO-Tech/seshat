@@ -5,6 +5,7 @@ on:
     branches: ["main", "dev"]
   pull_request:
     branches: ["main", "dev"]
+  workflow_dispatch:
 
 permissions:
   contents: read
@@ -94,11 +95,11 @@ jobs:
           if [[ "${{ github.event_name }}" == "pull_request" && \
                 "${{ github.base_ref }}" == "dev" ]]; then
             case "${{ github.head_ref }}" in
-              feat/*|fix/*|docs/*|refactor/*|test/*|chore/*|perf/*|ci/*)
+              feat/*|feature/*|fix/*|bugfix/*|docs/*|refactor/*|test/*|chore/*|perf/*|ci/*)
                 ;;
               *)
                 echo "Pull requests targeting dev must come from a typed topic branch."
-                echo "Allowed prefixes: feat/, fix/, docs/, refactor/, test/, chore/, perf/, ci/"
+                echo "Allowed prefixes: feat/, feature/, fix/, bugfix/, docs/, refactor/, test/, chore/, perf/, ci/"
                 echo "Current head branch: ${{ github.head_ref }}"
                 exit 1
                 ;;
