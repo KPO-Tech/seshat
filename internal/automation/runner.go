@@ -28,6 +28,12 @@ type RunnerConfig struct {
 	// way WebSearchKeys is resolved per owner rather than read from a
 	// single process-wide config.
 	RAGService *rag.Service
+	// DoclingURL enables the read_document_url tool when set — fetches
+	// and converts a remote document (PDF, webpage, ...) to markdown via a
+	// running docling-serve instance. Unlike WebSearchKeys/RAGService this
+	// isn't a secret or per-tenant value, so it's fine to read straight
+	// from RunnerConfig rather than resolved per execution.
+	DoclingURL string
 }
 
 // ExecuteConfig holds per-execution overrides applied on top of RunnerConfig.
@@ -81,6 +87,7 @@ func (r *Runner) Execute(ctx context.Context, w Workflow, ec ExecuteConfig) erro
 		ProviderConfig:         r.cfg.ProviderConfig,
 		WebSearchKeys:          r.cfg.WebSearchKeys,
 		RAGService:             r.cfg.RAGService,
+		DoclingURL:             r.cfg.DoclingURL,
 	}
 
 	if ec.StreamFn != nil {
