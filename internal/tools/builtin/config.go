@@ -66,6 +66,20 @@ type Config struct {
 	// Use fimproviders.NewMistral(apiKey) or fimproviders.NewDeepSeek(apiKey)
 	// from internal/fim/providers to create a provider client.
 	FIMCompleter fim.Completer
+
+	// AutomationServiceURL enables schedule_job and related tools when set.
+	// Should point to the seshat-automation daemon, e.g. "http://localhost:8090".
+	// When empty those tools register but return a "not configured" error.
+	AutomationServiceURL string
+	// AutomationAPIKey is the API key the tools use to authenticate with the daemon.
+	AutomationAPIKey string
+
+	// WebSearchKeys provides per-execution web search provider API keys.
+	// When set, the web_search tool uses these explicit keys instead of reading
+	// from the process environment — preventing key leakage across concurrent
+	// jobs from different owners. Keys are keyed by provider name:
+	// "tavily", "exa", "jina", "langsearch".
+	WebSearchKeys map[string]string
 }
 
 func DefaultConfig() *Config {

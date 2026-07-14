@@ -10,7 +10,10 @@ import (
 
 const migrationTableName = "seshat_schema_migrations"
 
-const migrationScopeCoreSQLite = "core_sqlite"
+const (
+	migrationScopeCoreSQLite       = "core_sqlite"
+	migrationScopeAutomationDaemon = "automation_daemon"
+)
 
 type schemaMigration struct {
 	ID    string
@@ -28,6 +31,10 @@ func (gSchemaMigration) TableName() string { return migrationTableName }
 
 func (db *DB) runSQLiteCoreMigrations(ctx context.Context) error {
 	return db.applyMigrations(ctx, sqliteCoreMigrations())
+}
+
+func (db *DB) runSQLiteAutomationDaemonMigrations(ctx context.Context) error {
+	return db.applyMigrations(ctx, automationDaemonMigrations())
 }
 
 func (db *DB) applyMigrations(ctx context.Context, migrations []schemaMigration) error {

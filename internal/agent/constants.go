@@ -16,6 +16,7 @@ const AgentTypeExplore = "explore"
 const AgentTypeBrowse = "browse"
 const AgentTypePlan = "plan"
 const AgentTypeVerify = "verify"
+const AgentTypeAutomationManager = "automation-manager"
 
 // DefaultMaxTurns is the fallback turn limit used only when no agent definition
 // provides a MaxTurns value. Agent definitions (GeneralPurposeAgent, ExploreAgent,

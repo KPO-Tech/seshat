@@ -76,6 +76,8 @@ type Config struct {
 	BrowserRemoteControlURL string `mapstructure:"browser_remote_control_url" yaml:"browser_remote_control_url,omitempty"`
 	BrowserExecutablePath   string `mapstructure:"browser_executable_path" yaml:"browser_executable_path,omitempty"`
 	DoclingURL              string `mapstructure:"docling_url" yaml:"docling_url,omitempty"`
+	AutomationServiceURL    string `mapstructure:"automation_service_url" yaml:"automation_service_url,omitempty"`
+	AutomationAPIKey        string `mapstructure:"-" yaml:"-"` // loaded from env only, never persisted
 
 	// Search tool integration keys — loaded from the credentials DB at runtime,
 	// never stored in the YAML config file.
@@ -267,6 +269,7 @@ func LoadInto(config *Config) error {
 	v.BindEnv("featured_skill_repos", "SESHAT_FEATURED_SKILL_REPOS")
 	v.BindEnv("trusted_proxies", "SESHAT_TRUSTED_PROXIES")
 	v.BindEnv("skill_repo_hosts", "SESHAT_SKILL_REPO_HOSTS")
+	v.BindEnv("automation_service_url", "AUTOMATION_SERVICE_URL")
 	v.SetDefault("enable_signup", true)
 	v.SetDefault("default_user_role", "member")
 	v.SetDefault("enable_api_keys", true)

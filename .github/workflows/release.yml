@@ -4,6 +4,11 @@ on:
   push:
     tags:
       - "v*"
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Tag to build and release (e.g. v0.2.0)"
+        required: true
 
 permissions:
   contents: write
@@ -46,7 +51,7 @@ jobs:
         run: |
           go build \
             -trimpath \
-            -ldflags="-s -w -X main.version=${{ github.ref_name }}" \
+            -ldflags="-s -w -X main.version=${{ github.event.inputs.tag || github.ref_name }}" \
             -o dist/seshat-${{ matrix.suffix }} \
             ./cmd/cli
 
@@ -58,7 +63,7 @@ jobs:
         run: |
           go build \
             -trimpath \
-            -ldflags="-s -w -X main.version=${{ github.ref_name }}" \
+            -ldflags="-s -w -X main.version=${{ github.event.inputs.tag || github.ref_name }}" \
             -o dist/seshat-grpc-${{ matrix.suffix }} \
             ./cmd/grpc
 

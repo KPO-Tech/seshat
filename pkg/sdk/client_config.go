@@ -149,6 +149,18 @@ type ClientConfig struct {
 	// Document conversion
 	DoclingURL string `json:"docling_url,omitempty"`
 
+	// Automation daemon connection (seshat-automation).
+	// When set, the schedule_job / list_jobs / update_job / delete_job / pause_job /
+	// resume_job / run_job_now tools become functional.
+	AutomationServiceURL string `json:"automation_service_url,omitempty"`
+	AutomationAPIKey     string `json:"-"`
+
+	// WebSearchKeys provides per-execution web search provider keys.
+	// When set, the web_search tool uses these keys instead of reading from the
+	// process environment, preventing key leakage across concurrent sessions.
+	// Keys are keyed by provider name: "tavily", "exa", "jina", "langsearch".
+	WebSearchKeys map[string]string `json:"-"`
+
 	// Optional capability-specific providers for multimodal built-in tools.
 	ImageGeneration *ImageGenerationConfig `json:"image_generation,omitempty"`
 	TextToSpeech    *TextToSpeechConfig    `json:"text_to_speech,omitempty"`
