@@ -507,7 +507,7 @@ func (t *Tool) executeCommand(ctx context.Context, execCtx *ExecutionContext) (*
 		cmd.Dir = execCtx.WorkingDirectory
 	}
 	cmd.Env = append(t.buildEnvironment(nil), sandboxEnv...)
-	cmd.SysProcAttr = &syscall.SysProcAttr{Setsid: true}
+	cmd.SysProcAttr = newProcessGroupAttr()
 	// Wire up stdin if provided; otherwise leave it nil (closed).
 	if execCtx.Stdin != "" {
 		cmd.Stdin = strings.NewReader(execCtx.Stdin)
@@ -518,7 +518,7 @@ func (t *Tool) executeCommand(ctx context.Context, execCtx *ExecutionContext) (*
 		if cmd.Process == nil {
 			return nil
 		}
-		if err := syscall.Kill(-cmd.Process.Pid, syscall.SIGKILL); err != nil {
+		if err := killProcessGroup(cmd.Process.Pid); err != nil {
 			return cmd.Process.Kill()
 		}
 		return nil

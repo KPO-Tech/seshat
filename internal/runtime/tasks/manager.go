@@ -3,7 +3,6 @@ package tasks
 import (
 	"bufio"
 	"context"
-	"errors"
 	"fmt"
 	"os"
 	"os/exec"
@@ -12,7 +11,6 @@ import (
 	"strconv"
 	"strings"
 	"sync"
-	"syscall"
 	"time"
 
 	"github.com/EngineerProjects/seshat/internal/engine"
@@ -235,7 +233,7 @@ func (m *Manager) runBashTask(ctx context.Context, task *Task) {
 	cmd := exec.CommandContext(taskCtx, "bash", "-lc", task.Command)
 	cmd.Stdout = file
 	cmd.Stderr = file
-	cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
+	cmd.SysProcAttr = newProcessGroupAttr()
 
 	m.mu.Lock()
 	task.cmd = cmd
@@ -306,14 +304,6 @@ func exitCodeFromFile(path string) *int {
 		return nil
 	}
 	return &value
-}
-
-func processExists(pid int) bool {
-	if pid <= 0 {
-		return false
-	}
-	err := syscall.Kill(pid, 0)
-	return err == nil || errors.Is(err, syscall.EPERM)
 }
 
 func (m *Manager) refreshRestoredTask(task *Task) {
@@ -457,10 +447,10 @@ func (m *Manager) KillTask(taskID TaskID) error {
 		cancel()
 	}
 	if cmd != nil && cmd.Process != nil {
-		_ = syscall.Kill(-cmd.Process.Pid, syscall.SIGKILL)
+		_ = killProcessGroup(cmd.Process.Pid)
 		_, _ = cmd.Process.Wait()
 	} else if pid > 0 {
-		_ = syscall.Kill(-pid, syscall.SIGKILL)
+		_ = killProcessGroup(pid)
 	}
 
 	m.mu.Lock()

@@ -1,3 +1,10 @@
+//go:build !windows
+
+// This file is excluded from Windows builds: github.com/coder/hnsw depends
+// on github.com/google/renameio for atomic index-file writes, and renameio
+// has no Windows support. See hnsw_store_windows.go for the stub that keeps
+// the rest of the package compiling there — vector.BackendSQLite and
+// vector.BackendMemory remain fully available on every platform.
 package vector
 
 import (
