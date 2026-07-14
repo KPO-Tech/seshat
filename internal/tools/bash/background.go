@@ -15,7 +15,6 @@ import (
 	"time"
 
 	"github.com/EngineerProjects/seshat/pkg/runtimepath"
-	"golang.org/x/sys/unix"
 )
 
 // TaskOutput manages task output storage.
@@ -133,7 +132,7 @@ func (m *BackgroundTaskManager) StartBackgroundTask(
 		cmd.Dir = workingDir
 	}
 	cmd.Env = append(env, sandboxEnv...)
-	cmd.SysProcAttr = &syscall.SysProcAttr{Setsid: true}
+	cmd.SysProcAttr = newProcessGroupAttr()
 	cmd.Stdout = file
 	cmd.Stderr = file
 
@@ -243,13 +242,8 @@ func KillTaskProcess(task *BackgroundTask) error {
 		return nil
 	}
 
-	pid := task.Process.Process.Pid
-	pgid, err := unix.Getpgid(pid)
-	if err != nil {
+	if err := killProcessGroup(task.Process.Process.Pid); err != nil {
 		return task.Process.Process.Kill()
-	}
-	if err := unix.Kill(-pgid, unix.SIGKILL); err != nil {
-		return err
 	}
 
 	task.mu.Lock()

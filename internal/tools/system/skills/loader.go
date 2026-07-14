@@ -8,7 +8,6 @@ import (
 	"path/filepath"
 	"sort"
 	"strings"
-	"syscall"
 
 	"github.com/EngineerProjects/seshat/pkg/runtimepath"
 )
@@ -328,12 +327,18 @@ func getSkillCommandName(filePath string, baseDir string) string {
 }
 
 func isSymlinkDir(path string) (bool, error) {
-	var st syscall.Stat_t
-	err := syscall.Lstat(path, &st)
+	info, err := os.Lstat(path)
 	if err != nil {
 		return false, err
 	}
-	return (st.Mode & syscall.S_IFMT) == syscall.S_IFLNK, nil
+	if info.Mode()&os.ModeSymlink == 0 {
+		return false, nil
+	}
+	target, err := os.Stat(path)
+	if err != nil {
+		return false, err
+	}
+	return target.IsDir(), nil
 }
 
 func CreateSkillFromFrontmatter(frontmatter FrontmatterData, markdownContent string, skillName string, baseDir string, loadedFrom string, source SettingSource) (Skill, error) {
