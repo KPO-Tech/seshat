@@ -5,8 +5,8 @@ import (
 	"fmt"
 	"strings"
 
-	tool "github.com/EngineerProjects/seshat/internal/tools/registry"
-	browsercore "github.com/EngineerProjects/seshat/internal/web/browser"
+	tool "github.com/KPO-Tech/seshat/internal/tools/registry"
+	browsercore "github.com/KPO-Tech/seshat/internal/web/browser"
 )
 
 func jsonResult(data any, content string) tool.CallResult {

@@ -6,11 +6,11 @@ import (
 	"strings"
 	"time"
 
-	"github.com/EngineerProjects/seshat/internal/agent/goal"
-	"github.com/EngineerProjects/seshat/internal/engine"
-	"github.com/EngineerProjects/seshat/internal/hooks"
-	tool "github.com/EngineerProjects/seshat/internal/tools/registry"
-	"github.com/EngineerProjects/seshat/internal/types"
+	"github.com/KPO-Tech/seshat/internal/agent/goal"
+	"github.com/KPO-Tech/seshat/internal/engine"
+	"github.com/KPO-Tech/seshat/internal/hooks"
+	tool "github.com/KPO-Tech/seshat/internal/tools/registry"
+	"github.com/KPO-Tech/seshat/internal/types"
 )
 
 // RunResult is the result of running an agent

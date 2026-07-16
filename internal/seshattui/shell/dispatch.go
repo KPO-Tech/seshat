@@ -14,7 +14,7 @@ import (
 	"runtime"
 	"strings"
 
-	"github.com/EngineerProjects/seshat/internal/seshattui/filepathext"
+	"github.com/KPO-Tech/seshat/internal/seshattui/filepathext"
 	"mvdan.cc/sh/v3/expand"
 	"mvdan.cc/sh/v3/interp"
 	"mvdan.cc/sh/v3/syntax"

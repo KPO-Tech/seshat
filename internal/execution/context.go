@@ -5,9 +5,9 @@ import (
 	"os"
 	"path/filepath"
 
-	tool "github.com/EngineerProjects/seshat/internal/tools/contract"
-	"github.com/EngineerProjects/seshat/internal/types"
-	"github.com/EngineerProjects/seshat/internal/workspace"
+	tool "github.com/KPO-Tech/seshat/internal/tools/contract"
+	"github.com/KPO-Tech/seshat/internal/types"
+	"github.com/KPO-Tech/seshat/internal/workspace"
 )
 
 func (o *Orchestrator) newToolContext(req ExecuteRequest) tool.ToolUseContext {

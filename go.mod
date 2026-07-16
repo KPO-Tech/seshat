@@ -1,4 +1,4 @@
-module github.com/EngineerProjects/seshat
+module github.com/KPO-Tech/seshat
 
 go 1.26.4
 

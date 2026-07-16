@@ -5,10 +5,10 @@ import (
 	"fmt"
 	"strings"
 
-	coreagent "github.com/EngineerProjects/seshat/internal/agent"
-	tool "github.com/EngineerProjects/seshat/internal/tools/registry"
-	"github.com/EngineerProjects/seshat/internal/tools/schema"
-	"github.com/EngineerProjects/seshat/internal/types"
+	coreagent "github.com/KPO-Tech/seshat/internal/agent"
+	tool "github.com/KPO-Tech/seshat/internal/tools/registry"
+	"github.com/KPO-Tech/seshat/internal/tools/schema"
+	"github.com/KPO-Tech/seshat/internal/types"
 )
 
 const sendAgentMessageName = "send_agent_message"

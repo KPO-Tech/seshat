@@ -3,8 +3,8 @@ package state
 import (
 	"context"
 	"errors"
-	dbpkg "github.com/EngineerProjects/seshat/internal/db"
-	"github.com/EngineerProjects/seshat/internal/types"
+	dbpkg "github.com/KPO-Tech/seshat/internal/db"
+	"github.com/KPO-Tech/seshat/internal/types"
 	"os"
 	"path/filepath"
 	"testing"

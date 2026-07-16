@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/EngineerProjects/seshat/cmd/automation/workflows"
+	"github.com/KPO-Tech/seshat/cmd/automation/workflows"
 )
 
 func execute(args []string) error {

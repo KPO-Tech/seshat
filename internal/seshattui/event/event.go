@@ -9,7 +9,7 @@ import (
 	"runtime"
 	"time"
 
-	"github.com/EngineerProjects/seshat/internal/seshattui/version"
+	"github.com/KPO-Tech/seshat/internal/seshattui/version"
 	"github.com/posthog/posthog-go"
 )
 

@@ -2,10 +2,10 @@ package webfetch
 
 import (
 	"context"
-	tool "github.com/EngineerProjects/seshat/internal/tools/registry"
-	"github.com/EngineerProjects/seshat/internal/types"
-	browsercore "github.com/EngineerProjects/seshat/internal/web/browser"
-	fetchcore "github.com/EngineerProjects/seshat/internal/web/fetch"
+	tool "github.com/KPO-Tech/seshat/internal/tools/registry"
+	"github.com/KPO-Tech/seshat/internal/types"
+	browsercore "github.com/KPO-Tech/seshat/internal/web/browser"
+	fetchcore "github.com/KPO-Tech/seshat/internal/web/fetch"
 	"strings"
 	"testing"
 	"time"

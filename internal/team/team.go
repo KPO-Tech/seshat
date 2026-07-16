@@ -7,8 +7,8 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/EngineerProjects/seshat/internal/agent"
-	"github.com/EngineerProjects/seshat/internal/db"
+	"github.com/KPO-Tech/seshat/internal/agent"
+	"github.com/KPO-Tech/seshat/internal/db"
 	"github.com/google/uuid"
 )
 

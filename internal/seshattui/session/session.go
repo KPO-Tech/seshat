@@ -5,7 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 
-	"github.com/EngineerProjects/seshat/internal/seshattui/pubsub"
+	"github.com/KPO-Tech/seshat/internal/seshattui/pubsub"
 	"github.com/zeebo/xxh3"
 )
 

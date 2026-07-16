@@ -4,7 +4,7 @@ import (
 	"strings"
 
 	"charm.land/glamour/v2"
-	"github.com/EngineerProjects/seshat/internal/seshattui/ui/common"
+	"github.com/KPO-Tech/seshat/internal/seshattui/ui/common"
 )
 
 // streamingMarkdown caches a "stable prefix" glamour render so each

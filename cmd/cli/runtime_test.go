@@ -4,8 +4,8 @@ import (
 	"strings"
 	"testing"
 
-	engineconfig "github.com/EngineerProjects/seshat/pkg/config"
-	"github.com/EngineerProjects/seshat/pkg/sdk"
+	engineconfig "github.com/KPO-Tech/seshat/pkg/config"
+	"github.com/KPO-Tech/seshat/pkg/sdk"
 )
 
 func TestResolveModelKeepsExplicitProviderPrefix(t *testing.T) {

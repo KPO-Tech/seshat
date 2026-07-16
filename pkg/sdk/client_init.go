@@ -5,17 +5,17 @@ import (
 	"log"
 	"strings"
 
-	audioproviders "github.com/EngineerProjects/seshat/internal/audio/providers"
-	"github.com/EngineerProjects/seshat/internal/audio/stt"
-	"github.com/EngineerProjects/seshat/internal/audio/tts"
-	"github.com/EngineerProjects/seshat/internal/image"
-	imageproviders "github.com/EngineerProjects/seshat/internal/image/providers"
-	"github.com/EngineerProjects/seshat/internal/memory"
-	"github.com/EngineerProjects/seshat/internal/monitoring"
-	"github.com/EngineerProjects/seshat/internal/storage"
-	"github.com/EngineerProjects/seshat/internal/tools/builtin"
-	"github.com/EngineerProjects/seshat/internal/tools/registry"
-	browsercore "github.com/EngineerProjects/seshat/internal/web/browser"
+	audioproviders "github.com/KPO-Tech/seshat/internal/audio/providers"
+	"github.com/KPO-Tech/seshat/internal/audio/stt"
+	"github.com/KPO-Tech/seshat/internal/audio/tts"
+	"github.com/KPO-Tech/seshat/internal/image"
+	imageproviders "github.com/KPO-Tech/seshat/internal/image/providers"
+	"github.com/KPO-Tech/seshat/internal/memory"
+	"github.com/KPO-Tech/seshat/internal/monitoring"
+	"github.com/KPO-Tech/seshat/internal/storage"
+	"github.com/KPO-Tech/seshat/internal/tools/builtin"
+	"github.com/KPO-Tech/seshat/internal/tools/registry"
+	browsercore "github.com/KPO-Tech/seshat/internal/web/browser"
 )
 
 func initArtifactStore(config *ClientConfig) ArtifactStore {

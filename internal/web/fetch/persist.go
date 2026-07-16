@@ -7,7 +7,7 @@ import (
 	"path"
 	"strings"
 
-	"github.com/EngineerProjects/seshat/internal/storage"
+	"github.com/KPO-Tech/seshat/internal/storage"
 )
 
 func isTextualContentType(contentType string) bool {

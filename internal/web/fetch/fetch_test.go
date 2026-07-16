@@ -2,7 +2,7 @@ package fetch
 
 import (
 	"context"
-	"github.com/EngineerProjects/seshat/internal/storage"
+	"github.com/KPO-Tech/seshat/internal/storage"
 	"io"
 	"net/http"
 	"strings"

@@ -4,10 +4,10 @@ import (
 	"context"
 	"net/url"
 
-	tool "github.com/EngineerProjects/seshat/internal/tools/registry"
-	"github.com/EngineerProjects/seshat/internal/types"
-	webcore "github.com/EngineerProjects/seshat/internal/web"
-	browsercore "github.com/EngineerProjects/seshat/internal/web/browser"
+	tool "github.com/KPO-Tech/seshat/internal/tools/registry"
+	"github.com/KPO-Tech/seshat/internal/types"
+	webcore "github.com/KPO-Tech/seshat/internal/web"
+	browsercore "github.com/KPO-Tech/seshat/internal/web/browser"
 )
 
 func browserPermissionResult(

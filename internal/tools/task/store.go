@@ -7,7 +7,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/EngineerProjects/seshat/internal/db"
+	"github.com/KPO-Tech/seshat/internal/db"
 )
 
 // Task represents a task in the task list.

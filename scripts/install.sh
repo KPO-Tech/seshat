@@ -2,7 +2,7 @@
 # install.sh — Seshat end-user installer
 #
 # Usage:
-#   curl -fsSL https://raw.githubusercontent.com/EngineerProjects/seshat/main/scripts/install.sh | bash
+#   curl -fsSL https://raw.githubusercontent.com/KPO-Tech/seshat/main/scripts/install.sh | bash
 #
 # Options (env vars):
 #   VERSION=v0.1.0       Install a specific version (default: latest)
@@ -12,8 +12,8 @@
 #   PYTHON_VERSION=3.12  Python version for the docling venv (default: 3.11)
 #
 # Developer / SDK usage (no installer needed):
-#   go install github.com/EngineerProjects/seshat/cmd/cli@latest
-#   go get     github.com/EngineerProjects/seshat@latest   # in your go.mod
+#   go install github.com/KPO-Tech/seshat/cmd/cli@latest
+#   go get     github.com/KPO-Tech/seshat@latest   # in your go.mod
 
 set -euo pipefail
 
@@ -28,7 +28,7 @@ _sha256check() {
     fi
 }
 
-REPO="EngineerProjects/seshat"
+REPO="KPO-Tech/seshat"
 BINARY="seshat"
 INSTALL_DIR="${INSTALL_DIR:-$HOME/.local/bin}"
 NO_PYTHON="${NO_PYTHON:-0}"

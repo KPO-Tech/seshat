@@ -5,9 +5,9 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/EngineerProjects/seshat/internal/providers"
-	"github.com/EngineerProjects/seshat/internal/types"
-	"github.com/EngineerProjects/seshat/internal/utils"
+	"github.com/KPO-Tech/seshat/internal/providers"
+	"github.com/KPO-Tech/seshat/internal/types"
+	"github.com/KPO-Tech/seshat/internal/utils"
 )
 
 const (

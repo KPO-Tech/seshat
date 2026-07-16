@@ -1,6 +1,6 @@
 package embedder
 
-import internalembedder "github.com/EngineerProjects/seshat/internal/rag/embedder"
+import internalembedder "github.com/KPO-Tech/seshat/internal/rag/embedder"
 
 type (
 	Config   = internalembedder.Config

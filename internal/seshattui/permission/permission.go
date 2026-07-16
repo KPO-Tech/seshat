@@ -10,8 +10,8 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/EngineerProjects/seshat/internal/seshattui/csync"
-	"github.com/EngineerProjects/seshat/internal/seshattui/pubsub"
+	"github.com/KPO-Tech/seshat/internal/seshattui/csync"
+	"github.com/KPO-Tech/seshat/internal/seshattui/pubsub"
 	"github.com/google/uuid"
 )
 

@@ -1,6 +1,6 @@
 package memory
 
-import "github.com/EngineerProjects/seshat/internal/types"
+import "github.com/KPO-Tech/seshat/internal/types"
 
 // Config represents compaction configuration.
 type Config struct {

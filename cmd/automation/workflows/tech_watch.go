@@ -10,8 +10,8 @@ import (
 	"strings"
 	"syscall"
 
-	"github.com/EngineerProjects/seshat/pkg/automation"
-	"github.com/EngineerProjects/seshat/pkg/sdk"
+	"github.com/KPO-Tech/seshat/pkg/automation"
+	"github.com/KPO-Tech/seshat/pkg/sdk"
 )
 
 const DefaultTechWatchModel = "anthropic:claude-sonnet-4-6"

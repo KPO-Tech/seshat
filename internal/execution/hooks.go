@@ -1,6 +1,6 @@
 package execution
 
-import runtimehooks "github.com/EngineerProjects/seshat/internal/runtime/hooks"
+import runtimehooks "github.com/KPO-Tech/seshat/internal/runtime/hooks"
 
 type ToolHookStage = runtimehooks.ToolHookStage
 

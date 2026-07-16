@@ -1,6 +1,6 @@
 package oauth
 
-import internaloauth "github.com/EngineerProjects/seshat/internal/auth/oauth"
+import internaloauth "github.com/KPO-Tech/seshat/internal/auth/oauth"
 
 type (
 	Client             = internaloauth.Client

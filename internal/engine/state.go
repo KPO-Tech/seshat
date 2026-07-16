@@ -5,11 +5,11 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/EngineerProjects/seshat/internal/modes"
-	"github.com/EngineerProjects/seshat/internal/prompt"
-	contract "github.com/EngineerProjects/seshat/internal/tools/contract"
-	tool "github.com/EngineerProjects/seshat/internal/tools/registry"
-	"github.com/EngineerProjects/seshat/internal/types"
+	"github.com/KPO-Tech/seshat/internal/modes"
+	"github.com/KPO-Tech/seshat/internal/prompt"
+	contract "github.com/KPO-Tech/seshat/internal/tools/contract"
+	tool "github.com/KPO-Tech/seshat/internal/tools/registry"
+	"github.com/KPO-Tech/seshat/internal/types"
 )
 
 // Transition represents a state transition in the query loop

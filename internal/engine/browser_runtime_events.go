@@ -1,6 +1,6 @@
 package engine
 
-import "github.com/EngineerProjects/seshat/internal/types"
+import "github.com/KPO-Tech/seshat/internal/types"
 
 func browserRuntimeEventFromProgress(progress types.ToolProgress) *types.RuntimeEvent {
 	if progress.Metadata == nil {

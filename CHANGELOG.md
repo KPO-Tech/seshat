@@ -45,4 +45,4 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 *This release has not been cut yet. The engine is in active development on `main`.*
 
-[Unreleased]: https://github.com/EngineerProjects/seshat/compare/HEAD...HEAD
+[Unreleased]: https://github.com/KPO-Tech/seshat/compare/HEAD...HEAD

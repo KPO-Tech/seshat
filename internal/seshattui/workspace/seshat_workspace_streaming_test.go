@@ -6,9 +6,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/EngineerProjects/seshat/internal/seshattui/message"
-	"github.com/EngineerProjects/seshat/internal/seshattui/pubsub"
-	"github.com/EngineerProjects/seshat/pkg/sdk"
+	"github.com/KPO-Tech/seshat/internal/seshattui/message"
+	"github.com/KPO-Tech/seshat/internal/seshattui/pubsub"
+	"github.com/KPO-Tech/seshat/pkg/sdk"
 )
 
 func TestOnChunkStartsNewAssistantMessageAfterMessageStop(t *testing.T) {

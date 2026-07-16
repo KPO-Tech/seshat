@@ -10,9 +10,9 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/EngineerProjects/seshat/internal/seshattui/csync"
-	"github.com/EngineerProjects/seshat/internal/seshattui/home"
-	"github.com/EngineerProjects/seshat/pkg/runtimepath"
+	"github.com/KPO-Tech/seshat/internal/seshattui/csync"
+	"github.com/KPO-Tech/seshat/internal/seshattui/home"
+	"github.com/KPO-Tech/seshat/pkg/runtimepath"
 	"github.com/charlievieth/fastwalk"
 	gitconfig "github.com/go-git/go-git/v5/config"
 	"github.com/go-git/go-git/v5/plumbing/format/gitignore"

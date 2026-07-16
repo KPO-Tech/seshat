@@ -11,7 +11,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/EngineerProjects/seshat/pkg/runtimepath"
+	"github.com/KPO-Tech/seshat/pkg/runtimepath"
 )
 
 // validMCPServerNameRe validates MCP server names: letters, digits, hyphens, underscores only.

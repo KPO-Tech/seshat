@@ -10,7 +10,7 @@ import (
 	"github.com/charmbracelet/x/ansi"
 	xstrings "github.com/charmbracelet/x/exp/strings"
 
-	"github.com/EngineerProjects/seshat/internal/seshattui/ui/notification"
+	"github.com/KPO-Tech/seshat/internal/seshattui/ui/notification"
 )
 
 // Capabilities define different terminal capabilities supported.

@@ -19,15 +19,15 @@ import (
 
 	tea "charm.land/bubbletea/v2"
 	"charm.land/catwalk/pkg/catwalk"
-	mcptools "github.com/EngineerProjects/seshat/internal/seshattui/agent/tools/mcp"
-	"github.com/EngineerProjects/seshat/internal/seshattui/config"
-	"github.com/EngineerProjects/seshat/internal/seshattui/history"
-	"github.com/EngineerProjects/seshat/internal/seshattui/lsp"
-	"github.com/EngineerProjects/seshat/internal/seshattui/message"
-	"github.com/EngineerProjects/seshat/internal/seshattui/oauth"
-	"github.com/EngineerProjects/seshat/internal/seshattui/permission"
-	"github.com/EngineerProjects/seshat/internal/seshattui/session"
-	"github.com/EngineerProjects/seshat/internal/seshattui/skills"
+	mcptools "github.com/KPO-Tech/seshat/internal/seshattui/agent/tools/mcp"
+	"github.com/KPO-Tech/seshat/internal/seshattui/config"
+	"github.com/KPO-Tech/seshat/internal/seshattui/history"
+	"github.com/KPO-Tech/seshat/internal/seshattui/lsp"
+	"github.com/KPO-Tech/seshat/internal/seshattui/message"
+	"github.com/KPO-Tech/seshat/internal/seshattui/oauth"
+	"github.com/KPO-Tech/seshat/internal/seshattui/permission"
+	"github.com/KPO-Tech/seshat/internal/seshattui/session"
+	"github.com/KPO-Tech/seshat/internal/seshattui/skills"
 )
 
 // LSPClientInfo holds information about an LSP client's state. This is

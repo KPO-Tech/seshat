@@ -9,8 +9,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/EngineerProjects/seshat/internal/automation"
-	"github.com/EngineerProjects/seshat/internal/db"
+	"github.com/KPO-Tech/seshat/internal/automation"
+	"github.com/KPO-Tech/seshat/internal/db"
 )
 
 // authKind describes how a request was authenticated.

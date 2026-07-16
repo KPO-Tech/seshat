@@ -7,11 +7,11 @@ import (
 	"strconv"
 	"strings"
 
-	tool "github.com/EngineerProjects/seshat/internal/tools/registry"
-	"github.com/EngineerProjects/seshat/internal/tools/schema"
-	"github.com/EngineerProjects/seshat/internal/tools/special/lsp/lspClient"
-	"github.com/EngineerProjects/seshat/internal/tools/special/lsp/lspServerManager"
-	"github.com/EngineerProjects/seshat/internal/types"
+	tool "github.com/KPO-Tech/seshat/internal/tools/registry"
+	"github.com/KPO-Tech/seshat/internal/tools/schema"
+	"github.com/KPO-Tech/seshat/internal/tools/special/lsp/lspClient"
+	"github.com/KPO-Tech/seshat/internal/tools/special/lsp/lspServerManager"
+	"github.com/KPO-Tech/seshat/internal/types"
 )
 
 // ToolName is the name of the tool

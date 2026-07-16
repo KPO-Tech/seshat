@@ -5,7 +5,7 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/EngineerProjects/seshat/internal/db"
+	"github.com/KPO-Tech/seshat/internal/db"
 	"github.com/google/uuid"
 )
 

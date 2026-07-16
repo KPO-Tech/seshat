@@ -16,12 +16,12 @@ import (
 	"sync"
 	"time"
 
-	"github.com/EngineerProjects/seshat/internal/seshattui/config"
-	"github.com/EngineerProjects/seshat/internal/seshattui/csync"
-	"github.com/EngineerProjects/seshat/internal/seshattui/home"
-	"github.com/EngineerProjects/seshat/internal/seshattui/permission"
-	"github.com/EngineerProjects/seshat/internal/seshattui/pubsub"
-	"github.com/EngineerProjects/seshat/internal/seshattui/version"
+	"github.com/KPO-Tech/seshat/internal/seshattui/config"
+	"github.com/KPO-Tech/seshat/internal/seshattui/csync"
+	"github.com/KPO-Tech/seshat/internal/seshattui/home"
+	"github.com/KPO-Tech/seshat/internal/seshattui/permission"
+	"github.com/KPO-Tech/seshat/internal/seshattui/pubsub"
+	"github.com/KPO-Tech/seshat/internal/seshattui/version"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 )
 

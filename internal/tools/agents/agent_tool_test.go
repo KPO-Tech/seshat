@@ -8,16 +8,16 @@ import (
 	"strings"
 	"testing"
 
-	coreagent "github.com/EngineerProjects/seshat/internal/agent"
-	"github.com/EngineerProjects/seshat/internal/engine"
-	"github.com/EngineerProjects/seshat/internal/execution"
-	"github.com/EngineerProjects/seshat/internal/permissions"
-	"github.com/EngineerProjects/seshat/internal/prompt"
-	"github.com/EngineerProjects/seshat/internal/providers"
-	compact "github.com/EngineerProjects/seshat/internal/runtime/memory"
-	tool "github.com/EngineerProjects/seshat/internal/tools/contract"
-	registry "github.com/EngineerProjects/seshat/internal/tools/registry"
-	"github.com/EngineerProjects/seshat/internal/types"
+	coreagent "github.com/KPO-Tech/seshat/internal/agent"
+	"github.com/KPO-Tech/seshat/internal/engine"
+	"github.com/KPO-Tech/seshat/internal/execution"
+	"github.com/KPO-Tech/seshat/internal/permissions"
+	"github.com/KPO-Tech/seshat/internal/prompt"
+	"github.com/KPO-Tech/seshat/internal/providers"
+	compact "github.com/KPO-Tech/seshat/internal/runtime/memory"
+	tool "github.com/KPO-Tech/seshat/internal/tools/contract"
+	registry "github.com/KPO-Tech/seshat/internal/tools/registry"
+	"github.com/KPO-Tech/seshat/internal/types"
 )
 
 // ---------------------------------------------------------------------------

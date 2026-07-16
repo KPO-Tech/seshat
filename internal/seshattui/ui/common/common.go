@@ -6,10 +6,10 @@ import (
 	"os"
 
 	tea "charm.land/bubbletea/v2"
-	"github.com/EngineerProjects/seshat/internal/seshattui/config"
-	"github.com/EngineerProjects/seshat/internal/seshattui/ui/styles"
-	"github.com/EngineerProjects/seshat/internal/seshattui/ui/util"
-	"github.com/EngineerProjects/seshat/internal/seshattui/workspace"
+	"github.com/KPO-Tech/seshat/internal/seshattui/config"
+	"github.com/KPO-Tech/seshat/internal/seshattui/ui/styles"
+	"github.com/KPO-Tech/seshat/internal/seshattui/ui/util"
+	"github.com/KPO-Tech/seshat/internal/seshattui/workspace"
 	"github.com/atotto/clipboard"
 	uv "github.com/charmbracelet/ultraviolet"
 )

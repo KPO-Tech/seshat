@@ -6,8 +6,8 @@ import (
 	"sync"
 	"time"
 
-	"github.com/EngineerProjects/seshat/internal/agent"
-	"github.com/EngineerProjects/seshat/internal/mailbox"
+	"github.com/KPO-Tech/seshat/internal/agent"
+	"github.com/KPO-Tech/seshat/internal/mailbox"
 )
 
 // MessageHandler is called by TeamBus when a message arrives for an agent.

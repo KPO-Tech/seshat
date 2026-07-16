@@ -14,7 +14,7 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/EngineerProjects/seshat/internal/seshattui/pubsub"
+	"github.com/KPO-Tech/seshat/internal/seshattui/pubsub"
 	"github.com/charlievieth/fastwalk"
 	"gopkg.in/yaml.v3"
 )

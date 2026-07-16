@@ -6,8 +6,8 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/EngineerProjects/seshat/internal/seshattui/home"
-	"github.com/EngineerProjects/seshat/internal/seshattui/pubsub"
+	"github.com/KPO-Tech/seshat/internal/seshattui/home"
+	"github.com/KPO-Tech/seshat/internal/seshattui/pubsub"
 )
 
 // Manager owns per-workspace skill discovery state: the latest discovery

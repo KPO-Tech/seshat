@@ -8,7 +8,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/EngineerProjects/seshat/internal/seshattui/config"
+	"github.com/KPO-Tech/seshat/internal/seshattui/config"
 )
 
 const projectsFileName = "projects.json"

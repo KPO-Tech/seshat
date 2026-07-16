@@ -4,8 +4,8 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/EngineerProjects/seshat/internal/tools/schema"
-	"github.com/EngineerProjects/seshat/internal/types"
+	"github.com/KPO-Tech/seshat/internal/tools/schema"
+	"github.com/KPO-Tech/seshat/internal/types"
 )
 
 // Builder builds a tool from a definition and handler function

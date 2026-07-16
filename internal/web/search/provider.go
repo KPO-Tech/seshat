@@ -9,7 +9,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/EngineerProjects/seshat/internal/web/search/providers"
+	"github.com/KPO-Tech/seshat/internal/web/search/providers"
 )
 
 // HTTPProvider is a configurable HTTP search provider.

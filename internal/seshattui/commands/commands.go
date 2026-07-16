@@ -9,11 +9,11 @@ import (
 	"strings"
 	"time"
 
-	"github.com/EngineerProjects/seshat/internal/seshattui/agent/tools/mcp"
-	"github.com/EngineerProjects/seshat/internal/seshattui/config"
-	"github.com/EngineerProjects/seshat/internal/seshattui/home"
-	"github.com/EngineerProjects/seshat/internal/seshattui/skills"
-	"github.com/EngineerProjects/seshat/pkg/runtimepath"
+	"github.com/KPO-Tech/seshat/internal/seshattui/agent/tools/mcp"
+	"github.com/KPO-Tech/seshat/internal/seshattui/config"
+	"github.com/KPO-Tech/seshat/internal/seshattui/home"
+	"github.com/KPO-Tech/seshat/internal/seshattui/skills"
+	"github.com/KPO-Tech/seshat/pkg/runtimepath"
 )
 
 var namedArgPattern = regexp.MustCompile(`\$([A-Z][A-Z0-9_]*)`)

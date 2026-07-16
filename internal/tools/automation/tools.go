@@ -7,8 +7,8 @@ import (
 	"fmt"
 	"net/http"
 
-	tool "github.com/EngineerProjects/seshat/internal/tools/registry"
-	"github.com/EngineerProjects/seshat/internal/tools/schema"
+	tool "github.com/KPO-Tech/seshat/internal/tools/registry"
+	"github.com/KPO-Tech/seshat/internal/tools/schema"
 )
 
 // ─── schedule_job ─────────────────────────────────────────────────────────────

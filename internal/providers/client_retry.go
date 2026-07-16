@@ -4,12 +4,12 @@ import (
 	"bytes"
 	"context"
 	"fmt"
-	providerretry "github.com/EngineerProjects/seshat/internal/providers/retry"
+	providerretry "github.com/KPO-Tech/seshat/internal/providers/retry"
 	"io"
 	"net/http"
 	"time"
 
-	"github.com/EngineerProjects/seshat/internal/types"
+	"github.com/KPO-Tech/seshat/internal/types"
 )
 
 // sendMessageWithRetry sends a message request with retry logic

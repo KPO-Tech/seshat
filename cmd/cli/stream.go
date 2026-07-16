@@ -9,7 +9,7 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/EngineerProjects/seshat/pkg/sdk"
+	"github.com/KPO-Tech/seshat/pkg/sdk"
 )
 
 const (

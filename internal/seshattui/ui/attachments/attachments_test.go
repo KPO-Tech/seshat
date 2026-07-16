@@ -5,7 +5,7 @@ import (
 	"testing"
 
 	"charm.land/lipgloss/v2"
-	"github.com/EngineerProjects/seshat/internal/seshattui/message"
+	"github.com/KPO-Tech/seshat/internal/seshattui/message"
 )
 
 func TestHandleClickRemovesAttachmentAtDeleteChip(t *testing.T) {

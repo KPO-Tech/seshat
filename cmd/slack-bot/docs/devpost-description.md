@@ -6,7 +6,7 @@ Most AI assistants in Slack are glorified chatbots — you ask a question, you g
 
 ## What it does
 
-**Seshat for Slack** is a fully autonomous AI agent integrated natively into Slack via Socket Mode. It brings the complete power of the [Seshat](https://github.com/EngineerProjects/seshat) runtime directly into your workspace.
+**Seshat for Slack** is a fully autonomous AI agent integrated natively into Slack via Socket Mode. It brings the complete power of the [Seshat](https://github.com/KPO-Tech/seshat) runtime directly into your workspace.
 
 **Core capabilities:**
 - **Slack workspace search** — Uses Slack's Real-Time Search API (`assistant.search.context`) to find messages, files, and channels across your organization. Ask Seshat to find a document, recall a past decision, or summarize what was discussed in a channel.

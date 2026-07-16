@@ -11,9 +11,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/EngineerProjects/seshat/internal/providers"
-	tool "github.com/EngineerProjects/seshat/internal/tools/contract"
-	"github.com/EngineerProjects/seshat/internal/types"
+	"github.com/KPO-Tech/seshat/internal/providers"
+	tool "github.com/KPO-Tech/seshat/internal/tools/contract"
+	"github.com/KPO-Tech/seshat/internal/types"
 )
 
 func TestNewClientPropagatesPromptFnToAskUserTool(t *testing.T) {

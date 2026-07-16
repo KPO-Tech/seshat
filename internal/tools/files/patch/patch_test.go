@@ -7,7 +7,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/EngineerProjects/seshat/internal/types"
+	"github.com/KPO-Tech/seshat/internal/types"
 )
 
 // helper: write a temp file and return its path

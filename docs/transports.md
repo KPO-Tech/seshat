@@ -2,7 +2,7 @@
 
 This document covers the gRPC server, proto codegen, and environment configuration for seshat.
 
-> The HTTP REST/SSE API (`cmd/api`) is part of **[seshat-ai](https://github.com/EngineerProjects/seshat-ai)**, not seshat. See seshat-ai documentation for that surface.
+> The HTTP REST/SSE API (`cmd/api`) is part of **[seshat-ai](https://github.com/KPO-Tech/seshat-ai)**, not seshat. See seshat-ai documentation for that surface.
 
 ---
 
@@ -160,9 +160,9 @@ PATH="$HOME/go/bin:$HOME/.local/bin:$PATH" \
 protoc \
   --proto_path=pkg/grpc/proto \
   --go_out=. \
-  --go_opt=module=github.com/EngineerProjects/seshat \
+  --go_opt=module=github.com/KPO-Tech/seshat \
   --go-grpc_out=. \
-  --go-grpc_opt=module=github.com/EngineerProjects/seshat \
+  --go-grpc_opt=module=github.com/KPO-Tech/seshat \
   pkg/grpc/proto/nexus.proto
 ```
 

@@ -1,7 +1,7 @@
 package config
 
 import (
-	"github.com/EngineerProjects/seshat/pkg/sdk"
+	"github.com/KPO-Tech/seshat/pkg/sdk"
 	"os"
 	"path/filepath"
 	"testing"

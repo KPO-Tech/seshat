@@ -1,7 +1,7 @@
 package providers
 
 import (
-	"github.com/EngineerProjects/seshat/internal/model"
+	"github.com/KPO-Tech/seshat/internal/model"
 )
 
 // init populates model.Global from AllProvidersInfo() so that every caller of

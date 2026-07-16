@@ -31,7 +31,7 @@ func TestEnsureExtractedIsNoopWithEmptyBuiltin(t *testing.T) {
 
 func TestEmbeddedBuiltinContainsOnlyReadme(t *testing.T) {
 	// The builtin/ directory now contains only README.md — all skills were
-	// moved to github.com/EngineerProjects/seshat-skills.
+	// moved to github.com/KPO-Tech/seshat-skills.
 	readme, err := FS.ReadFile("builtin/README.md")
 	if err != nil {
 		t.Fatalf("README.md should be embedded: %v", err)

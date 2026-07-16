@@ -4,7 +4,7 @@
 // docling-serve without accessing internal packages.
 package python
 
-import internalpython "github.com/EngineerProjects/seshat/internal/python"
+import internalpython "github.com/KPO-Tech/seshat/internal/python"
 
 const (
 	DefaultDoclingPort = internalpython.DefaultDoclingPort

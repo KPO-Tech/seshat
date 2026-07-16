@@ -1,6 +1,6 @@
 package sdk
 
-import "github.com/EngineerProjects/seshat/internal/prompt"
+import "github.com/KPO-Tech/seshat/internal/prompt"
 
 // ExecutionStage is the re-exported execution stage type.
 // Use the Stage* constants to specify the desired behavior overlay.

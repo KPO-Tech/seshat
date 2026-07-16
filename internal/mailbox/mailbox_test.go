@@ -8,8 +8,8 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/EngineerProjects/seshat/internal/db"
-	"github.com/EngineerProjects/seshat/internal/mailbox"
+	"github.com/KPO-Tech/seshat/internal/db"
+	"github.com/KPO-Tech/seshat/internal/mailbox"
 )
 
 func openTestDB(t *testing.T) *db.DB {

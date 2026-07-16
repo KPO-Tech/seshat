@@ -10,8 +10,8 @@ import (
 	"sync"
 	"time"
 
-	"github.com/EngineerProjects/seshat/internal/seshattui/lsp"
-	tool "github.com/EngineerProjects/seshat/internal/tools/registry"
+	"github.com/KPO-Tech/seshat/internal/seshattui/lsp"
+	tool "github.com/KPO-Tech/seshat/internal/tools/registry"
 	"github.com/charmbracelet/x/powernap/pkg/lsp/protocol"
 )
 

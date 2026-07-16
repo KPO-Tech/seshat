@@ -5,12 +5,12 @@ import (
 	"fmt"
 	"strings"
 
-	tool "github.com/EngineerProjects/seshat/internal/tools/registry"
-	"github.com/EngineerProjects/seshat/internal/tools/schema"
-	"github.com/EngineerProjects/seshat/internal/types"
-	webcore "github.com/EngineerProjects/seshat/internal/web"
-	searchcore "github.com/EngineerProjects/seshat/internal/web/search"
-	searchproviders "github.com/EngineerProjects/seshat/internal/web/search/providers"
+	tool "github.com/KPO-Tech/seshat/internal/tools/registry"
+	"github.com/KPO-Tech/seshat/internal/tools/schema"
+	"github.com/KPO-Tech/seshat/internal/types"
+	webcore "github.com/KPO-Tech/seshat/internal/web"
+	searchcore "github.com/KPO-Tech/seshat/internal/web/search"
+	searchproviders "github.com/KPO-Tech/seshat/internal/web/search/providers"
 )
 
 const SearchHint = "search the web for current information"

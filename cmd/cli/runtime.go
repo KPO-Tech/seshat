@@ -9,15 +9,15 @@ import (
 	"strings"
 	"time"
 
-	dbpkg "github.com/EngineerProjects/seshat/internal/db"
-	longtermStore "github.com/EngineerProjects/seshat/internal/memory/longterm"
-	"github.com/EngineerProjects/seshat/internal/providers"
-	internalrag "github.com/EngineerProjects/seshat/internal/rag"
-	"github.com/EngineerProjects/seshat/internal/rag/embedder"
-	"github.com/EngineerProjects/seshat/internal/vector"
-	engineconfig "github.com/EngineerProjects/seshat/pkg/config"
-	"github.com/EngineerProjects/seshat/pkg/runtimepath"
-	"github.com/EngineerProjects/seshat/pkg/sdk"
+	dbpkg "github.com/KPO-Tech/seshat/internal/db"
+	longtermStore "github.com/KPO-Tech/seshat/internal/memory/longterm"
+	"github.com/KPO-Tech/seshat/internal/providers"
+	internalrag "github.com/KPO-Tech/seshat/internal/rag"
+	"github.com/KPO-Tech/seshat/internal/rag/embedder"
+	"github.com/KPO-Tech/seshat/internal/vector"
+	engineconfig "github.com/KPO-Tech/seshat/pkg/config"
+	"github.com/KPO-Tech/seshat/pkg/runtimepath"
+	"github.com/KPO-Tech/seshat/pkg/sdk"
 )
 
 type runtimeOptions struct {

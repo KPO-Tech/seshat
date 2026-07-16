@@ -10,9 +10,9 @@ import (
 	"charm.land/bubbles/v2/key"
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
-	"github.com/EngineerProjects/seshat/internal/seshattui/agent/tools/mcp"
-	"github.com/EngineerProjects/seshat/internal/seshattui/fsext"
-	"github.com/EngineerProjects/seshat/internal/seshattui/ui/list"
+	"github.com/KPO-Tech/seshat/internal/seshattui/agent/tools/mcp"
+	"github.com/KPO-Tech/seshat/internal/seshattui/fsext"
+	"github.com/KPO-Tech/seshat/internal/seshattui/ui/list"
 	"github.com/charmbracelet/x/ansi"
 	"github.com/charmbracelet/x/exp/ordered"
 )

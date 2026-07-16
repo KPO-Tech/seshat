@@ -6,7 +6,7 @@ import (
 	"strings"
 
 	"charm.land/catwalk/pkg/catwalk"
-	engineconfig "github.com/EngineerProjects/seshat/pkg/config"
+	engineconfig "github.com/KPO-Tech/seshat/pkg/config"
 )
 
 //go:embed extra_models.json

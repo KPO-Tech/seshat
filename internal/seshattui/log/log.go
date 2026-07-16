@@ -10,7 +10,7 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/EngineerProjects/seshat/internal/seshattui/event"
+	"github.com/KPO-Tech/seshat/internal/seshattui/event"
 	"github.com/charmbracelet/x/term"
 	"gopkg.in/natefinch/lumberjack.v2"
 )

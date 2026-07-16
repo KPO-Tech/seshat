@@ -8,12 +8,12 @@ import (
 	"path/filepath"
 	"sync"
 
-	automode "github.com/EngineerProjects/seshat/internal/permissions/auto"
-	"github.com/EngineerProjects/seshat/internal/providers"
-	tool "github.com/EngineerProjects/seshat/internal/tools/registry"
-	"github.com/EngineerProjects/seshat/internal/types"
-	"github.com/EngineerProjects/seshat/internal/utils"
-	"github.com/EngineerProjects/seshat/pkg/runtimepath"
+	automode "github.com/KPO-Tech/seshat/internal/permissions/auto"
+	"github.com/KPO-Tech/seshat/internal/providers"
+	tool "github.com/KPO-Tech/seshat/internal/tools/registry"
+	"github.com/KPO-Tech/seshat/internal/types"
+	"github.com/KPO-Tech/seshat/internal/utils"
+	"github.com/KPO-Tech/seshat/pkg/runtimepath"
 )
 
 // Integrator integrates permission checking with tool execution.

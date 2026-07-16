@@ -19,7 +19,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/EngineerProjects/seshat/internal/seshattui/fsext"
+	"github.com/KPO-Tech/seshat/internal/seshattui/fsext"
 )
 
 type grepMatch struct {

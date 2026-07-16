@@ -1,6 +1,6 @@
 package docling
 
-import internaldocling "github.com/EngineerProjects/seshat/internal/docling"
+import internaldocling "github.com/KPO-Tech/seshat/internal/docling"
 
 type (
 	Client           = internaldocling.Client

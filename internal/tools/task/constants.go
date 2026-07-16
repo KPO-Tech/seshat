@@ -1,6 +1,6 @@
 package task
 
-import tool "github.com/EngineerProjects/seshat/internal/tools/registry"
+import tool "github.com/KPO-Tech/seshat/internal/tools/registry"
 
 // Tool name constants
 const (

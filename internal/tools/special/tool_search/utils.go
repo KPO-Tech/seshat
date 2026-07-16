@@ -5,7 +5,7 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/EngineerProjects/seshat/internal/tools/contract"
+	"github.com/KPO-Tech/seshat/internal/tools/contract"
 )
 
 func GetToolSearchMode() ToolSearchMode {

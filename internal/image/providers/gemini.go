@@ -8,7 +8,7 @@ import (
 	"io"
 	"net/http"
 
-	"github.com/EngineerProjects/seshat/internal/image"
+	"github.com/KPO-Tech/seshat/internal/image"
 )
 
 const (

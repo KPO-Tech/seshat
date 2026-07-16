@@ -10,7 +10,7 @@ import (
 	"io"
 	"strings"
 
-	"github.com/EngineerProjects/seshat/internal/types"
+	"github.com/KPO-Tech/seshat/internal/types"
 )
 
 // streamSSEResponse consumes an Anthropic SSE response body and forwards parsed chunks

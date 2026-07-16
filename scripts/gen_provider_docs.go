@@ -15,8 +15,8 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/EngineerProjects/seshat/internal/providers"
-	"github.com/EngineerProjects/seshat/internal/types"
+	"github.com/KPO-Tech/seshat/internal/providers"
+	"github.com/KPO-Tech/seshat/internal/types"
 )
 
 func main() {

@@ -8,7 +8,7 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/EngineerProjects/seshat/internal/tools/files/read"
+	"github.com/KPO-Tech/seshat/internal/tools/files/read"
 )
 
 const (

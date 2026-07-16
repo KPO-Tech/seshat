@@ -9,12 +9,12 @@ import (
 	"time"
 	"unicode"
 
-	"github.com/EngineerProjects/seshat/internal/sandbox"
-	fileReadTool "github.com/EngineerProjects/seshat/internal/tools/files/read"
-	"github.com/EngineerProjects/seshat/internal/tools/files/shared"
-	tool "github.com/EngineerProjects/seshat/internal/tools/registry"
-	"github.com/EngineerProjects/seshat/internal/tools/schema"
-	"github.com/EngineerProjects/seshat/internal/types"
+	"github.com/KPO-Tech/seshat/internal/sandbox"
+	fileReadTool "github.com/KPO-Tech/seshat/internal/tools/files/read"
+	"github.com/KPO-Tech/seshat/internal/tools/files/shared"
+	tool "github.com/KPO-Tech/seshat/internal/tools/registry"
+	"github.com/KPO-Tech/seshat/internal/tools/schema"
+	"github.com/KPO-Tech/seshat/internal/types"
 )
 
 const (

@@ -5,7 +5,7 @@ import (
 	"net/url"
 	"strings"
 
-	webcore "github.com/EngineerProjects/seshat/internal/web"
+	webcore "github.com/KPO-Tech/seshat/internal/web"
 )
 
 // NormalizeURL upgrades plain HTTP inputs to HTTPS and ensures the fetch core always receives a canonical URL.

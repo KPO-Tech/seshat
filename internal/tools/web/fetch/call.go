@@ -5,9 +5,9 @@ import (
 	"fmt"
 	"time"
 
-	tool "github.com/EngineerProjects/seshat/internal/tools/registry"
-	"github.com/EngineerProjects/seshat/internal/types"
-	fetchcore "github.com/EngineerProjects/seshat/internal/web/fetch"
+	tool "github.com/KPO-Tech/seshat/internal/tools/registry"
+	"github.com/KPO-Tech/seshat/internal/types"
+	fetchcore "github.com/KPO-Tech/seshat/internal/web/fetch"
 )
 
 // Call executes the tool end-to-end while keeping the orchestration logic separate from the fetch backends.

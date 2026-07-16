@@ -6,9 +6,9 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/EngineerProjects/seshat/internal/memory"
-	tool "github.com/EngineerProjects/seshat/internal/tools/contract"
-	"github.com/EngineerProjects/seshat/internal/types"
+	"github.com/KPO-Tech/seshat/internal/memory"
+	tool "github.com/KPO-Tech/seshat/internal/tools/contract"
+	"github.com/KPO-Tech/seshat/internal/types"
 )
 
 type learnedDirective struct {

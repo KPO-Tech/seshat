@@ -3,7 +3,7 @@ package skillrepos
 import (
 	"context"
 
-	internalrepos "github.com/EngineerProjects/seshat/internal/tools/system/skills/skillrepos"
+	internalrepos "github.com/KPO-Tech/seshat/internal/tools/system/skills/skillrepos"
 )
 
 type Repo = internalrepos.Repo

@@ -3,7 +3,7 @@ package common
 import (
 	"strings"
 
-	"github.com/EngineerProjects/seshat/internal/seshattui/ui/styles"
+	"github.com/KPO-Tech/seshat/internal/seshattui/ui/styles"
 )
 
 // Scrollbar renders a vertical scrollbar based on content and viewport size.

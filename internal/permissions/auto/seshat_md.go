@@ -17,7 +17,7 @@ package auto
 import (
 	"strings"
 
-	"github.com/EngineerProjects/seshat/internal/types"
+	"github.com/KPO-Tech/seshat/internal/types"
 )
 
 // SeshatMdProvider is a function type that returns the SESHAT.md content.

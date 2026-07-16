@@ -7,8 +7,8 @@ import (
 	"strings"
 
 	"charm.land/lipgloss/v2"
-	"github.com/EngineerProjects/seshat/internal/seshattui/ansiext"
-	"github.com/EngineerProjects/seshat/internal/seshattui/ui/xchroma"
+	"github.com/KPO-Tech/seshat/internal/seshattui/ansiext"
+	"github.com/KPO-Tech/seshat/internal/seshattui/ui/xchroma"
 	"github.com/alecthomas/chroma/v2"
 	"github.com/alecthomas/chroma/v2/lexers"
 	"github.com/aymanbagabas/go-udiff"

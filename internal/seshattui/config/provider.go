@@ -11,7 +11,7 @@ import (
 	"sync"
 
 	"charm.land/catwalk/pkg/catwalk"
-	"github.com/EngineerProjects/seshat/internal/seshattui/home"
+	"github.com/KPO-Tech/seshat/internal/seshattui/home"
 	"github.com/charmbracelet/x/etag"
 )
 

@@ -6,7 +6,7 @@ import (
 
 	tea "charm.land/bubbletea/v2"
 
-	"github.com/EngineerProjects/seshat/internal/seshattui/message"
+	"github.com/KPO-Tech/seshat/internal/seshattui/message"
 )
 
 // promptHistoryLoadedMsg is sent when prompt history is loaded.

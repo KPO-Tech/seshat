@@ -8,7 +8,7 @@ import (
 	"sort"
 	"time"
 
-	"github.com/EngineerProjects/seshat/internal/types"
+	"github.com/KPO-Tech/seshat/internal/types"
 )
 
 // DiscoveryResult reports the availability and authentication status of one provider.

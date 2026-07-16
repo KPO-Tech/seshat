@@ -6,7 +6,7 @@ import (
 	"testing"
 	"time"
 
-	publicoauth "github.com/EngineerProjects/seshat/pkg/auth/oauth"
+	publicoauth "github.com/KPO-Tech/seshat/pkg/auth/oauth"
 )
 
 func TestOAuthDeviceFlowSaveAndResolve(t *testing.T) {

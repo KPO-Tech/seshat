@@ -3,7 +3,7 @@ package task
 import (
 	"fmt"
 
-	bashTool "github.com/EngineerProjects/seshat/internal/tools/bash"
+	bashTool "github.com/KPO-Tech/seshat/internal/tools/bash"
 )
 
 // statusToString converts TaskStatus to string

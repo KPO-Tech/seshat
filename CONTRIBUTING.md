@@ -61,7 +61,7 @@ feature branches on top of a diverged `dev`.
 ### Clone and build
 
 ```bash
-git clone https://github.com/EngineerProjects/seshat
+git clone https://github.com/KPO-Tech/seshat
 cd seshat
 
 # Install git pre-commit hooks (run once)

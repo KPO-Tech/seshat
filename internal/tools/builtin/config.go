@@ -5,16 +5,16 @@ import (
 	"context"
 	"os"
 
-	"github.com/EngineerProjects/seshat/internal/audio/stt"
-	"github.com/EngineerProjects/seshat/internal/audio/tts"
-	"github.com/EngineerProjects/seshat/internal/fim"
-	"github.com/EngineerProjects/seshat/internal/image"
-	longterm "github.com/EngineerProjects/seshat/internal/memory/longterm"
-	"github.com/EngineerProjects/seshat/internal/rag"
-	"github.com/EngineerProjects/seshat/internal/storage"
-	"github.com/EngineerProjects/seshat/internal/tools/system/mcp"
-	"github.com/EngineerProjects/seshat/internal/types"
-	browsercore "github.com/EngineerProjects/seshat/internal/web/browser"
+	"github.com/KPO-Tech/seshat/internal/audio/stt"
+	"github.com/KPO-Tech/seshat/internal/audio/tts"
+	"github.com/KPO-Tech/seshat/internal/fim"
+	"github.com/KPO-Tech/seshat/internal/image"
+	longterm "github.com/KPO-Tech/seshat/internal/memory/longterm"
+	"github.com/KPO-Tech/seshat/internal/rag"
+	"github.com/KPO-Tech/seshat/internal/storage"
+	"github.com/KPO-Tech/seshat/internal/tools/system/mcp"
+	"github.com/KPO-Tech/seshat/internal/types"
+	browsercore "github.com/KPO-Tech/seshat/internal/web/browser"
 )
 
 // PlanStore is the minimal interface the submit_plan tool needs to persist plan documents.
