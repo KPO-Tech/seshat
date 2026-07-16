@@ -3,8 +3,8 @@ package agent
 import (
 	"context"
 	"fmt"
-	skills "github.com/EngineerProjects/seshat/internal/tools/system/skills"
-	publicskills "github.com/EngineerProjects/seshat/pkg/skills"
+	skills "github.com/KPO-Tech/seshat/internal/tools/system/skills"
+	publicskills "github.com/KPO-Tech/seshat/pkg/skills"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"os"

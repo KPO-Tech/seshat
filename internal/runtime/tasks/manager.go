@@ -13,11 +13,11 @@ import (
 	"sync"
 	"time"
 
-	"github.com/EngineerProjects/seshat/internal/engine"
-	tool "github.com/EngineerProjects/seshat/internal/tools/registry"
-	taskTool "github.com/EngineerProjects/seshat/internal/tools/task"
-	"github.com/EngineerProjects/seshat/internal/types"
-	"github.com/EngineerProjects/seshat/pkg/runtimepath"
+	"github.com/KPO-Tech/seshat/internal/engine"
+	tool "github.com/KPO-Tech/seshat/internal/tools/registry"
+	taskTool "github.com/KPO-Tech/seshat/internal/tools/task"
+	"github.com/KPO-Tech/seshat/internal/types"
+	"github.com/KPO-Tech/seshat/pkg/runtimepath"
 )
 
 // Manager manages background task execution.

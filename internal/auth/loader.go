@@ -4,9 +4,9 @@ import (
 	"context"
 	"os"
 
-	"github.com/EngineerProjects/seshat/internal/auth/store"
-	"github.com/EngineerProjects/seshat/internal/auth/types"
-	"github.com/EngineerProjects/seshat/pkg/runtimepath"
+	"github.com/KPO-Tech/seshat/internal/auth/store"
+	"github.com/KPO-Tech/seshat/internal/auth/types"
+	"github.com/KPO-Tech/seshat/pkg/runtimepath"
 )
 
 // ============================================================================

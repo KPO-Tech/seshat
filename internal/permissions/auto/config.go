@@ -4,7 +4,7 @@
 // package, including mode-level configuration, denial limits, and defaults.
 package auto
 
-import "github.com/EngineerProjects/seshat/internal/types"
+import "github.com/KPO-Tech/seshat/internal/types"
 
 // Config holds general configuration for auto mode.
 // Note: ModeConfig in mode.go is used for the Mode struct itself.

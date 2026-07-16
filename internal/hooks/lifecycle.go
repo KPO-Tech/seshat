@@ -6,7 +6,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/EngineerProjects/seshat/internal/types"
+	"github.com/KPO-Tech/seshat/internal/types"
 )
 
 // HookLifecycleConfig configures the hook lifecycle manager behavior

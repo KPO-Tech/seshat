@@ -1,7 +1,7 @@
 package agent
 
 import (
-	"github.com/EngineerProjects/seshat/internal/types"
+	"github.com/KPO-Tech/seshat/internal/types"
 )
 
 // AgentSource indicates where the agent definition comes from

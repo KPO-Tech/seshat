@@ -6,11 +6,11 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/EngineerProjects/seshat/internal/sandbox"
-	"github.com/EngineerProjects/seshat/internal/tools/files/shared"
-	tool "github.com/EngineerProjects/seshat/internal/tools/registry"
-	"github.com/EngineerProjects/seshat/internal/tools/schema"
-	"github.com/EngineerProjects/seshat/internal/types"
+	"github.com/KPO-Tech/seshat/internal/sandbox"
+	"github.com/KPO-Tech/seshat/internal/tools/files/shared"
+	tool "github.com/KPO-Tech/seshat/internal/tools/registry"
+	"github.com/KPO-Tech/seshat/internal/tools/schema"
+	"github.com/KPO-Tech/seshat/internal/types"
 )
 
 // ApplyPatchTool applies a structured multi-file patch in one atomic call.

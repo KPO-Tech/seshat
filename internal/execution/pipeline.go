@@ -10,9 +10,9 @@ import (
 	"go.opentelemetry.io/otel/codes"
 	oteltrace "go.opentelemetry.io/otel/trace"
 
-	runtimehooks "github.com/EngineerProjects/seshat/internal/runtime/hooks"
-	tool "github.com/EngineerProjects/seshat/internal/tools/contract"
-	"github.com/EngineerProjects/seshat/internal/types"
+	runtimehooks "github.com/KPO-Tech/seshat/internal/runtime/hooks"
+	tool "github.com/KPO-Tech/seshat/internal/tools/contract"
+	"github.com/KPO-Tech/seshat/internal/types"
 )
 
 func (o *Orchestrator) executePreparedTool(

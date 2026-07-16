@@ -11,4 +11,4 @@ This directory defines what seshat is, why it exists, and where it is going.
 ---
 
 > These documents describe the **engine** — the open-source runtime.  
-> The product layer (multi-user backend, desktop app) is built on top in **[seshat-ai](https://github.com/EngineerProjects/seshat-ai)** and is not covered here.
+> The product layer (multi-user backend, desktop app) is built on top in **[seshat-ai](https://github.com/KPO-Tech/seshat-ai)** and is not covered here.

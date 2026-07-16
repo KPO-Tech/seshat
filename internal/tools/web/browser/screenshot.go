@@ -4,10 +4,10 @@ import (
 	"context"
 	"fmt"
 
-	tool "github.com/EngineerProjects/seshat/internal/tools/registry"
-	"github.com/EngineerProjects/seshat/internal/tools/schema"
-	"github.com/EngineerProjects/seshat/internal/types"
-	browsercore "github.com/EngineerProjects/seshat/internal/web/browser"
+	tool "github.com/KPO-Tech/seshat/internal/tools/registry"
+	"github.com/KPO-Tech/seshat/internal/tools/schema"
+	"github.com/KPO-Tech/seshat/internal/types"
+	browsercore "github.com/KPO-Tech/seshat/internal/web/browser"
 )
 
 func (t *screenshotTool) Definition() tool.Definition {

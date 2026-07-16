@@ -6,7 +6,7 @@ import (
 	"os"
 	"path/filepath"
 
-	"github.com/EngineerProjects/seshat/internal/seshattui/home"
+	"github.com/KPO-Tech/seshat/internal/seshattui/home"
 )
 
 // Lookup searches for a target files or directories starting from dir

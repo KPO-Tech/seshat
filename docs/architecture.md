@@ -19,7 +19,7 @@
 
 Seshat is a **headless AI coding runtime**. It connects an LLM provider to a set of tools (file system, bash, web, LSP, etc.) and orchestrates multi-turn conversations where the model can invoke tools, observe results, and continue reasoning.
 
-The engine exposes two built-in entry points. A third (HTTP REST + SSE) is provided by [seshat-ai](https://github.com/EngineerProjects/seshat-ai) and built on top of the Go SDK.
+The engine exposes two built-in entry points. A third (HTTP REST + SSE) is provided by [seshat-ai](https://github.com/KPO-Tech/seshat-ai) and built on top of the Go SDK.
 
 ```
               ┌─────────────┐                           ┌──────────────┐

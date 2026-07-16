@@ -4,9 +4,9 @@ import (
 	"context"
 	"encoding/json"
 
-	shellhooks "github.com/EngineerProjects/seshat/internal/hooks"
-	runtimehooks "github.com/EngineerProjects/seshat/internal/runtime/hooks"
-	"github.com/EngineerProjects/seshat/internal/types"
+	shellhooks "github.com/KPO-Tech/seshat/internal/hooks"
+	runtimehooks "github.com/KPO-Tech/seshat/internal/runtime/hooks"
+	"github.com/KPO-Tech/seshat/internal/types"
 )
 
 // registerShellPreToolHooks converts PreToolHookConfig entries to ToolHooks

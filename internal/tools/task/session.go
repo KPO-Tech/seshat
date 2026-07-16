@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"strings"
 
-	tool "github.com/EngineerProjects/seshat/internal/tools/registry"
+	tool "github.com/KPO-Tech/seshat/internal/tools/registry"
 )
 
 func resolveTaskSessionID(input tool.CallInput) (string, error) {

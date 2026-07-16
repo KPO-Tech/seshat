@@ -4,7 +4,7 @@ import (
 	"context"
 	"testing"
 
-	"github.com/EngineerProjects/seshat/internal/types"
+	"github.com/KPO-Tech/seshat/internal/types"
 )
 
 type surfaceTestTool struct {

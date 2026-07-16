@@ -3,8 +3,8 @@ package providers
 import (
 	"context"
 
-	internalproviders "github.com/EngineerProjects/seshat/internal/providers"
-	internaltypes "github.com/EngineerProjects/seshat/internal/types"
+	internalproviders "github.com/KPO-Tech/seshat/internal/providers"
+	internaltypes "github.com/KPO-Tech/seshat/internal/types"
 )
 
 type (

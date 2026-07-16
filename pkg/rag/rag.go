@@ -1,9 +1,9 @@
 package rag
 
 import (
-	internalrag "github.com/EngineerProjects/seshat/internal/rag"
-	publicstorage "github.com/EngineerProjects/seshat/pkg/storage"
-	publicvector "github.com/EngineerProjects/seshat/pkg/vector"
+	internalrag "github.com/KPO-Tech/seshat/internal/rag"
+	publicstorage "github.com/KPO-Tech/seshat/pkg/storage"
+	publicvector "github.com/KPO-Tech/seshat/pkg/vector"
 )
 
 type (

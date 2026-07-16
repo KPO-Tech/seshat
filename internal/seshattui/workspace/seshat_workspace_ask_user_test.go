@@ -6,10 +6,10 @@ import (
 	"testing"
 	"time"
 
-	agenttools "github.com/EngineerProjects/seshat/internal/seshattui/agent/tools"
-	"github.com/EngineerProjects/seshat/internal/seshattui/pubsub"
-	"github.com/EngineerProjects/seshat/internal/types"
-	"github.com/EngineerProjects/seshat/pkg/sdk"
+	agenttools "github.com/KPO-Tech/seshat/internal/seshattui/agent/tools"
+	"github.com/KPO-Tech/seshat/internal/seshattui/pubsub"
+	"github.com/KPO-Tech/seshat/internal/types"
+	"github.com/KPO-Tech/seshat/pkg/sdk"
 )
 
 func TestPromptAskUserBuffersSurveyAnswers(t *testing.T) {

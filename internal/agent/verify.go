@@ -5,7 +5,7 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/EngineerProjects/seshat/internal/types"
+	"github.com/KPO-Tech/seshat/internal/types"
 )
 
 // VerifyAgent is a security and validation agent

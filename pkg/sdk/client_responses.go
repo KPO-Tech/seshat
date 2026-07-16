@@ -1,6 +1,6 @@
 package sdk
 
-import "github.com/EngineerProjects/seshat/internal/types"
+import "github.com/KPO-Tech/seshat/internal/types"
 
 // AskResponse represents the response from a single-turn query.
 type AskResponse struct {

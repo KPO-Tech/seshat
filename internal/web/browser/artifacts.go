@@ -3,8 +3,8 @@ package browser
 import (
 	"time"
 
-	"github.com/EngineerProjects/seshat/internal/storage"
-	"github.com/EngineerProjects/seshat/internal/types"
+	"github.com/KPO-Tech/seshat/internal/storage"
+	"github.com/KPO-Tech/seshat/internal/types"
 )
 
 func screenshotKey(sessionID types.SessionID, pageID string) string {

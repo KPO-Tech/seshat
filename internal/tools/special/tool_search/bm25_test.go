@@ -3,8 +3,8 @@ package toolsearch
 import (
 	"testing"
 
-	"github.com/EngineerProjects/seshat/internal/tools/contract"
-	"github.com/EngineerProjects/seshat/internal/tools/schema"
+	"github.com/KPO-Tech/seshat/internal/tools/contract"
+	"github.com/KPO-Tech/seshat/internal/tools/schema"
 )
 
 // mockDef creates a contract.Definition for testing.

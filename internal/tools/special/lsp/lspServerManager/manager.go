@@ -11,7 +11,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/EngineerProjects/seshat/internal/tools/special/lsp/lspClient"
+	"github.com/KPO-Tech/seshat/internal/tools/special/lsp/lspClient"
 )
 
 // ServerConfig represents LSP server configuration

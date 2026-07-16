@@ -6,7 +6,7 @@ import (
 	"log/slog"
 	"strings"
 
-	"github.com/EngineerProjects/seshat/internal/tools/system/mcp"
+	"github.com/KPO-Tech/seshat/internal/tools/system/mcp"
 )
 
 var mcpManagerInstance *mcp.MCPClientManager

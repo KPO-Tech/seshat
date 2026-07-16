@@ -11,9 +11,9 @@ import (
 
 	"github.com/mattn/go-isatty"
 
-	"github.com/EngineerProjects/seshat/internal/memory"
-	engineconfig "github.com/EngineerProjects/seshat/pkg/config"
-	"github.com/EngineerProjects/seshat/pkg/sdk"
+	"github.com/KPO-Tech/seshat/internal/memory"
+	engineconfig "github.com/KPO-Tech/seshat/pkg/config"
+	"github.com/KPO-Tech/seshat/pkg/sdk"
 )
 
 func runOnce(ctx context.Context, args []string, stdin io.Reader, stdout, stderr io.Writer) error {

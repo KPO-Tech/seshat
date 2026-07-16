@@ -6,8 +6,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/EngineerProjects/seshat/internal/storage"
-	"github.com/EngineerProjects/seshat/internal/vector"
+	"github.com/KPO-Tech/seshat/internal/storage"
+	"github.com/KPO-Tech/seshat/internal/vector"
 )
 
 // fakeEmbedder returns deterministic embeddings based on keyword content.

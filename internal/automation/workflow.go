@@ -4,7 +4,7 @@ import (
 	"context"
 	"time"
 
-	"github.com/EngineerProjects/seshat/pkg/sdk"
+	"github.com/KPO-Tech/seshat/pkg/sdk"
 )
 
 // Workflow is the interface every automation workflow must implement.

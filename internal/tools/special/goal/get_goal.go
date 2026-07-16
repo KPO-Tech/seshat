@@ -4,10 +4,10 @@ import (
 	"context"
 	"fmt"
 
-	coregoal "github.com/EngineerProjects/seshat/internal/agent/goal"
-	tool "github.com/EngineerProjects/seshat/internal/tools/registry"
-	"github.com/EngineerProjects/seshat/internal/tools/schema"
-	"github.com/EngineerProjects/seshat/internal/types"
+	coregoal "github.com/KPO-Tech/seshat/internal/agent/goal"
+	tool "github.com/KPO-Tech/seshat/internal/tools/registry"
+	"github.com/KPO-Tech/seshat/internal/tools/schema"
+	"github.com/KPO-Tech/seshat/internal/types"
 )
 
 const getGoalName = "get_goal"

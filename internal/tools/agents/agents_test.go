@@ -5,9 +5,9 @@ import (
 	"testing"
 	"time"
 
-	coreagent "github.com/EngineerProjects/seshat/internal/agent"
-	tool "github.com/EngineerProjects/seshat/internal/tools/registry"
-	"github.com/EngineerProjects/seshat/internal/types"
+	coreagent "github.com/KPO-Tech/seshat/internal/agent"
+	tool "github.com/KPO-Tech/seshat/internal/tools/registry"
+	"github.com/KPO-Tech/seshat/internal/types"
 )
 
 // ─── helpers ──────────────────────────────────────────────────────────────────

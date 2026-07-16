@@ -10,9 +10,9 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/EngineerProjects/seshat/internal/automation"
-	"github.com/EngineerProjects/seshat/internal/db"
-	pkgautomation "github.com/EngineerProjects/seshat/pkg/automation"
+	"github.com/KPO-Tech/seshat/internal/automation"
+	"github.com/KPO-Tech/seshat/internal/db"
+	pkgautomation "github.com/KPO-Tech/seshat/pkg/automation"
 )
 
 func main() {

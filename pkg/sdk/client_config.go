@@ -4,8 +4,8 @@ import (
 	"context"
 	"time"
 
-	"github.com/EngineerProjects/seshat/internal/providers"
-	"github.com/EngineerProjects/seshat/pkg/runtimepath"
+	"github.com/KPO-Tech/seshat/internal/providers"
+	"github.com/KPO-Tech/seshat/pkg/runtimepath"
 )
 
 // CredentialResolver resolves the API key for an LLM provider at client

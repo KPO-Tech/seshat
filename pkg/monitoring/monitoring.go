@@ -3,7 +3,7 @@ package monitoring
 import (
 	"context"
 
-	internalmonitoring "github.com/EngineerProjects/seshat/internal/monitoring"
+	internalmonitoring "github.com/KPO-Tech/seshat/internal/monitoring"
 )
 
 type (

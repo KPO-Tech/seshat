@@ -11,9 +11,9 @@ import (
 	tea "charm.land/bubbletea/v2"
 	"charm.land/catwalk/pkg/catwalk"
 	"charm.land/lipgloss/v2"
-	"github.com/EngineerProjects/seshat/internal/seshattui/config"
-	"github.com/EngineerProjects/seshat/internal/seshattui/ui/common"
-	"github.com/EngineerProjects/seshat/internal/seshattui/ui/util"
+	"github.com/KPO-Tech/seshat/internal/seshattui/config"
+	"github.com/KPO-Tech/seshat/internal/seshattui/ui/common"
+	"github.com/KPO-Tech/seshat/internal/seshattui/ui/util"
 	uv "github.com/charmbracelet/ultraviolet"
 )
 

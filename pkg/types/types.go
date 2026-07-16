@@ -3,7 +3,7 @@ package types
 import (
 	"context"
 
-	internaltypes "github.com/EngineerProjects/seshat/internal/types"
+	internaltypes "github.com/KPO-Tech/seshat/internal/types"
 )
 
 type (

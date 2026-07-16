@@ -8,10 +8,10 @@ import (
 	"strings"
 
 	"charm.land/lipgloss/v2"
-	"github.com/EngineerProjects/seshat/internal/seshattui/session"
-	"github.com/EngineerProjects/seshat/internal/seshattui/ui/common"
-	"github.com/EngineerProjects/seshat/internal/seshattui/ui/logo"
-	"github.com/EngineerProjects/seshat/internal/seshattui/ui/styles"
+	"github.com/KPO-Tech/seshat/internal/seshattui/session"
+	"github.com/KPO-Tech/seshat/internal/seshattui/ui/common"
+	"github.com/KPO-Tech/seshat/internal/seshattui/ui/logo"
+	"github.com/KPO-Tech/seshat/internal/seshattui/ui/styles"
 	uv "github.com/charmbracelet/ultraviolet"
 	"github.com/charmbracelet/ultraviolet/layout"
 )

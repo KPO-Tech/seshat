@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"net/url"
 
-	webcore "github.com/EngineerProjects/seshat/internal/web"
+	webcore "github.com/KPO-Tech/seshat/internal/web"
 )
 
 type fetchPlan struct {

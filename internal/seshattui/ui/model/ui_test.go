@@ -5,9 +5,9 @@ import (
 
 	"charm.land/bubbles/v2/textarea"
 	"charm.land/lipgloss/v2"
-	"github.com/EngineerProjects/seshat/internal/seshattui/ui/attachments"
-	"github.com/EngineerProjects/seshat/internal/seshattui/ui/common"
-	"github.com/EngineerProjects/seshat/internal/seshattui/ui/styles"
+	"github.com/KPO-Tech/seshat/internal/seshattui/ui/attachments"
+	"github.com/KPO-Tech/seshat/internal/seshattui/ui/common"
+	"github.com/KPO-Tech/seshat/internal/seshattui/ui/styles"
 )
 
 func TestRenderEditorViewKeepsTextareaWrapWidth(t *testing.T) {

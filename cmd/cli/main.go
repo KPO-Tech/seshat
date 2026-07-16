@@ -6,7 +6,7 @@ import (
 	"os"
 	"os/signal"
 
-	"github.com/EngineerProjects/seshat/pkg/runtimepath"
+	"github.com/KPO-Tech/seshat/pkg/runtimepath"
 )
 
 // version is set at build time via -ldflags "-X main.version=v1.2.3".

@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"time"
 
-	tool "github.com/EngineerProjects/seshat/internal/tools/registry"
+	tool "github.com/KPO-Tech/seshat/internal/tools/registry"
 )
 
 // ToolServerConfig represents MCP server configuration for the MCP tool surface.

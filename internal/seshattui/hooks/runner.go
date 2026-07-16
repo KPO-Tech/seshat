@@ -9,8 +9,8 @@ import (
 	"sync"
 	"time"
 
-	"github.com/EngineerProjects/seshat/internal/seshattui/config"
-	"github.com/EngineerProjects/seshat/internal/seshattui/shell"
+	"github.com/KPO-Tech/seshat/internal/seshattui/config"
+	"github.com/KPO-Tech/seshat/internal/seshattui/shell"
 )
 
 // abandonGrace is how long runOne waits after ctx cancellation for the

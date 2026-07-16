@@ -4,7 +4,7 @@ import (
 	"context"
 	"time"
 
-	taskTool "github.com/EngineerProjects/seshat/internal/tools/task"
+	taskTool "github.com/KPO-Tech/seshat/internal/tools/task"
 )
 
 // runtimeAdapter is the narrow bridge between the task manager and the

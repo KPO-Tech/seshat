@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"strings"
 
-	dbpkg "github.com/EngineerProjects/seshat/internal/db"
+	dbpkg "github.com/KPO-Tech/seshat/internal/db"
 )
 
 // Backend identifies which vector store implementation to use.

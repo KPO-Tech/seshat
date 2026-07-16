@@ -5,10 +5,10 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/EngineerProjects/seshat/internal/providers"
-	"github.com/EngineerProjects/seshat/internal/rag"
-	engineconfig "github.com/EngineerProjects/seshat/pkg/config"
-	"github.com/EngineerProjects/seshat/pkg/sdk"
+	"github.com/KPO-Tech/seshat/internal/providers"
+	"github.com/KPO-Tech/seshat/internal/rag"
+	engineconfig "github.com/KPO-Tech/seshat/pkg/config"
+	"github.com/KPO-Tech/seshat/pkg/sdk"
 )
 
 // RunnerConfig is the base template used to build an SDK client for each

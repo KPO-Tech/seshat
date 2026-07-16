@@ -2426,7 +2426,7 @@ const file_pkg_grpc_proto_seshat_proto_rawDesc = "" +
 	"\x04Grep\x12\x17.seshat.FileGrepRequest\x1a\x18.seshat.FileGrepResponse2\x8a\x01\n" +
 	"\rSystemService\x121\n" +
 	"\x04Bash\x12\x13.seshat.BashRequest\x1a\x14.seshat.BashResponse\x12F\n" +
-	"\rGetSystemInfo\x12\x19.seshat.SystemInfoRequest\x1a\x1a.seshat.SystemInfoResponseB4Z2github.com/EngineerProjects/seshat/pkg/grpc/seshatb\x06proto3"
+	"\rGetSystemInfo\x12\x19.seshat.SystemInfoRequest\x1a\x1a.seshat.SystemInfoResponseB4Z2github.com/KPO-Tech/seshat/pkg/grpc/seshatb\x06proto3"
 
 var (
 	file_pkg_grpc_proto_seshat_proto_rawDescOnce sync.Once

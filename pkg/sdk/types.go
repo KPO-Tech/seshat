@@ -1,21 +1,21 @@
 package sdk
 
 import (
-	"github.com/EngineerProjects/seshat/internal/engine"
-	"github.com/EngineerProjects/seshat/internal/execution"
-	"github.com/EngineerProjects/seshat/internal/hooks"
-	longterm "github.com/EngineerProjects/seshat/internal/memory/longterm"
-	"github.com/EngineerProjects/seshat/internal/modes"
-	"github.com/EngineerProjects/seshat/internal/monitoring"
-	"github.com/EngineerProjects/seshat/internal/rag"
-	"github.com/EngineerProjects/seshat/internal/runtime/state"
-	"github.com/EngineerProjects/seshat/internal/storage"
-	"github.com/EngineerProjects/seshat/internal/tools/builtin"
-	"github.com/EngineerProjects/seshat/internal/tools/contract"
-	"github.com/EngineerProjects/seshat/internal/tools/registry"
-	"github.com/EngineerProjects/seshat/internal/tools/system/mcp"
-	websearchtool "github.com/EngineerProjects/seshat/internal/tools/web/search"
-	"github.com/EngineerProjects/seshat/internal/types"
+	"github.com/KPO-Tech/seshat/internal/engine"
+	"github.com/KPO-Tech/seshat/internal/execution"
+	"github.com/KPO-Tech/seshat/internal/hooks"
+	longterm "github.com/KPO-Tech/seshat/internal/memory/longterm"
+	"github.com/KPO-Tech/seshat/internal/modes"
+	"github.com/KPO-Tech/seshat/internal/monitoring"
+	"github.com/KPO-Tech/seshat/internal/rag"
+	"github.com/KPO-Tech/seshat/internal/runtime/state"
+	"github.com/KPO-Tech/seshat/internal/storage"
+	"github.com/KPO-Tech/seshat/internal/tools/builtin"
+	"github.com/KPO-Tech/seshat/internal/tools/contract"
+	"github.com/KPO-Tech/seshat/internal/tools/registry"
+	"github.com/KPO-Tech/seshat/internal/tools/system/mcp"
+	websearchtool "github.com/KPO-Tech/seshat/internal/tools/web/search"
+	"github.com/KPO-Tech/seshat/internal/types"
 )
 
 // Public aliases keep the SDK consumable without forcing callers onto internal packages.

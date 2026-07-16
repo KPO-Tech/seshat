@@ -9,7 +9,7 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/EngineerProjects/seshat/internal/seshattui/csync"
+	"github.com/KPO-Tech/seshat/internal/seshattui/csync"
 )
 
 const (

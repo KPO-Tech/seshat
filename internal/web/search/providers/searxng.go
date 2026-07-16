@@ -4,7 +4,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/EngineerProjects/seshat/internal/web/searxng"
+	"github.com/KPO-Tech/seshat/internal/web/searxng"
 )
 
 // SearXNGProvider wraps the full-featured searxng.Client and satisfies SearchProvider.

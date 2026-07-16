@@ -7,10 +7,10 @@ import (
 	"sync"
 	"time"
 
-	"github.com/EngineerProjects/seshat/internal/execution"
-	"github.com/EngineerProjects/seshat/internal/prompt"
-	tool "github.com/EngineerProjects/seshat/internal/tools/registry"
-	"github.com/EngineerProjects/seshat/internal/types"
+	"github.com/KPO-Tech/seshat/internal/execution"
+	"github.com/KPO-Tech/seshat/internal/prompt"
+	tool "github.com/KPO-Tech/seshat/internal/tools/registry"
+	"github.com/KPO-Tech/seshat/internal/types"
 )
 
 // Session represents an active query session.

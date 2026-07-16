@@ -3,8 +3,8 @@ package providers
 import (
 	"strings"
 
-	"github.com/EngineerProjects/seshat/internal/model"
-	"github.com/EngineerProjects/seshat/internal/types"
+	"github.com/KPO-Tech/seshat/internal/model"
+	"github.com/KPO-Tech/seshat/internal/types"
 )
 
 type ProviderInfo struct {

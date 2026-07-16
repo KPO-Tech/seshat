@@ -3,8 +3,8 @@ package toolsearch
 import (
 	"strings"
 
-	"github.com/EngineerProjects/seshat/internal/tools/contract"
-	"github.com/EngineerProjects/seshat/internal/tools/schema"
+	"github.com/KPO-Tech/seshat/internal/tools/contract"
+	"github.com/KPO-Tech/seshat/internal/tools/schema"
 )
 
 // buildSearchText constructs the BM25-indexed text for a single tool.

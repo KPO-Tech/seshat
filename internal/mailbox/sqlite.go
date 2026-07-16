@@ -8,7 +8,7 @@ import (
 
 	"github.com/google/uuid"
 
-	"github.com/EngineerProjects/seshat/internal/db"
+	"github.com/KPO-Tech/seshat/internal/db"
 )
 
 // SQLiteMailbox is a Mailbox backed by SQLite via the shared db.DB handle.

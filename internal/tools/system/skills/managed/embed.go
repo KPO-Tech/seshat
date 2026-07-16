@@ -11,5 +11,5 @@ var FS embed.FS
 
 // Version must be bumped whenever skill files change so EnsureExtracted
 // re-extracts on the next boot. Bumped to 2.0.0 when builtin skills were
-// moved to github.com/EngineerProjects/seshat-skills.
+// moved to github.com/KPO-Tech/seshat-skills.
 const Version = "2.0.0"

@@ -7,9 +7,9 @@ import (
 	"sort"
 	"strings"
 
-	internalproviders "github.com/EngineerProjects/seshat/internal/providers"
-	"github.com/EngineerProjects/seshat/pkg/runtimepath"
-	"github.com/EngineerProjects/seshat/pkg/sdk"
+	internalproviders "github.com/KPO-Tech/seshat/internal/providers"
+	"github.com/KPO-Tech/seshat/pkg/runtimepath"
+	"github.com/KPO-Tech/seshat/pkg/sdk"
 )
 
 type ProviderSetupField struct {

@@ -4,7 +4,7 @@ import (
 	"os"
 	"strings"
 
-	"github.com/EngineerProjects/seshat/internal/types"
+	"github.com/KPO-Tech/seshat/internal/types"
 )
 
 // FastmodeConfig controls which model is used for low-latency background tasks

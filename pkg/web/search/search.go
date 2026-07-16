@@ -1,8 +1,8 @@
 package search
 
 import (
-	internalsearch "github.com/EngineerProjects/seshat/internal/web/search"
-	internalproviders "github.com/EngineerProjects/seshat/internal/web/search/providers"
+	internalsearch "github.com/KPO-Tech/seshat/internal/web/search"
+	internalproviders "github.com/KPO-Tech/seshat/internal/web/search/providers"
 )
 
 type (

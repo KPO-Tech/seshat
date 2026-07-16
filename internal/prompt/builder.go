@@ -8,8 +8,8 @@ import (
 	"strconv"
 	"strings"
 
-	tool "github.com/EngineerProjects/seshat/internal/tools/registry"
-	"github.com/EngineerProjects/seshat/internal/types"
+	tool "github.com/KPO-Tech/seshat/internal/tools/registry"
+	"github.com/KPO-Tech/seshat/internal/types"
 )
 
 // Builder assembles canonical system prompt parts and then composes a

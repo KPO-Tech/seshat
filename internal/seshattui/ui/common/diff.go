@@ -1,8 +1,8 @@
 package common
 
 import (
-	"github.com/EngineerProjects/seshat/internal/seshattui/ui/diffview"
-	"github.com/EngineerProjects/seshat/internal/seshattui/ui/styles"
+	"github.com/KPO-Tech/seshat/internal/seshattui/ui/diffview"
+	"github.com/KPO-Tech/seshat/internal/seshattui/ui/styles"
 	"github.com/alecthomas/chroma/v2"
 )
 

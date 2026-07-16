@@ -6,10 +6,10 @@ import (
 	"strings"
 	"time"
 
-	"github.com/EngineerProjects/seshat/internal/seshattui/message"
-	"github.com/EngineerProjects/seshat/internal/seshattui/session"
-	"github.com/EngineerProjects/seshat/internal/seshattui/ui/styles"
-	taskTool "github.com/EngineerProjects/seshat/internal/tools/task"
+	"github.com/KPO-Tech/seshat/internal/seshattui/message"
+	"github.com/KPO-Tech/seshat/internal/seshattui/session"
+	"github.com/KPO-Tech/seshat/internal/seshattui/ui/styles"
+	taskTool "github.com/KPO-Tech/seshat/internal/tools/task"
 )
 
 type TaskListToolMessageItem struct{ *baseToolMessageItem }
