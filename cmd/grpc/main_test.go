@@ -2,8 +2,6 @@ package main
 
 import (
 	"context"
-	"io"
-	"net"
 	"strings"
 	"sync"
 	"testing"
@@ -13,11 +11,9 @@ import (
 	appconfig "github.com/KPO-Tech/seshat/pkg/config"
 	pb "github.com/KPO-Tech/seshat/pkg/grpc/seshat"
 	"github.com/KPO-Tech/seshat/pkg/sdk"
-	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
-	"google.golang.org/grpc/credentials/insecure"
+	"google.golang.org/grpc/metadata"
 	"google.golang.org/grpc/status"
-	"google.golang.org/grpc/test/bufconn"
 )
 
 type fakeStreamingSession struct {
@@ -105,36 +101,41 @@ func (c *fakeSDKClient) Close() error {
 	return nil
 }
 
-func newBufconnSeshatClient(t *testing.T, server *SeshatServer) (pb.SeshatServiceClient, func()) {
-	t.Helper()
+type fakeQueryStreamServer struct {
+	ctx       context.Context
+	responses []*pb.QueryResponse
+}
 
-	listener := bufconn.Listen(1024 * 1024)
-	grpcServer := grpc.NewServer()
-	pb.RegisterSeshatServiceServer(grpcServer, server)
+func (s *fakeQueryStreamServer) SetHeader(metadata.MD) error { return nil }
 
-	go func() {
-		_ = grpcServer.Serve(listener)
-	}()
+func (s *fakeQueryStreamServer) SendHeader(metadata.MD) error { return nil }
 
-	ctx := context.Background()
-	conn, err := grpc.DialContext(
-		ctx,
-		"bufnet",
-		grpc.WithContextDialer(func(context.Context, string) (net.Conn, error) {
-			return listener.Dial()
-		}),
-		grpc.WithTransportCredentials(insecure.NewCredentials()),
-	)
-	if err != nil {
-		t.Fatalf("DialContext failed: %v", err)
+func (s *fakeQueryStreamServer) SetTrailer(metadata.MD) {}
+
+func (s *fakeQueryStreamServer) Context() context.Context {
+	if s.ctx != nil {
+		return s.ctx
 	}
+	return context.Background()
+}
 
-	cleanup := func() {
-		_ = conn.Close()
-		grpcServer.Stop()
-		_ = listener.Close()
+func (s *fakeQueryStreamServer) Send(resp *pb.QueryResponse) error {
+	s.responses = append(s.responses, resp)
+	return nil
+}
+
+func (s *fakeQueryStreamServer) SendMsg(m any) error {
+	resp, ok := m.(*pb.QueryResponse)
+	if !ok {
+		return status.Errorf(codes.Internal, "unexpected message type %T", m)
 	}
-	return pb.NewSeshatServiceClient(conn), cleanup
+	return s.Send(resp)
+}
+
+func (s *fakeQueryStreamServer) RecvMsg(any) error { return nil }
+
+func (s *fakeQueryStreamServer) responsesCopy() []*pb.QueryResponse {
+	return append([]*pb.QueryResponse(nil), s.responses...)
 }
 
 func TestStreamQuerySessionEmitsChunksRuntimeEventsAndFinalResponse(t *testing.T) {
@@ -303,7 +304,7 @@ func TestHealthCheckReportsVersionAndElapsedUptime(t *testing.T) {
 	}
 }
 
-func TestQueryOverGRPCLoadsSessionFiltersToolsAndClosesResources(t *testing.T) {
+func TestQueryLoadsSessionFiltersToolsAndClosesResources(t *testing.T) {
 	session := &fakeStreamingSession{
 		id:        sdk.SessionID("sess-42"),
 		toolNames: []string{"bash", "read"},
@@ -334,10 +335,7 @@ func TestQueryOverGRPCLoadsSessionFiltersToolsAndClosesResources(t *testing.T) {
 		return fakeClient, nil
 	}
 
-	client, cleanup := newBufconnSeshatClient(t, server)
-	defer cleanup()
-
-	resp, err := client.Query(context.Background(), &pb.QueryRequest{
+	resp, err := server.Query(context.Background(), &pb.QueryRequest{
 		Prompt:    "resume",
 		ContextId: session.id.String(),
 		Tools:     []string{"read"},
@@ -381,7 +379,7 @@ func TestQueryOverGRPCLoadsSessionFiltersToolsAndClosesResources(t *testing.T) {
 	}
 }
 
-func TestQueryOverGRPCReturnsInvalidArgumentForUnknownTool(t *testing.T) {
+func TestQueryReturnsInvalidArgumentForUnknownTool(t *testing.T) {
 	session := &fakeStreamingSession{
 		id:        sdk.SessionID("sess-invalid"),
 		toolNames: []string{"bash", "read"},
@@ -395,10 +393,7 @@ func TestQueryOverGRPCReturnsInvalidArgumentForUnknownTool(t *testing.T) {
 		return fakeClient, nil
 	}
 
-	client, cleanup := newBufconnSeshatClient(t, server)
-	defer cleanup()
-
-	_, err := client.Query(context.Background(), &pb.QueryRequest{
+	_, err := server.Query(context.Background(), &pb.QueryRequest{
 		Prompt: "hello",
 		Tools:  []string{"search"},
 	})
@@ -416,7 +411,7 @@ func TestQueryOverGRPCReturnsInvalidArgumentForUnknownTool(t *testing.T) {
 	}
 }
 
-func TestQueryStreamOverGRPCEmitsProtocolMessagesWithResolvedModel(t *testing.T) {
+func TestQueryStreamEmitsProtocolMessagesWithResolvedModel(t *testing.T) {
 	session := &fakeStreamingSession{
 		id: sdk.SessionID("sess-stream"),
 	}
@@ -472,27 +467,15 @@ func TestQueryStreamOverGRPCEmitsProtocolMessagesWithResolvedModel(t *testing.T)
 		return fakeClient, nil
 	}
 
-	client, cleanup := newBufconnSeshatClient(t, server)
-	defer cleanup()
-
-	stream, err := client.QueryStream(context.Background(), &pb.QueryRequest{
+	stream := &fakeQueryStreamServer{}
+	err := server.QueryStream(&pb.QueryRequest{
 		Prompt: "hello",
-	})
+	}, stream)
 	if err != nil {
 		t.Fatalf("QueryStream failed: %v", err)
 	}
 
-	var responses []*pb.QueryResponse
-	for {
-		resp, recvErr := stream.Recv()
-		if recvErr == io.EOF {
-			break
-		}
-		if recvErr != nil {
-			t.Fatalf("stream recv failed: %v", recvErr)
-		}
-		responses = append(responses, resp)
-	}
+	responses := stream.responsesCopy()
 
 	if len(responses) != 4 {
 		t.Fatalf("expected 4 streamed responses, got %d", len(responses))
