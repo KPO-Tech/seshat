@@ -3,7 +3,7 @@ package main
 import (
 	"strings"
 
-	"github.com/EngineerProjects/seshat/internal/prompt"
+	"github.com/KPO-Tech/seshat/internal/prompt"
 )
 
 // slackIdentity replaces the Seshat Core "headless AI coding runtime" identity

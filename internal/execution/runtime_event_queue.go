@@ -5,7 +5,7 @@ import (
 	"sync"
 	"sync/atomic"
 
-	"github.com/EngineerProjects/seshat/internal/types"
+	"github.com/KPO-Tech/seshat/internal/types"
 )
 
 // DefaultRuntimeEventQueueCapacity is the default buffer size for RuntimeEventQueue.

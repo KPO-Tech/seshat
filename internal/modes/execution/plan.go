@@ -9,8 +9,8 @@ import (
 	"os"
 	"path/filepath"
 
-	"github.com/EngineerProjects/seshat/internal/types"
-	"github.com/EngineerProjects/seshat/pkg/runtimepath"
+	"github.com/KPO-Tech/seshat/internal/types"
+	"github.com/KPO-Tech/seshat/pkg/runtimepath"
 )
 
 // DefaultPlansDirectory is the default location for plan files (~/.config/seshat/plans/).

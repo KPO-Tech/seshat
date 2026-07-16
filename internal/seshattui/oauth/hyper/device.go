@@ -13,9 +13,9 @@ import (
 	"strings"
 	"time"
 
-	"github.com/EngineerProjects/seshat/internal/seshattui/agent/hyper"
-	"github.com/EngineerProjects/seshat/internal/seshattui/event"
-	"github.com/EngineerProjects/seshat/internal/seshattui/oauth"
+	"github.com/KPO-Tech/seshat/internal/seshattui/agent/hyper"
+	"github.com/KPO-Tech/seshat/internal/seshattui/event"
+	"github.com/KPO-Tech/seshat/internal/seshattui/oauth"
 )
 
 // DeviceAuthResponse contains the response from the device authorization endpoint.

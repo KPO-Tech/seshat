@@ -12,7 +12,7 @@ import (
 	"charm.land/bubbles/v2/textinput"
 	"charm.land/glamour/v2/ansi"
 	"charm.land/lipgloss/v2"
-	"github.com/EngineerProjects/seshat/internal/seshattui/ui/diffview"
+	"github.com/KPO-Tech/seshat/internal/seshattui/ui/diffview"
 	"github.com/alecthomas/chroma/v2"
 )
 

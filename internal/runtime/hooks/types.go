@@ -3,8 +3,8 @@ package hooks
 import (
 	"context"
 
-	tool "github.com/EngineerProjects/seshat/internal/tools/contract"
-	"github.com/EngineerProjects/seshat/internal/types"
+	tool "github.com/KPO-Tech/seshat/internal/tools/contract"
+	"github.com/KPO-Tech/seshat/internal/types"
 )
 
 // ToolHookStage identifies when a hook fires.

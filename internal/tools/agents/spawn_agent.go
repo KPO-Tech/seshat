@@ -6,11 +6,11 @@ import (
 	"strings"
 	"time"
 
-	coreagent "github.com/EngineerProjects/seshat/internal/agent"
-	"github.com/EngineerProjects/seshat/internal/engine"
-	tool "github.com/EngineerProjects/seshat/internal/tools/registry"
-	"github.com/EngineerProjects/seshat/internal/tools/schema"
-	"github.com/EngineerProjects/seshat/internal/types"
+	coreagent "github.com/KPO-Tech/seshat/internal/agent"
+	"github.com/KPO-Tech/seshat/internal/engine"
+	tool "github.com/KPO-Tech/seshat/internal/tools/registry"
+	"github.com/KPO-Tech/seshat/internal/tools/schema"
+	"github.com/KPO-Tech/seshat/internal/types"
 )
 
 const spawnAgentName = "spawn_agent"

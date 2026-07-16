@@ -11,7 +11,7 @@ import (
 	"sort"
 	"strings"
 
-	dbpkg "github.com/EngineerProjects/seshat/internal/db"
+	dbpkg "github.com/KPO-Tech/seshat/internal/db"
 )
 
 // SQLiteStore is a persistent vector.Store backed by SQLite.

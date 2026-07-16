@@ -5,8 +5,8 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/EngineerProjects/seshat/internal/tools/files/shared"
-	"github.com/EngineerProjects/seshat/internal/types"
+	"github.com/KPO-Tech/seshat/internal/tools/files/shared"
+	"github.com/KPO-Tech/seshat/internal/types"
 )
 
 // AcceptEditsWriteCommands are commands auto-allowed in AcceptEdits mode.

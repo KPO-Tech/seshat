@@ -9,7 +9,7 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/EngineerProjects/seshat/internal/types"
+	"github.com/KPO-Tech/seshat/internal/types"
 )
 
 // WorktreeConfig is configuration for worktree tools

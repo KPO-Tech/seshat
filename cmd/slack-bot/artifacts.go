@@ -10,8 +10,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/EngineerProjects/seshat/pkg/runtimepath"
-	"github.com/EngineerProjects/seshat/pkg/sdk"
+	"github.com/KPO-Tech/seshat/pkg/runtimepath"
+	"github.com/KPO-Tech/seshat/pkg/sdk"
 	slackgo "github.com/slack-go/slack"
 )
 

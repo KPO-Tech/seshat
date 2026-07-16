@@ -9,7 +9,7 @@ import (
 	"net/http"
 	"regexp"
 
-	"github.com/EngineerProjects/seshat/internal/seshattui/log"
+	"github.com/KPO-Tech/seshat/internal/seshattui/log"
 )
 
 var assistantRolePattern = regexp.MustCompile(`"role"\s*:\s*"assistant"`)

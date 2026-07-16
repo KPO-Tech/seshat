@@ -6,7 +6,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/EngineerProjects/seshat/internal/web/searxng"
+	"github.com/KPO-Tech/seshat/internal/web/searxng"
 )
 
 func searxngProvider(transport roundTripFunc) *SearXNGProvider {

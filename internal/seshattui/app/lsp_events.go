@@ -3,7 +3,7 @@ package app
 import (
 	"time"
 
-	"github.com/EngineerProjects/seshat/internal/seshattui/lsp"
+	"github.com/KPO-Tech/seshat/internal/seshattui/lsp"
 )
 
 // LSPEventType represents the type of LSP event.

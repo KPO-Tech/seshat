@@ -5,8 +5,8 @@ import (
 	"fmt"
 	"strings"
 
-	coredb "github.com/EngineerProjects/seshat/internal/db"
-	internalvector "github.com/EngineerProjects/seshat/internal/vector"
+	coredb "github.com/KPO-Tech/seshat/internal/db"
+	internalvector "github.com/KPO-Tech/seshat/internal/vector"
 )
 
 type (

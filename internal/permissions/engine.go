@@ -7,10 +7,10 @@ import (
 	"sort"
 	"strings"
 
-	auto "github.com/EngineerProjects/seshat/internal/permissions/auto"
-	tool "github.com/EngineerProjects/seshat/internal/tools/registry"
-	"github.com/EngineerProjects/seshat/internal/types"
-	"github.com/EngineerProjects/seshat/internal/utils"
+	auto "github.com/KPO-Tech/seshat/internal/permissions/auto"
+	tool "github.com/KPO-Tech/seshat/internal/tools/registry"
+	"github.com/KPO-Tech/seshat/internal/types"
+	"github.com/KPO-Tech/seshat/internal/utils"
 )
 
 // Engine checks permissions for tool usage.

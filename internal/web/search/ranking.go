@@ -5,7 +5,7 @@ import (
 	"sort"
 	"strings"
 
-	webcore "github.com/EngineerProjects/seshat/internal/web"
+	webcore "github.com/KPO-Tech/seshat/internal/web"
 )
 
 func rankResults(query string, hits []webcore.SearchResult) []webcore.SearchResult {

@@ -4,8 +4,8 @@ import (
 	"context"
 	"fmt"
 
-	tool "github.com/EngineerProjects/seshat/internal/tools/contract"
-	"github.com/EngineerProjects/seshat/internal/types"
+	tool "github.com/KPO-Tech/seshat/internal/tools/contract"
+	"github.com/KPO-Tech/seshat/internal/types"
 )
 
 func (o *Orchestrator) resolveToolPermissions(

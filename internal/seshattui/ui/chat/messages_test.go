@@ -3,11 +3,11 @@ package chat
 import (
 	"testing"
 
-	"github.com/EngineerProjects/seshat/internal/seshattui/message"
-	"github.com/EngineerProjects/seshat/internal/seshattui/ui/styles"
-	planTool "github.com/EngineerProjects/seshat/internal/tools/system/plan"
-	skillsTool "github.com/EngineerProjects/seshat/internal/tools/system/skills"
-	taskTool "github.com/EngineerProjects/seshat/internal/tools/task"
+	"github.com/KPO-Tech/seshat/internal/seshattui/message"
+	"github.com/KPO-Tech/seshat/internal/seshattui/ui/styles"
+	planTool "github.com/KPO-Tech/seshat/internal/tools/system/plan"
+	skillsTool "github.com/KPO-Tech/seshat/internal/tools/system/skills"
+	taskTool "github.com/KPO-Tech/seshat/internal/tools/task"
 )
 
 func TestExtractMessageItemsSkipsHiddenPlanModeTools(t *testing.T) {

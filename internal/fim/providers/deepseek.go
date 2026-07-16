@@ -11,7 +11,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/EngineerProjects/seshat/internal/fim"
+	"github.com/KPO-Tech/seshat/internal/fim"
 )
 
 const deepseekDefaultBaseURL = "https://api.deepseek.com/beta/completions"

@@ -3,7 +3,7 @@ package contract
 import (
 	"encoding/json"
 
-	"github.com/EngineerProjects/seshat/internal/tools/schema"
+	"github.com/KPO-Tech/seshat/internal/tools/schema"
 )
 
 // ToolSurface represents the tool surface exposed to the model.

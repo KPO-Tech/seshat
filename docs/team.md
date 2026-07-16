@@ -96,8 +96,8 @@ internal/team  →  internal/mailbox
 
 ```go
 import (
-    "github.com/EngineerProjects/seshat/internal/agent"
-    "github.com/EngineerProjects/seshat/internal/db"
+    "github.com/KPO-Tech/seshat/internal/agent"
+    "github.com/KPO-Tech/seshat/internal/db"
 )
 
 database, _ := db.Open(ctx, db.Config{Driver: db.DriverSQLite, DSN: "seshat.db", AutoMigrate: true})
@@ -119,7 +119,7 @@ registry.Register(ctx, maria)
 ### 2. Wire up the mailbox
 
 ```go
-import "github.com/EngineerProjects/seshat/internal/mailbox"
+import "github.com/KPO-Tech/seshat/internal/mailbox"
 
 // agentLister resolves team members for broadcast expansion
 agentLister := func(ctx context.Context, teamID string) ([]string, error) {
@@ -140,7 +140,7 @@ mb := mailbox.New(database, agentLister)
 ### 3. Create a Dispatcher and send messages
 
 ```go
-import "github.com/EngineerProjects/seshat/internal/team"
+import "github.com/KPO-Tech/seshat/internal/team"
 
 dispatcher := team.NewDispatcher(registry, mb)
 

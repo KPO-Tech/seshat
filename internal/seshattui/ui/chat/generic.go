@@ -5,8 +5,8 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/EngineerProjects/seshat/internal/seshattui/message"
-	"github.com/EngineerProjects/seshat/internal/seshattui/ui/styles"
+	"github.com/KPO-Tech/seshat/internal/seshattui/message"
+	"github.com/KPO-Tech/seshat/internal/seshattui/ui/styles"
 )
 
 // GenericToolMessageItem is a message item that represents an unknown tool call.

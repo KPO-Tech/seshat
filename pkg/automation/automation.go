@@ -6,10 +6,10 @@ import (
 	"log"
 	"time"
 
-	"github.com/EngineerProjects/seshat/internal/automation"
-	"github.com/EngineerProjects/seshat/internal/providers"
-	engineconfig "github.com/EngineerProjects/seshat/pkg/config"
-	"github.com/EngineerProjects/seshat/pkg/sdk"
+	"github.com/KPO-Tech/seshat/internal/automation"
+	"github.com/KPO-Tech/seshat/internal/providers"
+	engineconfig "github.com/KPO-Tech/seshat/pkg/config"
+	"github.com/KPO-Tech/seshat/pkg/sdk"
 )
 
 // ─── Core types ───────────────────────────────────────────────────────────────

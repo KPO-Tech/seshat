@@ -8,7 +8,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/EngineerProjects/seshat/pkg/sdk"
+	"github.com/KPO-Tech/seshat/pkg/sdk"
 	"github.com/google/uuid"
 )
 

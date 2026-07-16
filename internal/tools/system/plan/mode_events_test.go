@@ -4,10 +4,10 @@ import (
 	"context"
 	"testing"
 
-	execution "github.com/EngineerProjects/seshat/internal/modes/execution"
-	tool "github.com/EngineerProjects/seshat/internal/tools/registry"
-	"github.com/EngineerProjects/seshat/internal/types"
-	"github.com/EngineerProjects/seshat/pkg/runtimepath"
+	execution "github.com/KPO-Tech/seshat/internal/modes/execution"
+	tool "github.com/KPO-Tech/seshat/internal/tools/registry"
+	"github.com/KPO-Tech/seshat/internal/types"
+	"github.com/KPO-Tech/seshat/pkg/runtimepath"
 )
 
 func TestEnterPlanModeEmitsExecutionModeChangedEvent(t *testing.T) {

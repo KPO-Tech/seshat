@@ -1,7 +1,7 @@
 package permissions
 
 import (
-	"github.com/EngineerProjects/seshat/internal/types"
+	"github.com/KPO-Tech/seshat/internal/types"
 )
 
 // CreateDenialTrackingState creates a new denial tracking state.

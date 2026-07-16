@@ -4,9 +4,9 @@ import (
 	"encoding/json"
 	"strings"
 
-	"github.com/EngineerProjects/seshat/internal/model"
-	"github.com/EngineerProjects/seshat/internal/schema"
-	toolschema "github.com/EngineerProjects/seshat/internal/tools/schema"
+	"github.com/KPO-Tech/seshat/internal/model"
+	"github.com/KPO-Tech/seshat/internal/schema"
+	toolschema "github.com/KPO-Tech/seshat/internal/tools/schema"
 )
 
 // APIProvider represents the API provider being used

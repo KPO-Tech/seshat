@@ -5,8 +5,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/EngineerProjects/seshat/internal/agent"
-	"github.com/EngineerProjects/seshat/internal/db"
+	"github.com/KPO-Tech/seshat/internal/agent"
+	"github.com/KPO-Tech/seshat/internal/db"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )

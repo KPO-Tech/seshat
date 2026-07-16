@@ -9,7 +9,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/EngineerProjects/seshat/internal/auth/types"
+	"github.com/KPO-Tech/seshat/internal/auth/types"
 )
 
 // ============================================================================

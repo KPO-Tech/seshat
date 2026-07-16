@@ -5,7 +5,7 @@ import (
 	"strings"
 	"sync"
 
-	skills "github.com/EngineerProjects/seshat/internal/tools/system/skills"
+	skills "github.com/KPO-Tech/seshat/internal/tools/system/skills"
 )
 
 // AgentRegistry is a unified registry for built-in and skill-derived agents.

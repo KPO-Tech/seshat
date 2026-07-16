@@ -1,6 +1,6 @@
 package skills
 
-import internalskills "github.com/EngineerProjects/seshat/internal/tools/system/skills"
+import internalskills "github.com/KPO-Tech/seshat/internal/tools/system/skills"
 
 type (
 	FrontmatterData = internalskills.FrontmatterData

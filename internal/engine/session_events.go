@@ -1,6 +1,6 @@
 package engine
 
-import "github.com/EngineerProjects/seshat/internal/types"
+import "github.com/KPO-Tech/seshat/internal/types"
 
 func (s *Session) persistSessionState(previousMessages []types.Message) error {
 	if s.store == nil || s.state == nil || s.state.Metadata == nil {

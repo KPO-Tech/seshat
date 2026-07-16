@@ -4,7 +4,7 @@ import (
 	"strings"
 	"time"
 
-	webcore "github.com/EngineerProjects/seshat/internal/web"
+	webcore "github.com/KPO-Tech/seshat/internal/web"
 )
 
 // DecisionCache stores stable auto-routing outcomes so repeated fetches avoid

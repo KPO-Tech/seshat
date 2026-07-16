@@ -14,9 +14,9 @@ import (
 	"charm.land/bubbles/v2/key"
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
-	"github.com/EngineerProjects/seshat/internal/seshattui/home"
-	"github.com/EngineerProjects/seshat/internal/seshattui/ui/common"
-	fimage "github.com/EngineerProjects/seshat/internal/seshattui/ui/image"
+	"github.com/KPO-Tech/seshat/internal/seshattui/home"
+	"github.com/KPO-Tech/seshat/internal/seshattui/ui/common"
+	fimage "github.com/KPO-Tech/seshat/internal/seshattui/ui/image"
 	uv "github.com/charmbracelet/ultraviolet"
 )
 

@@ -5,11 +5,11 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/EngineerProjects/seshat/internal/modes"
-	"github.com/EngineerProjects/seshat/internal/modes/execution"
-	tool "github.com/EngineerProjects/seshat/internal/tools/registry"
-	"github.com/EngineerProjects/seshat/internal/tools/schema"
-	"github.com/EngineerProjects/seshat/internal/types"
+	"github.com/KPO-Tech/seshat/internal/modes"
+	"github.com/KPO-Tech/seshat/internal/modes/execution"
+	tool "github.com/KPO-Tech/seshat/internal/tools/registry"
+	"github.com/KPO-Tech/seshat/internal/tools/schema"
+	"github.com/KPO-Tech/seshat/internal/types"
 )
 
 // Output represents the result of exiting execution mode.

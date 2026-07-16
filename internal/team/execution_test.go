@@ -4,8 +4,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/EngineerProjects/seshat/internal/mailbox"
-	"github.com/EngineerProjects/seshat/internal/team"
+	"github.com/KPO-Tech/seshat/internal/mailbox"
+	"github.com/KPO-Tech/seshat/internal/team"
 )
 
 func TestFormatIncoming_WithBody(t *testing.T) {

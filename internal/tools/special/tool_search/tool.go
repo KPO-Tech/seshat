@@ -6,10 +6,10 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/EngineerProjects/seshat/internal/tools/contract"
-	"github.com/EngineerProjects/seshat/internal/tools/registry"
-	"github.com/EngineerProjects/seshat/internal/tools/schema"
-	"github.com/EngineerProjects/seshat/internal/types"
+	"github.com/KPO-Tech/seshat/internal/tools/contract"
+	"github.com/KPO-Tech/seshat/internal/tools/registry"
+	"github.com/KPO-Tech/seshat/internal/tools/schema"
+	"github.com/KPO-Tech/seshat/internal/types"
 )
 
 // SearchMatch is one result returned by tool_search.

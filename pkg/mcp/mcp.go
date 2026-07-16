@@ -3,7 +3,7 @@ package mcp
 import (
 	"context"
 
-	internalmcp "github.com/EngineerProjects/seshat/internal/tools/system/mcp"
+	internalmcp "github.com/KPO-Tech/seshat/internal/tools/system/mcp"
 )
 
 type (

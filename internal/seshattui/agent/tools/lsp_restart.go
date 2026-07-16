@@ -9,8 +9,8 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/EngineerProjects/seshat/internal/seshattui/lsp"
-	tool "github.com/EngineerProjects/seshat/internal/tools/registry"
+	"github.com/KPO-Tech/seshat/internal/seshattui/lsp"
+	tool "github.com/KPO-Tech/seshat/internal/tools/registry"
 )
 
 const LSPRestartToolName = "lsp_restart"

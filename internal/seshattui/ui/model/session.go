@@ -10,13 +10,13 @@ import (
 
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
-	"github.com/EngineerProjects/seshat/internal/seshattui/diff"
-	"github.com/EngineerProjects/seshat/internal/seshattui/fsext"
-	"github.com/EngineerProjects/seshat/internal/seshattui/history"
-	"github.com/EngineerProjects/seshat/internal/seshattui/session"
-	"github.com/EngineerProjects/seshat/internal/seshattui/ui/common"
-	"github.com/EngineerProjects/seshat/internal/seshattui/ui/styles"
-	"github.com/EngineerProjects/seshat/internal/seshattui/ui/util"
+	"github.com/KPO-Tech/seshat/internal/seshattui/diff"
+	"github.com/KPO-Tech/seshat/internal/seshattui/fsext"
+	"github.com/KPO-Tech/seshat/internal/seshattui/history"
+	"github.com/KPO-Tech/seshat/internal/seshattui/session"
+	"github.com/KPO-Tech/seshat/internal/seshattui/ui/common"
+	"github.com/KPO-Tech/seshat/internal/seshattui/ui/styles"
+	"github.com/KPO-Tech/seshat/internal/seshattui/ui/util"
 	"github.com/charmbracelet/x/ansi"
 )
 

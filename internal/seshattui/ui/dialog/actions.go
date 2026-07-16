@@ -8,16 +8,16 @@ import (
 
 	tea "charm.land/bubbletea/v2"
 	"charm.land/catwalk/pkg/catwalk"
-	"github.com/EngineerProjects/seshat/internal/seshattui/commands"
-	"github.com/EngineerProjects/seshat/internal/seshattui/config"
-	"github.com/EngineerProjects/seshat/internal/seshattui/message"
-	"github.com/EngineerProjects/seshat/internal/seshattui/oauth"
-	"github.com/EngineerProjects/seshat/internal/seshattui/permission"
-	"github.com/EngineerProjects/seshat/internal/seshattui/planreview"
-	"github.com/EngineerProjects/seshat/internal/seshattui/session"
-	"github.com/EngineerProjects/seshat/internal/seshattui/skills"
-	"github.com/EngineerProjects/seshat/internal/seshattui/ui/common"
-	"github.com/EngineerProjects/seshat/internal/seshattui/ui/util"
+	"github.com/KPO-Tech/seshat/internal/seshattui/commands"
+	"github.com/KPO-Tech/seshat/internal/seshattui/config"
+	"github.com/KPO-Tech/seshat/internal/seshattui/message"
+	"github.com/KPO-Tech/seshat/internal/seshattui/oauth"
+	"github.com/KPO-Tech/seshat/internal/seshattui/permission"
+	"github.com/KPO-Tech/seshat/internal/seshattui/planreview"
+	"github.com/KPO-Tech/seshat/internal/seshattui/session"
+	"github.com/KPO-Tech/seshat/internal/seshattui/skills"
+	"github.com/KPO-Tech/seshat/internal/seshattui/ui/common"
+	"github.com/KPO-Tech/seshat/internal/seshattui/ui/util"
 )
 
 // ActionClose is a message to close the current dialog.

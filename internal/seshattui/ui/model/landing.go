@@ -4,8 +4,8 @@ import (
 	"strings"
 
 	"charm.land/lipgloss/v2"
-	"github.com/EngineerProjects/seshat/internal/modes"
-	"github.com/EngineerProjects/seshat/internal/seshattui/workspace"
+	"github.com/KPO-Tech/seshat/internal/modes"
+	"github.com/KPO-Tech/seshat/internal/seshattui/workspace"
 )
 
 // seshatBrailleLogo is the braille-art rendering of the Seshat logo.

@@ -8,11 +8,11 @@ import (
 
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
-	"github.com/EngineerProjects/seshat/internal/seshattui/message"
-	"github.com/EngineerProjects/seshat/internal/seshattui/ui/anim"
-	"github.com/EngineerProjects/seshat/internal/seshattui/ui/common"
-	"github.com/EngineerProjects/seshat/internal/seshattui/ui/list"
-	"github.com/EngineerProjects/seshat/internal/seshattui/ui/styles"
+	"github.com/KPO-Tech/seshat/internal/seshattui/message"
+	"github.com/KPO-Tech/seshat/internal/seshattui/ui/anim"
+	"github.com/KPO-Tech/seshat/internal/seshattui/ui/common"
+	"github.com/KPO-Tech/seshat/internal/seshattui/ui/list"
+	"github.com/KPO-Tech/seshat/internal/seshattui/ui/styles"
 	"github.com/charmbracelet/x/ansi"
 )
 

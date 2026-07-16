@@ -4,15 +4,15 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/EngineerProjects/seshat/internal/execution"
-	"github.com/EngineerProjects/seshat/internal/memory"
-	"github.com/EngineerProjects/seshat/internal/monitoring"
-	"github.com/EngineerProjects/seshat/internal/permissions"
-	"github.com/EngineerProjects/seshat/internal/prompt"
-	"github.com/EngineerProjects/seshat/internal/providers"
-	compact "github.com/EngineerProjects/seshat/internal/runtime/memory"
-	tool "github.com/EngineerProjects/seshat/internal/tools/registry"
-	"github.com/EngineerProjects/seshat/internal/tools/system/mcp"
+	"github.com/KPO-Tech/seshat/internal/execution"
+	"github.com/KPO-Tech/seshat/internal/memory"
+	"github.com/KPO-Tech/seshat/internal/monitoring"
+	"github.com/KPO-Tech/seshat/internal/permissions"
+	"github.com/KPO-Tech/seshat/internal/prompt"
+	"github.com/KPO-Tech/seshat/internal/providers"
+	compact "github.com/KPO-Tech/seshat/internal/runtime/memory"
+	tool "github.com/KPO-Tech/seshat/internal/tools/registry"
+	"github.com/KPO-Tech/seshat/internal/tools/system/mcp"
 )
 
 // NewEngineWithRegistry creates a new query engine with a custom tool registry

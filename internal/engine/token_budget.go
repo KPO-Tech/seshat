@@ -3,7 +3,7 @@ package engine
 import (
 	"fmt"
 
-	"github.com/EngineerProjects/seshat/internal/types"
+	"github.com/KPO-Tech/seshat/internal/types"
 )
 
 const (

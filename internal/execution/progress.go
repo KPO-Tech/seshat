@@ -3,8 +3,8 @@ package execution
 import (
 	"fmt"
 
-	tool "github.com/EngineerProjects/seshat/internal/tools/contract"
-	"github.com/EngineerProjects/seshat/internal/types"
+	tool "github.com/KPO-Tech/seshat/internal/tools/contract"
+	"github.com/KPO-Tech/seshat/internal/types"
 )
 
 func progressForStage(toolUse types.ToolUseContent, stage string, percent float64, extraMetadata map[string]any) types.ToolProgress {

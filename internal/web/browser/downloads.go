@@ -6,7 +6,7 @@ import (
 	"path/filepath"
 	"time"
 
-	"github.com/EngineerProjects/seshat/internal/storage"
+	"github.com/KPO-Tech/seshat/internal/storage"
 )
 
 func (s *sessionState) upsertDownloadLocked(entry DownloadEntry) {

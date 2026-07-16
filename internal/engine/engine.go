@@ -8,17 +8,17 @@ import (
 	"sync"
 	"time"
 
-	"github.com/EngineerProjects/seshat/internal/execution"
-	"github.com/EngineerProjects/seshat/internal/hooks"
-	"github.com/EngineerProjects/seshat/internal/memory"
-	"github.com/EngineerProjects/seshat/internal/monitoring"
-	"github.com/EngineerProjects/seshat/internal/permissions"
-	"github.com/EngineerProjects/seshat/internal/prompt"
-	"github.com/EngineerProjects/seshat/internal/providers"
-	compact "github.com/EngineerProjects/seshat/internal/runtime/memory"
-	tool "github.com/EngineerProjects/seshat/internal/tools/registry"
-	"github.com/EngineerProjects/seshat/internal/types"
-	browsercore "github.com/EngineerProjects/seshat/internal/web/browser"
+	"github.com/KPO-Tech/seshat/internal/execution"
+	"github.com/KPO-Tech/seshat/internal/hooks"
+	"github.com/KPO-Tech/seshat/internal/memory"
+	"github.com/KPO-Tech/seshat/internal/monitoring"
+	"github.com/KPO-Tech/seshat/internal/permissions"
+	"github.com/KPO-Tech/seshat/internal/prompt"
+	"github.com/KPO-Tech/seshat/internal/providers"
+	compact "github.com/KPO-Tech/seshat/internal/runtime/memory"
+	tool "github.com/KPO-Tech/seshat/internal/tools/registry"
+	"github.com/KPO-Tech/seshat/internal/types"
+	browsercore "github.com/KPO-Tech/seshat/internal/web/browser"
 )
 
 // SessionStore persists canonical session metadata and transcript state.

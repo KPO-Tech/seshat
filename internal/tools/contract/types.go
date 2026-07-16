@@ -3,8 +3,8 @@ package contract
 import (
 	"fmt"
 
-	"github.com/EngineerProjects/seshat/internal/tools/schema"
-	"github.com/EngineerProjects/seshat/internal/types"
+	"github.com/KPO-Tech/seshat/internal/tools/schema"
+	"github.com/KPO-Tech/seshat/internal/types"
 )
 
 // Definition defines a tool's metadata and schema

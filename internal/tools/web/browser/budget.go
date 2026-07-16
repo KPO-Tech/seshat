@@ -6,7 +6,7 @@ import (
 	"sync"
 	"time"
 
-	tool "github.com/EngineerProjects/seshat/internal/tools/registry"
+	tool "github.com/KPO-Tech/seshat/internal/tools/registry"
 )
 
 const (

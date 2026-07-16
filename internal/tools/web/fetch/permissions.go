@@ -3,10 +3,10 @@ package webfetch
 import (
 	"context"
 
-	tool "github.com/EngineerProjects/seshat/internal/tools/registry"
-	"github.com/EngineerProjects/seshat/internal/types"
-	webcore "github.com/EngineerProjects/seshat/internal/web"
-	fetchcore "github.com/EngineerProjects/seshat/internal/web/fetch"
+	tool "github.com/KPO-Tech/seshat/internal/tools/registry"
+	"github.com/KPO-Tech/seshat/internal/types"
+	webcore "github.com/KPO-Tech/seshat/internal/web"
+	fetchcore "github.com/KPO-Tech/seshat/internal/web/fetch"
 )
 
 // permissionInput enriches the tool payload with stable derived fields used by the permission layer.

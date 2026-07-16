@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/EngineerProjects/seshat/pkg/runtimepath"
+	"github.com/KPO-Tech/seshat/pkg/runtimepath"
 )
 
 func main() {

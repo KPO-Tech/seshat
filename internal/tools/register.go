@@ -1,8 +1,8 @@
 package tools
 
 import (
-	"github.com/EngineerProjects/seshat/internal/tools/builtin"
-	tool "github.com/EngineerProjects/seshat/internal/tools/registry"
+	"github.com/KPO-Tech/seshat/internal/tools/builtin"
+	tool "github.com/KPO-Tech/seshat/internal/tools/registry"
 )
 
 // NewBuiltinRegistry is deprecated. Use internal/core/tools/builtin.NewBuiltinRegistry.

@@ -4,7 +4,7 @@ import (
 	"context"
 	"net/http"
 
-	"github.com/EngineerProjects/seshat/internal/types"
+	"github.com/KPO-Tech/seshat/internal/types"
 )
 
 // RetryStrategy defines advanced retry options.

@@ -6,9 +6,9 @@ import (
 	"strings"
 	"time"
 
-	"github.com/EngineerProjects/seshat/internal/types"
-	webcore "github.com/EngineerProjects/seshat/internal/web"
-	browsercore "github.com/EngineerProjects/seshat/internal/web/browser"
+	"github.com/KPO-Tech/seshat/internal/types"
+	webcore "github.com/KPO-Tech/seshat/internal/web"
+	browsercore "github.com/KPO-Tech/seshat/internal/web/browser"
 )
 
 // BrowserSnapshotTextLimit bounds the browser-rendered text payload returned to fetch callers.

@@ -4,8 +4,8 @@ package search
 import (
 	"fmt"
 
-	webcore "github.com/EngineerProjects/seshat/internal/web"
-	"github.com/EngineerProjects/seshat/internal/web/search/providers"
+	webcore "github.com/KPO-Tech/seshat/internal/web"
+	"github.com/KPO-Tech/seshat/internal/web/search/providers"
 )
 
 // Input represents a normalized search request for the shared search core.

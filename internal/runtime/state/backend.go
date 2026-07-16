@@ -3,7 +3,7 @@ package state
 import (
 	"errors"
 
-	"github.com/EngineerProjects/seshat/internal/types"
+	"github.com/KPO-Tech/seshat/internal/types"
 )
 
 // ErrMalformedTranscriptEntry indicates a persisted transcript entry could not

@@ -12,12 +12,12 @@ import (
 	"time"
 
 	"charm.land/catwalk/pkg/catwalk"
-	hyperp "github.com/EngineerProjects/seshat/internal/seshattui/agent/hyper"
-	"github.com/EngineerProjects/seshat/internal/seshattui/env"
-	"github.com/EngineerProjects/seshat/internal/seshattui/lock"
-	"github.com/EngineerProjects/seshat/internal/seshattui/oauth"
-	"github.com/EngineerProjects/seshat/internal/seshattui/oauth/copilot"
-	"github.com/EngineerProjects/seshat/internal/seshattui/oauth/hyper"
+	hyperp "github.com/KPO-Tech/seshat/internal/seshattui/agent/hyper"
+	"github.com/KPO-Tech/seshat/internal/seshattui/env"
+	"github.com/KPO-Tech/seshat/internal/seshattui/lock"
+	"github.com/KPO-Tech/seshat/internal/seshattui/oauth"
+	"github.com/KPO-Tech/seshat/internal/seshattui/oauth/copilot"
+	"github.com/KPO-Tech/seshat/internal/seshattui/oauth/hyper"
 	"github.com/tidwall/gjson"
 	"github.com/tidwall/sjson"
 )

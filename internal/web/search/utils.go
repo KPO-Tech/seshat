@@ -5,8 +5,8 @@ import (
 	"sort"
 	"strings"
 
-	webcore "github.com/EngineerProjects/seshat/internal/web"
-	"github.com/EngineerProjects/seshat/internal/web/search/providers"
+	webcore "github.com/KPO-Tech/seshat/internal/web"
+	"github.com/KPO-Tech/seshat/internal/web/search/providers"
 )
 
 // normalizePayloadToHits converts a generic payload to search hits.

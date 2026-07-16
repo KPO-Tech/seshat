@@ -5,7 +5,7 @@ import (
 	"encoding/json"
 	"log/slog"
 
-	"github.com/EngineerProjects/seshat/internal/seshattui/lsp/util"
+	"github.com/KPO-Tech/seshat/internal/seshattui/lsp/util"
 	powernap "github.com/charmbracelet/x/powernap/pkg/lsp"
 	"github.com/charmbracelet/x/powernap/pkg/lsp/protocol"
 )

@@ -1,6 +1,6 @@
 package longterm
 
-import internallongterm "github.com/EngineerProjects/seshat/internal/memory/longterm"
+import internallongterm "github.com/KPO-Tech/seshat/internal/memory/longterm"
 
 type (
 	Entity            = internallongterm.Entity

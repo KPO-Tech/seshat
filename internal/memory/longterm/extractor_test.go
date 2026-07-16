@@ -9,8 +9,8 @@ import (
 
 	"github.com/stretchr/testify/require"
 
-	longterm "github.com/EngineerProjects/seshat/internal/memory/longterm"
-	"github.com/EngineerProjects/seshat/internal/types"
+	longterm "github.com/KPO-Tech/seshat/internal/memory/longterm"
+	"github.com/KPO-Tech/seshat/internal/types"
 )
 
 // ─── Fake LLM caller ─────────────────────────────────────────────────────────

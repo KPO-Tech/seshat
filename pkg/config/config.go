@@ -6,8 +6,8 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/EngineerProjects/seshat/pkg/runtimepath"
-	"github.com/EngineerProjects/seshat/pkg/sdk"
+	"github.com/KPO-Tech/seshat/pkg/runtimepath"
+	"github.com/KPO-Tech/seshat/pkg/sdk"
 	"github.com/spf13/viper"
 )
 
@@ -116,7 +116,7 @@ type Config struct {
 	// DefaultSkillRepo — git URL of the official Seshat skills collection cloned
 	// silently in the background on first boot. Defaults to the canonical seshat-skills
 	// repo. Set to "none" to disable automatic install.
-	// Example: SESHAT_DEFAULT_SKILL_REPO=https://github.com/EngineerProjects/seshat-skills
+	// Example: SESHAT_DEFAULT_SKILL_REPO=https://github.com/KPO-Tech/seshat-skills
 	DefaultSkillRepo string `mapstructure:"default_skill_repo" yaml:"default_skill_repo,omitempty"`
 
 	// Hooks — user-defined shell commands that fire on lifecycle events.

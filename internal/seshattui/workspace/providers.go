@@ -9,9 +9,9 @@ import (
 	"time"
 
 	"charm.land/catwalk/pkg/catwalk"
-	"github.com/EngineerProjects/seshat/internal/db"
-	engineconfig "github.com/EngineerProjects/seshat/pkg/config"
-	"github.com/EngineerProjects/seshat/pkg/sdk"
+	"github.com/KPO-Tech/seshat/internal/db"
+	engineconfig "github.com/KPO-Tech/seshat/pkg/config"
+	"github.com/KPO-Tech/seshat/pkg/sdk"
 )
 
 // SetStartupConfig stores the options needed to rebuild the SDK client when

@@ -9,7 +9,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/EngineerProjects/seshat/pkg/sdk"
+	"github.com/KPO-Tech/seshat/pkg/sdk"
 )
 
 func runSessions(ctx context.Context, args []string, _ io.Reader, stdout, stderr io.Writer) error {

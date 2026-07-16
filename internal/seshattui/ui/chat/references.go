@@ -3,10 +3,10 @@ package chat
 import (
 	"encoding/json"
 
-	"github.com/EngineerProjects/seshat/internal/seshattui/agent/tools"
-	"github.com/EngineerProjects/seshat/internal/seshattui/fsext"
-	"github.com/EngineerProjects/seshat/internal/seshattui/message"
-	"github.com/EngineerProjects/seshat/internal/seshattui/ui/styles"
+	"github.com/KPO-Tech/seshat/internal/seshattui/agent/tools"
+	"github.com/KPO-Tech/seshat/internal/seshattui/fsext"
+	"github.com/KPO-Tech/seshat/internal/seshattui/message"
+	"github.com/KPO-Tech/seshat/internal/seshattui/ui/styles"
 )
 
 // ReferencesToolMessageItem is a message item that represents a references tool call.

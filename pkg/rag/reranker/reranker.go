@@ -1,6 +1,6 @@
 package reranker
 
-import internalreranker "github.com/EngineerProjects/seshat/internal/rag/reranker"
+import internalreranker "github.com/KPO-Tech/seshat/internal/rag/reranker"
 
 type LangSearchReranker = internalreranker.LangSearchReranker
 

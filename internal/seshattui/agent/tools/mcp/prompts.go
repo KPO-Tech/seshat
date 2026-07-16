@@ -5,8 +5,8 @@ import (
 	"iter"
 	"log/slog"
 
-	"github.com/EngineerProjects/seshat/internal/seshattui/config"
-	"github.com/EngineerProjects/seshat/internal/seshattui/csync"
+	"github.com/KPO-Tech/seshat/internal/seshattui/config"
+	"github.com/KPO-Tech/seshat/internal/seshattui/csync"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 )
 

@@ -8,10 +8,10 @@ import (
 
 	"charm.land/lipgloss/v2"
 	"charm.land/lipgloss/v2/table"
-	"github.com/EngineerProjects/seshat/internal/seshattui/config"
-	"github.com/EngineerProjects/seshat/internal/seshattui/message"
-	"github.com/EngineerProjects/seshat/internal/seshattui/stringext"
-	"github.com/EngineerProjects/seshat/internal/seshattui/ui/styles"
+	"github.com/KPO-Tech/seshat/internal/seshattui/config"
+	"github.com/KPO-Tech/seshat/internal/seshattui/message"
+	"github.com/KPO-Tech/seshat/internal/seshattui/stringext"
+	"github.com/KPO-Tech/seshat/internal/seshattui/ui/styles"
 )
 
 // DockerMCPToolMessageItem is a message item that represents a Docker MCP tool call.

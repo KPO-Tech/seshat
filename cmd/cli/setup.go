@@ -9,7 +9,7 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/EngineerProjects/seshat/pkg/runtimepath"
+	"github.com/KPO-Tech/seshat/pkg/runtimepath"
 )
 
 func runSetup(args []string, stdout, stderr io.Writer) error {

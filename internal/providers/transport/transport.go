@@ -10,7 +10,7 @@ import (
 	"os"
 	"time"
 
-	"github.com/EngineerProjects/seshat/internal/types"
+	"github.com/KPO-Tech/seshat/internal/types"
 )
 
 // Config is the transport-facing provider configuration subset.

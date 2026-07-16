@@ -11,9 +11,9 @@
 
 <p align="center">
   <a href="https://seshat-ai.com"><b>🌐 Website</b></a> ·
-  <a href="https://github.com/EngineerProjects/seshat/discussions"><b>💬 Discussions</b></a> ·
-  <a href="https://github.com/EngineerProjects/seshat/issues"><b>🐛 Issues</b></a> ·
-  <a href="https://github.com/EngineerProjects/seshat-ai"><b>🖥️ seshat-ai</b></a>
+  <a href="https://github.com/KPO-Tech/seshat/discussions"><b>💬 Discussions</b></a> ·
+  <a href="https://github.com/KPO-Tech/seshat/issues"><b>🐛 Issues</b></a> ·
+  <a href="https://github.com/KPO-Tech/seshat-ai"><b>🖥️ seshat-ai</b></a>
 </p>
 
 <p align="center">
@@ -71,7 +71,7 @@ Use this repository if you want to:
 - embed the runtime inside a Go application or internal system
 - extend providers, tools, permissions, MCP integration, or runtime behavior
 
-If you want the full self-hosted platform layer for organizations, use [seshat-ai](https://github.com/EngineerProjects/seshat-ai): users, workspaces, REST API, knowledge base, scheduling, governance, and desktop product surfaces built on top of this engine.
+If you want the full self-hosted platform layer for organizations, use [seshat-ai](https://github.com/KPO-Tech/seshat-ai): users, workspaces, REST API, knowledge base, scheduling, governance, and desktop product surfaces built on top of this engine.
 
 ---
 
@@ -127,7 +127,7 @@ seshat is the **headless runtime**: pure Go, no UI, no users, no billing. It is 
 
 ### 🖥️ seshat-ai — Desktop & Platform
 
-**[→ seshat-ai](https://github.com/EngineerProjects/seshat-ai)** is the full production platform built on top of this engine. If you want a ready-to-use application rather than a library, that is where you want to go.
+**[→ seshat-ai](https://github.com/KPO-Tech/seshat-ai)** is the full production platform built on top of this engine. If you want a ready-to-use application rather than a library, that is where you want to go.
 
 | | seshat (this repo) | seshat-ai |
 |---|---|---|
@@ -168,7 +168,7 @@ The engine is intentionally kept minimal and fast. If you need something from th
 **End users — one command, fully configured:**
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/EngineerProjects/seshat/main/scripts/install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/KPO-Tech/seshat/main/scripts/install.sh | bash
 ```
 
 Downloads the right binary for your platform, adds it to your PATH, installs `uv` and `docling-serve` for document processing, and leaves the runtime directory (`~/.config/seshat-cli/`) ready. The DB and sessions are created on first run.
@@ -183,7 +183,7 @@ VERSION=v0.1.0 bash <(curl -fsSL ...)   # pin a specific version
 
 ```bash
 # Install the CLI binary
-go install github.com/EngineerProjects/seshat/cmd/cli@latest
+go install github.com/KPO-Tech/seshat/cmd/cli@latest
 
 # Then set up document processing if needed
 seshat setup
@@ -195,7 +195,7 @@ seshat setup --check
 **SDK — embed in your Go application:**
 
 ```bash
-go get github.com/EngineerProjects/seshat@latest
+go get github.com/KPO-Tech/seshat@latest
 ```
 
 ---
@@ -210,10 +210,10 @@ An AI agent in your terminal. Multi-provider, local-first, skills-aware.
 
 ```bash
 # End users — full setup in one command:
-curl -fsSL https://raw.githubusercontent.com/EngineerProjects/seshat/main/scripts/install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/KPO-Tech/seshat/main/scripts/install.sh | bash
 
 # Developers — binary only via Go toolchain:
-go install github.com/EngineerProjects/seshat/cmd/cli@latest
+go install github.com/KPO-Tech/seshat/cmd/cli@latest
 seshat setup          # install uv + docling-serve afterwards if needed
 seshat setup --check  # check what is already configured
 ```
@@ -274,11 +274,11 @@ One runtime. Every language.
 Embed the full runtime in your own Go application.
 
 ```bash
-go get github.com/EngineerProjects/seshat/pkg/sdk
+go get github.com/KPO-Tech/seshat/pkg/sdk
 ```
 
 ```go
-import "github.com/EngineerProjects/seshat/pkg/sdk"
+import "github.com/KPO-Tech/seshat/pkg/sdk"
 
 client, err := sdk.NewClient(&sdk.ClientConfig{
     APIKey: os.Getenv("ANTHROPIC_API_KEY"),
@@ -394,7 +394,7 @@ Full model listings and capabilities: [`docs/providers.md`](./docs/providers.md)
 
 ```bash
 # 1. Install
-curl -fsSL https://raw.githubusercontent.com/EngineerProjects/seshat/main/scripts/install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/KPO-Tech/seshat/main/scripts/install.sh | bash
 
 # Reload your shell (or open a new terminal) if prompted, then:
 
@@ -428,7 +428,7 @@ Skills are Markdown files that encode expertise injected into the agent's system
   security-rules.md     # "never log secrets, validate all external input at boundaries..."
 ```
 
-The official skill collection is [seshat-skills](https://github.com/EngineerProjects/seshat-skills), installable from any URL directly from the CLI.
+The official skill collection is [seshat-skills](https://github.com/KPO-Tech/seshat-skills), installable from any URL directly from the CLI.
 
 ---
 
@@ -484,7 +484,7 @@ Full architecture diagrams (Mermaid): [`docs/vision/diagrams.md`](./docs/vision/
 
 ```bash
 # Linux / macOS — installs all dependencies, builds, wires git hooks
-git clone https://github.com/EngineerProjects/seshat
+git clone https://github.com/KPO-Tech/seshat
 cd seshat
 make setup
 
@@ -543,7 +543,7 @@ Override with `SESHAT_RUNTIME_ROOT=/your/path seshat chat`.
 
 > **Linux** — primary development and testing platform. Fully supported.
 >
-> **macOS** — code is written to support macOS and basic testing has been done, but **macOS support is not yet fully validated**. If you hit an issue, please [open a report](https://github.com/EngineerProjects/seshat/issues).
+> **macOS** — code is written to support macOS and basic testing has been done, but **macOS support is not yet fully validated**. If you hit an issue, please [open a report](https://github.com/KPO-Tech/seshat/issues).
 >
 > **Windows** — PowerShell setup script included and paths are handled (`%APPDATA%`), but **Windows support has not been tested yet**. Contributions and test reports welcome.
 

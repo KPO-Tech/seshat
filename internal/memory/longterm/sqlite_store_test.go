@@ -4,7 +4,7 @@ import (
 	"context"
 	"testing"
 
-	dbpkg "github.com/EngineerProjects/seshat/internal/db"
+	dbpkg "github.com/KPO-Tech/seshat/internal/db"
 )
 
 func newTestStore(t *testing.T) *SQLiteStore {

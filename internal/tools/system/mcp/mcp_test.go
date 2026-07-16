@@ -2,7 +2,7 @@ package mcp
 
 import (
 	"context"
-	tool "github.com/EngineerProjects/seshat/internal/tools/registry"
+	tool "github.com/KPO-Tech/seshat/internal/tools/registry"
 	"net/http"
 	"net/http/httptest"
 	"strings"
