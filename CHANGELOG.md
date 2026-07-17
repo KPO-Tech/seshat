@@ -33,6 +33,7 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 ### Fixed
 - `internal/tools/files/patch/patch.go`: replaced `if HasSuffix` with `strings.TrimSuffix` (golangci-lint S1017)
 - `internal/providers/auth.go`: removed OAuth credential values from log output (security: S1)
+- `pkg/rag/embedder`: `EmbedTexts` now splits large requests into batches (default 64 texts), since some hosted embedding APIs (e.g. Mistral) reject an oversized request outright instead of truncating it
 
 ### Removed
 - `cmd/api` — moved to `nexus-product` (the open-source engine does not own the HTTP product layer)
