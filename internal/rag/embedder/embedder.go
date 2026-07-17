@@ -27,6 +27,14 @@ type Config struct {
 	Model    string
 	Provider Provider
 	Timeout  time.Duration
+	// BatchSize caps how many texts are sent in a single embeddings API
+	// call, defaulting to defaultEmbedBatchSize when zero. Most hosted
+	// embedding APIs enforce a per-request token/count budget - Mistral's
+	// embeddings endpoint, for one, rejects a request outright with "too
+	// many tokens overall, split into more batches" rather than truncating,
+	// so a single call for an entire large document's chunks fails instead
+	// of just running slowly.
+	BatchSize int
 }
 
 // FromEnv reads embedding configuration from environment variables:
@@ -60,10 +68,18 @@ type Embedder struct {
 	client *http.Client
 }
 
+// defaultEmbedBatchSize is a conservative default meant to stay well under
+// per-request token/count limits across hosted providers regardless of
+// individual chunk size - see Config.BatchSize.
+const defaultEmbedBatchSize = 64
+
 // New creates an Embedder from an explicit Config.
 func New(cfg *Config) *Embedder {
 	if cfg.Timeout == 0 {
 		cfg.Timeout = 30 * time.Second
+	}
+	if cfg.BatchSize == 0 {
+		cfg.BatchSize = defaultEmbedBatchSize
 	}
 	return &Embedder{
 		cfg:    cfg,
@@ -81,11 +97,34 @@ func NewFromEnv() *Embedder {
 	return New(cfg)
 }
 
-// EmbedTexts implements rag.Embedder.
+// EmbedTexts implements rag.Embedder. Splits texts into Config.BatchSize-
+// sized groups and calls the provider once per group, concatenating
+// results in order - a single unbounded call for a large document's worth
+// of chunks can be flatly rejected by the provider (see Config.BatchSize).
 func (e *Embedder) EmbedTexts(ctx context.Context, texts []string) ([][]float32, error) {
 	if len(texts) == 0 {
 		return nil, nil
 	}
+	batchSize := e.cfg.BatchSize
+	if batchSize <= 0 {
+		batchSize = defaultEmbedBatchSize
+	}
+	out := make([][]float32, 0, len(texts))
+	for start := 0; start < len(texts); start += batchSize {
+		end := start + batchSize
+		if end > len(texts) {
+			end = len(texts)
+		}
+		vectors, err := e.embedBatch(ctx, texts[start:end])
+		if err != nil {
+			return nil, err
+		}
+		out = append(out, vectors...)
+	}
+	return out, nil
+}
+
+func (e *Embedder) embedBatch(ctx context.Context, texts []string) ([][]float32, error) {
 	switch e.cfg.Provider {
 	case ProviderOllama:
 		return e.embedOllama(ctx, texts)
