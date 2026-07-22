@@ -209,6 +209,7 @@ func (t *Tool) Call(
 		RunInBackground:     runInBackground,
 		Stdin:               stdinData,
 		OutputChunkCallback: t.config.OutputChunkCallback,
+		SessionID:           string(toolCtx.SessionID),
 	}
 
 	// ── Layer 3: Approval pipeline (direct calls only) ────────────────────
@@ -433,6 +434,10 @@ type ExecutionContext struct {
 	// OutputChunkCallback, when set, is called for each output chunk (streaming).
 	// stream is "stdout" or "stderr".
 	OutputChunkCallback func(chunk string, stream string)
+	// SessionID, when non-empty, is checked against
+	// sandbox.RemoteExecutorFor before falling back to local execution — see
+	// executeCommand.
+	SessionID string
 }
 
 // CommandResult holds the output of a completed command.
@@ -490,7 +495,59 @@ func (t *Tool) executeBackground(ctx context.Context, execCtx *ExecutionContext)
 	return result, nil
 }
 
+// executeCommand dispatches to whichever backend is configured for this
+// call: a session-scoped RemoteExecutor when one is registered — the
+// agent's commands then run inside the user's real, visible terminal
+// instead of a detached subprocess — or the local exec.CommandContext path
+// otherwise. Every session with no terminal ever opened keeps using the
+// local path exactly as before — RemoteExecutorFor only returns ok=true
+// once the host application (seshat-backend) has explicitly registered one.
 func (t *Tool) executeCommand(ctx context.Context, execCtx *ExecutionContext) (*CommandResult, error) {
+	if execCtx.SessionID != "" {
+		if executor, ok := sandbox.RemoteExecutorFor(execCtx.SessionID); ok {
+			return t.executeViaRemote(ctx, execCtx, executor)
+		}
+	}
+	return t.executeLocalCommand(ctx, execCtx)
+}
+
+// executeViaRemote relays execCtx.Command through executor (e.g. Electron's
+// terminal relay) instead of spawning a local subprocess. A failure here
+// (relay disconnected mid-call, timeout, etc.) falls back to local execution
+// rather than surfacing a confusing error — the remote path is a visibility
+// upgrade for the user, not a hard requirement for bash to function.
+func (t *Tool) executeViaRemote(ctx context.Context, execCtx *ExecutionContext, executor sandbox.Executor) (*CommandResult, error) {
+	startTime := time.Now()
+	cmdCtx, cancel := context.WithTimeout(ctx, execCtx.Timeout)
+	defer cancel()
+
+	res, err := executor.Run(cmdCtx, sandbox.RunRequest{
+		Command: execCtx.Command,
+		WorkDir: execCtx.WorkingDirectory,
+		Timeout: execCtx.Timeout,
+	})
+	if err != nil {
+		return t.executeLocalCommand(ctx, execCtx)
+	}
+
+	cwd := res.Cwd
+	if cwd == "" {
+		cwd = execCtx.WorkingDirectory
+	}
+	maxOut := execCtx.MaxOutputSize
+	if maxOut <= 0 {
+		maxOut = MaxOutputSize
+	}
+	return &CommandResult{
+		ExitCode: res.ExitCode,
+		Stdout:   capOutput(res.Stdout, maxOut),
+		Stderr:   capOutput(res.Stderr, maxOut),
+		Duration: time.Since(startTime).Milliseconds(),
+		CWD:      cwd,
+	}, nil
+}
+
+func (t *Tool) executeLocalCommand(ctx context.Context, execCtx *ExecutionContext) (*CommandResult, error) {
 	startTime := time.Now()
 	cmdCtx, cancel := context.WithTimeout(ctx, execCtx.Timeout)
 	defer cancel()
@@ -606,6 +663,20 @@ func copyWithCallback(dst io.Writer, src io.Reader, stream string, chunkCb func(
 			break
 		}
 	}
+}
+
+// capOutput applies the same head+tail-biased truncation as local command
+// execution to a remote executor's already-complete output string.
+func capOutput(s string, max int64) string {
+	if max <= 0 {
+		max = MaxOutputSize
+	}
+	if int64(len(s)) <= max {
+		return s
+	}
+	buf := newCappedBuffer(max)
+	buf.Write([]byte(s)) //nolint:errcheck
+	return buf.String()
 }
 
 // ── Helpers ────────────────────────────────────────────────────────────────────

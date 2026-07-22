@@ -87,6 +87,13 @@ type RunResult struct {
 	// Duration is the wall-clock time the command took.
 	Duration time.Duration
 
+	// Cwd is the working directory the command left the environment in.
+	// Only populated by executors backed by a persistent shell (e.g.
+	// RemoteExecutor) where a `cd` genuinely changes state for the next
+	// command; empty for one-shot executors like NoopExecutor/DaggerExecutor
+	// where WorkDir never changes out from under the caller.
+	Cwd string
+
 	// Endpoints maps exposed port numbers to "host:port" strings.
 	// Populated by DaggerExecutor when DaggerRunOptions.ExposePorts is set.
 	Endpoints map[int]string
