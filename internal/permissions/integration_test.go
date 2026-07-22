@@ -200,6 +200,47 @@ func TestResolverUsesPromptFnDenial(t *testing.T) {
 	}
 }
 
+func TestResolverUsesPromptFnDenialReason(t *testing.T) {
+	t.Setenv("SESHAT_RUNTIME_ROOT", t.TempDir())
+	engine := NewEngine()
+	if err := engine.AddRule(PermissionRule{
+		Value:    PermissionRuleValue{ToolName: "bash", RuleContent: "echo *"},
+		Behavior: types.PermissionBehaviorAsk,
+		Priority: 100,
+		Reason:   "echo commands require approval in this test",
+		Source:   types.PermissionSourceStatic,
+	}); err != nil {
+		t.Fatalf("failed to add permission rule: %v", err)
+	}
+
+	integrator := NewIntegrator(engine)
+	integrator.SetPromptFn(func(ctx context.Context, request types.PromptRequest) (types.PromptResponse, error) {
+		return types.PromptResponse{
+			Value:    false,
+			Metadata: map[string]any{"reason": "please use a different tool instead"},
+		}, nil
+	})
+
+	resolver := integrator.Resolver("session-1", "turn-1", types.PermissionModeOnRequest)
+	result := resolver.ResolvePermission(context.Background(), types.GlobalToolPermissionRequest(
+		"bash",
+		map[string]any{"command": "echo hi"},
+		"tool-1",
+		"session-1",
+		"turn-1",
+		types.PermissionModeOnRequest,
+		"",
+		nil,
+	))
+
+	if !result.IsDenied() {
+		t.Fatalf("expected prompt denial to deny tool use, got %#v", result)
+	}
+	if result.Reason != "please use a different tool instead" {
+		t.Fatalf("expected human-supplied deny reason to flow through, got %q", result.Reason)
+	}
+}
+
 func TestResolverSessionAutoApproval(t *testing.T) {
 	t.Setenv("SESHAT_RUNTIME_ROOT", t.TempDir())
 	engine := NewEngine()

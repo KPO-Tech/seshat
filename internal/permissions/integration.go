@@ -266,10 +266,16 @@ func (i *Integrator) ResolverWithContext(
 			})
 		}
 
-		return types.DenyWithDecisionReason("user denied", &types.PermissionDecisionReason{
+		denyReason := "user denied"
+		if response.Metadata != nil {
+			if r, ok := response.Metadata["reason"].(string); ok && r != "" {
+				denyReason = r
+			}
+		}
+		return types.DenyWithDecisionReason(denyReason, &types.PermissionDecisionReason{
 			Type:   types.PermissionDecisionReasonPrompt,
 			Source: "prompt",
-			Reason: "user denied",
+			Reason: denyReason,
 		})
 	})
 }
