@@ -132,6 +132,13 @@ type dockerEnv struct {
 	// set only when DockerExecutorConfig.TrackFileChanges is true and
 	// workDir is non-empty. Empty means tracking is off for this environment.
 	historyGitDir string
+	// lastSnapshotErr records the most recent gitSnapshot failure, if any —
+	// snapshotAfterRun treats a failed snapshot as best-effort (never fails
+	// the Run() it's attached to), but silently dropping the error entirely
+	// makes "nothing changed" indistinguishable from "the snapshot failed"
+	// from the outside. Guarded by DockerExecutor.mu, same as the map this
+	// dockerEnv lives in.
+	lastSnapshotErr error
 }
 
 // processInstanceID tags every container this process creates
@@ -568,7 +575,10 @@ func (e *DockerExecutor) snapshotAfterRun(env *dockerEnv, command string) {
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
-	_ = e.gitSnapshot(ctx, env.historyGitDir, env.workDir, "cmd: "+message)
+	err := e.gitSnapshot(ctx, env.historyGitDir, env.workDir, "cmd: "+message)
+	e.mu.Lock()
+	env.lastSnapshotErr = err
+	e.mu.Unlock()
 }
 
 // resolvePublishedPorts reads back the host-side ports Docker assigned to

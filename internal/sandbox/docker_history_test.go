@@ -2,6 +2,7 @@ package sandbox
 
 import (
 	"context"
+	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -46,17 +47,40 @@ func TestDockerExecutorHealthyFailsWhenGitMissingButTrackingRequested(t *testing
 	}
 }
 
-func gitLog(t *testing.T, gitDir string) []string {
-	t.Helper()
-	out, err := exec.Command("git", "--git-dir", gitDir, "log", "--format=%s").Output()
+// gitLog does not itself fail the test — a "no commits yet" exit from git
+// (the bare repo has zero commits) is valid, diagnostic-worthy information
+// callers should combine with lastSnapshotErr rather than have buried in a
+// bare t.Fatalf with no context on *why* the expected commit never landed.
+func gitLog(gitDir string) (lines []string, gitErr string) {
+	cmd := exec.Command("git", "--git-dir", gitDir, "log", "--format=%s")
+	var stderr strings.Builder
+	cmd.Stderr = &stderr
+	out, err := cmd.Output()
 	if err != nil {
-		t.Fatalf("git log: %v", err)
+		return nil, fmt.Sprintf("%v: %s", err, strings.TrimSpace(stderr.String()))
 	}
-	lines := strings.Split(strings.TrimRight(string(out), "\n"), "\n")
-	if len(lines) == 1 && lines[0] == "" {
-		return nil
+	result := strings.Split(strings.TrimRight(string(out), "\n"), "\n")
+	if len(result) == 1 && result[0] == "" {
+		return nil, ""
 	}
-	return lines
+	return result, ""
+}
+
+// lastSnapshotErr reads DockerExecutor's diagnostic record of the most
+// recent gitSnapshot failure for the environment tracking gitDir, if any —
+// snapshotAfterRun treats a failed snapshot as best-effort (never fails the
+// command it's attached to) but records the error here so a test (or any
+// caller with access to the executor) can tell a "nothing changed" outcome
+// apart from a "the snapshot silently failed" outcome.
+func lastSnapshotErr(ex *DockerExecutor, gitDir string) error {
+	ex.mu.Lock()
+	defer ex.mu.Unlock()
+	for _, env := range ex.envs {
+		if env.historyGitDir == gitDir {
+			return env.lastSnapshotErr
+		}
+	}
+	return nil
 }
 
 func TestDockerExecutorTracksFileChangesAcrossCalls(t *testing.T) {
@@ -86,9 +110,10 @@ func TestDockerExecutorTracksFileChangesAcrossCalls(t *testing.T) {
 		t.Fatal("expected the environment to have a historyGitDir")
 	}
 
-	commits := gitLog(t, gitDir)
-	if len(commits) != 1 || !strings.Contains(commits[0], "echo one > a.txt") {
-		t.Fatalf("expected exactly 1 commit referencing the command, got %v", commits)
+	commits, gitErr := gitLog(gitDir)
+	if gitErr != "" || len(commits) != 1 || !strings.Contains(commits[0], "echo one > a.txt") {
+		t.Fatalf("expected exactly 1 commit referencing the command, got %v (git log error: %q, last snapshot error: %v)",
+			commits, gitErr, lastSnapshotErr(ex, gitDir))
 	}
 
 	// Second call, same environment, another change.
@@ -99,9 +124,10 @@ func TestDockerExecutorTracksFileChangesAcrossCalls(t *testing.T) {
 	}); err != nil {
 		t.Fatalf("Run: %v", err)
 	}
-	commits = gitLog(t, gitDir)
-	if len(commits) != 2 {
-		t.Fatalf("expected 2 commits after a second changing call, got %v", commits)
+	commits, gitErr = gitLog(gitDir)
+	if gitErr != "" || len(commits) != 2 {
+		t.Fatalf("expected 2 commits after a second changing call, got %v (git log error: %q, last snapshot error: %v)",
+			commits, gitErr, lastSnapshotErr(ex, gitDir))
 	}
 
 	// Confirm the tracked content is genuinely retrievable from the shadow
@@ -136,7 +162,10 @@ func TestDockerExecutorTrackingSkipsNoOpCommits(t *testing.T) {
 		gitDir = env.historyGitDir
 	}
 	ex.mu.Unlock()
-	before := gitLog(t, gitDir)
+	before, gitErr := gitLog(gitDir)
+	if gitErr != "" {
+		t.Fatalf("git log (before): %s", gitErr)
+	}
 
 	// A command that reads but changes nothing must not add a commit.
 	if _, err := ex.Run(context.Background(), RunRequest{
@@ -146,9 +175,13 @@ func TestDockerExecutorTrackingSkipsNoOpCommits(t *testing.T) {
 	}); err != nil {
 		t.Fatalf("Run: %v", err)
 	}
-	after := gitLog(t, gitDir)
+	after, gitErr := gitLog(gitDir)
+	if gitErr != "" {
+		t.Fatalf("git log (after): %s", gitErr)
+	}
 	if len(after) != len(before) {
-		t.Fatalf("expected no new commit for a no-op command: before=%v after=%v", before, after)
+		t.Fatalf("expected no new commit for a no-op command: before=%v after=%v (last snapshot error: %v)",
+			before, after, lastSnapshotErr(ex, gitDir))
 	}
 }
 
@@ -240,9 +273,10 @@ func TestDockerExecutorHistoryPersistsAcrossExecutorInstances(t *testing.T) {
 	}
 	ex2.mu.Unlock()
 
-	commits := gitLog(t, gitDir)
+	commits, gitErr := gitLog(gitDir)
 	joined := strings.Join(commits, "\n")
-	if !strings.Contains(joined, "x.txt") || !strings.Contains(joined, "y.txt") {
-		t.Fatalf("expected history from both executor instances to be present, got commits: %v", commits)
+	if gitErr != "" || !strings.Contains(joined, "x.txt") || !strings.Contains(joined, "y.txt") {
+		t.Fatalf("expected history from both executor instances to be present, got commits: %v (git log error: %q, last snapshot error: %v)",
+			commits, gitErr, lastSnapshotErr(ex2, gitDir))
 	}
 }
