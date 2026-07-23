@@ -5,8 +5,31 @@ import (
 	"time"
 
 	"github.com/KPO-Tech/seshat/internal/providers"
+	"github.com/KPO-Tech/seshat/internal/sandbox"
+	bashTool "github.com/KPO-Tech/seshat/internal/tools/bash"
 	"github.com/KPO-Tech/seshat/pkg/runtimepath"
 )
+
+// SandboxKind selects an OS-level sandbox backend for bash tool execution.
+type SandboxKind = sandbox.EnvironmentKind
+
+// Sandbox backend kind values for ClientConfig.SandboxKind.
+const (
+	// SandboxKindLocal is the zero value — Landlock on Linux, unconfined
+	// elsewhere unless RequireSandbox is also set. Today's existing behavior.
+	SandboxKindLocal = sandbox.EnvironmentLocal
+	// SandboxKindDocker routes bash execution through a persistent Docker
+	// container (internal/sandbox.DockerExecutor) — real filesystem/process
+	// isolation plus enforced CPU/memory caps and optional network isolation.
+	// Falls back to SandboxKindLocal with a logged warning if Docker isn't
+	// reachable when the client is constructed.
+	SandboxKindDocker = sandbox.EnvironmentDocker
+)
+
+// SandboxDockerConfig configures the Docker sandbox backend used when
+// ClientConfig.SandboxKind is SandboxKindDocker. See
+// sandbox.DockerExecutorConfig for field-by-field documentation.
+type SandboxDockerConfig = sandbox.DockerExecutorConfig
 
 // CredentialResolver resolves the API key for an LLM provider at client
 // creation time. The provider argument matches types.APIProvider values
@@ -165,6 +188,24 @@ type ClientConfig struct {
 	ImageGeneration *ImageGenerationConfig `json:"image_generation,omitempty"`
 	TextToSpeech    *TextToSpeechConfig    `json:"text_to_speech,omitempty"`
 	SpeechToText    *SpeechToTextConfig    `json:"speech_to_text,omitempty"`
+
+	// RequireSandbox makes the bash tool refuse to run commands when no
+	// OS-level sandbox (currently: Landlock, Linux-only) is available on the
+	// host, instead of silently falling back to unconfined execution. Leave
+	// false for desktop use where refusing to run bash entirely is worse UX
+	// than a visible unsandboxed-execution warning; set true for multi-tenant
+	// server deployments where unconfined execution must never happen.
+	RequireSandbox bool `json:"require_sandbox"`
+
+	// SandboxKind selects the OS-level sandbox backend for bash tool
+	// execution. Empty (SandboxKindLocal) preserves existing behavior.
+	// SandboxKindDocker routes execution through a persistent Docker
+	// container — see SandboxDocker.
+	SandboxKind SandboxKind `json:"sandbox_kind,omitempty"`
+	// SandboxDocker configures the Docker sandbox backend when SandboxKind
+	// is SandboxKindDocker. Zero value uses sane, security-conscious
+	// defaults (see sandbox.DefaultDockerConfig).
+	SandboxDocker SandboxDockerConfig `json:"-"`
 }
 
 // PreToolHookConfig is a single shell hook that runs before a tool call.
@@ -172,6 +213,15 @@ type PreToolHookConfig struct {
 	Matcher string // regex against tool name; empty = match all
 	Command string // shell command to execute
 	Timeout int    // timeout in seconds (default 30)
+}
+
+// SandboxAvailable reports whether an OS-level sandbox (currently: Landlock,
+// Linux-only) is available on this host to confine bash tool execution.
+// Host applications use this to surface the unconfined-execution tradeoff to
+// the end user (e.g. in a settings UI) rather than leaving it as a
+// backend-log-only warning.
+func SandboxAvailable() bool {
+	return bashTool.SandboxAvailable()
 }
 
 // DefaultClientConfig returns default client configuration.

@@ -6,8 +6,10 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log/slog"
 	"os"
 	"os/exec"
+	"runtime"
 	"strings"
 	"sync"
 	"syscall"
@@ -47,6 +49,11 @@ type Tool struct {
 	backgroundManager *BackgroundTaskManager
 	shell             string // cached at construction time
 	mu                sync.Mutex
+	// sandboxExecutor, when non-nil, routes executeLocalCommand through an
+	// OS-level sandbox backend (currently: sandbox.DockerExecutor) instead
+	// of the raw exec.CommandContext + Landlock path. nil means "Landlock/
+	// local" — today's behavior, unchanged.
+	sandboxExecutor sandbox.Executor
 }
 
 // ToolConfig represents the Bash tool configuration.
@@ -59,6 +66,17 @@ type ToolConfig struct {
 	// set but Landlock is unavailable. Leave false for desktop use; set true for
 	// multi-tenant server deployments.
 	RequireSandbox bool
+	// SandboxKind selects the OS-level sandbox backend to attempt before
+	// falling back to Landlock/local. Empty (sandbox.EnvironmentLocal, the
+	// zero value) preserves today's behavior. sandbox.EnvironmentDocker
+	// routes execution through a persistent Docker container — see
+	// SandboxDocker. If Docker isn't reachable at construction time, NewTool
+	// logs a warning and falls back to Landlock/local exactly as if
+	// SandboxKind had been left empty.
+	SandboxKind sandbox.EnvironmentKind
+	// SandboxDocker configures the Docker sandbox backend when SandboxKind
+	// is sandbox.EnvironmentDocker. Zero value uses sandbox.DefaultDockerConfig().
+	SandboxDocker sandbox.DockerExecutorConfig
 	// OutputChunkCallback, when set, receives each output chunk as it is produced
 	// (streaming mode). If nil, output is buffered and returned at completion.
 	OutputChunkCallback func(chunk string, stream string)
@@ -81,6 +99,36 @@ func NewTool(config *ToolConfig) *Tool {
 		config = DefaultToolConfig()
 	}
 
+	var sandboxExecutor sandbox.Executor
+	if config.SandboxKind == sandbox.EnvironmentDocker {
+		executor, err := sandbox.NewExecutor(sandbox.ExecutorConfig{
+			Kind:   sandbox.EnvironmentDocker,
+			Docker: config.SandboxDocker,
+		})
+		if err != nil {
+			slog.Warn("bash tool: failed to initialize docker sandbox — falling back to Landlock/local", "error", err)
+		} else if healthErr := executor.Healthy(context.Background()); healthErr != nil {
+			slog.Warn("bash tool: docker sandbox requested but unavailable — falling back to Landlock/local", "error", healthErr)
+		} else {
+			sandboxExecutor = executor
+		}
+	}
+
+	// Landlock (the only OS-level confinement executeLocalCommand falls back to)
+	// is Linux-only — see landlock_stub.go. On every other platform (which today
+	// means every desktop install: Windows, macOS) commands run directly on the
+	// host with no isolation, unless the operator opts into RequireSandbox and
+	// accepts that bash then refuses to run at all, or into SandboxKind=Docker
+	// above. That tradeoff needs to be visible, not silent, for an agent
+	// platform that executes model-issued shell commands.
+	if sandboxExecutor == nil && !landlockAvailable() && !config.RequireSandbox {
+		slog.Warn(
+			"bash tool: no OS-level sandbox available on this platform — shell commands will run unconfined on the host",
+			"platform", runtime.GOOS,
+			"hint", "Landlock (the current confinement backend) is Linux-only and no Docker sandbox is configured; set ToolConfig.SandboxKind=sandbox.EnvironmentDocker for real isolation, or RequireSandbox=true to refuse unconfined execution instead of allowing it silently",
+		)
+	}
+
 	bm := NewBackgroundTaskManager(runtimepath.BashTasksDir(""))
 	_ = bm.Init()
 	globalTaskManager = bm // expose to package-level callers (monitor, task-list tools)
@@ -91,6 +139,7 @@ func NewTool(config *ToolConfig) *Tool {
 		commandPolicy:     sandbox.NewDefaultCommandPolicy(),
 		backgroundManager: bm,
 		shell:             detectShell(),
+		sandboxExecutor:   sandboxExecutor,
 	}
 }
 
@@ -553,6 +602,11 @@ func (t *Tool) executeLocalCommand(ctx context.Context, execCtx *ExecutionContex
 	defer cancel()
 
 	_, actualCommand := parseEnvVars(execCtx.Command)
+
+	if t.sandboxExecutor != nil {
+		return t.executeViaSandbox(cmdCtx, execCtx, actualCommand, startTime)
+	}
+
 	cmdPath, cmdArgs, sandboxEnv, sandboxed := commandWithLandlock(t.shell, []string{"-c", actualCommand}, execCtx.WorkingDirectory)
 
 	if execCtx.WorkingDirectory != "" && !sandboxed && t.config != nil && t.config.RequireSandbox {
@@ -596,6 +650,44 @@ func (t *Tool) executeLocalCommand(ctx context.Context, execCtx *ExecutionContex
 		Duration:  time.Since(startTime).Milliseconds(),
 		CWD:       execCtx.WorkingDirectory,
 		Sandboxed: sandboxed,
+	}, nil
+}
+
+// executeViaSandbox runs the command through t.sandboxExecutor (currently:
+// sandbox.DockerExecutor) instead of the raw exec.CommandContext + Landlock
+// path. Streaming output chunks (execCtx.OutputChunkCallback) aren't
+// supported here — the sandbox.Executor interface returns output only once
+// the command completes — so callers relying on streaming won't see
+// incremental chunks while running sandboxed. Output capping and formatting
+// otherwise match executeLocalCommand exactly.
+func (t *Tool) executeViaSandbox(ctx context.Context, execCtx *ExecutionContext, actualCommand string, startTime time.Time) (*CommandResult, error) {
+	var stdin io.Reader
+	if execCtx.Stdin != "" {
+		stdin = strings.NewReader(execCtx.Stdin)
+	}
+
+	res, err := t.sandboxExecutor.Run(ctx, sandbox.RunRequest{
+		Command: actualCommand,
+		WorkDir: execCtx.WorkingDirectory,
+		Timeout: execCtx.Timeout,
+		Stdin:   stdin,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("sandboxed command execution failed: %w", err)
+	}
+
+	maxOut := execCtx.MaxOutputSize
+	if maxOut <= 0 {
+		maxOut = MaxOutputSize
+	}
+
+	return &CommandResult{
+		ExitCode:  res.ExitCode,
+		Stdout:    capOutput(res.Stdout, maxOut),
+		Stderr:    capOutput(res.Stderr, maxOut),
+		Duration:  time.Since(startTime).Milliseconds(),
+		CWD:       execCtx.WorkingDirectory,
+		Sandboxed: true,
 	}, nil
 }
 
@@ -773,6 +865,15 @@ func applyPatchCommandName(s string) bool {
 		name = name[idx+1:]
 	}
 	return name == "apply_patch" || name == "applypatch"
+}
+
+// SandboxAvailable reports whether an OS-level sandbox (currently: Landlock,
+// Linux-only) is available on this host for confining bash execution. Host
+// applications use this to surface the unconfined-execution tradeoff to the
+// end user instead of leaving it as a backend-log-only warning — see
+// ToolConfig.RequireSandbox and NewTool's startup log.
+func SandboxAvailable() bool {
+	return landlockAvailable()
 }
 
 // detectShell picks the best available shell, cached at startup.
