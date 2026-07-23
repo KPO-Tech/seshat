@@ -118,23 +118,6 @@ func formatExtract(snapshot browsercore.Snapshot) string {
 	return strings.TrimSpace(builder.String())
 }
 
-func formatScreenshot(screenshot browsercore.Screenshot) string {
-	var builder strings.Builder
-	builder.WriteString(fmt.Sprintf("Page: %s\n", screenshot.Page.ID))
-	builder.WriteString(fmt.Sprintf("URL: %s\n", screenshot.Page.URL))
-	builder.WriteString(fmt.Sprintf("Image: %s (%d bytes)\n", screenshot.MimeType, screenshot.Bytes))
-	if screenshot.FullPage {
-		builder.WriteString("Capture: full page\n")
-	} else {
-		builder.WriteString("Capture: viewport\n")
-	}
-	if screenshot.PersistedPath != "" {
-		builder.WriteString(fmt.Sprintf("Path: %s\n", screenshot.PersistedPath))
-	}
-	builder.WriteString(fmt.Sprintf("Data: %d base64 chars", len(screenshot.DataBase64)))
-	return builder.String()
-}
-
 func formatNetwork(entries []browsercore.NetworkEntry) string {
 	if len(entries) == 0 {
 		return "No recent browser network activity."
