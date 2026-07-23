@@ -490,8 +490,18 @@ func TestScreenshotToolFormatsOutput(t *testing.T) {
 	if res.IsError() {
 		t.Fatalf("expected success result, got error: %v", res.Error)
 	}
-	if got := res.Content; !containsAll(got, "image/png", "full page") {
+	// Content must carry the raw payload (including data_base64), not a
+	// human-text summary — a UI needs the actual bytes to render the image,
+	// which a formatted "N base64 chars" string can't provide.
+	if got := res.Content; !containsAll(got, "image/png", "data_base64", "ZmFrZQ==") {
 		t.Fatalf("unexpected screenshot content: %s", got)
+	}
+	screenshot, ok := res.Data.(browsercore.Screenshot)
+	if !ok {
+		t.Fatalf("expected res.Data to be a browsercore.Screenshot, got %T", res.Data)
+	}
+	if screenshot.DataBase64 != "ZmFrZQ==" {
+		t.Fatalf("unexpected screenshot data_base64: %s", screenshot.DataBase64)
 	}
 }
 

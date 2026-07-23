@@ -219,7 +219,7 @@ client, _ := sdk.NewClient(&sdk.ClientConfig{
 })
 ```
 
-Full event type list: `turn.started`, `turn.completed`, `turn.failed`, `response.chunk`, `tool.progress`, `tool.permission_required`, `prompt.request`, `plan.submitted`, `plan.status_changed`, `goal.updated`, `agent.spawn.begin`, `agent.spawn.end`.
+Full event type list: `turn.started`, `turn.completed`, `turn.failed`, `response.chunk`, `tool.progress`, `tool.permission_required`, `prompt.request`, `plan.submitted`, `goal.updated`, `agent.spawn.begin`, `agent.spawn.end`. (`plan.status_changed` is declared as a reserved constant but not currently emitted by the engine.)
 
 ### EventQueue — per-session async channel
 

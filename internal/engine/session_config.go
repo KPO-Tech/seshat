@@ -5,6 +5,7 @@ import (
 	"sort"
 
 	"github.com/KPO-Tech/seshat/internal/execution"
+	"github.com/KPO-Tech/seshat/internal/modes"
 	tool "github.com/KPO-Tech/seshat/internal/tools/registry"
 	"github.com/KPO-Tech/seshat/internal/types"
 )
@@ -149,6 +150,32 @@ func (s *Session) SetPermissionMode(mode types.PermissionMode) {
 		ctx = &types.PermissionContext{}
 	}
 	ctx.Mode = mode
+	s.state.SetPermissionContext(ctx)
+}
+
+// ForcePlanMode enters plan mode in the session permission context directly.
+// This mirrors what enter_plan_mode.Call does via its ContextModifier,
+// allowing a host application to force a session into plan mode without
+// waiting for the model to call enter_plan_mode itself. Like ClearPlanMode
+// below, this stays a pure state mutation — no runtime event is emitted and
+// no plan-file bookkeeping (internal/modes/execution's planCache) is touched,
+// since both live behind a context.Context-scoped emitter/session id not
+// available to this parameterless setter. Safe to call unconditionally
+// (including when already in plan mode, which is a harmless no-op: Mode
+// itself is untouched by plan mode, only PrePlanMode/ExecutionMode change).
+func (s *Session) ForcePlanMode() {
+	if s == nil || s.state == nil {
+		return
+	}
+	ctx := s.state.PermissionContextSnapshot()
+	if ctx == nil {
+		ctx = &types.PermissionContext{Mode: types.PermissionModeOnRequest}
+	}
+	ctx.PrePlanMode = ctx.Mode
+	ctx.ExecutionMode = string(modes.ExecutionModePlan)
+	if ctx.Mode == types.PermissionModeBypass {
+		ctx.IsBypassPermissionsModeAvailable = true
+	}
 	s.state.SetPermissionContext(ctx)
 }
 

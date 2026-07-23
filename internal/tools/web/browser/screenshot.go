@@ -2,6 +2,7 @@ package browser
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 
 	tool "github.com/KPO-Tech/seshat/internal/tools/registry"
@@ -50,7 +51,17 @@ func (t *screenshotTool) Call(ctx context.Context, input tool.CallInput, permiss
 	if err != nil {
 		return tool.NewErrorResult(err), nil
 	}
-	return jsonResult(screenshot, formatScreenshot(screenshot)), nil
+	// Unlike the other browser tools, jsonResult()'s human-text formatting
+	// (formatScreenshot) would strip the actual image down to a byte count —
+	// the payload IS what needs rendering, not a summary of it. Put the raw
+	// JSON (including data_base64) directly in Content instead, the same
+	// pattern generate_image uses, so a UI can render it without a dedicated
+	// non-streamed download path.
+	encoded, err := json.Marshal(screenshot)
+	if err != nil {
+		return tool.NewErrorResult(err), nil
+	}
+	return tool.CallResult{Data: screenshot, ContentType: tool.ContentTypeJSON, Content: string(encoded)}, nil
 }
 
 func (t *screenshotTool) Description(ctx context.Context) (string, error) {

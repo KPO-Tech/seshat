@@ -131,6 +131,9 @@ func initBuiltinRegistry(config *ClientConfig, browserManager browsercore.Manage
 		ImageGenerator:             initImageGenerator(config),
 		TTSGenerator:               initTextToSpeechGenerator(config),
 		STTTranscriber:             initSpeechToTextTranscriber(config),
+		RequireSandbox:             config.RequireSandbox,
+		SandboxKind:                config.SandboxKind,
+		SandboxDocker:              config.SandboxDocker,
 	})
 }
 

@@ -99,6 +99,16 @@ func (s *Session) GetPermissionContext() *PermissionContext {
 	return s.session.GetPermissionContext()
 }
 
+// ForcePlanMode enters plan mode in the session context directly, allowing
+// the host to force a session into plan mode without waiting for the model
+// to call enter_plan_mode itself.
+func (s *Session) ForcePlanMode() {
+	if s == nil || s.session == nil {
+		return
+	}
+	s.session.ForcePlanMode()
+}
+
 // ClearPlanMode exits plan mode in the session context, restoring the previous
 // permission mode. This allows the host to pre-exit plan mode on user approval
 // without the model needing to call exit_plan_mode itself.

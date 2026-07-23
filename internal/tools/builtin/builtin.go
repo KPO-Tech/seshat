@@ -85,8 +85,14 @@ func RegisterBuiltinToolsWithConfig(reg *tool.Registry, config *Config) error {
 
 	readURLConfig := readURLTool.Config{DoclingURL: config.DoclingURL}
 
+	bashConfig := bashTool.DefaultToolConfig()
+	bashConfig.WorkingDirectory = config.WorkingDir
+	bashConfig.RequireSandbox = config.RequireSandbox
+	bashConfig.SandboxKind = config.SandboxKind
+	bashConfig.SandboxDocker = config.SandboxDocker
+
 	tools := []tool.Tool{
-		bashTool.NewTool(bashTool.DefaultToolConfig()),
+		bashTool.NewTool(bashConfig),
 		bashTool.NewWriteStdinTool(),
 		bashTool.NewJobOutputTool(),
 		bashTool.NewJobKillTool(),

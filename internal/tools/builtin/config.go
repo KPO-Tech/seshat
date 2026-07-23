@@ -11,6 +11,7 @@ import (
 	"github.com/KPO-Tech/seshat/internal/image"
 	longterm "github.com/KPO-Tech/seshat/internal/memory/longterm"
 	"github.com/KPO-Tech/seshat/internal/rag"
+	"github.com/KPO-Tech/seshat/internal/sandbox"
 	"github.com/KPO-Tech/seshat/internal/storage"
 	"github.com/KPO-Tech/seshat/internal/tools/system/mcp"
 	"github.com/KPO-Tech/seshat/internal/types"
@@ -80,6 +81,20 @@ type Config struct {
 	// jobs from different owners. Keys are keyed by provider name:
 	// "tavily", "exa", "jina", "langsearch".
 	WebSearchKeys map[string]string
+
+	// RequireSandbox makes the bash tool refuse to run commands when no
+	// OS-level sandbox (currently: Landlock, Linux-only) is available on the
+	// host, instead of silently falling back to unconfined execution.
+	RequireSandbox bool
+
+	// SandboxKind selects the OS-level sandbox backend the bash tool
+	// attempts before falling back to Landlock/local. Empty preserves
+	// today's behavior. sandbox.EnvironmentDocker routes execution through
+	// a persistent Docker container — see SandboxDocker.
+	SandboxKind sandbox.EnvironmentKind
+	// SandboxDocker configures the Docker sandbox backend when SandboxKind
+	// is sandbox.EnvironmentDocker. Zero value uses sandbox.DefaultDockerConfig().
+	SandboxDocker sandbox.DockerExecutorConfig
 }
 
 func DefaultConfig() *Config {

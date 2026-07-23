@@ -6,6 +6,8 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"sort"
+	"strings"
 	"sync"
 
 	automode "github.com/KPO-Tech/seshat/internal/permissions/auto"
@@ -73,12 +75,22 @@ func (i *Integrator) ResolverWithContext(
 		}
 
 		if requestSessionID != "" {
+			// A request_permissions call with scope=session also gets a second,
+			// content-scoped lookup key (see requestPermissionsSessionKey) — a
+			// session grant for that tool must only cover the exact escalation
+			// that was approved (same paths/access/targets), not every future
+			// request_permissions call regardless of what it's asking for.
+			lookupKeys := []string{toolName}
+			if key := requestPermissionsSessionKey(toolName, toolInput); key != "" {
+				lookupKeys = append(lookupKeys, key)
+			}
+
 			// 1. Fast path: check in-memory map
 			i.mu.RLock()
 			hasSession := i.sessionTools != nil && i.sessionTools[requestSessionID] != nil
 			var allowed bool
 			if hasSession {
-				allowed = i.sessionTools[requestSessionID][toolName]
+				allowed = anyKeyAllowed(i.sessionTools[requestSessionID], lookupKeys)
 			}
 			i.mu.RUnlock()
 
@@ -98,7 +110,7 @@ func (i *Integrator) ResolverWithContext(
 					}
 					i.sessionTools[requestSessionID] = loadedMap
 				}
-				allowed = i.sessionTools[requestSessionID][toolName]
+				allowed = anyKeyAllowed(i.sessionTools[requestSessionID], lookupKeys)
 				i.mu.Unlock()
 			}
 
@@ -239,25 +251,18 @@ func (i *Integrator) ResolverWithContext(
 		if approved {
 			reason := "user approved"
 			if always && requestSessionID != "" {
-				i.mu.Lock()
-				if i.sessionTools == nil {
-					i.sessionTools = make(map[types.SessionID]map[string]bool)
-				}
-				if i.sessionTools[requestSessionID] == nil {
-					i.sessionTools[requestSessionID] = make(map[string]bool)
-				}
-				i.sessionTools[requestSessionID][toolName] = true
-
-				// Save to disk
-				sessionDir := runtimepath.SessionDir("", string(requestSessionID))
-				filePath := filepath.Join(sessionDir, "permissions.json")
-				if err := os.MkdirAll(sessionDir, 0700); err == nil {
-					if data, err := json.Marshal(i.sessionTools[requestSessionID]); err == nil {
-						_ = os.WriteFile(filePath, data, 0600)
-					}
-				}
-				i.mu.Unlock()
+				i.persistSessionApproval(requestSessionID, toolName)
 				reason = "always approved for session"
+			}
+			// request_permissions itself asked for scope=session — persist under
+			// its content-scoped key (not the plain tool name) regardless of
+			// whether the UI has an "always" concept, since the scope was
+			// declared by the model's own input, not a special user response.
+			if scope, _ := metadata["grant_scope"].(string); scope == "session" && requestSessionID != "" {
+				if key := requestPermissionsSessionKey(toolName, toolInput); key != "" {
+					i.persistSessionApproval(requestSessionID, key)
+					reason = "approved for session (request_permissions scope=session)"
+				}
 			}
 			return types.AllowWithInputAndDecisionReason(reason, result.UpdatedInput, &types.PermissionDecisionReason{
 				Type:   types.PermissionDecisionReasonPrompt,
@@ -266,10 +271,16 @@ func (i *Integrator) ResolverWithContext(
 			})
 		}
 
-		return types.DenyWithDecisionReason("user denied", &types.PermissionDecisionReason{
+		denyReason := "user denied"
+		if response.Metadata != nil {
+			if r, ok := response.Metadata["reason"].(string); ok && r != "" {
+				denyReason = r
+			}
+		}
+		return types.DenyWithDecisionReason(denyReason, &types.PermissionDecisionReason{
 			Type:   types.PermissionDecisionReasonPrompt,
 			Source: "prompt",
-			Reason: "user denied",
+			Reason: denyReason,
 		})
 	})
 }
@@ -347,6 +358,88 @@ func (i *Integrator) CheckToolUse(
 	}
 
 	return result, nil
+}
+
+// persistSessionApproval records key as granted for sessionID, both in memory
+// and on disk (~/.../sessions/<id>/permissions.json), reusing the same file
+// the "always approve this tool" flow already writes to. key is either a bare
+// tool name (whole-tool grant) or a requestPermissionsSessionKey signature
+// (content-scoped grant).
+func (i *Integrator) persistSessionApproval(sessionID types.SessionID, key string) {
+	i.mu.Lock()
+	defer i.mu.Unlock()
+	if i.sessionTools == nil {
+		i.sessionTools = make(map[types.SessionID]map[string]bool)
+	}
+	if i.sessionTools[sessionID] == nil {
+		i.sessionTools[sessionID] = make(map[string]bool)
+	}
+	i.sessionTools[sessionID][key] = true
+
+	sessionDir := runtimepath.SessionDir("", string(sessionID))
+	filePath := filepath.Join(sessionDir, "permissions.json")
+	if err := os.MkdirAll(sessionDir, 0700); err == nil {
+		if data, err := json.Marshal(i.sessionTools[sessionID]); err == nil {
+			_ = os.WriteFile(filePath, data, 0600)
+		}
+	}
+}
+
+// anyKeyAllowed reports whether any of keys is marked granted in grants.
+func anyKeyAllowed(grants map[string]bool, keys []string) bool {
+	for _, k := range keys {
+		if grants[k] {
+			return true
+		}
+	}
+	return false
+}
+
+// requestPermissionsSessionKey builds a stable signature for a
+// request_permissions call's escalation target (filesystem paths+access,
+// network targets), so a session-scoped grant only auto-approves a future
+// request_permissions call asking for the exact same escalation — not just
+// any escalation, and not other tools. Returns "" when toolName isn't
+// request_permissions or input carries no recognizable permissions payload.
+func requestPermissionsSessionKey(toolName string, input map[string]any) string {
+	if toolName != "request_permissions" {
+		return ""
+	}
+	perms, ok := input["permissions"].(map[string]any)
+	if !ok {
+		return ""
+	}
+	var parts []string
+	if fs, ok := perms["filesystem"].(map[string]any); ok {
+		parts = append(parts, "fs:"+canonicalStringSlice(fs["paths"])+"/"+canonicalStringSlice(fs["access"]))
+	}
+	if net, ok := perms["network"].(map[string]any); ok {
+		enabled, _ := net["enabled"].(bool)
+		parts = append(parts, fmt.Sprintf("net:%s/%v", canonicalStringSlice(net["targets"]), enabled))
+	}
+	if len(parts) == 0 {
+		return ""
+	}
+	sort.Strings(parts)
+	return "request_permissions::" + strings.Join(parts, "|")
+}
+
+// canonicalStringSlice renders a []any of strings (as decoded from JSON tool
+// input) into a sorted, deduplication-friendly comma-joined string, so two
+// requests naming the same paths/targets in a different order still match.
+func canonicalStringSlice(raw any) string {
+	items, ok := raw.([]any)
+	if !ok {
+		return ""
+	}
+	strs := make([]string, 0, len(items))
+	for _, item := range items {
+		if s, ok := item.(string); ok && strings.TrimSpace(s) != "" {
+			strs = append(strs, strings.TrimSpace(s))
+		}
+	}
+	sort.Strings(strs)
+	return strings.Join(strs, ",")
 }
 
 func cloneSessionPermissionContext(ctx *types.PermissionContext) *types.PermissionContext {
