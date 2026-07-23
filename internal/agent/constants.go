@@ -42,6 +42,16 @@ const MaxSubAgentDepth = 3
 // frontend must clamp user-configured values to this maximum.
 const MaxAbsoluteSubAgentDepth = 5
 
+// DefaultMaxActiveAsyncAgents caps how many spawn_agent-style background agents
+// a single AsyncAgentManager (one per backend process) will run concurrently,
+// across all sessions. MaxSubAgentDepth bounds delegation *chains* (A→B→C), but
+// nothing previously bounded *breadth* — a model that loops on spawn_agent
+// across several turns could otherwise start an unbounded number of concurrent
+// engine sessions, each with its own goroutines and provider calls, exhausting
+// memory/goroutines/API quota. This is a process-wide safety net, not a
+// per-session limit; see AsyncAgentManager.SetMaxActiveAgents to override it.
+const DefaultMaxActiveAsyncAgents = 8
+
 // DefaultSubAgentTimeout is the wall-clock safety net for a single sub-agent
 // run. This is NOT a functional limit — it exists to kill a sub-agent that is
 // genuinely stuck (LLM unresponsive, infinite loop with no token output).

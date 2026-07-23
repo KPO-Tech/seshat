@@ -117,6 +117,12 @@ type AsyncAgent struct {
 	// the run completes and exposes the session for resumption via resume_agent.
 	SessionID types.SessionID
 
+	// ParentSessionID is the conversation session that spawned this agent —
+	// copied from RunConfig.ParentSessionID at start time (unlike SessionID,
+	// available immediately, not only after completion). Host applications use
+	// it to authorize management operations; see RunConfig.ParentSessionID.
+	ParentSessionID types.SessionID
+
 	// Current status
 	Status AgentStatus
 
@@ -186,6 +192,10 @@ type AsyncAgentManager struct {
 	agentCounter   atomic.Int64
 	workersWg      sync.WaitGroup
 
+	// maxActive caps how many agents may be Pending/Running at once — see
+	// DefaultMaxActiveAsyncAgents. Guarded by agentsMu (read alongside agents).
+	maxActive int
+
 	// Tracks active agent goroutines so Shutdown can wait for them to finish
 	agentsWg sync.WaitGroup
 
@@ -206,6 +216,7 @@ func NewAsyncAgentManager() *AsyncAgentManager {
 		agents:           make(map[string]*AsyncAgent),
 		eventChan:        make(chan AgentEvent, 1000), // Buffered channel for events
 		workerPoolSize:   5,                           // Default 5 workers for event dispatch
+		maxActive:        DefaultMaxActiveAsyncAgents,
 		dispatcherCtx:    ctx,
 		dispatcherCancel: cancel,
 	}
@@ -321,6 +332,29 @@ func (m *AsyncAgentManager) RemoveGlobalListener(listener AgentEventListener) {
 	}
 }
 
+// SetMaxActiveAgents overrides the default breadth limit (DefaultMaxActiveAsyncAgents)
+// on concurrently Pending/Running agents. A value <= 0 disables the limit.
+func (m *AsyncAgentManager) SetMaxActiveAgents(n int) {
+	m.agentsMu.Lock()
+	defer m.agentsMu.Unlock()
+	m.maxActive = n
+}
+
+// activeAgentCountLocked returns the number of tracked agents that are still
+// Pending or Running. Caller must hold agentsMu (read or write lock).
+func (m *AsyncAgentManager) activeAgentCountLocked() int {
+	count := 0
+	for _, a := range m.agents {
+		a.stateMu.RLock()
+		status := a.Status
+		a.stateMu.RUnlock()
+		if status == AgentStatusPending || status == AgentStatusRunning {
+			count++
+		}
+	}
+	return count
+}
+
 // StartAgent starts an agent asynchronously and returns immediately.
 // RunConfig.Nickname and RunConfig.Role (if set) are copied to the agent for identification.
 func (m *AsyncAgentManager) StartAgent(config *RunConfig) (*AsyncAgent, error) {
@@ -339,22 +373,33 @@ func (m *AsyncAgentManager) StartAgent(config *RunConfig) (*AsyncAgent, error) {
 	ctx, cancel := context.WithCancel(context.Background())
 
 	asyncAgent := &AsyncAgent{
-		ID:            agentID,
-		Config:        config,
-		Nickname:      config.Nickname,
-		Role:          config.Role,
-		Status:        AgentStatusPending,
-		Ctx:           ctx,
-		Cancel:        cancel,
-		StartTime:     time.Now(),
-		CurrentTurn:   0,
-		CurrentOutput: "",
-		ToolUses:      0,
-		done:          make(chan struct{}),
+		ID:              agentID,
+		Config:          config,
+		Nickname:        config.Nickname,
+		Role:            config.Role,
+		ParentSessionID: config.ParentSessionID,
+		Status:          AgentStatusPending,
+		Ctx:             ctx,
+		Cancel:          cancel,
+		StartTime:       time.Now(),
+		CurrentTurn:     0,
+		CurrentOutput:   "",
+		ToolUses:        0,
+		done:            make(chan struct{}),
 	}
 
-	// Register agent
+	// Check the breadth limit and register the agent under the same lock
+	// acquisition, so two concurrent StartAgent calls can't both pass the
+	// check and push the active count past maxActive.
 	m.agentsMu.Lock()
+	if m.maxActive > 0 && m.activeAgentCountLocked() >= m.maxActive {
+		m.agentsMu.Unlock()
+		cancel()
+		return nil, fmt.Errorf(
+			"too many background agents already running (limit: %d) — wait for one to finish, or close_agent an existing one, before spawning another",
+			m.maxActive,
+		)
+	}
 	m.agents[agentID] = asyncAgent
 	m.agentsMu.Unlock()
 

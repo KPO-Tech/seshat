@@ -112,6 +112,16 @@ type RunConfig struct {
 	// Stored in AsyncAgent.Nickname; does not affect execution.
 	Nickname string
 
+	// ParentSessionID is the session that spawned this agent (set by spawn_agent
+	// from types.ToolContext.SessionID). Stored in AsyncAgent.ParentSessionID;
+	// does not affect execution. Host applications use it to authorize
+	// management operations on the resulting AsyncAgent (e.g. seshat-backend
+	// only lets a cancel request through when the caller can prove ownership of
+	// this session) — generated agent IDs are a predictable counter, not a
+	// capability token, so this check matters once more than one user can reach
+	// the same AsyncAgentManager.
+	ParentSessionID types.SessionID
+
 	// Role is the role this agent was spawned with (e.g. "reviewer").
 	// Stored in AsyncAgent.Role; does not affect execution.
 	Role string

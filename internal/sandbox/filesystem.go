@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 )
 
@@ -15,12 +16,16 @@ type FilesystemPolicy struct {
 
 func NewDefaultFilesystemPolicy() *FilesystemPolicy {
 	return &FilesystemPolicy{
+		// Linux kernel/system internals only — no narrow Windows or macOS
+		// equivalent exists, and read access is rarely dangerous, so this
+		// list stays deliberately narrower than writeDeniedPrefixes below.
 		readDeniedPrefixes: []string{
 			"/boot",
 			"/sys",
 			"/proc/sys",
 		},
 		writeDeniedPrefixes: []string{
+			// Linux.
 			"/boot",
 			"/sys",
 			"/proc/sys",
@@ -29,6 +34,16 @@ func NewDefaultFilesystemPolicy() *FilesystemPolicy {
 			"/usr/sbin",
 			"/bin",
 			"/sbin",
+			// macOS system directories — macOS is Unix-like but keeps its own
+			// /System and /Library trees distinct from the Linux paths above.
+			"/System",
+			"/Library",
+			// Windows system and program directories. Matched
+			// case-insensitively on Windows (see hasPathPrefix) since NTFS
+			// paths are case-preserving but not case-sensitive.
+			`C:\Windows`,
+			`C:\Program Files`,
+			`C:\Program Files (x86)`,
 		},
 	}
 }
@@ -108,6 +123,12 @@ func matchingPrefix(path string, prefixes []string) string {
 func hasPathPrefix(path string, prefix string) bool {
 	path = filepath.Clean(path)
 	prefix = filepath.Clean(prefix)
+	if runtime.GOOS == "windows" {
+		// NTFS paths are case-preserving but not case-sensitive — compare
+		// case-insensitively so "c:\windows\..." still matches "C:\Windows".
+		path = strings.ToLower(path)
+		prefix = strings.ToLower(prefix)
+	}
 	if path == prefix {
 		return true
 	}

@@ -3,6 +3,7 @@ package agents
 import (
 	"context"
 	"fmt"
+	"log/slog"
 	"strings"
 	"time"
 
@@ -158,15 +159,16 @@ func (t *SpawnAgentTool) Call(
 	}
 
 	config := &coreagent.RunConfig{
-		AgentType: agentType,
-		Task:      prompt,
-		Tools:     t.tools,
-		Engine:    t.eng,
-		MaxTurns:  maxTurns,
-		Context:   ctx,
-		Registry:  t.reg,
-		Nickname:  nickname,
-		Role:      role,
+		AgentType:       agentType,
+		Task:            prompt,
+		Tools:           t.tools,
+		Engine:          t.eng,
+		MaxTurns:        maxTurns,
+		Context:         ctx,
+		Registry:        t.reg,
+		Nickname:        nickname,
+		Role:            role,
+		ParentSessionID: toolCtx.SessionID,
 		// Background agents run in a goroutine that outlives the parent turn;
 		// bypass permissions so tools are not stuck waiting for an interactive
 		// prompt after the parent's turn context has been canceled.
@@ -181,7 +183,18 @@ func (t *SpawnAgentTool) Call(
 
 	// Spawn a background goroutine that blocks on ag.Wait() and notifies the TUI
 	// when the subagent completes its task, marking the spawn_agent tool as done.
+	// This goroutine outlives the parent tool call (and often the parent HTTP
+	// request that originated it), so it must never take the process down with
+	// it: recover any panic here instead of letting it propagate, the same way
+	// AsyncAgentManager.runAgent and its event dispatch workers do.
 	go func() {
+		defer func() {
+			if r := recover(); r != nil {
+				slog.Error("spawn_agent completion notifier panic",
+					"panic", r, "tool_use_id", callID, "agent_id", ag.ID)
+			}
+		}()
+
 		ag.Wait()
 		if emitter, ok := ctx.Value(types.RuntimeEventEmitterKey).(func(types.RuntimeEvent)); ok && emitter != nil {
 			status := "completed"

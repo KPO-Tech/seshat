@@ -23,6 +23,8 @@ var RuleSourcePriority = map[types.PermissionRuleSource]int{
 
 // GetRulesBySource returns all rules from a specific source.
 func (e *Engine) GetRulesBySource(source types.PermissionRuleSource) []PermissionRule {
+	e.rulesMu.RLock()
+	defer e.rulesMu.RUnlock()
 	var rules []PermissionRule
 	for _, rule := range e.rules {
 		if rule.Source == source {
@@ -34,6 +36,8 @@ func (e *Engine) GetRulesBySource(source types.PermissionRuleSource) []Permissio
 
 // RemoveRulesBySource removes all rules from a specific source.
 func (e *Engine) RemoveRulesBySource(source types.PermissionRuleSource) {
+	e.rulesMu.Lock()
+	defer e.rulesMu.Unlock()
 	var newRules []PermissionRule
 	for _, rule := range e.rules {
 		if rule.Source != source {
@@ -41,7 +45,7 @@ func (e *Engine) RemoveRulesBySource(source types.PermissionRuleSource) {
 		}
 	}
 	e.rules = newRules
-	e.sortRules()
+	e.sortRulesLocked()
 }
 
 // UpdateRules applies permission updates from various sources.
@@ -81,6 +85,7 @@ func (e *Engine) UpdateRules(update types.PermissionUpdate) error {
 
 	case types.PermissionUpdateTypeDeleteRules:
 		// Remove specific rules from this source
+		e.rulesMu.Lock()
 		var newRules []PermissionRule
 		for _, rule := range e.rules {
 			if rule.Source != update.Destination {
@@ -101,7 +106,8 @@ func (e *Engine) UpdateRules(update types.PermissionUpdate) error {
 			}
 		}
 		e.rules = newRules
-		e.sortRules()
+		e.sortRulesLocked()
+		e.rulesMu.Unlock()
 
 	default:
 		return fmt.Errorf("unknown permission update type: %s", update.Type)
@@ -112,9 +118,14 @@ func (e *Engine) UpdateRules(update types.PermissionUpdate) error {
 
 // GetEffectiveRules returns rules sorted by priority (highest first).
 // This ensures that higher-priority sources (cliArg, session) take precedence.
+// Returns a copy: the caller must not observe later mutations of the live
+// rule set through a slice obtained here while the lock was only held for
+// the duration of this call.
 func (e *Engine) GetEffectiveRules() []PermissionRule {
-	// Rules are already sorted by priority in sortRules()
-	return e.rules
+	e.rulesMu.RLock()
+	defer e.rulesMu.RUnlock()
+	// Rules are already sorted by priority in sortRulesLocked()
+	return append([]PermissionRule(nil), e.rules...)
 }
 
 // GetRuleSourcePriority returns the priority for a given source.
@@ -143,7 +154,9 @@ func (e *Engine) MergeRulesFromSources(sourceRules map[types.PermissionRuleSourc
 	}
 
 	// Clear existing rules
+	e.rulesMu.Lock()
 	e.rules = make([]PermissionRule, 0)
+	e.rulesMu.Unlock()
 
 	// Add rules from each source in priority order
 	for _, source := range sources {
@@ -162,6 +175,8 @@ func (e *Engine) MergeRulesFromSources(sourceRules map[types.PermissionRuleSourc
 
 // GetAllRuleSources returns all rule sources currently in use.
 func (e *Engine) GetAllRuleSources() []types.PermissionRuleSource {
+	e.rulesMu.RLock()
+	defer e.rulesMu.RUnlock()
 	sources := make(map[types.PermissionRuleSource]bool)
 	for _, rule := range e.rules {
 		sources[rule.Source] = true
@@ -176,6 +191,8 @@ func (e *Engine) GetAllRuleSources() []types.PermissionRuleSource {
 
 // GetRuleCountBySource returns the count of rules for each source.
 func (e *Engine) GetRuleCountBySource() map[types.PermissionRuleSource]int {
+	e.rulesMu.RLock()
+	defer e.rulesMu.RUnlock()
 	counts := make(map[types.PermissionRuleSource]int)
 	for _, rule := range e.rules {
 		counts[rule.Source]++

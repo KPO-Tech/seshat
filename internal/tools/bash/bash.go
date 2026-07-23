@@ -6,8 +6,10 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log/slog"
 	"os"
 	"os/exec"
+	"runtime"
 	"strings"
 	"sync"
 	"syscall"
@@ -47,6 +49,11 @@ type Tool struct {
 	backgroundManager *BackgroundTaskManager
 	shell             string // cached at construction time
 	mu                sync.Mutex
+	// sandboxExecutor, when non-nil, routes executeLocalCommand through an
+	// OS-level sandbox backend (currently: sandbox.DockerExecutor) instead
+	// of the raw exec.CommandContext + Landlock path. nil means "Landlock/
+	// local" — today's behavior, unchanged.
+	sandboxExecutor sandbox.Executor
 }
 
 // ToolConfig represents the Bash tool configuration.
@@ -59,6 +66,17 @@ type ToolConfig struct {
 	// set but Landlock is unavailable. Leave false for desktop use; set true for
 	// multi-tenant server deployments.
 	RequireSandbox bool
+	// SandboxKind selects the OS-level sandbox backend to attempt before
+	// falling back to Landlock/local. Empty (sandbox.EnvironmentLocal, the
+	// zero value) preserves today's behavior. sandbox.EnvironmentDocker
+	// routes execution through a persistent Docker container — see
+	// SandboxDocker. If Docker isn't reachable at construction time, NewTool
+	// logs a warning and falls back to Landlock/local exactly as if
+	// SandboxKind had been left empty.
+	SandboxKind sandbox.EnvironmentKind
+	// SandboxDocker configures the Docker sandbox backend when SandboxKind
+	// is sandbox.EnvironmentDocker. Zero value uses sandbox.DefaultDockerConfig().
+	SandboxDocker sandbox.DockerExecutorConfig
 	// OutputChunkCallback, when set, receives each output chunk as it is produced
 	// (streaming mode). If nil, output is buffered and returned at completion.
 	OutputChunkCallback func(chunk string, stream string)
@@ -81,6 +99,36 @@ func NewTool(config *ToolConfig) *Tool {
 		config = DefaultToolConfig()
 	}
 
+	var sandboxExecutor sandbox.Executor
+	if config.SandboxKind == sandbox.EnvironmentDocker {
+		executor, err := sandbox.NewExecutor(sandbox.ExecutorConfig{
+			Kind:   sandbox.EnvironmentDocker,
+			Docker: config.SandboxDocker,
+		})
+		if err != nil {
+			slog.Warn("bash tool: failed to initialize docker sandbox — falling back to Landlock/local", "error", err)
+		} else if healthErr := executor.Healthy(context.Background()); healthErr != nil {
+			slog.Warn("bash tool: docker sandbox requested but unavailable — falling back to Landlock/local", "error", healthErr)
+		} else {
+			sandboxExecutor = executor
+		}
+	}
+
+	// Landlock (the only OS-level confinement executeLocalCommand falls back to)
+	// is Linux-only — see landlock_stub.go. On every other platform (which today
+	// means every desktop install: Windows, macOS) commands run directly on the
+	// host with no isolation, unless the operator opts into RequireSandbox and
+	// accepts that bash then refuses to run at all, or into SandboxKind=Docker
+	// above. That tradeoff needs to be visible, not silent, for an agent
+	// platform that executes model-issued shell commands.
+	if sandboxExecutor == nil && !landlockAvailable() && !config.RequireSandbox {
+		slog.Warn(
+			"bash tool: no OS-level sandbox available on this platform — shell commands will run unconfined on the host",
+			"platform", runtime.GOOS,
+			"hint", "Landlock (the current confinement backend) is Linux-only and no Docker sandbox is configured; set ToolConfig.SandboxKind=sandbox.EnvironmentDocker for real isolation, or RequireSandbox=true to refuse unconfined execution instead of allowing it silently",
+		)
+	}
+
 	bm := NewBackgroundTaskManager(runtimepath.BashTasksDir(""))
 	_ = bm.Init()
 	globalTaskManager = bm // expose to package-level callers (monitor, task-list tools)
@@ -91,6 +139,7 @@ func NewTool(config *ToolConfig) *Tool {
 		commandPolicy:     sandbox.NewDefaultCommandPolicy(),
 		backgroundManager: bm,
 		shell:             detectShell(),
+		sandboxExecutor:   sandboxExecutor,
 	}
 }
 
@@ -209,6 +258,7 @@ func (t *Tool) Call(
 		RunInBackground:     runInBackground,
 		Stdin:               stdinData,
 		OutputChunkCallback: t.config.OutputChunkCallback,
+		SessionID:           string(toolCtx.SessionID),
 	}
 
 	// ── Layer 3: Approval pipeline (direct calls only) ────────────────────
@@ -433,6 +483,10 @@ type ExecutionContext struct {
 	// OutputChunkCallback, when set, is called for each output chunk (streaming).
 	// stream is "stdout" or "stderr".
 	OutputChunkCallback func(chunk string, stream string)
+	// SessionID, when non-empty, is checked against
+	// sandbox.RemoteExecutorFor before falling back to local execution — see
+	// executeCommand.
+	SessionID string
 }
 
 // CommandResult holds the output of a completed command.
@@ -490,12 +544,69 @@ func (t *Tool) executeBackground(ctx context.Context, execCtx *ExecutionContext)
 	return result, nil
 }
 
+// executeCommand dispatches to whichever backend is configured for this
+// call: a session-scoped RemoteExecutor when one is registered — the
+// agent's commands then run inside the user's real, visible terminal
+// instead of a detached subprocess — or the local exec.CommandContext path
+// otherwise. Every session with no terminal ever opened keeps using the
+// local path exactly as before — RemoteExecutorFor only returns ok=true
+// once the host application (seshat-backend) has explicitly registered one.
 func (t *Tool) executeCommand(ctx context.Context, execCtx *ExecutionContext) (*CommandResult, error) {
+	if execCtx.SessionID != "" {
+		if executor, ok := sandbox.RemoteExecutorFor(execCtx.SessionID); ok {
+			return t.executeViaRemote(ctx, execCtx, executor)
+		}
+	}
+	return t.executeLocalCommand(ctx, execCtx)
+}
+
+// executeViaRemote relays execCtx.Command through executor (e.g. Electron's
+// terminal relay) instead of spawning a local subprocess. A failure here
+// (relay disconnected mid-call, timeout, etc.) falls back to local execution
+// rather than surfacing a confusing error — the remote path is a visibility
+// upgrade for the user, not a hard requirement for bash to function.
+func (t *Tool) executeViaRemote(ctx context.Context, execCtx *ExecutionContext, executor sandbox.Executor) (*CommandResult, error) {
+	startTime := time.Now()
+	cmdCtx, cancel := context.WithTimeout(ctx, execCtx.Timeout)
+	defer cancel()
+
+	res, err := executor.Run(cmdCtx, sandbox.RunRequest{
+		Command: execCtx.Command,
+		WorkDir: execCtx.WorkingDirectory,
+		Timeout: execCtx.Timeout,
+	})
+	if err != nil {
+		return t.executeLocalCommand(ctx, execCtx)
+	}
+
+	cwd := res.Cwd
+	if cwd == "" {
+		cwd = execCtx.WorkingDirectory
+	}
+	maxOut := execCtx.MaxOutputSize
+	if maxOut <= 0 {
+		maxOut = MaxOutputSize
+	}
+	return &CommandResult{
+		ExitCode: res.ExitCode,
+		Stdout:   capOutput(res.Stdout, maxOut),
+		Stderr:   capOutput(res.Stderr, maxOut),
+		Duration: time.Since(startTime).Milliseconds(),
+		CWD:      cwd,
+	}, nil
+}
+
+func (t *Tool) executeLocalCommand(ctx context.Context, execCtx *ExecutionContext) (*CommandResult, error) {
 	startTime := time.Now()
 	cmdCtx, cancel := context.WithTimeout(ctx, execCtx.Timeout)
 	defer cancel()
 
 	_, actualCommand := parseEnvVars(execCtx.Command)
+
+	if t.sandboxExecutor != nil {
+		return t.executeViaSandbox(cmdCtx, execCtx, actualCommand, startTime)
+	}
+
 	cmdPath, cmdArgs, sandboxEnv, sandboxed := commandWithLandlock(t.shell, []string{"-c", actualCommand}, execCtx.WorkingDirectory)
 
 	if execCtx.WorkingDirectory != "" && !sandboxed && t.config != nil && t.config.RequireSandbox {
@@ -539,6 +650,44 @@ func (t *Tool) executeCommand(ctx context.Context, execCtx *ExecutionContext) (*
 		Duration:  time.Since(startTime).Milliseconds(),
 		CWD:       execCtx.WorkingDirectory,
 		Sandboxed: sandboxed,
+	}, nil
+}
+
+// executeViaSandbox runs the command through t.sandboxExecutor (currently:
+// sandbox.DockerExecutor) instead of the raw exec.CommandContext + Landlock
+// path. Streaming output chunks (execCtx.OutputChunkCallback) aren't
+// supported here — the sandbox.Executor interface returns output only once
+// the command completes — so callers relying on streaming won't see
+// incremental chunks while running sandboxed. Output capping and formatting
+// otherwise match executeLocalCommand exactly.
+func (t *Tool) executeViaSandbox(ctx context.Context, execCtx *ExecutionContext, actualCommand string, startTime time.Time) (*CommandResult, error) {
+	var stdin io.Reader
+	if execCtx.Stdin != "" {
+		stdin = strings.NewReader(execCtx.Stdin)
+	}
+
+	res, err := t.sandboxExecutor.Run(ctx, sandbox.RunRequest{
+		Command: actualCommand,
+		WorkDir: execCtx.WorkingDirectory,
+		Timeout: execCtx.Timeout,
+		Stdin:   stdin,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("sandboxed command execution failed: %w", err)
+	}
+
+	maxOut := execCtx.MaxOutputSize
+	if maxOut <= 0 {
+		maxOut = MaxOutputSize
+	}
+
+	return &CommandResult{
+		ExitCode:  res.ExitCode,
+		Stdout:    capOutput(res.Stdout, maxOut),
+		Stderr:    capOutput(res.Stderr, maxOut),
+		Duration:  time.Since(startTime).Milliseconds(),
+		CWD:       execCtx.WorkingDirectory,
+		Sandboxed: true,
 	}, nil
 }
 
@@ -606,6 +755,20 @@ func copyWithCallback(dst io.Writer, src io.Reader, stream string, chunkCb func(
 			break
 		}
 	}
+}
+
+// capOutput applies the same head+tail-biased truncation as local command
+// execution to a remote executor's already-complete output string.
+func capOutput(s string, max int64) string {
+	if max <= 0 {
+		max = MaxOutputSize
+	}
+	if int64(len(s)) <= max {
+		return s
+	}
+	buf := newCappedBuffer(max)
+	buf.Write([]byte(s)) //nolint:errcheck
+	return buf.String()
 }
 
 // ── Helpers ────────────────────────────────────────────────────────────────────
@@ -702,6 +865,15 @@ func applyPatchCommandName(s string) bool {
 		name = name[idx+1:]
 	}
 	return name == "apply_patch" || name == "applypatch"
+}
+
+// SandboxAvailable reports whether an OS-level sandbox (currently: Landlock,
+// Linux-only) is available on this host for confining bash execution. Host
+// applications use this to surface the unconfined-execution tradeoff to the
+// end user instead of leaving it as a backend-log-only warning — see
+// ToolConfig.RequireSandbox and NewTool's startup log.
+func SandboxAvailable() bool {
+	return landlockAvailable()
 }
 
 // detectShell picks the best available shell, cached at startup.

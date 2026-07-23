@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"sync"
 	"time"
 
 	coreagent "github.com/KPO-Tech/seshat/internal/agent"
@@ -612,14 +611,6 @@ func (t *AgentTool) runAgentBackground(ctx context.Context, agentType, prompt st
 		}, nil
 	}
 
-	registerTaskCompletionCallbackOnce.Do(func() {
-		manager.SetCompletionCallback(func(task *tasks.Task) {
-			if task.Type == tasks.TaskTypeAgent {
-				NotifyAgentCompletion(string(task.ID), "agent", task.Description, task.Output, task.Status == tasks.TaskStatusCompleted)
-			}
-		})
-	})
-
 	eng := t.engine
 	if eng == nil {
 		return tool.CallResult{
@@ -636,6 +627,11 @@ func (t *AgentTool) runAgentBackground(ctx context.Context, agentType, prompt st
 		}, nil
 	}
 
+	// There is no push notification for background agent completion — this task
+	// runs in its own independent engine session (see Manager.CreateAgentTask),
+	// decoupled from this turn's SSE connection, which may well be closed by the
+	// time the task finishes. The only reliable way to learn the outcome is to
+	// poll; say so plainly instead of promising a notification that never comes.
 	return tool.CallResult{
 		Data: map[string]any{
 			"agentType":   agentType,
@@ -643,37 +639,9 @@ func (t *AgentTool) runAgentBackground(ctx context.Context, agentType, prompt st
 			"status":      string(task.Status),
 			"background":  true,
 			"description": task.Description,
-			"onComplete":  "You will be notified when the agent completes",
 		},
-		Content: fmt.Sprintf("Agent '%s' started in background (task ID: %s)\n\nYou will be notified when it completes. Use TaskGet to check status or TaskList to see all running tasks.", agentType, task.ID),
+		Content: fmt.Sprintf("Agent '%s' started in background (task ID: %s)\n\nThere is no completion notification for this — poll with TaskGet('%s') or TaskList to check status and retrieve output once it finishes.", agentType, task.ID, task.ID),
 	}, nil
-}
-
-// AgentCompletionHandler is a function type for handling agent completion
-type AgentCompletionHandler func(taskID, agentType, description, output string, success bool)
-
-var (
-	agentCompletionHandlers            = make([]AgentCompletionHandler, 0)
-	completionHandlerMu                sync.Mutex
-	registerTaskCompletionCallbackOnce sync.Once
-)
-
-// RegisterAgentCompletionHandler registers a callback to be called when background agents complete
-func RegisterAgentCompletionHandler(handler AgentCompletionHandler) {
-	completionHandlerMu.Lock()
-	defer completionHandlerMu.Unlock()
-	agentCompletionHandlers = append(agentCompletionHandlers, handler)
-}
-
-// NotifyAgentCompletion is called when a background agent task completes
-func NotifyAgentCompletion(taskID, agentType, description, output string, success bool) {
-	completionHandlerMu.Lock()
-	handlers := make([]AgentCompletionHandler, len(agentCompletionHandlers))
-	copy(handlers, agentCompletionHandlers)
-	completionHandlerMu.Unlock()
-	for _, handler := range handlers {
-		handler(taskID, agentType, description, output, success)
-	}
 }
 
 // extractForkMessagesFromInput extracts inherited transcript for fork mode.

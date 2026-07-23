@@ -37,8 +37,22 @@ func (s *Session) handleResponseChunkCallback(chunk types.APIResponseChunk) {
 		return
 	}
 	if s.responseChunkCallback != nil {
+		// The top-level session (seshat-backend's /query/stream handler) wires
+		// this callback to write each chunk as a raw, unnamed SSE line — see
+		// query.go's onChunk. Wrapping the same chunk in a
+		// response.chunk runtime event on top of that would just double the
+		// bytes on the wire for a copy the frontend already ignores for the
+		// main turn (no case for it in useChat.ts's top-level switch — see
+		// handleSubagentEvent below for where it IS the primary channel).
 		s.responseChunkCallback(chunk)
+		return
 	}
+	// Sub-agent sessions never set responseChunkCallback (see
+	// RunAgent/RunConfig.EventFn in internal/agent/runner.go) — for them,
+	// this runtime event is the only channel streamed content reaches the
+	// frontend through, tagged with AgentToolUseID by the spawning tool
+	// (spawn_agent.go / agent_tool.go) so useChat.ts can route it to the
+	// right sub-agent card.
 	cloned := cloneAPIResponseChunk(chunk)
 	s.emitRuntimeEvent(types.RuntimeEvent{
 		Type:       types.RuntimeEventTypeResponseChunk,
