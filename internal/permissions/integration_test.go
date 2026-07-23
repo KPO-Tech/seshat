@@ -324,6 +324,89 @@ func TestResolverSessionAutoApproval(t *testing.T) {
 	}
 }
 
+// TestRequestPermissionsSessionScopeAutoApproves verifies that a
+// request_permissions call granted with scope=session is remembered and
+// auto-approved on a later call asking for the *same* escalation, but still
+// prompts for a call asking for something different — the grant must be
+// scoped to what was actually approved, not to the request_permissions tool
+// as a whole.
+func TestRequestPermissionsSessionScopeAutoApproves(t *testing.T) {
+	t.Setenv("SESHAT_RUNTIME_ROOT", t.TempDir())
+	engine := NewEngine()
+	if err := engine.AddRule(PermissionRule{
+		Value:    PermissionRuleValue{ToolName: "request_permissions"},
+		Behavior: types.PermissionBehaviorAsk,
+		Priority: 100,
+		Reason:   "escalations always require approval in this test",
+		Source:   types.PermissionSourceStatic,
+	}); err != nil {
+		t.Fatalf("failed to add permission rule: %v", err)
+	}
+
+	integrator := NewIntegrator(engine)
+	promptCalls := 0
+	integrator.SetPromptFn(func(ctx context.Context, request types.PromptRequest) (types.PromptResponse, error) {
+		promptCalls++
+		return types.PromptResponse{Value: true}, nil
+	})
+
+	sessionInput := func(path string) map[string]any {
+		return map[string]any{
+			"reason": "test",
+			"permissions": map[string]any{
+				"filesystem": map[string]any{
+					"paths":  []any{path},
+					"access": []any{"read"},
+				},
+			},
+			"scope": "session",
+		}
+	}
+	sessionMetadata := map[string]any{"grant_scope": "session"}
+
+	resolver := integrator.Resolver("session-1", "turn-1", types.PermissionModeOnRequest)
+
+	// First call for ~/.ssh/config: prompts, gets approved, remembered.
+	result1 := resolver.ResolvePermission(context.Background(), types.GlobalToolPermissionRequest(
+		"request_permissions", sessionInput("/home/user/.ssh/config"), "tool-1",
+		"session-1", "turn-1", types.PermissionModeOnRequest, "", sessionMetadata,
+	))
+	if promptCalls != 1 {
+		t.Fatalf("expected promptFn to be called once, got %d", promptCalls)
+	}
+	if !result1.IsAllowed() {
+		t.Fatalf("expected first escalation to be allowed, got %#v", result1)
+	}
+
+	// Second call, SAME session, SAME path: must NOT prompt again.
+	result2 := resolver.ResolvePermission(context.Background(), types.GlobalToolPermissionRequest(
+		"request_permissions", sessionInput("/home/user/.ssh/config"), "tool-2",
+		"session-1", "turn-2", types.PermissionModeOnRequest, "", sessionMetadata,
+	))
+	if promptCalls != 1 {
+		t.Fatalf("expected promptFn NOT to be called again for the same escalation, got %d calls total", promptCalls)
+	}
+	if !result2.IsAllowed() {
+		t.Fatalf("expected repeat escalation to auto-approve, got %#v", result2)
+	}
+	if result2.DecisionReason == nil || result2.DecisionReason.Source != "session" {
+		t.Fatalf("expected session decision reason, got %#v", result2.DecisionReason)
+	}
+
+	// Third call, SAME session, DIFFERENT path: must prompt — the session
+	// grant should not blanket-cover every future request_permissions call.
+	result3 := resolver.ResolvePermission(context.Background(), types.GlobalToolPermissionRequest(
+		"request_permissions", sessionInput("/etc/passwd"), "tool-3",
+		"session-1", "turn-3", types.PermissionModeOnRequest, "", sessionMetadata,
+	))
+	if promptCalls != 2 {
+		t.Fatalf("expected promptFn to be called again for a different escalation target, got %d calls total", promptCalls)
+	}
+	if !result3.IsAllowed() {
+		t.Fatalf("expected third escalation (after prompt approval) to be allowed, got %#v", result3)
+	}
+}
+
 func TestResolverSessionAutoApprovalPersistence(t *testing.T) {
 	tempRoot := t.TempDir()
 	t.Setenv("SESHAT_RUNTIME_ROOT", tempRoot)

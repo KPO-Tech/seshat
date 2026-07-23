@@ -6,6 +6,7 @@ import (
 	"regexp"
 	"sort"
 	"strings"
+	"sync"
 
 	auto "github.com/KPO-Tech/seshat/internal/permissions/auto"
 	tool "github.com/KPO-Tech/seshat/internal/tools/registry"
@@ -15,7 +16,17 @@ import (
 
 // Engine checks permissions for tool usage.
 type Engine struct {
-	// rules are the permission rules.
+	// rulesMu guards rules. Rules are read on every CheckPermission call,
+	// potentially concurrently — StreamingExecutor runs tool calls in
+	// parallel goroutines within a turn (see orchestrator.go's
+	// maxConcurrency) — while AddRule/AddRules can write. Today all writes
+	// happen once at startup (factory.go, pkg/sdk/client.go), so this isn't
+	// an active race, but nothing enforces that: any future caller adding
+	// rules mid-session (e.g. a settings change applied live) would
+	// introduce one on this previously-unprotected slice. A RWMutex here is
+	// cheap on the (dominant) read path and closes that off proactively.
+	rulesMu sync.RWMutex
+	// rules are the permission rules. Access only through rulesMu.
 	rules []PermissionRule
 
 	// classifier is the optional classifier for auto-mode.
@@ -225,8 +236,10 @@ func (e *Engine) AddRule(rule PermissionRule) error {
 		return err
 	}
 
+	e.rulesMu.Lock()
+	defer e.rulesMu.Unlock()
 	e.rules = append(e.rules, rule)
-	e.sortRules()
+	e.sortRulesLocked()
 	return nil
 }
 
@@ -542,6 +555,8 @@ func (e *Engine) checkRuleBasedPermissions(
 }
 
 func (e *Engine) findWholeToolRule(pctx *PermissionContext, behavior types.PermissionBehavior) *PermissionRule {
+	e.rulesMu.RLock()
+	defer e.rulesMu.RUnlock()
 	for _, rule := range e.rules {
 		if rule.Behavior != behavior {
 			continue
@@ -563,6 +578,8 @@ func (e *Engine) findGlobalRule(ctx context.Context, pctx *PermissionContext, be
 		return nil
 	}
 
+	e.rulesMu.RLock()
+	defer e.rulesMu.RUnlock()
 	for _, rule := range e.rules {
 		if rule.Behavior != behavior {
 			continue
@@ -815,8 +832,8 @@ func (e *Engine) runHooks(ctx context.Context, pctx *PermissionContext, stage ty
 	return types.PermissionResult{}, false, nil
 }
 
-// sortRules sorts rules by priority (descending).
-func (e *Engine) sortRules() {
+// sortRulesLocked sorts rules by priority (descending). Caller must hold rulesMu.
+func (e *Engine) sortRulesLocked() {
 	sort.SliceStable(e.rules, func(i, j int) bool {
 		return e.rules[i].Priority > e.rules[j].Priority
 	})
