@@ -148,7 +148,12 @@ func initImageGenerator(config *ClientConfig) image.Generation {
 
 	switch providerID {
 	case "openai":
-		if apiKey == "" {
+		// A custom BaseURL means a self-hosted, OpenAI-API-compatible server
+		// (e.g. a local model server) rather than the real OpenAI cloud —
+		// those don't check the Authorization header, so requiring a cloud
+		// API key here would block a perfectly valid local-only setup. Only
+		// bail out when there's neither a key nor an explicit endpoint.
+		if apiKey == "" && baseURL == "" {
 			return nil
 		}
 		opts := []imageproviders.OpenAIOption{}
@@ -160,7 +165,7 @@ func initImageGenerator(config *ClientConfig) image.Generation {
 		}
 		return imageproviders.NewOpenAI(apiKey, opts...)
 	case "gemini":
-		if apiKey == "" {
+		if apiKey == "" && baseURL == "" {
 			return nil
 		}
 		opts := []imageproviders.GeminiOption{}
@@ -187,7 +192,10 @@ func initTextToSpeechGenerator(config *ClientConfig) tts.Generation {
 
 	switch providerID {
 	case "openai":
-		if apiKey == "" {
+		// See initImageGenerator's matching comment — a custom BaseURL means
+		// a self-hosted, OpenAI-API-compatible server, which doesn't require
+		// a real cloud API key.
+		if apiKey == "" && baseURL == "" {
 			return nil
 		}
 		opts := []audioproviders.OpenAITTSOption{}
@@ -220,7 +228,10 @@ func initSpeechToTextTranscriber(config *ClientConfig) stt.SpeechToText {
 
 	switch providerID {
 	case "openai":
-		if apiKey == "" {
+		// See initImageGenerator's matching comment - this is what lets a
+		// locally running whisper.cpp server (OpenAI-API-compatible, no auth
+		// checked) power this tool with BaseURL set and no APIKey at all.
+		if apiKey == "" && baseURL == "" {
 			return nil
 		}
 		opts := []audioproviders.OpenAISTTOption{}
