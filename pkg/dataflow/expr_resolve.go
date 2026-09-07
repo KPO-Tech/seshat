@@ -25,13 +25,14 @@ type ExpressionEvaluator interface {
 // (expressions not wired up by the caller - not an error, just "off").
 //
 // Bindings available inside the expression: $json (item), $itemIndex,
-// $now/$today (native JS Date), and $node(name) - a callable returning
+// $now/$today (native JS Date), $node(name) - a callable returning
 // {json, all} for a node that has already executed (see
-// Runtime.NodeOutput). Deliberately no $prevNode: that needs per-item
-// upstream source (NodeResult.InputSource, Tier 1.3), which the engine only
-// knows after a node returns, not during its call - exposing it would mean
-// changing Execute's signature, which this design avoids. $node('Name')
-// covers the actual need.
+// Runtime.NodeOutput) - and $vars (the caller's organization-scoped named
+// values, Tier 3.2 - see Runtime.Vars/VarsMap). Deliberately no $prevNode:
+// that needs per-item upstream source (NodeResult.InputSource, Tier 1.3),
+// which the engine only knows after a node returns, not during its call -
+// exposing it would mean changing Execute's signature, which this design
+// avoids. $node('Name') covers the actual need.
 func ResolveValue(ctx context.Context, rt *Runtime, raw any, item Item, itemIndex int) (any, error) {
 	s, ok := raw.(string)
 	if !ok || !strings.HasPrefix(s, "=") || rt == nil || rt.Expr == nil {
@@ -44,6 +45,7 @@ func ResolveValue(ctx context.Context, rt *Runtime, raw any, item Item, itemInde
 		"$now":       now,
 		"$today":     now.Truncate(24 * time.Hour),
 		"$node":      rt.NodeAccessor(),
+		"$vars":      rt.VarsMap(),
 	}
 	return rt.Expr.Eval(ctx, strings.TrimPrefix(s, "="), bindings)
 }

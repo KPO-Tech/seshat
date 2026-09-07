@@ -98,6 +98,39 @@ func TestFilterExpressionNodeBindingIsNilSafeWithoutRuntime(t *testing.T) {
 	}
 }
 
+// TestFilterExpressionSeesVars proves $vars.NAME (Tier 3.2) resolves inside
+// a logic node's own whole-field expression, the same as it does through
+// ResolveValue's "=" convention.
+func TestFilterExpressionSeesVars(t *testing.T) {
+	n := NewFilter(expr.NewPool(2))
+	rt := &dataflow.Runtime{Vars: map[string]string{"THRESHOLD": "5"}}
+	out, err := n.Execute(context.Background(), rt, []dataflow.Item{{"n": 1}, {"n": 9}}, map[string]any{
+		"expression": "$json.n > Number($vars.THRESHOLD)",
+	})
+	if err != nil {
+		t.Fatalf("execute: %v", err)
+	}
+	kept := out.Ports["main"]
+	if len(kept) != 1 || kept[0]["n"] != 9 {
+		t.Fatalf("expected only the item above $vars.THRESHOLD, got %#v", kept)
+	}
+}
+
+// TestFilterExpressionVarsBindingIsNilSafeWithoutRuntime mirrors
+// TestFilterExpressionNodeBindingIsNilSafeWithoutRuntime for $vars.
+func TestFilterExpressionVarsBindingIsNilSafeWithoutRuntime(t *testing.T) {
+	n := NewFilter(expr.NewPool(2))
+	out, err := n.Execute(context.Background(), nil, []dataflow.Item{{"n": 1}}, map[string]any{
+		"expression": "$vars.ANYTHING === undefined",
+	})
+	if err != nil {
+		t.Fatalf("execute with nil Runtime: %v", err)
+	}
+	if len(out.Ports["main"]) != 1 {
+		t.Fatalf("expected $vars to be a working nil-safe empty map with no Runtime, got %#v", out.Ports)
+	}
+}
+
 func TestSwitchValidateParametersRequiresKnownCases(t *testing.T) {
 	n := NewSwitch(expr.NewPool(2))
 	err := n.ValidateParameters(map[string]any{
