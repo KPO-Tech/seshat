@@ -11,6 +11,8 @@ type (
 	Chunk                 = internalrag.Chunk
 	ChunkCache            = internalrag.ChunkCache
 	ChunkCacheKeyProvider = internalrag.ChunkCacheKeyProvider
+	ChunkProfile          = internalrag.ChunkProfile
+	ChunkProfileName      = internalrag.ChunkProfileName
 	Chunker               = internalrag.Chunker
 	CachedDocumentChunker = internalrag.CachedDocumentChunker
 	Document              = internalrag.Document
@@ -39,6 +41,14 @@ type (
 	SemanticChunker = internalrag.SemanticChunker
 )
 
+const (
+	ChunkProfileSmall      = internalrag.ChunkProfileSmall
+	ChunkProfileMedium     = internalrag.ChunkProfileMedium
+	ChunkProfileLarge      = internalrag.ChunkProfileLarge
+	ChunkProfileStructured = internalrag.ChunkProfileStructured
+	ChunkProfileCustom     = internalrag.ChunkProfileCustom
+)
+
 func NewService(artifacts publicstorage.ArtifactStore, vectors publicvector.Store, embedder Embedder, chunker Chunker) *Service {
 	return internalrag.NewService(artifacts, vectors, embedder, chunker)
 }
@@ -52,6 +62,26 @@ func DefaultChunker() Chunker {
 // NewDoclingChunker creates a document-aware chunker backed by docling-serve.
 func NewDoclingChunker(client *publicdocling.Client, opts publicdocling.ChunkOptions) *DoclingChunker {
 	return internalrag.NewDoclingChunker(client, opts)
+}
+
+func NewDoclingChunkerForProfile(client *publicdocling.Client, profile ChunkProfile, opts publicdocling.ChunkOptions) *DoclingChunker {
+	return internalrag.NewDoclingChunkerForProfile(client, profile, opts)
+}
+
+func DefaultChunkProfile() ChunkProfile {
+	return internalrag.DefaultChunkProfile()
+}
+
+func RecommendedChunkProfile(name ChunkProfileName) (ChunkProfile, bool) {
+	return internalrag.RecommendedChunkProfile(name)
+}
+
+func NewCustomChunkProfile(maxTokens, overlapTokens int) (ChunkProfile, error) {
+	return internalrag.NewCustomChunkProfile(maxTokens, overlapTokens)
+}
+
+func DoclingChunkOptionsForProfile(profile ChunkProfile, opts publicdocling.ChunkOptions) publicdocling.ChunkOptions {
+	return internalrag.DoclingChunkOptionsForProfile(profile, opts)
 }
 
 func NewCachedDocumentChunker(chunker DocumentChunker, cache ChunkCache) *CachedDocumentChunker {
