@@ -25,9 +25,30 @@ type Runtime struct {
 	// against a nil-Expr Runtime just get their literal values back
 	// unresolved.
 	Expr ExpressionEvaluator
+	// Vars is the caller's own organization-scoped named values (Tier 3.2's
+	// "Variables"), exposed to expressions as $vars.NAME - see VarsMap.
+	// Unlike Secrets, this is a plain map rather than a lazy resolver
+	// interface: Variables aren't secret, so the caller resolves the whole
+	// set once up front (e.g. before a run starts) instead of one name at a
+	// time per access. nil (the default) means no variables are configured,
+	// not an error - $vars.ANYTHING then just resolves to undefined.
+	Vars map[string]string
 
 	nodeOutputsMu sync.RWMutex
 	nodeOutputs   map[string][]Item
+}
+
+// VarsMap returns rt.Vars, or an empty (never nil) map for a nil Runtime or
+// a Runtime with no Vars set - so a binding map can always assign
+// rt.VarsMap() to "$vars" without a separate nil check, mirroring
+// NodeAccessor's own nil-safety. Exported so a node type building its own
+// bindings map (e.g. filter/if/switch, see nodes/logic.go) can offer $vars
+// too without duplicating this logic.
+func (rt *Runtime) VarsMap() map[string]string {
+	if rt == nil || rt.Vars == nil {
+		return map[string]string{}
+	}
+	return rt.Vars
 }
 
 // NodeOutput returns the named node's Output ("main"-collapsed, same shape

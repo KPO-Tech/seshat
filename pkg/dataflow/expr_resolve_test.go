@@ -72,6 +72,9 @@ func TestResolveValueEvaluatesLeadingEqualsPrefix(t *testing.T) {
 	if _, ok := eval.lastBindings["$node"].(func(string) map[string]any); !ok {
 		t.Fatalf("expected $node to be bound as a func(string) map[string]any, got %#v", eval.lastBindings["$node"])
 	}
+	if _, ok := eval.lastBindings["$vars"].(map[string]string); !ok {
+		t.Fatalf("expected $vars to be bound as a map[string]string, got %#v", eval.lastBindings["$vars"])
+	}
 }
 
 func TestResolveValuePropagatesEvaluatorError(t *testing.T) {
@@ -153,6 +156,36 @@ func TestRuntimeNodeOutputAndRecordAreNilSafe(t *testing.T) {
 		t.Fatal("expected ok=false on a nil Runtime")
 	}
 	rt.recordNodeOutput("a", []Item{{"x": 1}}) // must not panic
+}
+
+// TestVarsMapExposesNamedVariablesToExpressions is an end-to-end proof (real
+// expr.Pool, not a mocked evaluator) that $vars.NAME resolves to a value set
+// on Runtime.Vars - the actual JS property-access syntax Tier 3.2's
+// dataflowvariables.Service.ResolveAll result feeds this with.
+func TestVarsMapExposesNamedVariablesToExpressions(t *testing.T) {
+	rt := &Runtime{Expr: expr.NewPool(1), Vars: map[string]string{"API_BASE": "https://api.example.com"}}
+	got, err := ResolveValue(context.Background(), rt, "=$vars.API_BASE + '/v1'", Item{}, 0)
+	if err != nil {
+		t.Fatalf("ResolveValue: %v", err)
+	}
+	if got != "https://api.example.com/v1" {
+		t.Fatalf("expected $vars.API_BASE to resolve, got %#v", got)
+	}
+}
+
+// TestVarsMapIsNilSafe proves a nil Runtime.Vars (the default for every
+// caller that hasn't wired variable resolution in) makes $vars.ANYTHING
+// resolve to undefined rather than erroring - same "off, not broken"
+// posture Expr itself already has when unset.
+func TestVarsMapIsNilSafe(t *testing.T) {
+	rt := &Runtime{Expr: expr.NewPool(1)}
+	got, err := ResolveValue(context.Background(), rt, "=$vars.MISSING === undefined", Item{}, 0)
+	if err != nil {
+		t.Fatalf("ResolveValue: %v", err)
+	}
+	if got != true {
+		t.Fatalf("expected $vars.MISSING to be undefined on a Runtime with no Vars set, got %#v", got)
+	}
 }
 
 // TestNodeAccessorSeesUpstreamNodeOutputAfterItCompletes proves $node('a')

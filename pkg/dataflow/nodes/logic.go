@@ -14,9 +14,10 @@ import (
 // filter/if/switch - these nodes evaluate their whole parameter field as JS
 // (not the "=" convention ResolveValue looks for), so they don't call
 // ResolveValue themselves, but still get the same enriched bindings
-// (Tier 2.1) it would have offered: $itemIndex (the loop already has it),
-// $now/$today, and $node (nil-safe: a nil rt yields a working always-empty
-// accessor, matching how these nodes already tolerate a nil Runtime today).
+// (Tier 2.1/3.2) it would have offered: $itemIndex (the loop already has
+// it), $now/$today, $node and $vars (both nil-safe: a nil rt yields a
+// working always-empty accessor/map, matching how these nodes already
+// tolerate a nil Runtime today).
 func logicBindings(rt *dataflow.Runtime, item dataflow.Item, itemIndex int) map[string]any {
 	now := time.Now()
 	return map[string]any{
@@ -25,6 +26,7 @@ func logicBindings(rt *dataflow.Runtime, item dataflow.Item, itemIndex int) map[
 		"$now":       now,
 		"$today":     now.Truncate(24 * time.Hour),
 		"$node":      rt.NodeAccessor(),
+		"$vars":      rt.VarsMap(),
 	}
 }
 
