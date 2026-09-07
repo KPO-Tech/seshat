@@ -15,6 +15,7 @@ import (
 type DoclingChunker struct {
 	Client      *docling.Client
 	Options     docling.ChunkOptions
+	Profile     ChunkProfile
 	Fallback    Chunker
 	FailOnError bool
 }
@@ -28,6 +29,20 @@ func NewDoclingChunker(client *docling.Client, opts docling.ChunkOptions) *Docli
 	}
 }
 
+// NewDoclingChunkerForProfile creates a document-aware chunker using one of
+// Seshat's recommended chunking profiles.
+func NewDoclingChunkerForProfile(client *docling.Client, profile ChunkProfile, opts docling.ChunkOptions) *DoclingChunker {
+	if profile.MaxTokens <= 0 {
+		profile = DefaultChunkProfile()
+	}
+	return &DoclingChunker{
+		Client:   client,
+		Options:  DoclingChunkOptionsForProfile(profile, opts),
+		Profile:  profile,
+		Fallback: DefaultChunker(),
+	}
+}
+
 func (c *DoclingChunker) Split(ctx context.Context, text string) ([]Chunk, error) {
 	return c.fallback().Split(ctx, text)
 }
@@ -36,7 +51,13 @@ func (c *DoclingChunker) ChunkCacheKey() string {
 	if c == nil {
 		return "docling-hybrid:v1:nil"
 	}
-	data, err := json.Marshal(c.Options)
+	data, err := json.Marshal(struct {
+		Options docling.ChunkOptions `json:"options"`
+		Profile ChunkProfile         `json:"profile,omitempty"`
+	}{
+		Options: c.Options,
+		Profile: c.Profile,
+	})
 	if err != nil {
 		return "docling-hybrid:v1"
 	}
@@ -70,7 +91,7 @@ func (c *DoclingChunker) SplitDocument(ctx context.Context, doc Document) ([]Chu
 		out = append(out, Chunk{
 			Text:     text,
 			Position: position,
-			Metadata: doclingChunkMetadata(chunk),
+			Metadata: c.doclingChunkMetadata(chunk),
 		})
 	}
 	if len(out) == 0 {
@@ -93,10 +114,19 @@ func (c *DoclingChunker) fallback() Chunker {
 	return DefaultChunker()
 }
 
-func doclingChunkMetadata(chunk docling.Chunk) map[string]string {
+func (c *DoclingChunker) doclingChunkMetadata(chunk docling.Chunk) map[string]string {
 	metadata := map[string]string{
 		"chunker":       "docling_hybrid",
 		"docling_index": strconv.Itoa(chunk.ChunkIndex),
+	}
+	if c != nil && c.Profile.Name != "" {
+		metadata["chunk_profile"] = string(c.Profile.Name)
+		if c.Profile.MaxTokens > 0 {
+			metadata["chunk_max_tokens"] = strconv.Itoa(c.Profile.MaxTokens)
+		}
+		if c.Profile.OverlapTokens > 0 {
+			metadata["chunk_overlap_tokens"] = strconv.Itoa(c.Profile.OverlapTokens)
+		}
 	}
 	if strings.TrimSpace(chunk.Filename) != "" {
 		metadata["docling_filename"] = chunk.Filename

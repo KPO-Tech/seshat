@@ -92,6 +92,65 @@ func TestDoclingChunker_SplitDocument(t *testing.T) {
 	}
 }
 
+func TestDoclingChunkerForProfileSendsProfileMaxTokens(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/health":
+			_, _ = w.Write([]byte(`{"status":"ok"}`))
+		case "/v1/chunk/hybrid/file":
+			mr, err := r.MultipartReader()
+			if err != nil {
+				t.Fatal(err)
+			}
+			fields := map[string]string{}
+			for {
+				part, err := mr.NextPart()
+				if err == io.EOF {
+					break
+				}
+				if err != nil {
+					t.Fatal(err)
+				}
+				if part.FileName() != "" {
+					continue
+				}
+				b, _ := io.ReadAll(part)
+				fields[part.FormName()] = string(b)
+			}
+			if fields["chunking_max_tokens"] != "1536" {
+				t.Fatalf("chunking_max_tokens = %q, want 1536 (fields: %+v)", fields["chunking_max_tokens"], fields)
+			}
+			_, _ = w.Write([]byte(`{"chunks":[{"chunk_index":0,"text":"enterprise policy"}]}`))
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer server.Close()
+
+	profile, ok := RecommendedChunkProfile(ChunkProfileLarge)
+	if !ok {
+		t.Fatal("large profile not found")
+	}
+	chunker := NewDoclingChunkerForProfile(docling.NewClient(server.URL), profile, docling.ChunkOptions{})
+	chunks, err := chunker.SplitDocument(context.Background(), Document{
+		Filename: "policy.pdf",
+		Text:     "fallback",
+		Data:     []byte("%PDF"),
+	})
+	if err != nil {
+		t.Fatalf("SplitDocument: %v", err)
+	}
+	if len(chunks) != 1 {
+		t.Fatalf("expected one chunk, got %d", len(chunks))
+	}
+	if chunks[0].Metadata["chunk_profile"] != "large" {
+		t.Fatalf("missing chunk profile metadata: %+v", chunks[0].Metadata)
+	}
+	if chunks[0].Metadata["chunk_max_tokens"] != "1536" {
+		t.Fatalf("missing chunk max tokens metadata: %+v", chunks[0].Metadata)
+	}
+}
+
 func TestServiceIngest_UsesDocumentChunkerMetadata(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
