@@ -36,6 +36,27 @@ type Node struct {
 	Type        string              `json:"type" yaml:"type"`
 	Parameters  map[string]any      `json:"parameters,omitempty" yaml:"parameters,omitempty"`
 	Connections map[string][]string `json:"connections,omitempty" yaml:"connections,omitempty"`
+	// RetryOnFail/MaxTries/WaitBetweenTriesMS/OnError (Tier 3.1) are real
+	// production behavior - not test/dev overrides like PinnedData - so
+	// they're siblings of Parameters/Connections here rather than a
+	// separate top-level map, mirroring n8n's own INode shape exactly.
+	// RetryOnFail off (the default, and every graph saved before this field
+	// existed) means Execute is called exactly once, today's existing
+	// behavior. MaxTries is meaningful only when RetryOnFail is true, and
+	// clamped 2-5 by the engine; WaitBetweenTriesMS is clamped 0-5000.
+	RetryOnFail        bool `json:"retry_on_fail,omitempty" yaml:"retry_on_fail,omitempty"`
+	MaxTries           int  `json:"max_tries,omitempty" yaml:"max_tries,omitempty"`
+	WaitBetweenTriesMS int  `json:"wait_between_tries_ms,omitempty" yaml:"wait_between_tries_ms,omitempty"`
+	// OnError decides what happens once every retry attempt (or the single
+	// attempt, if RetryOnFail is off) has failed: "" (unset, the default -
+	// today's existing behavior: NodeResult.Success=false, downstream
+	// dependents skipped), "continueRegularOutput" (proceed with empty
+	// output as if nothing happened), or "continueErrorOutput" (route a
+	// single synthesized {"error": message} item onto a new "error" port,
+	// letting a downstream branch handle the failure explicitly). Retry and
+	// OnError are independent: a node can continue-on-error without ever
+	// retrying, or retry a few times and still stop the run.
+	OnError string `json:"on_error,omitempty" yaml:"on_error,omitempty"`
 }
 
 // Item is one record flowing through the graph — the dataflow analog of a
@@ -74,6 +95,17 @@ type NodeResult struct {
 	// rather than a real Execute call - lets a trace/UI consumer tell
 	// "this node actually ran" apart from "this used frozen test data".
 	Pinned bool `json:"pinned,omitempty"`
+	// Continued is true when this node failed (Success=false) but its own
+	// OnError setting (Tier 3.1) let the run proceed anyway rather than
+	// stopping - kept distinct from Success so a trace/UI consumer can
+	// still tell "this genuinely failed" apart from "this failed but the
+	// run kept going", the same distinction n8n's own execution view makes.
+	// Run's own downstream-skip/routing logic treats Continued the same as
+	// a real success (see engine.go).
+	Continued bool `json:"continued,omitempty"`
+	// Attempts is how many times Execute was actually called for this node
+	// - 1 unless RetryOnFail was set and at least one attempt failed.
+	Attempts int `json:"attempts,omitempty"`
 	// Input/InputSource are exactly what this node received and, index for
 	// index, where each item came from - populated by Run's own scheduling
 	// loop (see engine.go), never by the node's own Execute, so every node
