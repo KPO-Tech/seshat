@@ -88,8 +88,14 @@ func (s *Service) Ingest(ctx context.Context, request IngestRequest) (IngestResu
 	if strings.TrimSpace(request.Filename) == "" {
 		return IngestResult{}, fmt.Errorf("filename is required")
 	}
-	if strings.TrimSpace(request.Text) == "" {
-		return IngestResult{}, fmt.Errorf("text is required")
+	if strings.TrimSpace(request.Text) == "" && len(request.Data) == 0 {
+		return IngestResult{}, fmt.Errorf("text or data is required")
+	}
+	artifactPayload := []byte(request.Text)
+	contentType := "text/plain"
+	if len(artifactPayload) == 0 {
+		artifactPayload = request.Data
+		contentType = storage.DetectContentType(request.Filename)
 	}
 
 	// Build the artifact key. When FileID is provided we use a deterministic key so that
@@ -99,18 +105,18 @@ func (s *Service) Ingest(ctx context.Context, request IngestRequest) (IngestResu
 	if request.FileID != "" {
 		deterministicKey := ArtifactKey(request.CorpusID, request.FileID)
 		if s.artifacts != nil {
-			if _, err := s.artifacts.Put(ctx, deterministicKey, []byte(request.Text), "text/plain"); err != nil {
+			if _, err := s.artifacts.Put(ctx, deterministicKey, artifactPayload, contentType); err != nil {
 				return IngestResult{}, err
 			}
 		}
 		artifact = storage.ArtifactRef{
 			Key:  deterministicKey,
-			Size: int64(len(request.Text)),
+			Size: int64(len(artifactPayload)),
 		}
 	} else if s.artifacts != nil {
 		// Fallback for callers that don't supply FileID: timestamp-based key via blob store.
 		var err error
-		artifact, err = storage.StoreRAGDocumentRef(ctx, s.artifacts, []byte(request.Text), request.Filename)
+		artifact, err = storage.StoreRAGDocumentRef(ctx, s.artifacts, artifactPayload, request.Filename)
 		if err != nil {
 			return IngestResult{}, err
 		}
@@ -118,11 +124,11 @@ func (s *Service) Ingest(ctx context.Context, request IngestRequest) (IngestResu
 		// Synthetic ref: stable key derived from corpus + filename.
 		artifact = storage.ArtifactRef{
 			Key:  ArtifactKey(request.CorpusID, request.Filename),
-			Size: int64(len(request.Text)),
+			Size: int64(len(artifactPayload)),
 		}
 	}
 
-	chunks, err := s.chunker.Split(ctx, request.Text)
+	chunks, err := s.splitChunks(ctx, request)
 	if err != nil {
 		return IngestResult{}, fmt.Errorf("chunker: %w", err)
 	}
@@ -157,6 +163,12 @@ func (s *Service) Ingest(ctx context.Context, request IngestRequest) (IngestResu
 			"artifact_key": artifact.Key,
 			"filename":     request.Filename,
 			"position":     fmt.Sprintf("%d", chunk.Position),
+		}
+		for k, v := range chunk.Metadata {
+			if strings.TrimSpace(k) == "" {
+				continue
+			}
+			metadata[k] = v
 		}
 		if len(request.ScopeIDs) > 0 {
 			// Encoded as a JSON array string - matchesFilter/pgFilterClause
@@ -196,6 +208,17 @@ func (s *Service) Ingest(ctx context.Context, request IngestRequest) (IngestResu
 		Artifact: artifact,
 		Chunks:   len(records),
 	}, nil
+}
+
+func (s *Service) splitChunks(ctx context.Context, request IngestRequest) ([]Chunk, error) {
+	if documentChunker, ok := s.chunker.(DocumentChunker); ok && len(request.Data) > 0 {
+		return documentChunker.SplitDocument(ctx, Document{
+			Filename: request.Filename,
+			Text:     request.Text,
+			Data:     request.Data,
+		})
+	}
+	return s.chunker.Split(ctx, request.Text)
 }
 
 // staleChunkCleanupCeiling bounds how many chunk-position keys beyond the

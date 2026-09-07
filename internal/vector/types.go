@@ -2,7 +2,7 @@ package vector
 
 import "context"
 
-// Record is one vectorized chunk stored in a vector backend.
+// Record is one vectorized chunk stored in a vector store.
 type Record struct {
 	Namespace string            `json:"namespace"`
 	Key       string            `json:"key"`
@@ -36,7 +36,7 @@ type Query struct {
 	//   0   (default) → pure vector
 	//   1             → pure BM25
 	//   0 < w < 1    → linear blend: (1-w)*vector + w*bm25
-	// Only the SQLite and pgvector backends implement BM25; others ignore it.
+	// Only vector stores with keyword support implement BM25/keyword blending.
 	// Meaningless when Vector is empty - see the Vector field doc.
 	HybridWeight float32
 
@@ -51,7 +51,7 @@ type SearchResult struct {
 	Score  float32 `json:"score"`
 }
 
-// Store abstracts the vector backend used by RAG.
+// Store abstracts the vector storage/search engine used by RAG.
 // Concrete implementations target SQLite, pgvector, Qdrant, Chroma, or any
 // future provider — the rag.Service and knowledge.Service call only this interface.
 type Store interface {

@@ -41,6 +41,23 @@ seshat rag add https://example.com/spec.pdf --collection "specs"
 seshat rag list
 ```
 
+### Document-aware chunking
+
+The core RAG service can now accept both extracted text and the original document bytes through `rag.IngestRequest.Data`. Plain text chunkers continue to split `IngestRequest.Text` as before. Chunkers that implement `rag.DocumentChunker` can use the original bytes to preserve document structure.
+
+`rag.NewDoclingChunker` provides the first document-aware chunker. It calls docling-serve's hybrid chunk endpoint and maps Docling metadata onto Seshat chunk metadata:
+
+- headings;
+- captions;
+- page numbers;
+- Docling document item references;
+- raw text when it differs from contextualized chunk text;
+- token count when Docling returns it.
+
+This path is intended for rich Knowledge ingestion, especially PDF, DOCX, PPTX, XLSX, and other structured enterprise documents. The existing paragraph and semantic chunkers remain useful fallbacks for local/simple text ingestion.
+
+For repeated ingestion of the same document, wrap a document-aware chunker with `rag.NewCachedDocumentChunker`. The cache key includes the document content, filename, cache schema version, and chunker options when the chunker exposes a cache fingerprint. `rag.NewArtifactChunkCache` persists cached chunks through the runtime artifact store, while `rag.NewMemoryChunkCache` is useful for tests and short-lived local runs.
+
 ---
 
 ## Hybrid search
@@ -53,6 +70,38 @@ Seshat combines two retrieval strategies for better results than pure vector sea
 | **Vector (semantic)** | Embedding similarity | Conceptual queries, paraphrase matching |
 
 Results from both are fused and re-ranked before being presented to the agent.
+
+---
+
+## Vector backends
+
+The CLI defaults to the embedded local-first path: HNSW when available, with a SQLite fallback. For larger knowledge bases or enterprise deployments, Seshat can use OpenSearch as the RAG vector store:
+
+```bash
+SESHAT_VECTOR_STORE=opensearch
+OPENSEARCH_ADDRESSES=http://localhost:9200
+OPENSEARCH_INDEX_PREFIX=seshat-rag
+OPENSEARCH_KNN=true
+OPENSEARCH_BULK_SIZE=500
+```
+
+Optional authentication:
+
+```bash
+OPENSEARCH_USERNAME=seshat
+OPENSEARCH_PASSWORD=...
+
+# or
+OPENSEARCH_API_KEY=...
+```
+
+OpenSearch uses one index per Seshat namespace. Text search uses OpenSearch BM25, vector search uses `knn_vector` when `OPENSEARCH_KNN=true`, and hybrid search is fused by Seshat so ranking behavior remains consistent with the rest of the runtime. Ingestion uses the OpenSearch `_bulk` API; `OPENSEARCH_BULK_SIZE` controls how many records are sent per request and defaults to 500.
+
+To run the optional integration test against a local or remote OpenSearch cluster:
+
+```bash
+OPENSEARCH_INTEGRATION_URL=http://localhost:9200 go test ./internal/vector -run TestOpenSearchStoreIntegration -count=1
+```
 
 ---
 

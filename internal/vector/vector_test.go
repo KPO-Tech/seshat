@@ -361,7 +361,7 @@ func TestPgVectorNewStoreRequiresPostgres(t *testing.T) {
 	}
 	defer database.Close()
 
-	_, err = NewStore(context.Background(), Config{Backend: BackendPgVector, DB: database})
+	_, err = NewStore(context.Background(), Config{StoreKind: StorePgVector, DB: database})
 	if err == nil {
 		t.Fatal("expected pgvector store creation to reject sqlite database")
 	}
@@ -374,7 +374,7 @@ func TestPgVectorConfigDefaultsCreateExtension(t *testing.T) {
 	}
 	defer database.Close()
 
-	cfg := Config{Backend: BackendPgVector, DB: database}
+	cfg := Config{StoreKind: StorePgVector, DB: database}
 	_, err = NewStore(context.Background(), cfg)
 	if err == nil {
 		t.Fatal("expected pgvector store creation to reject sqlite database")

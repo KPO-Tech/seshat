@@ -43,22 +43,34 @@ type Config struct {
 	EmbedderModel    string `mapstructure:"embedder_model" yaml:"embedder_model,omitempty"`
 	EmbedderProvider string `mapstructure:"embedder_provider" yaml:"embedder_provider,omitempty"`
 
-	// Vector store backend (sqlite|pgvector|qdrant|chroma|memory). Defaults to sqlite.
-	VectorBackend           string `mapstructure:"vector_backend" yaml:"vector_backend,omitempty"`
-	QdrantHost              string `mapstructure:"qdrant_host" yaml:"qdrant_host,omitempty"`
-	QdrantPort              int    `mapstructure:"qdrant_port" yaml:"qdrant_port,omitempty"`
-	QdrantAPIKey            string `mapstructure:"qdrant_api_key" yaml:"qdrant_api_key,omitempty"`
-	QdrantPrefix            string `mapstructure:"qdrant_prefix" yaml:"qdrant_prefix,omitempty"`
-	PgVectorCreateExtension bool   `mapstructure:"pgvector_create_extension" yaml:"pgvector_create_extension,omitempty"`
-	PgVectorDSN             string `mapstructure:"pgvector_dsn" yaml:"pgvector_dsn,omitempty"`
-	PgVectorIndexMethod     string `mapstructure:"pgvector_index_method" yaml:"pgvector_index_method,omitempty"`
-	PgVectorHNSWM           int    `mapstructure:"pgvector_hnsw_m" yaml:"pgvector_hnsw_m,omitempty"`
-	PgVectorHNSWEF          int    `mapstructure:"pgvector_hnsw_ef_construction" yaml:"pgvector_hnsw_ef_construction,omitempty"`
-	PgVectorIVFFlatLists    int    `mapstructure:"pgvector_ivfflat_lists" yaml:"pgvector_ivfflat_lists,omitempty"`
-	ChromaURL               string `mapstructure:"chroma_url" yaml:"chroma_url,omitempty"`
-	ChromaAPIKey            string `mapstructure:"chroma_api_key" yaml:"chroma_api_key,omitempty"`
-	ChromaTenant            string `mapstructure:"chroma_tenant" yaml:"chroma_tenant,omitempty"`
-	ChromaDatabase          string `mapstructure:"chroma_database" yaml:"chroma_database,omitempty"`
+	// Vector store (sqlite|pgvector|qdrant|opensearch|chroma|memory). Defaults to sqlite.
+	VectorStore string `mapstructure:"vector_store" yaml:"vector_store,omitempty"`
+
+	// Deprecated: use VectorStore / SESHAT_VECTOR_STORE.
+	VectorBackend                string `mapstructure:"vector_backend" yaml:"-"`
+	QdrantHost                   string `mapstructure:"qdrant_host" yaml:"qdrant_host,omitempty"`
+	QdrantPort                   int    `mapstructure:"qdrant_port" yaml:"qdrant_port,omitempty"`
+	QdrantAPIKey                 string `mapstructure:"qdrant_api_key" yaml:"qdrant_api_key,omitempty"`
+	QdrantPrefix                 string `mapstructure:"qdrant_prefix" yaml:"qdrant_prefix,omitempty"`
+	OpenSearchAddresses          string `mapstructure:"opensearch_addresses" yaml:"opensearch_addresses,omitempty"`
+	OpenSearchUsername           string `mapstructure:"opensearch_username" yaml:"opensearch_username,omitempty"`
+	OpenSearchPassword           string `mapstructure:"opensearch_password" yaml:"-"`
+	OpenSearchAPIKey             string `mapstructure:"opensearch_api_key" yaml:"-"`
+	OpenSearchIndexPrefix        string `mapstructure:"opensearch_index_prefix" yaml:"opensearch_index_prefix,omitempty"`
+	OpenSearchCreateIndex        bool   `mapstructure:"opensearch_create_index" yaml:"opensearch_create_index,omitempty"`
+	OpenSearchKNN                bool   `mapstructure:"opensearch_knn" yaml:"opensearch_knn,omitempty"`
+	OpenSearchInsecureSkipVerify bool   `mapstructure:"opensearch_insecure_skip_verify" yaml:"opensearch_insecure_skip_verify,omitempty"`
+	OpenSearchBulkSize           int    `mapstructure:"opensearch_bulk_size" yaml:"opensearch_bulk_size,omitempty"`
+	PgVectorCreateExtension      bool   `mapstructure:"pgvector_create_extension" yaml:"pgvector_create_extension,omitempty"`
+	PgVectorDSN                  string `mapstructure:"pgvector_dsn" yaml:"pgvector_dsn,omitempty"`
+	PgVectorIndexMethod          string `mapstructure:"pgvector_index_method" yaml:"pgvector_index_method,omitempty"`
+	PgVectorHNSWM                int    `mapstructure:"pgvector_hnsw_m" yaml:"pgvector_hnsw_m,omitempty"`
+	PgVectorHNSWEF               int    `mapstructure:"pgvector_hnsw_ef_construction" yaml:"pgvector_hnsw_ef_construction,omitempty"`
+	PgVectorIVFFlatLists         int    `mapstructure:"pgvector_ivfflat_lists" yaml:"pgvector_ivfflat_lists,omitempty"`
+	ChromaURL                    string `mapstructure:"chroma_url" yaml:"chroma_url,omitempty"`
+	ChromaAPIKey                 string `mapstructure:"chroma_api_key" yaml:"chroma_api_key,omitempty"`
+	ChromaTenant                 string `mapstructure:"chroma_tenant" yaml:"chroma_tenant,omitempty"`
+	ChromaDatabase               string `mapstructure:"chroma_database" yaml:"chroma_database,omitempty"`
 
 	// Storage configuration
 	StorageProvider         string `mapstructure:"storage_provider" yaml:"storage_provider,omitempty"`
@@ -160,6 +172,8 @@ func DefaultConfig() Config {
 		AdminPassword:           "",
 		AdminPasswordHash:       "",
 		DBAutoMigrate:           true,
+		OpenSearchCreateIndex:   true,
+		OpenSearchKNN:           true,
 		PgVectorCreateExtension: true,
 		PgVectorIndexMethod:     "hnsw",
 		PgVectorHNSWM:           16,
@@ -246,11 +260,21 @@ func LoadInto(config *Config) error {
 	v.BindEnv("embedder_model", "RAG_EMBEDDING_MODEL")
 	v.BindEnv("embedder_provider", "RAG_EMBEDDING_PROVIDER")
 
+	v.BindEnv("vector_store", "SESHAT_VECTOR_STORE")
 	v.BindEnv("vector_backend", "SESHAT_VECTOR_BACKEND")
 	v.BindEnv("qdrant_host", "QDRANT_HOST")
 	v.BindEnv("qdrant_port", "QDRANT_PORT")
 	v.BindEnv("qdrant_api_key", "QDRANT_API_KEY")
 	v.BindEnv("qdrant_prefix", "QDRANT_PREFIX")
+	v.BindEnv("opensearch_addresses", "OPENSEARCH_ADDRESSES")
+	v.BindEnv("opensearch_username", "OPENSEARCH_USERNAME")
+	v.BindEnv("opensearch_password", "OPENSEARCH_PASSWORD")
+	v.BindEnv("opensearch_api_key", "OPENSEARCH_API_KEY")
+	v.BindEnv("opensearch_index_prefix", "OPENSEARCH_INDEX_PREFIX")
+	v.BindEnv("opensearch_create_index", "OPENSEARCH_CREATE_INDEX")
+	v.BindEnv("opensearch_knn", "OPENSEARCH_KNN")
+	v.BindEnv("opensearch_insecure_skip_verify", "OPENSEARCH_INSECURE_SKIP_VERIFY")
+	v.BindEnv("opensearch_bulk_size", "OPENSEARCH_BULK_SIZE")
 	v.BindEnv("pgvector_create_extension", "SESHAT_PGVECTOR_CREATE_EXTENSION")
 	v.BindEnv("pgvector_dsn", "SESHAT_PGVECTOR_DSN")
 	v.BindEnv("pgvector_index_method", "SESHAT_PGVECTOR_INDEX_METHOD")
@@ -284,6 +308,10 @@ func LoadInto(config *Config) error {
 
 	if err := v.Unmarshal(config); err != nil {
 		return fmt.Errorf("failed to unmarshal config: %w", err)
+	}
+
+	if strings.TrimSpace(config.VectorStore) == "" {
+		config.VectorStore = strings.TrimSpace(config.VectorBackend)
 	}
 
 	config.RuntimeRoot = runtimepath.ResolveRoot(config.RuntimeRoot)

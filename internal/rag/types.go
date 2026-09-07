@@ -15,6 +15,7 @@ type Chunk struct {
 	Key      string
 	Text     string
 	Position int
+	Metadata map[string]string
 }
 
 type IngestRequest struct {
@@ -25,6 +26,10 @@ type IngestRequest struct {
 	FileID   string
 	Filename string
 	Text     string
+	// Data carries the original document bytes when ingestion can provide
+	// them. Chunkers that understand document structure can use it instead of
+	// splitting the already-extracted Text representation.
+	Data []byte
 	// ScopeID tags every chunk produced from this ingest with a permission
 	// scope (a workspace ID for shared content, or an owning user ID for
 	// personal content). Empty means unscoped — no scope_id metadata is
@@ -71,10 +76,26 @@ type SearchResponse struct {
 	Results  []SearchResult `json:"results"`
 }
 
+// Document is the original source material plus its text representation.
+// Plain text chunkers can ignore Data. Document-aware chunkers can prefer Data
+// to preserve layout, headings, page numbers, tables, and captions.
+type Document struct {
+	Filename string
+	Text     string
+	Data     []byte
+}
+
 // Chunker splits a text into indexable chunks.
 // The context allows implementations that call remote services (e.g. SemanticChunker).
 type Chunker interface {
 	Split(ctx context.Context, text string) ([]Chunk, error)
+}
+
+// DocumentChunker is implemented by chunkers that can split the original
+// document, not just extracted plain text.
+type DocumentChunker interface {
+	Chunker
+	SplitDocument(ctx context.Context, doc Document) ([]Chunk, error)
 }
 
 type VectorStore = vector.Store

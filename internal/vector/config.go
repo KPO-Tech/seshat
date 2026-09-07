@@ -8,23 +8,41 @@ import (
 	dbpkg "github.com/KPO-Tech/seshat/internal/db"
 )
 
-// Backend identifies which vector store implementation to use.
-type Backend string
+// StoreKind identifies which vector store implementation to use.
+type StoreKind string
 
 const (
-	BackendSQLite   Backend = "sqlite"
-	BackendPgVector Backend = "pgvector"
-	BackendQdrant   Backend = "qdrant"
-	BackendChroma   Backend = "chroma"
-	BackendMemory   Backend = "memory" // in-process, for tests and dev
-	BackendHNSW     Backend = "hnsw"   // embedded HNSW, no CGO, no external service
+	StoreSQLite     StoreKind = "sqlite"
+	StorePgVector   StoreKind = "pgvector"
+	StoreQdrant     StoreKind = "qdrant"
+	StoreOpenSearch StoreKind = "opensearch"
+	StoreChroma     StoreKind = "chroma"
+	StoreMemory     StoreKind = "memory" // in-process, for tests and dev
+	StoreHNSW       StoreKind = "hnsw"   // embedded HNSW, no CGO, no external service
+
+	// Deprecated: use StoreKind and Store* constants.
+	BackendSQLite     = StoreSQLite
+	BackendPgVector   = StorePgVector
+	BackendQdrant     = StoreQdrant
+	BackendOpenSearch = StoreOpenSearch
+	BackendChroma     = StoreChroma
+	BackendMemory     = StoreMemory
+	BackendHNSW       = StoreHNSW
 )
+
+// Deprecated: use StoreKind.
+type Backend = StoreKind
 
 // Config describes how to open a vector store.
 // Not all fields are used by all backends — see field comments.
 type Config struct {
+	// StoreKind selects the implementation.
+	StoreKind StoreKind
+
 	// Backend selects the implementation.
-	Backend Backend
+	//
+	// Deprecated: use StoreKind.
+	Backend StoreKind
 
 	// DB is used by the SQLite and pgvector backends.
 	// For SQLite:   must be a SQLite DB (DriverSQLite).
@@ -62,6 +80,34 @@ type Config struct {
 	// multi-tenant deployments sharing one Qdrant instance).
 	QdrantPrefix string
 
+	// OpenSearchAddresses is the list of OpenSearch HTTP endpoints.
+	// Defaults to http://localhost:9200.
+	OpenSearchAddresses []string
+
+	// OpenSearchUsername / OpenSearchPassword configure HTTP Basic auth.
+	OpenSearchUsername string
+	OpenSearchPassword string
+
+	// OpenSearchAPIKey configures API key auth through the Authorization header.
+	OpenSearchAPIKey string
+
+	// OpenSearchIndexPrefix is prepended to every namespace index.
+	OpenSearchIndexPrefix string
+
+	// OpenSearchCreateIndex controls whether missing namespace indices are
+	// created automatically during Upsert. Nil defaults to true.
+	OpenSearchCreateIndex *bool
+
+	// OpenSearchKNN enables knn_vector mappings and vector queries.
+	OpenSearchKNN bool
+
+	// OpenSearchInsecureSkipVerify disables TLS certificate verification.
+	OpenSearchInsecureSkipVerify bool
+
+	// OpenSearchBulkSize controls how many records are sent per _bulk request.
+	// Values <= 0 use the OpenSearch store default.
+	OpenSearchBulkSize int
+
 	// ChromaURL is the base URL of the Chroma HTTP API (e.g. "http://localhost:8000").
 	ChromaURL string
 
@@ -85,17 +131,21 @@ func NewStore(ctx context.Context, cfg Config) (Store, error) {
 	if cfg.Dim <= 0 {
 		cfg.Dim = 1536
 	}
-	switch cfg.Backend {
-	case BackendMemory:
+	kind := cfg.StoreKind
+	if kind == "" {
+		kind = cfg.Backend
+	}
+	switch kind {
+	case StoreMemory:
 		return NewMemoryStore(), nil
 
-	case BackendSQLite, "":
+	case StoreSQLite, "":
 		if cfg.DB == nil {
 			return nil, fmt.Errorf("vector.NewStore: DB is required for sqlite backend")
 		}
 		return NewSQLiteStore(cfg.DB)
 
-	case BackendPgVector:
+	case StorePgVector:
 		if cfg.DB == nil {
 			return nil, fmt.Errorf("vector.NewStore: DB is required for pgvector backend")
 		}
@@ -112,7 +162,7 @@ func NewStore(ctx context.Context, cfg Config) (Store, error) {
 			IVFFlatLists:       cfg.PgVectorIVFFlatLists,
 		})
 
-	case BackendQdrant:
+	case StoreQdrant:
 		host := strings.TrimSpace(cfg.QdrantHost)
 		if host == "" {
 			host = "localhost"
@@ -129,7 +179,25 @@ func NewStore(ctx context.Context, cfg Config) (Store, error) {
 			DefaultDim: cfg.Dim,
 		})
 
-	case BackendChroma:
+	case StoreOpenSearch:
+		createIndex := true
+		if cfg.OpenSearchCreateIndex != nil {
+			createIndex = *cfg.OpenSearchCreateIndex
+		}
+		return NewOpenSearchStore(ctx, OpenSearchConfig{
+			Addresses:          cfg.OpenSearchAddresses,
+			Username:           cfg.OpenSearchUsername,
+			Password:           cfg.OpenSearchPassword,
+			APIKey:             cfg.OpenSearchAPIKey,
+			IndexPrefix:        cfg.OpenSearchIndexPrefix,
+			DefaultDim:         cfg.Dim,
+			CreateIndex:        createIndex,
+			KNN:                cfg.OpenSearchKNN,
+			InsecureSkipVerify: cfg.OpenSearchInsecureSkipVerify,
+			BulkSize:           cfg.OpenSearchBulkSize,
+		})
+
+	case StoreChroma:
 		url := strings.TrimSpace(cfg.ChromaURL)
 		if url == "" {
 			url = "http://localhost:8000"
@@ -149,7 +217,7 @@ func NewStore(ctx context.Context, cfg Config) (Store, error) {
 			Database: database,
 		}), nil
 
-	case BackendHNSW:
+	case StoreHNSW:
 		dir := strings.TrimSpace(cfg.HNSWDir)
 		if dir == "" {
 			return nil, fmt.Errorf("vector.NewStore: HNSWDir is required for hnsw backend")
@@ -157,6 +225,6 @@ func NewStore(ctx context.Context, cfg Config) (Store, error) {
 		return NewHNSWStore(dir)
 
 	default:
-		return nil, fmt.Errorf("vector.NewStore: unknown backend %q", cfg.Backend)
+		return nil, fmt.Errorf("vector.NewStore: unknown vector store %q", kind)
 	}
 }

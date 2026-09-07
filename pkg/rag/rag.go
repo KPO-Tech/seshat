@@ -2,22 +2,31 @@ package rag
 
 import (
 	internalrag "github.com/KPO-Tech/seshat/internal/rag"
+	publicdocling "github.com/KPO-Tech/seshat/pkg/docling"
 	publicstorage "github.com/KPO-Tech/seshat/pkg/storage"
 	publicvector "github.com/KPO-Tech/seshat/pkg/vector"
 )
 
 type (
-	Chunk          = internalrag.Chunk
-	Chunker        = internalrag.Chunker
-	Embedder       = internalrag.Embedder
-	IngestRequest  = internalrag.IngestRequest
-	IngestResult   = internalrag.IngestResult
-	Reranker       = internalrag.Reranker
-	SearchRequest  = internalrag.SearchRequest
-	SearchResponse = internalrag.SearchResponse
-	SearchResult   = internalrag.SearchResult
-	Service        = internalrag.Service
-	VectorStore    = publicvector.Store
+	Chunk                 = internalrag.Chunk
+	ChunkCache            = internalrag.ChunkCache
+	ChunkCacheKeyProvider = internalrag.ChunkCacheKeyProvider
+	Chunker               = internalrag.Chunker
+	CachedDocumentChunker = internalrag.CachedDocumentChunker
+	Document              = internalrag.Document
+	DocumentChunker       = internalrag.DocumentChunker
+	DoclingChunker        = internalrag.DoclingChunker
+	Embedder              = internalrag.Embedder
+	IngestRequest         = internalrag.IngestRequest
+	IngestResult          = internalrag.IngestResult
+	Reranker              = internalrag.Reranker
+	SearchRequest         = internalrag.SearchRequest
+	SearchResponse        = internalrag.SearchResponse
+	SearchResult          = internalrag.SearchResult
+	Service               = internalrag.Service
+	VectorStore           = publicvector.Store
+	ArtifactChunkCache    = internalrag.ArtifactChunkCache
+	MemoryChunkCache      = internalrag.MemoryChunkCache
 
 	// ParagraphChunker splits on blank lines with a hard character cap per
 	// chunk. The default Chunker (see DefaultChunker) when none is given.
@@ -38,6 +47,27 @@ func NewService(artifacts publicstorage.ArtifactStore, vectors publicvector.Stor
 // NewService uses internally when chunker is nil.
 func DefaultChunker() Chunker {
 	return internalrag.DefaultChunker()
+}
+
+// NewDoclingChunker creates a document-aware chunker backed by docling-serve.
+func NewDoclingChunker(client *publicdocling.Client, opts publicdocling.ChunkOptions) *DoclingChunker {
+	return internalrag.NewDoclingChunker(client, opts)
+}
+
+func NewCachedDocumentChunker(chunker DocumentChunker, cache ChunkCache) *CachedDocumentChunker {
+	return internalrag.NewCachedDocumentChunker(chunker, cache)
+}
+
+func NewArtifactChunkCache(store publicstorage.ArtifactStore) *ArtifactChunkCache {
+	return internalrag.NewArtifactChunkCache(store)
+}
+
+func NewMemoryChunkCache() *MemoryChunkCache {
+	return internalrag.NewMemoryChunkCache()
+}
+
+func DocumentChunkCacheKey(doc Document, chunkerKey string) string {
+	return internalrag.DocumentChunkCacheKey(doc, chunkerKey)
 }
 
 // NewSemanticChunker creates a SemanticChunker. threshold <= 0 uses the

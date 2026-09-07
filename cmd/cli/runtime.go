@@ -147,7 +147,7 @@ func loadRuntimeOptions(overrides runtimeOverrides) (runtimeOptions, error) {
 		StorageGCLimit:          config.StorageGCLimit,
 		StorageGCNamespaces:     splitCommaList(config.StorageGCNamespaces),
 		Debug:                   config.Debug,
-		RAGService:              buildRAGService(hnswDir, ragSQLitePath),
+		RAGService:              buildRAGService(config, hnswDir, ragSQLitePath),
 		Companion:               companionPtr,
 	}, nil
 }
@@ -312,20 +312,12 @@ func parsePermissionMode(raw string) (sdk.PermissionMode, error) {
 // (google/renameio) doesn't build (see internal/vector/hnsw_store_windows.go).
 // Without this fallback, RAG was silently disabled on every Windows install
 // regardless of embedding configuration.
-func buildRAGService(hnswDir, sqliteFallbackPath string) *sdk.RAGService {
+func buildRAGService(config engineconfig.Config, hnswDir, sqliteFallbackPath string) *sdk.RAGService {
 	emb := embedder.NewFromEnv() // nil is fine - vectorless mode covers it
 
-	var store vector.Store
-	if hnswStore, err := vector.NewHNSWStore(hnswDir); err == nil {
-		store = hnswStore
-	} else {
-		log.Printf("[cli] hnsw vector store unavailable (%v), falling back to sqlite", err)
-		sqliteStore, sqliteErr := vector.OpenSQLiteStore(sqliteFallbackPath)
-		if sqliteErr != nil {
-			log.Printf("[cli] sqlite vector store unavailable, rag disabled: %v", sqliteErr)
-			return nil
-		}
-		store = sqliteStore
+	store := buildVectorStore(config, hnswDir, sqliteFallbackPath)
+	if store == nil {
+		return nil
 	}
 
 	// Best-effort: RAG still works without artifact storage (chunk text is
@@ -363,6 +355,42 @@ func buildRAGService(hnswDir, sqliteFallbackPath string) *sdk.RAGService {
 	svc.SetReranker(reranker.NewFromEnv())
 
 	return svc
+}
+
+func buildVectorStore(config engineconfig.Config, hnswDir, sqliteFallbackPath string) vector.Store {
+	if strings.EqualFold(strings.TrimSpace(config.VectorStore), string(vector.StoreOpenSearch)) {
+		createIndex := config.OpenSearchCreateIndex
+		store, err := vector.NewStore(context.Background(), vector.Config{
+			StoreKind:                    vector.StoreOpenSearch,
+			Dim:                          1536,
+			OpenSearchAddresses:          splitCommaList(config.OpenSearchAddresses),
+			OpenSearchUsername:           strings.TrimSpace(config.OpenSearchUsername),
+			OpenSearchPassword:           strings.TrimSpace(config.OpenSearchPassword),
+			OpenSearchAPIKey:             strings.TrimSpace(config.OpenSearchAPIKey),
+			OpenSearchIndexPrefix:        strings.TrimSpace(config.OpenSearchIndexPrefix),
+			OpenSearchCreateIndex:        &createIndex,
+			OpenSearchKNN:                config.OpenSearchKNN,
+			OpenSearchInsecureSkipVerify: config.OpenSearchInsecureSkipVerify,
+			OpenSearchBulkSize:           config.OpenSearchBulkSize,
+		})
+		if err == nil {
+			return store
+		}
+		log.Printf("[cli] opensearch vector store unavailable, rag disabled: %v", err)
+		return nil
+	}
+
+	if hnswStore, err := vector.NewHNSWStore(hnswDir); err == nil {
+		return hnswStore
+	} else {
+		log.Printf("[cli] hnsw vector store unavailable (%v), falling back to sqlite", err)
+		sqliteStore, sqliteErr := vector.OpenSQLiteStore(sqliteFallbackPath)
+		if sqliteErr != nil {
+			log.Printf("[cli] sqlite vector store unavailable, rag disabled: %v", sqliteErr)
+			return nil
+		}
+		return sqliteStore
+	}
 }
 
 func resolveModel(config engineconfig.Config) sdk.ModelIdentifier {

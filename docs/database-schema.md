@@ -747,17 +747,18 @@ Skills are exposed as `/skill-name` slash commands in the TUI.
 
 ## 12. Vector Store / RAG
 
-**Default backend**: SQLite (`vector_records` table).
+**Default vector store**: SQLite (`vector_records` table).
 
-**Alternative backends** (configured via env or config.yaml):
+**Alternative stores** (configured via env or config.yaml):
 
-| Backend | Config key | Notes |
+| Store | Config key | Notes |
 |---|---|---|
-| `sqlite` | `SESHAT_VECTOR_BACKEND=sqlite` | Default, no extra deps |
+| `sqlite` | `SESHAT_VECTOR_STORE=sqlite` | Default, no extra deps |
 | `pgvector` | `SESHAT_PGVECTOR_DSN=postgres://...` | Requires pgvector extension |
 | `qdrant` | `QDRANT_HOST`, `QDRANT_PORT` | External Qdrant service |
+| `opensearch` | `SESHAT_VECTOR_STORE=opensearch`, `OPENSEARCH_ADDRESSES` | External OpenSearch service for enterprise search |
 | `chroma` | `CHROMA_URL` | External Chroma service |
-| `memory` | `SESHAT_VECTOR_BACKEND=memory` | In-process, no persistence |
+| `memory` | `SESHAT_VECTOR_STORE=memory` | In-process, no persistence |
 
 **Embedder config**:
 
