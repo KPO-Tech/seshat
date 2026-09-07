@@ -390,6 +390,154 @@ func TestRunPropagatesPinnedOutputToDownstreamNode(t *testing.T) {
 	}
 }
 
+// TestRunRetriesAFailingNodeUntilItSucceeds proves RetryOnFail (Tier 3.1)
+// actually calls Execute more than once - not just accepts the field.
+func TestRunRetriesAFailingNodeUntilItSucceeds(t *testing.T) {
+	reg := NewRegistry()
+	calls := 0
+	reg.Register("flaky", funcExecutor{desc: NodeDescription{Type: "flaky"}, execute: func(context.Context, *Runtime, []Item, map[string]any) (Output, error) {
+		calls++
+		if calls < 3 {
+			return Output{}, errors.New("not yet")
+		}
+		return Main([]Item{{"ok": true}}), nil
+	}})
+	def := Definition{Nodes: []Node{{ID: "a", Type: "flaky", RetryOnFail: true, MaxTries: 3}}}
+	result, err := Run(context.Background(), def, reg, nil, nil, Options{})
+	if err != nil {
+		t.Fatalf("run: %v", err)
+	}
+	if !result.Success {
+		t.Fatalf("expected the node to succeed on its 3rd attempt, results: %#v", result.Results)
+	}
+	a := result.Results["a"]
+	if a.Attempts != 3 {
+		t.Fatalf("expected Attempts=3, got %d", a.Attempts)
+	}
+	if calls != 3 {
+		t.Fatalf("expected Execute to be called 3 times, got %d", calls)
+	}
+}
+
+// TestRunDoesNotRetryWithoutRetryOnFail is the regression guard: every graph
+// saved before this field existed has RetryOnFail=false, and must behave
+// exactly as before - one call, immediate failure.
+func TestRunDoesNotRetryWithoutRetryOnFail(t *testing.T) {
+	reg := NewRegistry()
+	calls := 0
+	reg.Register("boom", funcExecutor{desc: NodeDescription{Type: "boom"}, execute: func(context.Context, *Runtime, []Item, map[string]any) (Output, error) {
+		calls++
+		return Output{}, errors.New("boom")
+	}})
+	def := Definition{Nodes: []Node{{ID: "a", Type: "boom"}}}
+	result, err := Run(context.Background(), def, reg, nil, nil, Options{})
+	if err != nil {
+		t.Fatalf("run: %v", err)
+	}
+	if result.Success {
+		t.Fatal("expected failure")
+	}
+	if calls != 1 {
+		t.Fatalf("expected exactly 1 call with RetryOnFail unset, got %d", calls)
+	}
+	if result.Results["a"].Attempts != 1 {
+		t.Fatalf("expected Attempts=1, got %d", result.Results["a"].Attempts)
+	}
+}
+
+// TestRunClampsMaxTriesToFive proves a node can't be configured to retry
+// unbounded - MaxTries is clamped to n8n's own real 2-5 range.
+func TestRunClampsMaxTriesToFive(t *testing.T) {
+	reg := NewRegistry()
+	calls := 0
+	reg.Register("boom", funcExecutor{desc: NodeDescription{Type: "boom"}, execute: func(context.Context, *Runtime, []Item, map[string]any) (Output, error) {
+		calls++
+		return Output{}, errors.New("boom")
+	}})
+	def := Definition{Nodes: []Node{{ID: "a", Type: "boom", RetryOnFail: true, MaxTries: 999}}}
+	if _, err := Run(context.Background(), def, reg, nil, nil, Options{}); err != nil {
+		t.Fatalf("run: %v", err)
+	}
+	if calls != 5 {
+		t.Fatalf("expected MaxTries clamped to 5, got %d calls", calls)
+	}
+}
+
+// TestRunOnErrorContinueRegularOutputLetsDownstreamRun proves a node with
+// OnError="continueRegularOutput" doesn't stop the run - downstream still
+// executes, receiving no items (not skipped, not erroring itself).
+func TestRunOnErrorContinueRegularOutputLetsDownstreamRun(t *testing.T) {
+	reg := NewRegistry()
+	reg.Register("boom", funcExecutor{desc: NodeDescription{Type: "boom"}, execute: func(context.Context, *Runtime, []Item, map[string]any) (Output, error) {
+		return Output{}, errors.New("boom")
+	}})
+	var nextRan bool
+	var nextInput []Item
+	reg.Register("next", funcExecutor{desc: NodeDescription{Type: "next"}, execute: func(_ context.Context, _ *Runtime, input []Item, _ map[string]any) (Output, error) {
+		nextRan = true
+		nextInput = input
+		return Main(input), nil
+	}})
+	def := Definition{Nodes: []Node{
+		{ID: "a", Type: "boom", OnError: "continueRegularOutput", Connections: map[string][]string{"main": {"next"}}},
+		{ID: "next", Type: "next"},
+	}}
+	result, err := Run(context.Background(), def, reg, nil, nil, Options{})
+	if err != nil {
+		t.Fatalf("run: %v", err)
+	}
+	if result.Success {
+		t.Fatal("expected the overall run to still report failure - a real error happened, it just didn't stop execution")
+	}
+	a := result.Results["a"]
+	if a.Success || !a.Continued {
+		t.Fatalf("expected a to be Success=false, Continued=true, got %#v", a)
+	}
+	if !nextRan {
+		t.Fatal("expected downstream to run despite the upstream failure")
+	}
+	if len(nextInput) != 0 {
+		t.Fatalf("expected downstream to receive no items, got %#v", nextInput)
+	}
+	if next := result.Results["next"]; next.Skipped {
+		t.Fatal("expected downstream to not be skipped")
+	}
+}
+
+// TestRunOnErrorContinueErrorOutputRoutesToErrorPort proves
+// OnError="continueErrorOutput" sends a synthesized error item on a new
+// "error" port, and a downstream node wired specifically to that port
+// receives it.
+func TestRunOnErrorContinueErrorOutputRoutesToErrorPort(t *testing.T) {
+	reg := NewRegistry()
+	reg.Register("boom", funcExecutor{desc: NodeDescription{Type: "boom"}, execute: func(context.Context, *Runtime, []Item, map[string]any) (Output, error) {
+		return Output{}, errors.New("boom detail")
+	}})
+	var errBranchGot []Item
+	reg.Register("errsink", funcExecutor{desc: NodeDescription{Type: "errsink"}, execute: func(_ context.Context, _ *Runtime, input []Item, _ map[string]any) (Output, error) {
+		errBranchGot = input
+		return Main(input), nil
+	}})
+	def := Definition{Nodes: []Node{
+		{ID: "a", Type: "boom", OnError: "continueErrorOutput", Connections: map[string][]string{"error": {"errsink"}}},
+		{ID: "errsink", Type: "errsink"},
+	}}
+	result, err := Run(context.Background(), def, reg, nil, nil, Options{})
+	if err != nil {
+		t.Fatalf("run: %v", err)
+	}
+	a := result.Results["a"]
+	if a.Success || !a.Continued {
+		t.Fatalf("expected a to be Success=false, Continued=true, got %#v", a)
+	}
+	if len(errBranchGot) != 1 || errBranchGot[0]["error"] != "boom detail" {
+		t.Fatalf("expected the error branch to receive a synthesized error item, got %#v", errBranchGot)
+	}
+	if len(a.OutputByPort["error"]) != 1 {
+		t.Fatalf("expected NodeResult.OutputByPort[\"error\"] to record the same item, got %#v", a.OutputByPort)
+	}
+}
+
 func TestNodeAccessorSeesPinnedOutputOnceThatNodeCompletes(t *testing.T) {
 	reg := NewRegistry()
 	reg.Register("b", funcExecutor{desc: NodeDescription{Type: "b"}, execute: func(ctx context.Context, rt *Runtime, _ []Item, params map[string]any) (Output, error) {

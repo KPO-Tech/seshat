@@ -175,7 +175,12 @@ func Run(ctx context.Context, def Definition, registry *Registry, rt *Runtime, i
 			mu.Lock()
 			failedDep := ""
 			for dep := range preds[id] {
-				if r := result.Results[dep]; !r.Success {
+				// A dependency that failed but Continued (Tier 3.1's OnError
+				// letting the run proceed anyway) is treated the same as a
+				// real success here - it already produced whatever output
+				// its OnError mode dictated (empty, or a synthesized error
+				// item), and that's what this node should receive.
+				if r := result.Results[dep]; !r.Success && !r.Continued {
 					failedDep = dep
 					break
 				}
@@ -205,11 +210,16 @@ func Run(ctx context.Context, def Definition, registry *Registry, rt *Runtime, i
 				result.Order = append(result.Order, node.ID)
 				if !nodeResult.Success {
 					result.Success = false
-				} else {
+				}
+				// A Continued failure (Tier 3.1's OnError) still routes its
+				// output downstream and records for $node('Name'), same as
+				// a real success - only a genuine stop-the-run failure
+				// (neither Success nor Continued) withholds both.
+				if nodeResult.Success || nodeResult.Continued {
 					// Recorded here, not in executeNode - $node('Name')
 					// (see ResolveValue) must only ever see a node that has
-					// *finished successfully*, matching n8n's own execution-
-					// order requirement on $('Name').
+					// *finished*, matching n8n's own execution-order
+					// requirement on $('Name').
 					rt.recordNodeOutput(node.ID, nodeResult.Output)
 					for port, targets := range node.Connections {
 						items := output.Ports[port]
@@ -257,11 +267,24 @@ func executeNode(ctx context.Context, registry *Registry, rt *Runtime, node Node
 	if err := executor.ValidateParameters(node.Parameters); err != nil {
 		return instantFailure(node, fmt.Errorf("invalid parameters for node %q: %w", node.ID, err), input, sources), Output{}
 	}
-	output, err := executor.Execute(ctx, rt, input, node.Parameters)
+	output, err, attempts := executeWithRetry(ctx, executor, rt, node, input)
 	end := time.Now()
 	if err != nil {
-		return NodeResult{ID: node.ID, Type: node.Type, Success: false, Input: input, InputSource: sources,
-			Error: err.Error(), StartedAt: start, EndedAt: end, Duration: end.Sub(start)}, Output{}
+		switch node.OnError {
+		case "continueRegularOutput":
+			// Proceed as if nothing happened - no output, but the run keeps
+			// going (see engine.go's Run: Continued is treated like Success
+			// for downstream-skip/routing purposes).
+			return NodeResult{ID: node.ID, Type: node.Type, Success: false, Continued: true, Input: input, InputSource: sources,
+				Error: err.Error(), Attempts: attempts, StartedAt: start, EndedAt: end, Duration: end.Sub(start)}, Main(nil)
+		case "continueErrorOutput":
+			errOutput := Output{Ports: map[string][]Item{"error": {{"error": err.Error()}}}}
+			return NodeResult{ID: node.ID, Type: node.Type, Success: false, Continued: true, Input: input, InputSource: sources,
+				Error: err.Error(), Attempts: attempts, OutputByPort: errOutput.Ports, StartedAt: start, EndedAt: end, Duration: end.Sub(start)}, errOutput
+		default: // "" - today's existing behavior, stop this branch of the run
+			return NodeResult{ID: node.ID, Type: node.Type, Success: false, Input: input, InputSource: sources,
+				Error: err.Error(), Attempts: attempts, StartedAt: start, EndedAt: end, Duration: end.Sub(start)}, Output{}
+		}
 	}
 	reported := output.Ports[mainPort]
 	if reported == nil {
@@ -270,7 +293,52 @@ func executeNode(ctx context.Context, registry *Registry, rt *Runtime, node Node
 		}
 	}
 	return NodeResult{ID: node.ID, Type: node.Type, Success: true, Input: input, InputSource: sources,
-		Output: reported, OutputByPort: output.Ports, StartedAt: start, EndedAt: end, Duration: end.Sub(start)}, output
+		Output: reported, OutputByPort: output.Ports, StartedAt: start, EndedAt: end, Duration: end.Sub(start), Attempts: attempts}, output
+}
+
+// executeWithRetry calls executor.Execute once, or up to node.MaxTries times
+// (clamped 2-5) with node.WaitBetweenTriesMS (clamped 0-5000) between
+// attempts if node.RetryOnFail is set (Tier 3.1) - a node that never opts in
+// behaves exactly as before this feature existed: one call, no wait. Stops
+// early on ctx cancellation, same as pkg/automation's own WithRetry
+// middleware (a whole-workflow-level retry, the only other retry precedent
+// in this SDK) already does. attempts is how many Execute calls were
+// actually made, always >= 1.
+func executeWithRetry(ctx context.Context, executor NodeExecutor, rt *Runtime, node Node, input []Item) (output Output, err error, attempts int) {
+	maxTries := 1
+	if node.RetryOnFail {
+		maxTries = node.MaxTries
+		if maxTries < 2 {
+			maxTries = 2
+		}
+		if maxTries > 5 {
+			maxTries = 5
+		}
+	}
+	wait := time.Duration(node.WaitBetweenTriesMS) * time.Millisecond
+	if wait < 0 {
+		wait = 0
+	}
+	if wait > 5*time.Second {
+		wait = 5 * time.Second
+	}
+
+retryLoop:
+	for attempts = 1; attempts <= maxTries; attempts++ {
+		output, err = executor.Execute(ctx, rt, input, node.Parameters)
+		if err == nil || attempts == maxTries {
+			break
+		}
+		if wait > 0 {
+			select {
+			case <-ctx.Done():
+				err = ctx.Err()
+				break retryLoop
+			case <-time.After(wait):
+			}
+		}
+	}
+	return output, err, attempts
 }
 
 func instantFailure(node Node, err error, input []Item, sources []ItemSource) NodeResult {
