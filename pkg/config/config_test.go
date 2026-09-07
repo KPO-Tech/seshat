@@ -230,6 +230,64 @@ func TestLoadIntoBindsPgVectorEnv(t *testing.T) {
 	}
 }
 
+func TestLoadIntoBindsOpenSearchEnv(t *testing.T) {
+	t.Setenv("SESHAT_VECTOR_STORE", "opensearch")
+	t.Setenv("OPENSEARCH_ADDRESSES", "https://search-1.local:9200,https://search-2.local:9200")
+	t.Setenv("OPENSEARCH_USERNAME", "seshat")
+	t.Setenv("OPENSEARCH_PASSWORD", "secret")
+	t.Setenv("OPENSEARCH_API_KEY", "api-key")
+	t.Setenv("OPENSEARCH_INDEX_PREFIX", "company-rag")
+	t.Setenv("OPENSEARCH_CREATE_INDEX", "false")
+	t.Setenv("OPENSEARCH_KNN", "true")
+	t.Setenv("OPENSEARCH_INSECURE_SKIP_VERIFY", "true")
+
+	var cfg Config
+	if err := LoadInto(&cfg); err != nil {
+		t.Fatalf("load config: %v", err)
+	}
+
+	if cfg.VectorStore != "opensearch" {
+		t.Fatalf("unexpected vector store: %q", cfg.VectorStore)
+	}
+	if cfg.OpenSearchAddresses != "https://search-1.local:9200,https://search-2.local:9200" {
+		t.Fatalf("unexpected opensearch addresses: %q", cfg.OpenSearchAddresses)
+	}
+	if cfg.OpenSearchUsername != "seshat" {
+		t.Fatalf("unexpected opensearch username: %q", cfg.OpenSearchUsername)
+	}
+	if cfg.OpenSearchPassword != "secret" {
+		t.Fatalf("unexpected opensearch password: %q", cfg.OpenSearchPassword)
+	}
+	if cfg.OpenSearchAPIKey != "api-key" {
+		t.Fatalf("unexpected opensearch api key: %q", cfg.OpenSearchAPIKey)
+	}
+	if cfg.OpenSearchIndexPrefix != "company-rag" {
+		t.Fatalf("unexpected opensearch index prefix: %q", cfg.OpenSearchIndexPrefix)
+	}
+	if cfg.OpenSearchCreateIndex {
+		t.Fatal("expected opensearch_create_index=false from env")
+	}
+	if !cfg.OpenSearchKNN {
+		t.Fatal("expected opensearch_knn=true from env")
+	}
+	if !cfg.OpenSearchInsecureSkipVerify {
+		t.Fatal("expected opensearch_insecure_skip_verify=true from env")
+	}
+}
+
+func TestLoadIntoSupportsLegacyVectorBackendEnv(t *testing.T) {
+	t.Setenv("SESHAT_VECTOR_BACKEND", "opensearch")
+
+	var cfg Config
+	if err := LoadInto(&cfg); err != nil {
+		t.Fatalf("load config: %v", err)
+	}
+
+	if cfg.VectorStore != "opensearch" {
+		t.Fatalf("expected legacy vector backend env to populate vector store, got %q", cfg.VectorStore)
+	}
+}
+
 func TestAvailableProvidersIncludesOpenAI(t *testing.T) {
 	providers := AvailableProviders()
 	if len(providers) == 0 {

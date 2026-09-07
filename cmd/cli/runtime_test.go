@@ -52,7 +52,7 @@ func TestBuildRAGService_FallsBackToSQLiteWhenHNSWUnavailable(t *testing.T) {
 	hnswDir := filepath.Join(blockerFile, "hnsw") // parent is a file: MkdirAll must fail
 	sqlitePath := filepath.Join(dir, "rag.sqlite3")
 
-	svc := buildRAGService(hnswDir, sqlitePath)
+	svc := buildRAGService(engineconfig.Config{}, hnswDir, sqlitePath)
 	if svc == nil {
 		t.Fatal("expected a RAG service backed by the sqlite fallback, got nil")
 	}
@@ -72,7 +72,7 @@ func TestBuildRAGService_VectorlessWhenEmbeddingNotConfigured(t *testing.T) {
 	t.Setenv("RAG_EMBEDDING_MODEL", "")
 
 	dir := t.TempDir()
-	svc := buildRAGService(filepath.Join(dir, "hnsw"), filepath.Join(dir, "rag.sqlite3"))
+	svc := buildRAGService(engineconfig.Config{}, filepath.Join(dir, "hnsw"), filepath.Join(dir, "rag.sqlite3"))
 	if svc == nil {
 		t.Fatal("expected a vectorless (BM25-only) RAG service even without an embedding provider configured")
 	}

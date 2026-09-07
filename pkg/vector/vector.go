@@ -10,7 +10,7 @@ import (
 )
 
 type (
-	Backend      = internalvector.Backend
+	StoreKind    = internalvector.StoreKind
 	Query        = internalvector.Query
 	Record       = internalvector.Record
 	SearchResult = internalvector.SearchResult
@@ -18,13 +18,26 @@ type (
 )
 
 const (
-	BackendSQLite   = internalvector.BackendSQLite
-	BackendPgVector = internalvector.BackendPgVector
-	BackendQdrant   = internalvector.BackendQdrant
-	BackendChroma   = internalvector.BackendChroma
-	BackendMemory   = internalvector.BackendMemory
-	BackendHNSW     = internalvector.BackendHNSW
+	StoreSQLite     = internalvector.StoreSQLite
+	StorePgVector   = internalvector.StorePgVector
+	StoreQdrant     = internalvector.StoreQdrant
+	StoreOpenSearch = internalvector.StoreOpenSearch
+	StoreChroma     = internalvector.StoreChroma
+	StoreMemory     = internalvector.StoreMemory
+	StoreHNSW       = internalvector.StoreHNSW
+
+	// Deprecated: use Store* constants.
+	BackendSQLite     = StoreSQLite
+	BackendPgVector   = StorePgVector
+	BackendQdrant     = StoreQdrant
+	BackendOpenSearch = StoreOpenSearch
+	BackendChroma     = StoreChroma
+	BackendMemory     = StoreMemory
+	BackendHNSW       = StoreHNSW
 )
+
+// Deprecated: use StoreKind.
+type Backend = StoreKind
 
 // DBHandle is the public vector-facing database descriptor.
 // It intentionally avoids leaking the engine's internal DB type while keeping
@@ -47,24 +60,36 @@ func NewDBHandle(driverName, dsn string) *DBHandle {
 }
 
 type Config struct {
-	Backend Backend
-	DB      *DBHandle
+	StoreKind StoreKind
+	DB        *DBHandle
 
-	Dim                        int
-	PgVectorCreateExtension    *bool
-	PgVectorIndexMethod        string
-	PgVectorHNSWM              int
-	PgVectorHNSWEfConstruction int
-	PgVectorIVFFlatLists       int
-	QdrantHost                 string
-	QdrantPort                 int
-	QdrantAPIKey               string
-	QdrantPrefix               string
-	ChromaURL                  string
-	ChromaAPIKey               string
-	ChromaTenant               string
-	ChromaDatabase             string
-	// HNSWDir is the directory for HNSW index files (BackendHNSW only).
+	// Deprecated: use StoreKind.
+	Backend StoreKind
+
+	Dim                          int
+	PgVectorCreateExtension      *bool
+	PgVectorIndexMethod          string
+	PgVectorHNSWM                int
+	PgVectorHNSWEfConstruction   int
+	PgVectorIVFFlatLists         int
+	QdrantHost                   string
+	QdrantPort                   int
+	QdrantAPIKey                 string
+	QdrantPrefix                 string
+	OpenSearchAddresses          []string
+	OpenSearchUsername           string
+	OpenSearchPassword           string
+	OpenSearchAPIKey             string
+	OpenSearchIndexPrefix        string
+	OpenSearchCreateIndex        *bool
+	OpenSearchKNN                bool
+	OpenSearchInsecureSkipVerify bool
+	OpenSearchBulkSize           int
+	ChromaURL                    string
+	ChromaAPIKey                 string
+	ChromaTenant                 string
+	ChromaDatabase               string
+	// HNSWDir is the directory for HNSW index files (StoreHNSW only).
 	// Defaults to <runtime_root>/data/hnsw via pkg/config helpers.
 	HNSWDir string
 }
@@ -79,23 +104,33 @@ func NewStore(ctx context.Context, cfg Config) (Store, error) {
 		return nil, err
 	}
 	return internalvector.NewStore(ctx, internalvector.Config{
-		Backend:                    cfg.Backend,
-		DB:                         coreHandle,
-		Dim:                        cfg.Dim,
-		PgVectorCreateExtension:    cfg.PgVectorCreateExtension,
-		PgVectorIndexMethod:        cfg.PgVectorIndexMethod,
-		PgVectorHNSWM:              cfg.PgVectorHNSWM,
-		PgVectorHNSWEfConstruction: cfg.PgVectorHNSWEfConstruction,
-		PgVectorIVFFlatLists:       cfg.PgVectorIVFFlatLists,
-		QdrantHost:                 cfg.QdrantHost,
-		QdrantPort:                 cfg.QdrantPort,
-		QdrantAPIKey:               cfg.QdrantAPIKey,
-		QdrantPrefix:               cfg.QdrantPrefix,
-		ChromaURL:                  cfg.ChromaURL,
-		ChromaAPIKey:               cfg.ChromaAPIKey,
-		ChromaTenant:               cfg.ChromaTenant,
-		ChromaDatabase:             cfg.ChromaDatabase,
-		HNSWDir:                    cfg.HNSWDir,
+		StoreKind:                    cfg.StoreKind,
+		Backend:                      cfg.Backend,
+		DB:                           coreHandle,
+		Dim:                          cfg.Dim,
+		PgVectorCreateExtension:      cfg.PgVectorCreateExtension,
+		PgVectorIndexMethod:          cfg.PgVectorIndexMethod,
+		PgVectorHNSWM:                cfg.PgVectorHNSWM,
+		PgVectorHNSWEfConstruction:   cfg.PgVectorHNSWEfConstruction,
+		PgVectorIVFFlatLists:         cfg.PgVectorIVFFlatLists,
+		QdrantHost:                   cfg.QdrantHost,
+		QdrantPort:                   cfg.QdrantPort,
+		QdrantAPIKey:                 cfg.QdrantAPIKey,
+		QdrantPrefix:                 cfg.QdrantPrefix,
+		OpenSearchAddresses:          cfg.OpenSearchAddresses,
+		OpenSearchUsername:           cfg.OpenSearchUsername,
+		OpenSearchPassword:           cfg.OpenSearchPassword,
+		OpenSearchAPIKey:             cfg.OpenSearchAPIKey,
+		OpenSearchIndexPrefix:        cfg.OpenSearchIndexPrefix,
+		OpenSearchCreateIndex:        cfg.OpenSearchCreateIndex,
+		OpenSearchKNN:                cfg.OpenSearchKNN,
+		OpenSearchInsecureSkipVerify: cfg.OpenSearchInsecureSkipVerify,
+		OpenSearchBulkSize:           cfg.OpenSearchBulkSize,
+		ChromaURL:                    cfg.ChromaURL,
+		ChromaAPIKey:                 cfg.ChromaAPIKey,
+		ChromaTenant:                 cfg.ChromaTenant,
+		ChromaDatabase:               cfg.ChromaDatabase,
+		HNSWDir:                      cfg.HNSWDir,
 	})
 }
 

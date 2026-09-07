@@ -29,6 +29,8 @@ func ExpandShellValues(cfg *Config) {
 	cfg.S3SecretAccessKey = expandField(cfg.S3SecretAccessKey)
 	cfg.DBDSN = expandField(cfg.DBDSN)
 	cfg.PgVectorDSN = expandField(cfg.PgVectorDSN)
+	cfg.OpenSearchPassword = expandField(cfg.OpenSearchPassword)
+	cfg.OpenSearchAPIKey = expandField(cfg.OpenSearchAPIKey)
 	cfg.ChromaAPIKey = expandField(cfg.ChromaAPIKey)
 	cfg.TavilyAPIKey = expandField(cfg.TavilyAPIKey)
 	cfg.ExaAPIKey = expandField(cfg.ExaAPIKey)
