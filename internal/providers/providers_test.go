@@ -3341,13 +3341,10 @@ func TestBuildRequestBody_AnthropicSystemPromptBlocksWithCache(t *testing.T) {
 	}
 }
 
-// TestHTTPClientForProvider_OllamaGetsLongerResponseHeaderTimeout verifies the
-// fix for local Ollama requests failing when a large model takes longer than
-// the shared 60s ResponseHeaderTimeout to load and emit its first byte —
-// legitimate on constrained hardware or a cold model, unlike a remote API
-// that's already warm. Ollama gets its own longer timeout; every other
-// provider keeps the default (checked here via OpenAI as a representative).
-func TestHTTPClientForProvider_OllamaGetsLongerResponseHeaderTimeout(t *testing.T) {
+// TestHTTPClientForProvider_LongFirstByteProviders verifies providers that can
+// legitimately take longer than the shared 60s ResponseHeaderTimeout before
+// streaming their first byte get provider-specific headroom.
+func TestHTTPClientForProvider_LongFirstByteProviders(t *testing.T) {
 	ollamaClient := httpClientForProvider(types.APIProviderOllama)
 	ollamaTransport, ok := ollamaClient.Transport.(*http.Transport)
 	if !ok {
@@ -3355,6 +3352,15 @@ func TestHTTPClientForProvider_OllamaGetsLongerResponseHeaderTimeout(t *testing.
 	}
 	if ollamaTransport.ResponseHeaderTimeout <= defaultResponseHeaderTimeout {
 		t.Fatalf("Ollama ResponseHeaderTimeout = %v, want > default %v", ollamaTransport.ResponseHeaderTimeout, defaultResponseHeaderTimeout)
+	}
+
+	zaiClient := httpClientForProvider(types.APIProviderZAi)
+	zaiTransport, ok := zaiClient.Transport.(*http.Transport)
+	if !ok {
+		t.Fatalf("expected *http.Transport, got %T", zaiClient.Transport)
+	}
+	if zaiTransport.ResponseHeaderTimeout <= defaultResponseHeaderTimeout {
+		t.Fatalf("Z.ai ResponseHeaderTimeout = %v, want > default %v", zaiTransport.ResponseHeaderTimeout, defaultResponseHeaderTimeout)
 	}
 
 	defaultClient := httpClientForProvider(types.APIProviderOpenAI)
