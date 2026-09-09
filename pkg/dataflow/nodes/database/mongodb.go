@@ -62,6 +62,26 @@ func (MongoDB) ValidateParameters(params map[string]any) error {
 	return nil
 }
 
+// TestConnection verifies uriSecretRef alone resolves and connects — it
+// needs none of the other parameters (database/collection/operation/...).
+// mongo.Connect itself is lazy (it doesn't verify connectivity), so this
+// explicitly Pings — see dataflow.TestableExecutor.
+func (MongoDB) TestConnection(ctx context.Context, rt *dataflow.Runtime, params map[string]any) error {
+	if rt == nil || rt.Secrets == nil {
+		return errors.New("dataflow: no SecretResolver configured on Runtime")
+	}
+	uri, err := rt.Secrets.Resolve(ctx, dataflow.StringParam(params, "uriSecretRef", ""))
+	if err != nil {
+		return fmt.Errorf("resolve uri: %w", err)
+	}
+	client, err := mongo.Connect(options.Client().ApplyURI(uri))
+	if err != nil {
+		return fmt.Errorf("connect: %w", err)
+	}
+	defer client.Disconnect(ctx)
+	return client.Ping(ctx, nil)
+}
+
 func (MongoDB) Execute(ctx context.Context, rt *dataflow.Runtime, input []dataflow.Item, params map[string]any) (dataflow.Output, error) {
 	if rt == nil || rt.Secrets == nil {
 		return dataflow.Output{}, errors.New("dataflow: no SecretResolver configured on Runtime")

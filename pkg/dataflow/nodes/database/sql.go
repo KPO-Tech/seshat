@@ -137,6 +137,25 @@ func (n *sqlNode) Execute(ctx context.Context, rt *dataflow.Runtime, input []dat
 	return dataflow.Main([]dataflow.Item{{"rows_affected": affected}}), nil
 }
 
+// TestConnection verifies dsnSecretRef alone resolves and connects — it
+// needs none of the other parameters (operation/query/args), so a node can
+// be tested before the rest of its configuration is even filled in. See
+// dataflow.TestableExecutor.
+func (n *sqlNode) TestConnection(ctx context.Context, rt *dataflow.Runtime, params map[string]any) error {
+	if rt == nil || rt.Secrets == nil {
+		return errors.New("dataflow: no SecretResolver configured on Runtime")
+	}
+	dsn, err := rt.Secrets.Resolve(ctx, dataflow.StringParam(params, "dsnSecretRef", ""))
+	if err != nil {
+		return fmt.Errorf("resolve dsn: %w", err)
+	}
+	db, err := n.connFor(dsn)
+	if err != nil {
+		return err
+	}
+	return db.PingContext(ctx)
+}
+
 func (n *sqlNode) executeQuery(ctx context.Context, db *sql.DB, query string, args []any) (dataflow.Output, error) {
 	rows, err := db.QueryContext(ctx, query, args...)
 	if err != nil {

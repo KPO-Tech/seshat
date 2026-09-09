@@ -57,6 +57,29 @@ func (Redis) ValidateParameters(params map[string]any) error {
 	return nil
 }
 
+// TestConnection verifies addrSecretRef (+ passwordSecretRef, if set) alone
+// resolve and connect — see dataflow.TestableExecutor.
+func (Redis) TestConnection(ctx context.Context, rt *dataflow.Runtime, params map[string]any) error {
+	if rt == nil || rt.Secrets == nil {
+		return errors.New("dataflow: no SecretResolver configured on Runtime")
+	}
+	addr, err := rt.Secrets.Resolve(ctx, dataflow.StringParam(params, "addrSecretRef", ""))
+	if err != nil {
+		return fmt.Errorf("resolve addr: %w", err)
+	}
+	opts := &redis.Options{Addr: addr}
+	if ref := dataflow.StringParam(params, "passwordSecretRef", ""); ref != "" {
+		password, err := rt.Secrets.Resolve(ctx, ref)
+		if err != nil {
+			return fmt.Errorf("resolve password: %w", err)
+		}
+		opts.Password = password
+	}
+	client := redis.NewClient(opts)
+	defer client.Close()
+	return client.Ping(ctx).Err()
+}
+
 func (Redis) Execute(ctx context.Context, rt *dataflow.Runtime, input []dataflow.Item, params map[string]any) (dataflow.Output, error) {
 	if rt == nil || rt.Secrets == nil {
 		return dataflow.Output{}, errors.New("dataflow: no SecretResolver configured on Runtime")

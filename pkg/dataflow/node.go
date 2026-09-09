@@ -17,6 +17,21 @@ type NodeExecutor interface {
 	ValidateParameters(params map[string]any) error
 }
 
+// TestableExecutor is an optional capability a node type may implement to
+// verify its own secretRef-based connection (a SQL Ping, a Redis PING, a
+// Mongo Ping, an Elasticsearch root GET) without requiring the rest of its
+// parameters (query, key, operation, ...) to be filled in or valid — the
+// Go-idiomatic equivalent of n8n's per-node testedBy fallback, since a
+// dataflow secret carries no "credential type" to hang a declarative
+// ICredentialType.test off of (see DataflowSecret in seshat-server: an
+// opaque name/value pair, nothing more). A node type that doesn't implement
+// this simply has no "Test connection" affordance — Registry.Types() sets
+// NodeDescription.IsTestable via a type assertion against this interface,
+// so nothing needs a hardcoded type-name list anywhere.
+type TestableExecutor interface {
+	TestConnection(ctx context.Context, rt *Runtime, params map[string]any) error
+}
+
 // NodeDescription is metadata about a node type, for catalogs/authoring UIs
 // (an agent building a Definition can be handed a list of these).
 type NodeDescription struct {
@@ -32,6 +47,12 @@ type NodeDescription struct {
 	// UI uses this to render trigger nodes distinctly (no input handle,
 	// grouped separately) without hardcoding a type-name list.
 	IsTrigger bool `json:"isTrigger,omitempty"`
+	// IsTestable marks a node type whose executor implements
+	// TestableExecutor — an authoring UI uses this to show a "Test
+	// connection" affordance without hardcoding a type-name list. Set by
+	// Registry.Types() via a type assertion, never by a node's own
+	// Description() implementation.
+	IsTestable bool `json:"isTestable,omitempty"`
 }
 
 // NodePropertyType is the set of parameter field widgets an authoring UI
@@ -178,7 +199,11 @@ func (r *Registry) Types() []NodeDescription {
 	defer r.mu.RUnlock()
 	result := make([]NodeDescription, 0, len(r.executors))
 	for _, executor := range r.executors {
-		result = append(result, executor.Description())
+		desc := executor.Description()
+		if _, ok := executor.(TestableExecutor); ok {
+			desc.IsTestable = true
+		}
+		result = append(result, desc)
 	}
 	return result
 }
