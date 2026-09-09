@@ -107,10 +107,23 @@ func NewTool(config *ToolConfig) *Tool {
 		})
 		if err != nil {
 			slog.Warn("bash tool: failed to initialize docker sandbox — falling back to Landlock/local", "error", err)
-		} else if healthErr := executor.Healthy(context.Background()); healthErr != nil {
-			slog.Warn("bash tool: docker sandbox requested but unavailable — falling back to Landlock/local", "error", healthErr)
 		} else {
-			sandboxExecutor = executor
+			// Bounded, not context.Background() - Healthy shells out to
+			// `docker version` (see sandbox.DockerExecutor.Healthy), and a
+			// Docker daemon that's installed but unresponsive (stuck WSL2
+			// integration, a hung engine, ...) must never be able to block
+			// this constructor - and therefore every embedder's own startup,
+			// e.g. a server binding its HTTP port - forever. A healthy
+			// daemon answers in well under a second; 5s is generous slack,
+			// not a tuned budget.
+			healthCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+			healthErr := executor.Healthy(healthCtx)
+			cancel()
+			if healthErr != nil {
+				slog.Warn("bash tool: docker sandbox requested but unavailable — falling back to Landlock/local", "error", healthErr)
+			} else {
+				sandboxExecutor = executor
+			}
 		}
 	}
 
