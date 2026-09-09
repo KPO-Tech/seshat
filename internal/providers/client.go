@@ -55,6 +55,11 @@ const defaultResponseHeaderTimeout = 60 * time.Second
 // 60s on constrained hardware.
 const ollamaResponseHeaderTimeout = 5 * time.Minute
 
+// zaiResponseHeaderTimeout is longer than the default: Z.ai can take more than
+// 60s to emit response headers on reasoning-heavy or tool-augmented requests,
+// while still streaming normally once the first byte arrives.
+const zaiResponseHeaderTimeout = 3 * time.Minute
+
 // newStreamingHTTPClient returns an http.Client suitable for long-running LLM
 // streaming responses. The key difference from a standard client is that
 // http.Client.Timeout is NOT set — that field applies to the entire request
@@ -127,15 +132,17 @@ func (c *Client) resolveAdapter() providerAdapter {
 }
 
 // httpClientForProvider returns the streaming http.Client appropriate for the
-// given provider: Codex needs the Cloudflare cookie jar, Ollama needs a longer
-// ResponseHeaderTimeout to tolerate local model load time, everything else
-// gets the default streaming client.
+// given provider: Codex needs the Cloudflare cookie jar, Ollama and Z.ai need
+// longer ResponseHeaderTimeout values for slow first-byte responses, everything
+// else gets the default streaming client.
 func httpClientForProvider(provider types.APIProvider) *http.Client {
 	switch provider {
 	case types.APIProviderCodex:
 		return getCodexHTTPClient()
 	case types.APIProviderOllama:
 		return newStreamingHTTPClientWithHeaderTimeout(ollamaResponseHeaderTimeout)
+	case types.APIProviderZAi:
+		return newStreamingHTTPClientWithHeaderTimeout(zaiResponseHeaderTimeout)
 	default:
 		return newStreamingHTTPClient()
 	}
