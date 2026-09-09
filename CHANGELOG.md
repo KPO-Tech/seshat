@@ -9,6 +9,77 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [1.2.38] - 2026-09-09
+
+### Fixed
+- `internal/providers`: tunes the Z.ai request timeout behavior and provider tests so long-running model calls have a better chance to complete without weakening the shared provider client path.
+
+### Added
+- `pkg/types`: exposes model context-window metadata through the public types surface, with coverage for the new API contract.
+
+## [1.2.37] - 2026-09-07
+
+### Added
+- `pkg/dataflow`: node execution can now retry individual node failures with per-node retry configuration.
+- `pkg/dataflow`: nodes can opt into `OnError` continuation behavior so a graph can continue after selected failures instead of always aborting the whole run.
+
+## [1.2.36] - 2026-09-07
+
+### Added
+- `pkg/dataflow`: promotes `$vars` expression binding for dataflow `Variables` onto the normal `dev` -> `main` release path.
+
+### Notes
+- `v1.2.35` was tagged on an intermediate equivalent commit that is not on the current `main` ancestry; `v1.2.36` is the mainline release carrying the same `$vars` feature.
+
+## [1.2.35] - 2026-09-07
+
+### Added
+- `pkg/dataflow`: adds `$vars` expression binding so graph expressions can read workflow-level variables alongside item JSON.
+
+### Notes
+- This tag was cut before the final `dev` -> `main` promotion; consumers should prefer `v1.2.36` or newer.
+
+## [1.2.34] - 2026-09-07
+
+### Added
+- `internal/vector`: adds an OpenSearch vector store implementation, integration coverage, and configuration plumbing.
+- `internal/rag`: adds Docling-based chunking and chunk-cache support for richer RAG ingestion.
+- `pkg/docling`, `pkg/rag`, `pkg/vector`, and `pkg/config`: expose the new RAG/vector configuration and Docling chunking surfaces to embedders.
+
+### Changed
+- RAG documentation and database-schema notes now describe the new chunking/vector-store behavior.
+
+## [1.2.33] - 2026-09-05
+
+### Added
+- `pkg/dataflow`: adds pinned node data so tests and authoring tools can freeze a node output and replay downstream graph behavior deterministically.
+
+## [1.2.32] - 2026-09-05
+
+### Added
+- `pkg/dataflow`: adds expression resolution for dataflow nodes, enabling node parameters to be computed from incoming item data during execution.
+
+## [1.2.31] - 2026-09-05
+
+### Added
+- `pkg/dataflow`: tracks per-item provenance and per-port outputs so graph consumers can inspect where each item came from and which branch produced it.
+
+## [1.2.30] - 2026-09-05
+
+### Added
+- `pkg/dataflow/nodes`: `webhook_trigger` gains `responseMode` support for immediate responses or delayed responses after workflow completion.
+
+## [1.2.29] - 2026-09-05
+
+### Added
+- `pkg/dataflow/nodes`: adds a `webhook_trigger` node type for HTTP-triggered dataflow workflows.
+
+## [1.2.28] - 2026-09-05
+
+### Added
+- `pkg/dataflow/nodes`: adds a `schedule_trigger` node type for time-based dataflow workflow starts.
+- `pkg/dataflow`: `NodeDescription` gains `IsTrigger` so authoring UIs and runtimes can identify trigger nodes explicitly.
+
 ## [1.2.27] — 2026-09-03
 
 ### Added
