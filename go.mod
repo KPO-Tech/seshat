@@ -46,7 +46,7 @@ require (
 	github.com/go-pdf/fpdf v0.9.0
 	github.com/go-rod/rod v0.116.2
 	github.com/go-shiori/go-readability v0.0.0-20251205110129-5db1dc9836f0
-	github.com/go-sql-driver/mysql v1.10.0
+	github.com/go-sql-driver/mysql v1.10.1
 	github.com/google/uuid v1.6.0
 	github.com/gorilla/websocket v1.5.3
 	github.com/invopop/jsonschema v0.14.0
