@@ -44,6 +44,33 @@ func TestElasticsearchSearchParsesHits(t *testing.T) {
 	}
 }
 
+func TestElasticsearchTestConnectionSucceedsWithoutIndexOrOperation(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer srv.Close()
+
+	n := NewElasticsearch()
+	rt := &dataflow.Runtime{Secrets: staticSecrets{"es": srv.URL}}
+	// Deliberately no "index"/"operation" - TestConnection must not need them.
+	if err := n.TestConnection(context.Background(), rt, map[string]any{"baseURLSecretRef": "es"}); err != nil {
+		t.Fatalf("expected TestConnection to succeed, got %v", err)
+	}
+}
+
+func TestElasticsearchTestConnectionFailsOnErrorStatus(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusUnauthorized)
+	}))
+	defer srv.Close()
+
+	n := NewElasticsearch()
+	rt := &dataflow.Runtime{Secrets: staticSecrets{"es": srv.URL}}
+	if err := n.TestConnection(context.Background(), rt, map[string]any{"baseURLSecretRef": "es"}); err == nil {
+		t.Fatal("expected TestConnection to fail on a non-2xx response")
+	}
+}
+
 func TestElasticsearchSurfacesErrorStatus(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusNotFound)

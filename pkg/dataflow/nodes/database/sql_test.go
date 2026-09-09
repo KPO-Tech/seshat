@@ -82,6 +82,23 @@ func TestSQLValidateParametersRequiresDSNRefAndOperation(t *testing.T) {
 	}
 }
 
+func TestSQLTestConnectionSucceedsWithoutOperationOrQuery(t *testing.T) {
+	rt := &dataflow.Runtime{Secrets: staticSecrets{"db": "file::memory:?cache=shared"}}
+	n := NewSQLite()
+	// Deliberately no "operation"/"query" - TestConnection must not need them.
+	if err := n.TestConnection(context.Background(), rt, map[string]any{"dsnSecretRef": "db"}); err != nil {
+		t.Fatalf("expected TestConnection to succeed, got %v", err)
+	}
+}
+
+func TestSQLTestConnectionFailsForUnreachableHost(t *testing.T) {
+	rt := &dataflow.Runtime{Secrets: staticSecrets{"db": "postgres://user:pass@127.0.0.1:1/nonexistent"}}
+	n := NewPostgres()
+	if err := n.TestConnection(context.Background(), rt, map[string]any{"dsnSecretRef": "db"}); err == nil {
+		t.Fatal("expected TestConnection to fail against an unreachable host")
+	}
+}
+
 func TestSQLExecuteRequiresSecretResolver(t *testing.T) {
 	n := NewMySQL()
 	_, err := n.Execute(context.Background(), nil, nil, map[string]any{

@@ -69,6 +69,35 @@ func (n *Elasticsearch) ValidateParameters(params map[string]any) error {
 	return nil
 }
 
+// TestConnection verifies baseURLSecretRef alone resolves and reaches a real
+// Elasticsearch cluster — it needs none of the other parameters
+// (index/operation/...). A GET on the cluster root is the cheapest request
+// every Elasticsearch deployment answers regardless of index. See
+// dataflow.TestableExecutor.
+func (n *Elasticsearch) TestConnection(ctx context.Context, rt *dataflow.Runtime, params map[string]any) error {
+	if rt == nil || rt.Secrets == nil {
+		return errors.New("dataflow: no SecretResolver configured on Runtime")
+	}
+	baseURL, err := rt.Secrets.Resolve(ctx, dataflow.StringParam(params, "baseURLSecretRef", ""))
+	if err != nil {
+		return fmt.Errorf("resolve base url: %w", err)
+	}
+	baseURL = strings.TrimRight(baseURL, "/")
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, baseURL+"/", nil)
+	if err != nil {
+		return fmt.Errorf("build request: %w", err)
+	}
+	resp, err := n.client.Do(req)
+	if err != nil {
+		return fmt.Errorf("request: %w", err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		return fmt.Errorf("elasticsearch returned HTTP %d", resp.StatusCode)
+	}
+	return nil
+}
+
 func (n *Elasticsearch) Execute(ctx context.Context, rt *dataflow.Runtime, input []dataflow.Item, params map[string]any) (dataflow.Output, error) {
 	if rt == nil || rt.Secrets == nil {
 		return dataflow.Output{}, errors.New("dataflow: no SecretResolver configured on Runtime")
