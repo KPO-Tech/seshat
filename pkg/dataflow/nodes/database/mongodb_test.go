@@ -1,6 +1,24 @@
 package database
 
-import "testing"
+import (
+	"context"
+	"testing"
+	"time"
+
+	"github.com/KPO-Tech/seshat/pkg/dataflow"
+)
+
+func TestMongoDBTestConnectionFailsForUnreachableHost(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancel()
+	rt := &dataflow.Runtime{Secrets: staticSecrets{"uri": "mongodb://127.0.0.1:1/?serverSelectionTimeoutMS=500"}}
+	n := NewMongoDB()
+	// Deliberately no "database"/"collection"/"operation" - TestConnection
+	// must not need them.
+	if err := n.TestConnection(ctx, rt, map[string]any{"uriSecretRef": "uri"}); err == nil {
+		t.Fatal("expected TestConnection to fail against an unreachable host")
+	}
+}
 
 func TestMongoDBValidateParameters(t *testing.T) {
 	n := NewMongoDB()
