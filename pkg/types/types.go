@@ -14,6 +14,7 @@ type (
 	ExecutionOrigin       = internaltypes.ExecutionOrigin
 	ImageContent          = internaltypes.ImageContent
 	Message               = internaltypes.Message
+	ModelIdentifier       = internaltypes.ModelIdentifier
 	PermissionMode        = internaltypes.PermissionMode
 	PromptFn              = internaltypes.PromptFn
 	PromptOption          = internaltypes.PromptOption
@@ -26,6 +27,7 @@ type (
 	SessionID             = internaltypes.SessionID
 	TextContent           = internaltypes.TextContent
 	TokenUsage            = internaltypes.TokenUsage
+	ContextWindow         = internaltypes.ContextWindow
 	ToolPermissionRequest = internaltypes.ToolPermissionRequest
 	ToolResultContent     = internaltypes.ToolResultContent
 	ToolUseContent        = internaltypes.ToolUseContent
@@ -39,6 +41,23 @@ const (
 	APIChunkTypeMessageDelta      = internaltypes.APIChunkTypeMessageDelta
 	APIChunkTypeMessageStop       = internaltypes.APIChunkTypeMessageStop
 	APIChunkTypeError             = internaltypes.APIChunkTypeError
+
+	APIProviderAnthropic  = internaltypes.APIProviderAnthropic
+	APIProviderBedrock    = internaltypes.APIProviderBedrock
+	APIProviderCodex      = internaltypes.APIProviderCodex
+	APIProviderDeepSeek   = internaltypes.APIProviderDeepSeek
+	APIProviderFoundry    = internaltypes.APIProviderFoundry
+	APIProviderGemini     = internaltypes.APIProviderGemini
+	APIProviderKimi       = internaltypes.APIProviderKimi
+	APIProviderMiniMax    = internaltypes.APIProviderMiniMax
+	APIProviderMistral    = internaltypes.APIProviderMistral
+	APIProviderOllama     = internaltypes.APIProviderOllama
+	APIProviderOpenAI     = internaltypes.APIProviderOpenAI
+	APIProviderOpenCode   = internaltypes.APIProviderOpenCode
+	APIProviderOpenRouter = internaltypes.APIProviderOpenRouter
+	APIProviderVertex     = internaltypes.APIProviderVertex
+	APIProviderWorkersAI  = internaltypes.APIProviderWorkersAI
+	APIProviderZAi        = internaltypes.APIProviderZAi
 
 	ExecutionOriginInteractive = internaltypes.ExecutionOriginInteractive
 	ExecutionOriginAutomation  = internaltypes.ExecutionOriginAutomation
@@ -91,4 +110,8 @@ func WithSubAgentMaxDepth(ctx context.Context, depth int) context.Context {
 
 func SubAgentMaxDepthFromContext(ctx context.Context) int {
 	return internaltypes.SubAgentMaxDepthFromContext(ctx)
+}
+
+func GetContextWindow(model ModelIdentifier) ContextWindow {
+	return internaltypes.GetContextWindow(model)
 }
