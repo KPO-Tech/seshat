@@ -2,6 +2,7 @@ package bash
 
 import (
 	"context"
+	"os"
 	"os/exec"
 	"strings"
 	"testing"
@@ -10,6 +11,20 @@ import (
 	"github.com/KPO-Tech/seshat/internal/sandbox"
 	tool "github.com/KPO-Tech/seshat/internal/tools/registry"
 )
+
+// TestMain lets this test binary double as a "hangs forever" fake docker
+// binary for TestDockerHealthCheckIsBoundedWhenDockerHangs - the standard
+// exec.Command re-exec test pattern (see Go's own os/exec test suite),
+// portable across every OS this SDK targets, unlike shelling out to a
+// platform-specific "sleep" command. Every other test in this package is
+// unaffected: this branch only triggers when BASH_TEST_HANG_FOREVER is set,
+// which only that one test's re-exec'd child process ever has.
+func TestMain(m *testing.M) {
+	if os.Getenv("BASH_TEST_HANG_FOREVER") == "1" {
+		select {}
+	}
+	os.Exit(m.Run())
+}
 
 // requireDocker skips the test when the docker CLI isn't on PATH or the
 // daemon isn't reachable. These tests exercise real Docker, not a mock, and
@@ -86,6 +101,46 @@ func TestNewToolFallsBackWhenDockerSandboxRequestedButUnavailable(t *testing.T) 
 	}
 	if got := tool.SandboxKind(); got != sandbox.EnvironmentLocal {
 		t.Fatalf("expected SandboxKind() to report EnvironmentLocal on Docker health-check failure, got %v", got)
+	}
+}
+
+// TestDockerHealthCheckIsBoundedWhenDockerHangs is the regression guard for
+// the real bug this fix addresses: NewTool used to call
+// executor.Healthy(context.Background()) - a Docker binary that's present
+// but never returns (a hung daemon, stuck WSL2 integration, ...) hung this
+// constructor, and therefore every embedder's own startup, forever. The fake
+// "docker" here is this very test binary re-exec'd into an infinite select{}
+// (see TestMain) - a real subprocess that genuinely never exits on its own,
+// not a mock standing in for the timeout behavior being tested.
+func TestDockerHealthCheckIsBoundedWhenDockerHangs(t *testing.T) {
+	selfBinary, err := os.Executable()
+	if err != nil {
+		t.Fatalf("os.Executable: %v", err)
+	}
+	t.Setenv("BASH_TEST_HANG_FOREVER", "1")
+
+	cfg := DefaultToolConfig()
+	cfg.SandboxKind = sandbox.EnvironmentDocker
+	cfg.SandboxDocker = sandbox.DefaultDockerConfig()
+	cfg.SandboxDocker.DockerBinary = selfBinary
+
+	done := make(chan *Tool, 1)
+	go func() { done <- NewTool(cfg) }()
+
+	// newDockerExecutor's own orphan-container reap already carries its own
+	// bounded 10s context (unrelated to this fix, pre-existing), and it also
+	// shells out to the same hung fake binary before Healthy() ever runs -
+	// so the real worst case here is "both stages hit their own bound", not
+	// just Healthy()'s 5s alone. 20s gives real slack above that combined
+	// worst case while still failing fast if either stage regresses to
+	// truly unbounded.
+	select {
+	case tl := <-done:
+		if tl.sandboxExecutor != nil {
+			t.Fatal("expected sandboxExecutor to stay nil when the docker binary never responds")
+		}
+	case <-time.After(20 * time.Second):
+		t.Fatal("NewTool did not return within 20s - the Docker health check's own bounded timeout did not bound it")
 	}
 }
 
