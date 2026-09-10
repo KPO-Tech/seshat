@@ -92,8 +92,19 @@ type SecretResolver interface {
 // built-in "agent" node type (see builtin.go) delegates to. The concrete
 // implementation (e.g. wrapping sdk.Client.Ask) lives with the caller, not
 // here, so dataflow never imports pkg/sdk directly.
+//
+// agentSlug and tools are both optional per-node overrides of the job's own
+// default agent/tool set - empty/nil means "behave exactly as before this
+// parameter existed" (reuse the job's shared session, full conversation
+// continuity across nodes). A non-default value asks the implementation for
+// an isolated, freshly-scoped turn instead (e.g. sdk.Client.Ask's own
+// create-register-submit-close session), since a node explicitly asking for
+// a different agent or tool set is asking to delegate to something other
+// than "continue the same conversation." tools is a list of tool *names*
+// already available to resolve, not new tool definitions - see
+// StringListParam, which is how agentNode reads its own "tools" property.
 type AgentCaller interface {
-	Ask(ctx context.Context, agentSlug, prompt string) (string, error)
+	Ask(ctx context.Context, agentSlug, prompt string, tools []string) (string, error)
 }
 
 // SubworkflowRunner executes a pkg/workflow.Definition — what the built-in

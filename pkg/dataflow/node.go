@@ -3,6 +3,7 @@ package dataflow
 import (
 	"context"
 	"fmt"
+	"strings"
 	"sync"
 )
 
@@ -163,6 +164,32 @@ func BoolParam(params map[string]any, name string, fallback bool) bool {
 		return v
 	}
 	return fallback
+}
+
+// StringListParam reads a comma-separated PropString parameter as a
+// trimmed, non-empty string slice - the same plain-string convention
+// NodeProperty's own doc comment describes for a value only known at
+// runtime per-tenant (an agent's available tool names), where a real
+// multi-select has nowhere to source its options from statically. Returns
+// nil (not an empty, non-nil slice) when the parameter is absent or blank,
+// so callers can use its zero value to mean "no override" - see agentNode's
+// use of this for its optional "tools" parameter.
+func StringListParam(params map[string]any, name string) []string {
+	raw := StringParam(params, name, "")
+	if raw == "" {
+		return nil
+	}
+	parts := strings.Split(raw, ",")
+	out := make([]string, 0, len(parts))
+	for _, p := range parts {
+		if t := strings.TrimSpace(p); t != "" {
+			out = append(out, t)
+		}
+	}
+	if len(out) == 0 {
+		return nil
+	}
+	return out
 }
 
 // Registry maps node type names to their executors. A Run needs a Registry
