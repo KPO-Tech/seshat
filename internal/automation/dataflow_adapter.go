@@ -25,10 +25,26 @@ type messageSubmitter interface {
 // calls Client.Ask per node and so starts a fresh session every time.
 // agentSlug is accepted for interface symmetry with a future multi-agent
 // dispatch but unused today — jobWorkflow's session is already the one
-// job.Agent resolved to.
+// job.Agent resolved to (unchanged from before dataflow.AgentCaller grew
+// its tools parameter - not tightening this now, since jobs already rely
+// on a non-empty, effectively-ignored slug here, per
+// TestSessionAgentCallerReturnsAssistantText).
+//
+// tools is new and has no such existing contract to preserve. Actually
+// scoping a node's tools needs a way to resolve a tool name to a
+// registrable sdk.Tool (internal/tools/registry.Registry.Get is type-
+// compatible - both alias contract.Tool - but nothing here holds a
+// Registry to call it on yet). Rather than silently ignoring a tools
+// override a workflow author explicitly set (which would run their node
+// with every tool the job's agent already has instead of the requested
+// subset, with no indication anything was wrong), it fails loudly instead
+// until that resolution path exists.
 type sessionAgentCaller struct{ session messageSubmitter }
 
-func (a sessionAgentCaller) Ask(ctx context.Context, _ string, prompt string) (string, error) {
+func (a sessionAgentCaller) Ask(ctx context.Context, _ string, prompt string, tools []string) (string, error) {
+	if len(tools) > 0 {
+		return "", fmt.Errorf("dataflow: agent node requested tools=%v, but per-node tool scoping is not implemented yet - omit it to use the workflow's own agent's tools", tools)
+	}
 	resp, err := a.session.SubmitMessage(ctx, prompt)
 	if err != nil {
 		return "", err

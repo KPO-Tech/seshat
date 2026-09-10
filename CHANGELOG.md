@@ -9,6 +9,9 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Changed
+- `pkg/dataflow`: `AgentCaller.Ask` gains a fourth parameter, `tools []string` - a list of tool names to scope an "agent" node's turn to, empty for "use the resolved agent's own tools" (unchanged behavior). This is a breaking change to a public interface; every `AgentCaller` implementation needs updating to the new signature. The built-in `agentNode` gained a matching optional `tools` property (comma-separated, parsed via the new `StringListParam` helper). Actually enforcing a tools override end-to-end (resolving a tool name to a registrable `sdk.Tool`) is not wired into `internal/automation`'s `sessionAgentCaller` yet - it fails loudly with a clear error if a graph sets `tools`, rather than silently ignoring the request.
+
 ## [1.2.38] - 2026-09-09
 
 ### Fixed
