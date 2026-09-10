@@ -56,7 +56,7 @@ func TestLastAssistantTextEmptyForNoAssistantMessage(t *testing.T) {
 func TestSessionAgentCallerReturnsAssistantText(t *testing.T) {
 	session := &fakeSession{responses: []string{"the answer"}}
 	caller := sessionAgentCaller{session: session}
-	got, err := caller.Ask(context.Background(), "inbox", "what is the answer?")
+	got, err := caller.Ask(context.Background(), "inbox", "what is the answer?", nil)
 	if err != nil {
 		t.Fatalf("ask: %v", err)
 	}
@@ -68,10 +68,21 @@ func TestSessionAgentCallerReturnsAssistantText(t *testing.T) {
 	}
 }
 
+func TestSessionAgentCallerFailsLoudlyOnToolsOverride(t *testing.T) {
+	session := &fakeSession{responses: []string{"should not be reached"}}
+	caller := sessionAgentCaller{session: session}
+	if _, err := caller.Ask(context.Background(), "", "x", []string{"weather_lookup"}); err == nil {
+		t.Fatal("expected an error - per-node tool scoping is not implemented yet")
+	}
+	if len(session.calls) != 0 {
+		t.Fatalf("expected no SubmitMessage call when tools scoping is requested, got %#v", session.calls)
+	}
+}
+
 func TestSessionAgentCallerPropagatesError(t *testing.T) {
 	session := &fakeSession{err: errors.New("boom")}
 	caller := sessionAgentCaller{session: session}
-	if _, err := caller.Ask(context.Background(), "", "x"); err == nil {
+	if _, err := caller.Ask(context.Background(), "", "x", nil); err == nil {
 		t.Fatal("expected error to propagate")
 	}
 }
