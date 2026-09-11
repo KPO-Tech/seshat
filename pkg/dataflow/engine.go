@@ -12,9 +12,12 @@ import (
 const mainPort = "main"
 
 // Validate checks graph structure only (unique node IDs, connections that
-// target real nodes, no cycles) — it does not need a Registry, mirroring
-// pkg/workflow.Validate. Per-node parameter validation happens in Run, once
-// each node's executor is resolved.
+// target real nodes, no cycles, Tools references that are structurally
+// sound) — it does not need a Registry, mirroring pkg/workflow.Validate.
+// Per-node parameter validation, and the one Tools check that needs a node
+// type's real metadata (a target can't be a Trigger or Logic node - see
+// validateToolTargets), happens in Run, once each node's executor is
+// resolved.
 func Validate(def Definition) error {
 	if len(def.Nodes) == 0 {
 		return errors.New("dataflow: graph must contain at least one node")
@@ -41,6 +44,30 @@ func Validate(def Definition) error {
 			}
 		}
 	}
+	byID := make(map[string]Node, len(def.Nodes))
+	for _, node := range def.Nodes {
+		byID[node.ID] = node
+	}
+	for _, node := range def.Nodes {
+		if len(node.Tools) == 0 {
+			continue
+		}
+		if node.Type != "agent" {
+			return fmt.Errorf("dataflow: node %q sets tools but is type %q, not \"agent\" - only an agent node may call tools", node.ID, node.Type)
+		}
+		for _, targetID := range node.Tools {
+			target, ok := byID[targetID]
+			if !ok {
+				return fmt.Errorf("dataflow: node %q tools references unknown node %q", node.ID, targetID)
+			}
+			if targetID == node.ID {
+				return fmt.Errorf("dataflow: node %q cannot list itself as a tool", node.ID)
+			}
+			if target.Type == "agent" {
+				return fmt.Errorf("dataflow: node %q tools references %q, but an agent node cannot be used as a tool", node.ID, targetID)
+			}
+		}
+	}
 	for nodeID := range def.PinnedData {
 		if !ids[nodeID] {
 			return fmt.Errorf("dataflow: pinnedData references unknown node %q", nodeID)
@@ -48,6 +75,42 @@ func Validate(def Definition) error {
 	}
 	if _, err := topologicalLevels(def); err != nil {
 		return err
+	}
+	return nil
+}
+
+// validateToolTargetTypes rejects a Tools reference to a Trigger or Logic
+// node - the one Tools check that needs a node type's real metadata
+// (NodeDescription.IsTrigger/Category), not just the raw Definition, so it
+// runs here (once Run already has a Registry) rather than in the
+// Registry-free Validate above. A Trigger is a graph's entry point, a Logic
+// node (filter/if/switch, Category "Logic") is a branching structure -
+// neither is a "capability" an agent's LLM should be able to invoke
+// (automation-app-pages.md §37.9); Agent-typed targets are already rejected
+// by Validate itself, no registry needed for that one.
+func validateToolTargetTypes(def Definition, registry *Registry) error {
+	byID := make(map[string]Node, len(def.Nodes))
+	for _, node := range def.Nodes {
+		byID[node.ID] = node
+	}
+	for _, node := range def.Nodes {
+		for _, targetID := range node.Tools {
+			target, ok := byID[targetID]
+			if !ok {
+				continue // already reported by Validate
+			}
+			executor, err := registry.Get(target.Type)
+			if err != nil {
+				return fmt.Errorf("dataflow: node %q tools references %q: %w", node.ID, targetID, err)
+			}
+			desc := executor.Description()
+			if desc.IsTrigger {
+				return fmt.Errorf("dataflow: node %q tools references %q, but a trigger node cannot be used as a tool", node.ID, targetID)
+			}
+			if desc.Category == "Logic" {
+				return fmt.Errorf("dataflow: node %q tools references %q, but a logic node cannot be used as a tool", node.ID, targetID)
+			}
+		}
 	}
 	return nil
 }
@@ -69,15 +132,59 @@ func predecessors(def Definition) map[string]map[string]bool {
 	return preds
 }
 
+// toolOnlyNodeIDs returns node IDs that exist purely as an agent's callable
+// tool - referenced in some node's Tools list, and structurally isolated
+// from the rest of the graph (no incoming or outgoing Connections at all).
+// These must never be scheduled by the normal topological walk
+// (automation-app-pages.md §37.9) - only an agent's own on-demand
+// invocation (see BuildAgentTools) ever runs them. A node that's *also*
+// wired into real Connections (dual-use) is deliberately excluded from this
+// set - being additionally tool-callable never suppresses a node's normal
+// place in the sequential flow, only pure orphans (nothing else in the
+// graph reaches them) are held back.
+func toolOnlyNodeIDs(def Definition, preds map[string]map[string]bool) map[string]bool {
+	referenced := map[string]bool{}
+	for _, node := range def.Nodes {
+		for _, id := range node.Tools {
+			referenced[id] = true
+		}
+	}
+	if len(referenced) == 0 {
+		return nil
+	}
+	hasOutgoing := map[string]bool{}
+	for _, node := range def.Nodes {
+		for _, targets := range node.Connections {
+			if len(targets) > 0 {
+				hasOutgoing[node.ID] = true
+				break
+			}
+		}
+	}
+	toolOnly := map[string]bool{}
+	for id := range referenced {
+		if len(preds[id]) == 0 && !hasOutgoing[id] {
+			toolOnly[id] = true
+		}
+	}
+	return toolOnly
+}
+
 // topologicalLevels groups node IDs into execution batches (Kahn's
 // algorithm): every node in a level depends only on nodes in earlier
 // levels, so a level's nodes are safe to execute concurrently. Deterministic
 // (sorted) ordering within a level, same approach as pkg/workflow's
-// topologicalLevels.
+// topologicalLevels. Nodes in toolOnlyNodeIDs never enter remaining at all -
+// they get no level, ever, until/unless something (this function's own
+// exclusion aside) later wires real Connections to them.
 func topologicalLevels(def Definition) ([][]string, error) {
 	preds := predecessors(def)
+	toolOnly := toolOnlyNodeIDs(def, preds)
 	remaining := make(map[string]map[string]bool, len(preds))
 	for id, p := range preds {
+		if toolOnly[id] {
+			continue
+		}
 		cp := make(map[string]bool, len(p))
 		for dep := range p {
 			cp[dep] = true
@@ -124,6 +231,9 @@ func Run(ctx context.Context, def Definition, registry *Registry, rt *Runtime, i
 		return Result{}, errors.New("dataflow: registry is required")
 	}
 	if err := Validate(def); err != nil {
+		return Result{}, err
+	}
+	if err := validateToolTargetTypes(def, registry); err != nil {
 		return Result{}, err
 	}
 	if opts.MaxParallel <= 0 {
@@ -203,7 +313,8 @@ func Run(ctx context.Context, def Definition, registry *Registry, rt *Runtime, i
 			go func(node Node, nodeInput []Item, nodeSources []ItemSource) {
 				defer wg.Done()
 				defer func() { <-sem }()
-				nodeResult, output := executeNode(ctx, registry, rt, node, nodeInput, nodeSources, def.PinnedData)
+				nodeCtx := withGraphContext(ctx, def, registry, node.ID)
+				nodeResult, output := executeNode(nodeCtx, registry, rt, node, nodeInput, nodeSources, def.PinnedData)
 
 				mu.Lock()
 				result.Results[node.ID] = nodeResult

@@ -9,14 +9,15 @@ import (
 )
 
 type stubAgentCaller struct {
-	gotSlug   string
-	gotPrompt string
-	gotTools  []string
-	response  string
+	gotSlug       string
+	gotPrompt     string
+	gotTools      []string
+	gotGraphTools []ToolSpec
+	response      string
 }
 
-func (s *stubAgentCaller) Ask(_ context.Context, agentSlug, prompt string, tools []string) (string, error) {
-	s.gotSlug, s.gotPrompt, s.gotTools = agentSlug, prompt, tools
+func (s *stubAgentCaller) Ask(_ context.Context, agentSlug, prompt string, tools []string, graphTools []ToolSpec) (string, error) {
+	s.gotSlug, s.gotPrompt, s.gotTools, s.gotGraphTools = agentSlug, prompt, tools, graphTools
 	return s.response, nil
 }
 

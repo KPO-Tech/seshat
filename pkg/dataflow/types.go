@@ -57,6 +57,17 @@ type Node struct {
 	// OnError are independent: a node can continue-on-error without ever
 	// retrying, or retry a few times and still stop the run.
 	OnError string `json:"on_error,omitempty" yaml:"on_error,omitempty"`
+	// Tools lists the IDs of other nodes this node (which must be type
+	// "agent" - enforced by Validate) may invoke as LLM-callable tools during
+	// its turn, in addition to (never instead of) whatever it's wired to via
+	// Connections. A node named here that has no real Connections of its own
+	// stays dormant - the engine never schedules it eagerly (see
+	// topologicalLevels) - and only runs when the agent's LLM actually calls
+	// it (see BuildAgentTools). A node that's both wired into Connections
+	// *and* named in some agent's Tools keeps running in its normal
+	// sequential position too - dual-use, purely additive (automation-app-
+	// pages.md §37.9).
+	Tools []string `json:"tools,omitempty" yaml:"tools,omitempty"`
 }
 
 // Item is one record flowing through the graph — the dataflow analog of a
