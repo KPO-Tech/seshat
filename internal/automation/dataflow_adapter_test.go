@@ -193,11 +193,14 @@ func TestRunGraphFailsClearlyWithoutRegistry(t *testing.T) {
 func TestRunGraphSurfacesNodeFailure(t *testing.T) {
 	registry := dataflow.NewRegistry()
 	dataflow.RegisterBuiltins(registry)
-	// "agent" node with no agent parameter fails ValidateParameters.
-	graph := &dataflow.Definition{Name: "g", Nodes: []dataflow.Node{{ID: "bad", Type: "agent"}}}
+	// "query" node with no prompt fails ValidateParameters.
+	graph := &dataflow.Definition{Name: "g", Nodes: []dataflow.Node{
+		{ID: "id", Type: "agent"},
+		{ID: "bad", Type: "query", Agent: "id"},
+	}}
 	err := runGraph(context.Background(), graph, registry, nil, &fakeSession{})
 	if err == nil {
-		t.Fatal("expected error for invalid agent node parameters")
+		t.Fatal("expected error for invalid query node parameters")
 	}
 }
 
