@@ -58,16 +58,27 @@ type Node struct {
 	// retrying, or retry a few times and still stop the run.
 	OnError string `json:"on_error,omitempty" yaml:"on_error,omitempty"`
 	// Tools lists the IDs of other nodes this node (which must be type
-	// "agent" - enforced by Validate) may invoke as LLM-callable tools during
-	// its turn, in addition to (never instead of) whatever it's wired to via
-	// Connections. A node named here that has no real Connections of its own
-	// stays dormant - the engine never schedules it eagerly (see
-	// topologicalLevels) - and only runs when the agent's LLM actually calls
-	// it (see BuildAgentTools). A node that's both wired into Connections
-	// *and* named in some agent's Tools keeps running in its normal
-	// sequential position too - dual-use, purely additive (automation-app-
-	// pages.md §37.9).
+	// "query" or "tools" - enforced by Validate) may invoke as LLM-callable
+	// tools during its turn, in addition to (never instead of) whatever it's
+	// wired to via Connections. A node named here that has no real
+	// Connections of its own stays dormant - the engine never schedules it
+	// eagerly (see topologicalLevels) - and only runs when the query's LLM
+	// actually calls it (see ResolveTools). A node that's both wired into
+	// Connections *and* named in some query's Tools keeps running in its
+	// normal sequential position too - dual-use, purely additive
+	// (automation-app-pages.md §37.9). A target of type "tools" is expanded
+	// recursively rather than called directly - see ResolveTools - letting
+	// several "query" nodes share the same reusable, individually-toggleable
+	// tool group instead of each repeating the same list of IDs.
 	Tools []string `json:"tools,omitempty" yaml:"tools,omitempty"`
+	// Agent is the ID of the "agent"-type node providing this "query" node's
+	// persona - required on every "query" node (enforced by Validate), never
+	// set on any other type. A plain ID reference rather than a Connections
+	// edge, same reasoning as Tools above: it's a structural relationship
+	// ("which identity do I run as"), not data flow, so the referenced agent
+	// node is looked up directly rather than needing to run/be scheduled at
+	// all.
+	Agent string `json:"agent,omitempty" yaml:"agent,omitempty"`
 }
 
 // Item is one record flowing through the graph — the dataflow analog of a

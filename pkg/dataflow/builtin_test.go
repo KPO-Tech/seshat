@@ -31,14 +31,15 @@ func (s *stubSubworkflowRunner) Run(_ context.Context, def workflow.Definition) 
 	return s.result, nil
 }
 
-func TestAgentNodeCallsRuntimeAgent(t *testing.T) {
+func TestQueryNodeCallsRuntimeAgentViaConnectedAgentNode(t *testing.T) {
 	reg := NewRegistry()
 	RegisterBuiltins(reg)
 	stub := &stubAgentCaller{response: "hello"}
 	rt := &Runtime{Agent: stub}
 
 	def := Definition{Nodes: []Node{
-		{ID: "a", Type: "agent", Parameters: map[string]any{"agent": "inbox", "prompt": "draft a reply"}},
+		{ID: "id", Type: "agent", Parameters: map[string]any{"agent": "inbox"}},
+		{ID: "q", Type: "query", Agent: "id", Parameters: map[string]any{"prompt": "draft a reply"}},
 	}}
 	result, err := Run(context.Background(), def, reg, rt, nil, Options{})
 	if err != nil || !result.Success {
@@ -47,20 +48,21 @@ func TestAgentNodeCallsRuntimeAgent(t *testing.T) {
 	if stub.gotSlug != "inbox" || stub.gotPrompt != "draft a reply" {
 		t.Fatalf("unexpected call: slug=%q prompt=%q", stub.gotSlug, stub.gotPrompt)
 	}
-	out := result.Results["a"].Output
+	out := result.Results["q"].Output
 	if len(out) != 1 || out[0]["text"] != "hello" {
 		t.Fatalf("unexpected output: %#v", out)
 	}
 }
 
-func TestAgentNodeForwardsToolsOverride(t *testing.T) {
+func TestQueryNodeForwardsToolsOverride(t *testing.T) {
 	reg := NewRegistry()
 	RegisterBuiltins(reg)
 	stub := &stubAgentCaller{response: "ok"}
 	rt := &Runtime{Agent: stub}
 
 	def := Definition{Nodes: []Node{
-		{ID: "a", Type: "agent", Parameters: map[string]any{"prompt": "check the weather", "tools": " weather_lookup , calendar_read ,,"}},
+		{ID: "id", Type: "agent", Parameters: map[string]any{"agent": "inbox"}},
+		{ID: "q", Type: "query", Agent: "id", Parameters: map[string]any{"prompt": "check the weather", "tools": " weather_lookup , calendar_read ,,"}},
 	}}
 	result, err := Run(context.Background(), def, reg, rt, nil, Options{})
 	if err != nil || !result.Success {
@@ -72,14 +74,15 @@ func TestAgentNodeForwardsToolsOverride(t *testing.T) {
 	}
 }
 
-func TestAgentNodeOmitsToolsWhenNotSet(t *testing.T) {
+func TestQueryNodeOmitsToolsWhenNotSet(t *testing.T) {
 	reg := NewRegistry()
 	RegisterBuiltins(reg)
 	stub := &stubAgentCaller{response: "ok"}
 	rt := &Runtime{Agent: stub}
 
 	def := Definition{Nodes: []Node{
-		{ID: "a", Type: "agent", Parameters: map[string]any{"prompt": "draft a reply"}},
+		{ID: "id", Type: "agent", Parameters: map[string]any{"agent": "inbox"}},
+		{ID: "q", Type: "query", Agent: "id", Parameters: map[string]any{"prompt": "draft a reply"}},
 	}}
 	result, err := Run(context.Background(), def, reg, rt, nil, Options{})
 	if err != nil || !result.Success {
@@ -90,15 +93,16 @@ func TestAgentNodeOmitsToolsWhenNotSet(t *testing.T) {
 	}
 }
 
-func TestAgentNodeIncludesUpstreamInputInPrompt(t *testing.T) {
+func TestQueryNodeIncludesUpstreamInputInPrompt(t *testing.T) {
 	reg := NewRegistry()
 	RegisterBuiltins(reg)
 	stub := &stubAgentCaller{response: "done"}
 	rt := &Runtime{Agent: stub}
 
 	def := Definition{Nodes: []Node{
-		{ID: "source", Type: "source", Connections: map[string][]string{"main": {"agent"}}},
-		{ID: "agent", Type: "agent", Parameters: map[string]any{"prompt": "handle this"}},
+		{ID: "source", Type: "source", Connections: map[string][]string{"main": {"query"}}},
+		{ID: "id", Type: "agent", Parameters: map[string]any{"agent": "inbox"}},
+		{ID: "query", Type: "query", Agent: "id", Parameters: map[string]any{"prompt": "handle this"}},
 	}}
 	reg.Register("source", funcExecutor{desc: NodeDescription{Type: "source"}, execute: func(context.Context, *Runtime, []Item, map[string]any) (Output, error) {
 		return Main([]Item{{"subject": "invoice overdue"}}), nil
@@ -113,16 +117,78 @@ func TestAgentNodeIncludesUpstreamInputInPrompt(t *testing.T) {
 	}
 }
 
-func TestAgentNodeRequiresRuntimeAgent(t *testing.T) {
+func TestQueryNodeRequiresRuntimeAgent(t *testing.T) {
 	reg := NewRegistry()
 	RegisterBuiltins(reg)
-	def := Definition{Nodes: []Node{{ID: "a", Type: "agent", Parameters: map[string]any{"prompt": "x"}}}}
+	def := Definition{Nodes: []Node{
+		{ID: "id", Type: "agent", Parameters: map[string]any{"agent": "inbox"}},
+		{ID: "q", Type: "query", Agent: "id", Parameters: map[string]any{"prompt": "x"}},
+	}}
 	result, err := Run(context.Background(), def, reg, &Runtime{}, nil, Options{})
 	if err != nil {
 		t.Fatalf("run: %v", err)
 	}
 	if result.Success {
 		t.Fatal("expected failure without a configured AgentCaller")
+	}
+}
+
+func TestAgentNodeIsAPureNoOp(t *testing.T) {
+	reg := NewRegistry()
+	RegisterBuiltins(reg)
+	def := Definition{Nodes: []Node{
+		{ID: "id", Type: "agent", Parameters: map[string]any{"agent": "inbox"}},
+	}}
+	result, err := Run(context.Background(), def, reg, &Runtime{}, nil, Options{})
+	if err != nil || !result.Success {
+		t.Fatalf("run: err=%v success=%v results=%#v", err, result.Success, result.Results)
+	}
+	if out := result.Results["id"].Output; len(out) != 0 {
+		t.Fatalf("expected an agent node to produce no output, got %#v", out)
+	}
+}
+
+func TestAgentNodeRequiresAgentParameter(t *testing.T) {
+	if err := (agentNode{}).ValidateParameters(nil); err == nil {
+		t.Fatal("expected an error for an agent node with no agent parameter")
+	}
+}
+
+func TestValidateRejectsQueryNodeWithNoAgent(t *testing.T) {
+	def := Definition{Nodes: []Node{
+		{ID: "q", Type: "query", Parameters: map[string]any{"prompt": "x"}},
+	}}
+	if err := Validate(def); err == nil {
+		t.Fatal("expected an error for a query node with no Agent reference")
+	}
+}
+
+func TestValidateRejectsQueryAgentReferencingUnknownNode(t *testing.T) {
+	def := Definition{Nodes: []Node{
+		{ID: "q", Type: "query", Agent: "missing", Parameters: map[string]any{"prompt": "x"}},
+	}}
+	if err := Validate(def); err == nil {
+		t.Fatal("expected an error for a query node referencing a non-existent agent")
+	}
+}
+
+func TestValidateRejectsQueryAgentReferencingNonAgentNode(t *testing.T) {
+	def := Definition{Nodes: []Node{
+		{ID: "w", Type: "wait"},
+		{ID: "q", Type: "query", Agent: "w", Parameters: map[string]any{"prompt": "x"}},
+	}}
+	if err := Validate(def); err == nil {
+		t.Fatal("expected an error for a query node referencing a non-agent-typed node")
+	}
+}
+
+func TestValidateRejectsAgentSetOnNonQueryNode(t *testing.T) {
+	def := Definition{Nodes: []Node{
+		{ID: "id", Type: "agent", Parameters: map[string]any{"agent": "inbox"}},
+		{ID: "w", Type: "wait", Agent: "id"},
+	}}
+	if err := Validate(def); err == nil {
+		t.Fatal("expected an error for a non-query node setting Agent")
 	}
 }
 

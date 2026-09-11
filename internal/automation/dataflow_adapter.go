@@ -25,16 +25,20 @@ type messageSubmitter interface {
 }
 
 // sessionAgentCaller adapts a single session to dataflow.AgentCaller so a
-// graph's "agent" nodes reuse the job's own session (and its conversation
+// graph's "query" nodes reuse the job's own session (and its conversation
 // so far) rather than each spinning up an unrelated one — unlike
 // sdk.Client.RunWorkflow's default executor (pkg/sdk/workflow.go), which
 // calls Client.Ask per node and so starts a fresh session every time.
-// agentSlug is accepted for interface symmetry with a future multi-agent
-// dispatch but unused today — jobWorkflow's session is already the one
-// job.Agent resolved to (unchanged from before dataflow.AgentCaller grew
-// its tools parameter - not tightening this now, since jobs already rely
-// on a non-empty, effectively-ignored slug here, per
-// TestSessionAgentCallerReturnsAssistantText).
+// agentSlug is accepted for interface symmetry but unused today —
+// jobWorkflow's session is already the one job.Agent resolved to (unchanged
+// from before dataflow.AgentCaller grew its tools parameter - not
+// tightening this now, since jobs already rely on a non-empty,
+// effectively-ignored slug here, per
+// TestSessionAgentCallerReturnsAssistantText). A "query" node's own
+// connected "agent" node identity is resolved inside pkg/dataflow itself
+// (see resolveAgentSlug in builtin.go) before Ask is ever called - this
+// caller only ever receives whatever agentSlug the SDK-internal resolution
+// already settled on.
 //
 // tools (named tool scoping) is separate from graphTools (below) and has no
 // such existing contract to preserve. Actually scoping a node's tools needs
@@ -58,15 +62,15 @@ type sessionAgentCaller struct{ session messageSubmitter }
 
 func (a sessionAgentCaller) Ask(ctx context.Context, _ string, prompt string, tools []string, graphTools []dataflow.ToolSpec) (string, error) {
 	if len(tools) > 0 {
-		return "", fmt.Errorf("dataflow: agent node requested tools=%v, but per-node tool scoping is not implemented yet - omit it to use the workflow's own agent's tools", tools)
+		return "", fmt.Errorf("dataflow: query node requested tools=%v, but per-node tool scoping is not implemented yet - omit it to use the workflow's own agent's tools", tools)
 	}
 	for _, spec := range graphTools {
 		built, err := buildSessionTool(spec)
 		if err != nil {
-			return "", fmt.Errorf("dataflow: agent node tool %q: %w", spec.Name, err)
+			return "", fmt.Errorf("dataflow: query node tool %q: %w", spec.Name, err)
 		}
 		if err := a.session.RegisterTool(built); err != nil {
-			return "", fmt.Errorf("dataflow: agent node tool %q: %w", spec.Name, err)
+			return "", fmt.Errorf("dataflow: query node tool %q: %w", spec.Name, err)
 		}
 		defer func(name string) { _ = a.session.UnregisterTool(name) }(spec.Name)
 	}
