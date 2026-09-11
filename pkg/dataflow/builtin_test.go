@@ -148,9 +148,32 @@ func TestAgentNodeIsAPureNoOp(t *testing.T) {
 	}
 }
 
-func TestAgentNodeRequiresAgentParameter(t *testing.T) {
-	if err := (agentNode{}).ValidateParameters(nil); err == nil {
-		t.Fatal("expected an error for an agent node with no agent parameter")
+func TestAgentNodeAllowsEmptyAgentParameter(t *testing.T) {
+	// A fresh/mid-edit agent node (or a built-in template shipping as a
+	// generic starting point - see automation-app-pages.md §9) has no
+	// persona picked yet; that's valid, not an error - see agentNode's own
+	// doc comment for why.
+	if err := (agentNode{}).ValidateParameters(nil); err != nil {
+		t.Fatalf("expected no error for an agent node with no agent parameter, got %v", err)
+	}
+}
+
+func TestQueryNodeUsesJobDefaultWhenAgentIdentityIsUnconfigured(t *testing.T) {
+	reg := NewRegistry()
+	RegisterBuiltins(reg)
+	stub := &stubAgentCaller{response: "ok"}
+	rt := &Runtime{Agent: stub}
+
+	def := Definition{Nodes: []Node{
+		{ID: "id", Type: "agent"}, // no "agent" parameter set
+		{ID: "q", Type: "query", Agent: "id", Parameters: map[string]any{"prompt": "go"}},
+	}}
+	result, err := Run(context.Background(), def, reg, rt, nil, Options{})
+	if err != nil || !result.Success {
+		t.Fatalf("run: err=%v success=%v results=%#v", err, result.Success, result.Results)
+	}
+	if stub.gotSlug != "" {
+		t.Fatalf("expected an empty slug (job default) when the agent identity has none set, got %q", stub.gotSlug)
 	}
 }
 
