@@ -12,8 +12,8 @@ import (
 // it) - Run wraps ctx with this once per node right before calling
 // executeNode (see engine.go), so it's naturally goroutine-safe: each
 // concurrently-executing node in a level gets its own derived ctx value,
-// never a shared mutable field on Runtime. Only agentNode.Execute reads it
-// today, to resolve its own Tools into real ToolSpecs.
+// never a shared mutable field on Runtime. Only queryNode.Execute reads it
+// today, to resolve its own Agent reference and Tools into real ToolSpecs.
 type graphContextKey struct{}
 
 type graphContext struct {
@@ -28,8 +28,8 @@ func withGraphContext(ctx context.Context, def Definition, registry *Registry, n
 
 // graphContextFrom returns false for any Execute call Run itself didn't
 // make (a node type's own unit test calling Execute directly, for
-// instance) - agentNode.Execute treats that as "no graph tools available,
-// behave exactly as before Tools existed" rather than an error.
+// instance) - queryNode.Execute treats that as a clear error, since a query
+// with no graph context has no way to resolve which agent it runs as.
 func graphContextFrom(ctx context.Context) (graphContext, bool) {
 	gc, ok := ctx.Value(graphContextKey{}).(graphContext)
 	return gc, ok
@@ -60,47 +60,79 @@ type ToolSpec struct {
 	Invoke func(ctx context.Context, args map[string]any) (string, error)
 }
 
-// BuildAgentTools resolves agentNodeID's own Tools list into real,
-// invocable ToolSpecs - called by agentNode.Execute (see builtin.go) before
-// asking rt.Agent. Returns nil (not an error) for an agent node with no
-// Tools set, the common case today.
-func BuildAgentTools(def Definition, registry *Registry, rt *Runtime, agentNodeID string) ([]ToolSpec, error) {
-	var agentNode *Node
+// ResolveTools resolves nodeID's own Tools list into real, invocable
+// ToolSpecs - called by queryNode.Execute (see builtin.go) before asking
+// rt.Agent. Returns nil (not an error) for a node with no Tools set, the
+// common case for a query with no tools at all.
+//
+// A "tools"-type target is expanded recursively instead of becoming a
+// ToolSpec itself (its own Tools list's members do, minus whatever its
+// "disabled" parameter names) - this is how several "query" nodes share one
+// reusable, individually-toggleable capability group instead of each
+// repeating the same list of IDs (automation-app-pages.md §37.9).
+func ResolveTools(def Definition, registry *Registry, rt *Runtime, nodeID string) ([]ToolSpec, error) {
+	return resolveTools(def, registry, rt, nodeID, map[string]bool{})
+}
+
+func resolveTools(def Definition, registry *Registry, rt *Runtime, nodeID string, visited map[string]bool) ([]ToolSpec, error) {
+	if visited[nodeID] {
+		return nil, fmt.Errorf("dataflow: tools reference cycle at node %q", nodeID)
+	}
+	visited[nodeID] = true
+
+	var owner *Node
 	for i := range def.Nodes {
-		if def.Nodes[i].ID == agentNodeID {
-			agentNode = &def.Nodes[i]
+		if def.Nodes[i].ID == nodeID {
+			owner = &def.Nodes[i]
 			break
 		}
 	}
-	if agentNode == nil {
-		return nil, fmt.Errorf("dataflow: no node %q in this graph", agentNodeID)
+	if owner == nil {
+		return nil, fmt.Errorf("dataflow: no node %q in this graph", nodeID)
 	}
-	if len(agentNode.Tools) == 0 {
+	if len(owner.Tools) == 0 {
 		return nil, nil
 	}
 	byID := make(map[string]Node, len(def.Nodes))
 	for _, node := range def.Nodes {
 		byID[node.ID] = node
 	}
+	var disabled map[string]bool
+	if owner.Type == "tools" {
+		disabled = make(map[string]bool)
+		for _, id := range StringListParam(owner.Parameters, "disabled") {
+			disabled[id] = true
+		}
+	}
 
-	specs := make([]ToolSpec, 0, len(agentNode.Tools))
-	for _, targetID := range agentNode.Tools {
+	var specs []ToolSpec
+	for _, targetID := range owner.Tools {
+		if disabled[targetID] {
+			continue
+		}
 		target, ok := byID[targetID]
 		if !ok {
-			return nil, fmt.Errorf("dataflow: node %q tools references unknown node %q", agentNodeID, targetID)
+			return nil, fmt.Errorf("dataflow: node %q tools references unknown node %q", nodeID, targetID)
+		}
+		if target.Type == "tools" {
+			nested, err := resolveTools(def, registry, rt, targetID, visited)
+			if err != nil {
+				return nil, err
+			}
+			specs = append(specs, nested...)
+			continue
 		}
 		executor, err := registry.Get(target.Type)
 		if err != nil {
-			return nil, fmt.Errorf("dataflow: node %q tools references %q: %w", agentNodeID, targetID, err)
+			return nil, fmt.Errorf("dataflow: node %q tools references %q: %w", nodeID, targetID, err)
 		}
 		desc := executor.Description()
-		spec := ToolSpec{
+		specs = append(specs, ToolSpec{
 			Name:        target.ID,
 			Description: desc.Description,
 			Schema:      nodePropertiesToJSONSchema(desc.Properties),
 			Invoke:      invokeNodeAsTool(executor, target, rt),
-		}
-		specs = append(specs, spec)
+		})
 	}
 	return specs, nil
 }
