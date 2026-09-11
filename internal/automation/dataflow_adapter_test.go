@@ -16,9 +16,12 @@ import (
 // this package's existing preference for testing execution logic in
 // isolation (see buildClientConfig in runner.go).
 type fakeSession struct {
-	responses []string // one entry consumed per SubmitMessage call, in order
-	calls     []string // prompts received, for assertions
-	err       error
+	responses    []string // one entry consumed per SubmitMessage call, in order
+	calls        []string // prompts received, for assertions
+	err          error
+	registered   []string // tool names passed to RegisterTool, in order
+	unregistered []string // tool names passed to UnregisterTool, in order
+	registerErr  error
 }
 
 func (f *fakeSession) SubmitMessage(_ context.Context, content string) (*sdk.SessionResponse, error) {
@@ -34,6 +37,19 @@ func (f *fakeSession) SubmitMessage(_ context.Context, content string) (*sdk.Ses
 	return &sdk.SessionResponse{Messages: []types.Message{
 		{Role: types.RoleAssistant, Content: []types.ContentBlock{types.TextContent{Text: text}}},
 	}}, nil
+}
+
+func (f *fakeSession) RegisterTool(t sdk.Tool) error {
+	if f.registerErr != nil {
+		return f.registerErr
+	}
+	f.registered = append(f.registered, t.Definition().Name)
+	return nil
+}
+
+func (f *fakeSession) UnregisterTool(name string) error {
+	f.unregistered = append(f.unregistered, name)
+	return nil
 }
 
 func TestLastAssistantTextExtractsTrailingAssistantMessage(t *testing.T) {
@@ -56,7 +72,7 @@ func TestLastAssistantTextEmptyForNoAssistantMessage(t *testing.T) {
 func TestSessionAgentCallerReturnsAssistantText(t *testing.T) {
 	session := &fakeSession{responses: []string{"the answer"}}
 	caller := sessionAgentCaller{session: session}
-	got, err := caller.Ask(context.Background(), "inbox", "what is the answer?", nil)
+	got, err := caller.Ask(context.Background(), "inbox", "what is the answer?", nil, nil)
 	if err != nil {
 		t.Fatalf("ask: %v", err)
 	}
@@ -71,7 +87,7 @@ func TestSessionAgentCallerReturnsAssistantText(t *testing.T) {
 func TestSessionAgentCallerFailsLoudlyOnToolsOverride(t *testing.T) {
 	session := &fakeSession{responses: []string{"should not be reached"}}
 	caller := sessionAgentCaller{session: session}
-	if _, err := caller.Ask(context.Background(), "", "x", []string{"weather_lookup"}); err == nil {
+	if _, err := caller.Ask(context.Background(), "", "x", []string{"weather_lookup"}, nil); err == nil {
 		t.Fatal("expected an error - per-node tool scoping is not implemented yet")
 	}
 	if len(session.calls) != 0 {
@@ -79,10 +95,41 @@ func TestSessionAgentCallerFailsLoudlyOnToolsOverride(t *testing.T) {
 	}
 }
 
+func TestSessionAgentCallerRegistersAndUnregistersGraphTools(t *testing.T) {
+	session := &fakeSession{responses: []string{"used the tool"}}
+	caller := sessionAgentCaller{session: session}
+	// The fake session's own SubmitMessage never actually calls a
+	// registered tool's handler (no real LLM in this test) - this test
+	// exercises the register-before/unregister-after lifecycle around that
+	// call, not the handler itself (see TestToolSpecInvokeMergesArgsOverParams
+	// in pkg/dataflow for that).
+	spec := dataflow.ToolSpec{
+		Name:        "gmail_send",
+		Description: "sends an email",
+		Schema:      map[string]any{"type": "object"},
+		Invoke: func(_ context.Context, args map[string]any) (string, error) {
+			return "sent", nil
+		},
+	}
+	got, err := caller.Ask(context.Background(), "", "send the email", nil, []dataflow.ToolSpec{spec})
+	if err != nil {
+		t.Fatalf("ask: %v", err)
+	}
+	if got != "used the tool" {
+		t.Fatalf("expected %q, got %q", "used the tool", got)
+	}
+	if len(session.registered) != 1 || session.registered[0] != "gmail_send" {
+		t.Fatalf("expected gmail_send to be registered, got %#v", session.registered)
+	}
+	if len(session.unregistered) != 1 || session.unregistered[0] != "gmail_send" {
+		t.Fatalf("expected gmail_send to be unregistered after the call, got %#v", session.unregistered)
+	}
+}
+
 func TestSessionAgentCallerPropagatesError(t *testing.T) {
 	session := &fakeSession{err: errors.New("boom")}
 	caller := sessionAgentCaller{session: session}
-	if _, err := caller.Ask(context.Background(), "", "x", nil); err == nil {
+	if _, err := caller.Ask(context.Background(), "", "x", nil, nil); err == nil {
 		t.Fatal("expected error to propagate")
 	}
 }

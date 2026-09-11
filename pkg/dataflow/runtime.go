@@ -103,8 +103,16 @@ type SecretResolver interface {
 // than "continue the same conversation." tools is a list of tool *names*
 // already available to resolve, not new tool definitions - see
 // StringListParam, which is how agentNode reads its own "tools" property.
+//
+// graphTools is this node's own Tools resolved into real, invocable
+// ToolSpecs by BuildAgentTools (see tool_adapter.go) - nil/empty for every
+// agent node that sets no Tools, which is every graph saved before this
+// parameter existed. An implementation with no way to register a dynamic
+// tool for this one turn should fail loudly on a non-empty graphTools
+// rather than silently running the turn without them - the same posture
+// already established for tools above.
 type AgentCaller interface {
-	Ask(ctx context.Context, agentSlug, prompt string, tools []string) (string, error)
+	Ask(ctx context.Context, agentSlug, prompt string, tools []string, graphTools []ToolSpec) (string, error)
 }
 
 // SubworkflowRunner executes a pkg/workflow.Definition — what the built-in
