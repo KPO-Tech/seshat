@@ -35,24 +35,29 @@ func RegisterBuiltins(registry *Registry) {
 // node reads its "agent" parameter by direct ID lookup (see
 // resolveAgentSlug), not through Connections/scheduling, since this is a
 // structural reference, not data flow.
+//
+// Its own "agent" parameter is optional, deliberately: a query node must
+// always reference an agent node (Validate enforces that structural link),
+// but the agent node itself can exist with no persona picked yet - the
+// authoring UI's normal flow is drag the node, then configure/create its
+// persona, and a graph mid-edit (or a built-in template - see
+// automation-app-pages.md §9 - shipping as a generic starting point rather
+// than a specific account's persona) shouldn't be rejected outright for not
+// having reached that step yet. An empty slug here means the same thing it
+// always has for AgentCaller.Ask: "use the job's own default agent."
 type agentNode struct{}
 
 func (agentNode) Description() NodeDescription {
 	return NodeDescription{Type: "agent", Name: "Agent", Category: "AI",
 		Description: "Declares a local workflow persona's identity - which agent a connected \"query\" node runs its prompt as. Does nothing on its own; a \"query\" node's Agent field references this node's ID. " +
-			"Parameters: agent (string, required) — the persona's slug (created/picked via the authoring UI's agent picker).",
+			"Parameters: agent (string, optional) — the persona's slug (created/picked via the authoring UI's agent picker); empty uses the job's own default agent.",
 		Properties: []NodeProperty{
-			{Name: "agent", DisplayName: "Agent", Type: PropString, Required: true,
-				Description: "The persona's slug, created/picked via the authoring UI's agent picker."},
+			{Name: "agent", DisplayName: "Agent", Type: PropString,
+				Description: "The persona's slug, created/picked via the authoring UI's agent picker; empty uses the job's own default agent."},
 		}}
 }
 
-func (agentNode) ValidateParameters(params map[string]any) error {
-	if StringParam(params, "agent", "") == "" {
-		return errors.New("agent is required")
-	}
-	return nil
-}
+func (agentNode) ValidateParameters(map[string]any) error { return nil }
 
 func (agentNode) Execute(context.Context, *Runtime, []Item, map[string]any) (Output, error) {
 	return Main(nil), nil
