@@ -156,13 +156,14 @@ func TestSessionSubworkflowRunnerExecutesEachNode(t *testing.T) {
 	}
 }
 
-func TestRunGraphExecutesAgentNode(t *testing.T) {
+func TestRunGraphExecutesQueryNode(t *testing.T) {
 	registry := dataflow.NewRegistry()
 	dataflow.RegisterBuiltins(registry)
 	session := &fakeSession{responses: []string{"drafted"}}
 
 	graph := &dataflow.Definition{Name: "g", Nodes: []dataflow.Node{
-		{ID: "draft", Type: "agent", Parameters: map[string]any{"agent": "inbox", "prompt": "draft a reply"}},
+		{ID: "id", Type: "agent", Parameters: map[string]any{"agent": "inbox"}},
+		{ID: "draft", Type: "query", Agent: "id", Parameters: map[string]any{"prompt": "draft a reply"}},
 	}}
 	if err := runGraph(context.Background(), graph, registry, nil, session); err != nil {
 		t.Fatalf("run graph: %v", err)
@@ -192,7 +193,7 @@ func TestRunGraphFailsClearlyWithoutRegistry(t *testing.T) {
 func TestRunGraphSurfacesNodeFailure(t *testing.T) {
 	registry := dataflow.NewRegistry()
 	dataflow.RegisterBuiltins(registry)
-	// "agent" node with no prompt fails ValidateParameters.
+	// "agent" node with no agent parameter fails ValidateParameters.
 	graph := &dataflow.Definition{Name: "g", Nodes: []dataflow.Node{{ID: "bad", Type: "agent"}}}
 	err := runGraph(context.Background(), graph, registry, nil, &fakeSession{})
 	if err == nil {
@@ -208,7 +209,8 @@ func TestJobWorkflowRunUsesGraphWhenSet(t *testing.T) {
 	job := &Job{
 		ID: "job-1",
 		Graph: &dataflow.Definition{Name: "g", Nodes: []dataflow.Node{
-			{ID: "a", Type: "agent", Parameters: map[string]any{"prompt": "go"}},
+			{ID: "id", Type: "agent", Parameters: map[string]any{"agent": "inbox"}},
+			{ID: "a", Type: "query", Agent: "id", Parameters: map[string]any{"prompt": "go"}},
 		}},
 		Task: "this should be ignored since Graph is set",
 	}
@@ -217,7 +219,7 @@ func TestJobWorkflowRunUsesGraphWhenSet(t *testing.T) {
 		t.Fatalf("run: %v", err)
 	}
 	if len(session.calls) != 1 || session.calls[0] != "go" {
-		t.Fatalf("expected the graph's agent node prompt to be submitted, got %#v", session.calls)
+		t.Fatalf("expected the graph's query node prompt to be submitted, got %#v", session.calls)
 	}
 }
 

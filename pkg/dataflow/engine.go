@@ -12,12 +12,12 @@ import (
 const mainPort = "main"
 
 // Validate checks graph structure only (unique node IDs, connections that
-// target real nodes, no cycles, Tools references that are structurally
-// sound) — it does not need a Registry, mirroring pkg/workflow.Validate.
-// Per-node parameter validation, and the one Tools check that needs a node
-// type's real metadata (a target can't be a Trigger or Logic node - see
-// validateToolTargets), happens in Run, once each node's executor is
-// resolved.
+// target real nodes, no cycles, Tools/Agent references that are
+// structurally sound) — it does not need a Registry, mirroring
+// pkg/workflow.Validate. Per-node parameter validation, and the one Tools
+// check that needs a node type's real metadata (a target can't be a Trigger
+// or Logic node - see validateToolTargetTypes), happens in Run, once each
+// node's executor is resolved.
 func Validate(def Definition) error {
 	if len(def.Nodes) == 0 {
 		return errors.New("dataflow: graph must contain at least one node")
@@ -52,8 +52,8 @@ func Validate(def Definition) error {
 		if len(node.Tools) == 0 {
 			continue
 		}
-		if node.Type != "agent" {
-			return fmt.Errorf("dataflow: node %q sets tools but is type %q, not \"agent\" - only an agent node may call tools", node.ID, node.Type)
+		if node.Type != "query" && node.Type != "tools" {
+			return fmt.Errorf("dataflow: node %q sets tools but is type %q, not \"query\" or \"tools\" - only those types may call tools", node.ID, node.Type)
 		}
 		for _, targetID := range node.Tools {
 			target, ok := byID[targetID]
@@ -66,6 +66,27 @@ func Validate(def Definition) error {
 			if target.Type == "agent" {
 				return fmt.Errorf("dataflow: node %q tools references %q, but an agent node cannot be used as a tool", node.ID, targetID)
 			}
+			if target.Type == "query" {
+				return fmt.Errorf("dataflow: node %q tools references %q, but a query node cannot be used as a tool", node.ID, targetID)
+			}
+		}
+	}
+	for _, node := range def.Nodes {
+		if node.Type != "query" {
+			if node.Agent != "" {
+				return fmt.Errorf("dataflow: node %q sets agent but is type %q, not \"query\" - only a query node references an agent", node.ID, node.Type)
+			}
+			continue
+		}
+		if node.Agent == "" {
+			return fmt.Errorf("dataflow: query node %q requires an agent reference", node.ID)
+		}
+		target, ok := byID[node.Agent]
+		if !ok {
+			return fmt.Errorf("dataflow: query node %q references unknown agent %q", node.ID, node.Agent)
+		}
+		if target.Type != "agent" {
+			return fmt.Errorf("dataflow: query node %q references %q, but it is type %q, not \"agent\"", node.ID, node.Agent, target.Type)
 		}
 	}
 	for nodeID := range def.PinnedData {
@@ -132,21 +153,43 @@ func predecessors(def Definition) map[string]map[string]bool {
 	return preds
 }
 
-// toolOnlyNodeIDs returns node IDs that exist purely as an agent's callable
-// tool - referenced in some node's Tools list, and structurally isolated
-// from the rest of the graph (no incoming or outgoing Connections at all).
-// These must never be scheduled by the normal topological walk
-// (automation-app-pages.md §37.9) - only an agent's own on-demand
-// invocation (see BuildAgentTools) ever runs them. A node that's *also*
-// wired into real Connections (dual-use) is deliberately excluded from this
-// set - being additionally tool-callable never suppresses a node's normal
-// place in the sequential flow, only pure orphans (nothing else in the
-// graph reaches them) are held back.
+// toolOnlyNodeIDs returns node IDs that exist purely as a query's callable
+// tool - referenced (directly, or transitively through a "tools" hub node's
+// own Tools list) in some node's Tools list, and structurally isolated from
+// the rest of the graph (no incoming or outgoing Connections at all). These
+// must never be scheduled by the normal topological walk (automation-app-
+// pages.md §37.9) - only a query's own on-demand invocation (see
+// ResolveTools) ever runs them. A node that's *also* wired into real
+// Connections (dual-use) is deliberately excluded from this set - being
+// additionally tool-callable never suppresses a node's normal place in the
+// sequential flow, only pure orphans (nothing else in the graph reaches
+// them) are held back. A "tools" hub node itself is included here too when
+// it's isolated - it never does real work either (see toolsNode.Execute),
+// so it shouldn't appear as "ran" in a trace any more than an isolated
+// capability node should.
 func toolOnlyNodeIDs(def Definition, preds map[string]map[string]bool) map[string]bool {
+	byID := make(map[string]Node, len(def.Nodes))
+	for _, node := range def.Nodes {
+		byID[node.ID] = node
+	}
 	referenced := map[string]bool{}
+	var walk func(id string)
+	walk = func(id string) {
+		if referenced[id] {
+			return // already found via another path, or a tools->tools cycle - either way, stop
+		}
+		referenced[id] = true
+		node, ok := byID[id]
+		if !ok || node.Type != "tools" {
+			return
+		}
+		for _, nested := range node.Tools {
+			walk(nested)
+		}
+	}
 	for _, node := range def.Nodes {
 		for _, id := range node.Tools {
-			referenced[id] = true
+			walk(id)
 		}
 	}
 	if len(referenced) == 0 {
