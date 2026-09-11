@@ -63,7 +63,15 @@ func (agentNode) Execute(ctx context.Context, rt *Runtime, input []Item, params 
 	prompt := StringParam(params, "prompt", "")
 	agentSlug := StringParam(params, "agent", "")
 	tools := StringListParam(params, "tools")
-	output, err := rt.Agent.Ask(ctx, agentSlug, buildAgentPrompt(prompt, input), tools)
+	var graphTools []ToolSpec
+	if gc, ok := graphContextFrom(ctx); ok {
+		var err error
+		graphTools, err = BuildAgentTools(gc.def, gc.registry, rt, gc.nodeID)
+		if err != nil {
+			return Output{}, fmt.Errorf("agent node: %w", err)
+		}
+	}
+	output, err := rt.Agent.Ask(ctx, agentSlug, buildAgentPrompt(prompt, input), tools, graphTools)
 	if err != nil {
 		return Output{}, fmt.Errorf("agent node: %w", err)
 	}
