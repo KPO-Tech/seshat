@@ -59,6 +59,14 @@ type promptAwareTool interface {
 
 // NewClient creates a new SDK client.
 func NewClient(config *ClientConfig) (*Client, error) {
+	// perf: NewClient is not cached anywhere upstream (seshat-ai's
+	// seshat-backend calls it fresh on every chat turn, see
+	// seshat-backend/internal/query/runtime.go's clientForInput) - registryMs
+	// and mcpMs below are logged to find out how much of that per-turn cost
+	// is tool-registry bootstrap vs re-synchronizing MCP servers.
+	newClientStart := time.Now()
+	var registryMs, mcpMs, storeMs, memMs int64
+
 	if config == nil {
 		config = DefaultClientConfig()
 	}
@@ -116,27 +124,35 @@ func NewClient(config *ClientConfig) (*Client, error) {
 	queryConfig.BrowserManager = browserManager
 
 	// Tool registry
+	registryStart := time.Now()
 	reg, err := initBuiltinRegistry(config, browserManager, artifactStore)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create tool registry: %w", err)
 	}
+	registryMs = time.Since(registryStart).Milliseconds()
 
 	// MCP servers
 	var mcpResult *MCPIntegrationResult
 	if len(config.MCPServers) > 0 {
+		mcpStart := time.Now()
 		mcpResult = mcp.IntegrateMCPServersWithOptions(context.Background(), reg, config.MCPServers, nil)
+		mcpMs = time.Since(mcpStart).Milliseconds()
 	}
 
+	storeStart := time.Now()
 	store, ownedStore, err := initSessionStore(config)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create session store: %w", err)
 	}
+	storeMs = time.Since(storeStart).Milliseconds()
 	var sessionStore engine.SessionStore
 	if store != nil {
 		sessionStore = store
 	}
 
+	memStart := time.Now()
 	memSvc, memInitErr := initMemoryService(config)
+	memMs = time.Since(memStart).Milliseconds()
 	if memInitErr != nil && config.MemoryFailFast {
 		return nil, fmt.Errorf("memory service initialization failed: %w", memInitErr)
 	}
@@ -228,6 +244,9 @@ func NewClient(config *ClientConfig) (*Client, error) {
 			}
 		})
 	}
+
+	log.Printf("[perf] sdk.NewClient registry_ms=%d mcp_ms=%d mcp_servers=%d store_ms=%d mem_ms=%d total_ms=%d",
+		registryMs, mcpMs, len(config.MCPServers), storeMs, memMs, time.Since(newClientStart).Milliseconds())
 
 	return client, nil
 }

@@ -197,6 +197,8 @@ type RunResult struct {
 	Usage              *types.TokenUsage        `json:"usage"`
 	PermissionContext  *types.PermissionContext `json:"-"`
 	Compacted          bool                     `json:"compacted"`
+	CompactPreTokens   int                      `json:"compact_pre_tokens,omitempty"`
+	CompactPostTokens  int                      `json:"compact_post_tokens,omitempty"`
 	Iterations         int                      `json:"iterations"`
 	DiscoveredDeferred []string                 `json:"discovered_deferred,omitempty"`
 	Error              error                    `json:"error,omitempty"`
@@ -462,6 +464,8 @@ func (l *Loop) Run(ctx context.Context, req RunRequest) RunResult {
 		Usage:              state.Usage,
 		PermissionContext:  clonePermissionContext(state.PermissionContext),
 		Compacted:          state.Compacted,
+		CompactPreTokens:   state.CompactPreTokens,
+		CompactPostTokens:  state.CompactPostTokens,
 		Iterations:         state.Iterations,
 		DiscoveredDeferred: append([]string(nil), state.DiscoveredDeferred...),
 		RecoveryContext:    state.RecoveryContext,
@@ -694,6 +698,8 @@ func (l *Loop) initializeState(req RunRequest) *MutableState {
 	state.PermissionContext = clonePermissionContext(req.PermissionContext)
 	state.PermissionMode = req.PermissionMode
 	state.Compacted = false
+	state.CompactPreTokens = 0
+	state.CompactPostTokens = 0
 	return state
 }
 
@@ -718,6 +724,8 @@ func (l *Loop) maybeAutoCompact(ctx context.Context, state *MutableState, req Ru
 	if result.DidCompact {
 		state.Messages = result.Messages
 		state.Compacted = true
+		state.CompactPreTokens = result.PreCompactTokens
+		state.CompactPostTokens = result.PostCompactTokens
 		// Compaction rewrote Messages, so any previously recorded Codex
 		// continuation reference no longer describes a valid prefix of it -
 		// see recordPreviousResponse/buildAPIRequest.

@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"log"
 	"sync"
+	"time"
 
 	tool "github.com/KPO-Tech/seshat/internal/tools/registry"
 )
@@ -18,6 +19,13 @@ type ServerResult struct {
 	ToolsRegistered int
 	// Error is non-nil if the server could not be connected, initialized, or wrapped.
 	Error error
+	// Duration is how long this one server took to connect, initialize, and
+	// wrap its tools - perf: this loop runs sequentially and today re-runs on
+	// every sdk.NewClient() call (i.e. every chat turn, not once per
+	// session), so a slow server here directly delays the first visible
+	// response. See docs/produits/chat/seshatos-main-chat-ui-audit.md in
+	// seshat-ai.
+	Duration time.Duration
 }
 
 // IntegrationResult represents the result of MCP integration
@@ -46,6 +54,7 @@ func IntegrateMCPServers(ctx context.Context, registry *tool.Registry, serverCon
 }
 
 func IntegrateMCPServersWithOptions(ctx context.Context, registry *tool.Registry, serverConfigs []ServerConfig, options *IntegrationOptions) *IntegrationResult {
+	integrationStart := time.Now()
 	result := &IntegrationResult{
 		MCPTools:      make([]tool.Tool, 0),
 		ServerResults: make([]ServerResult, 0, len(serverConfigs)),
@@ -53,18 +62,21 @@ func IntegrateMCPServersWithOptions(ctx context.Context, registry *tool.Registry
 
 	for _, serverConfig := range serverConfigs {
 		sr := ServerResult{Name: serverConfig.Name}
+		serverStart := time.Now()
 
 		client, err := NewClient(serverConfig)
 		if err != nil {
 			sr.Error = fmt.Errorf("create client: %w", err)
-			log.Printf("[mcp] server %q: %v", serverConfig.Name, sr.Error)
+			sr.Duration = time.Since(serverStart)
+			log.Printf("[mcp] server %q: %v (duration=%s)", serverConfig.Name, sr.Error, sr.Duration)
 			result.ServerResults = append(result.ServerResults, sr)
 			continue
 		}
 
 		if err := client.Start(ctx); err != nil {
 			sr.Error = fmt.Errorf("start: %w", err)
-			log.Printf("[mcp] server %q: %v", serverConfig.Name, sr.Error)
+			sr.Duration = time.Since(serverStart)
+			log.Printf("[mcp] server %q: %v (duration=%s)", serverConfig.Name, sr.Error, sr.Duration)
 			result.ServerResults = append(result.ServerResults, sr)
 			continue
 		}
@@ -72,18 +84,20 @@ func IntegrateMCPServersWithOptions(ctx context.Context, registry *tool.Registry
 		_, err = client.Initialize(ctx)
 		if err != nil {
 			sr.Error = fmt.Errorf("initialize: %w", err)
-			log.Printf("[mcp] server %q: %v", serverConfig.Name, sr.Error)
+			sr.Duration = time.Since(serverStart)
+			log.Printf("[mcp] server %q: %v (duration=%s)", serverConfig.Name, sr.Error, sr.Duration)
 			client.Close()
 			result.ServerResults = append(result.ServerResults, sr)
 			continue
 		}
 
-		wrapper := NewWrapper(client, serverConfig.Name, options)
+		wrapper := NewWrapper(client, serverConfig, options)
 
 		mcpTools, err := wrapper.WrapAll(ctx)
 		if err != nil {
 			sr.Error = fmt.Errorf("wrap tools: %w", err)
-			log.Printf("[mcp] server %q: %v", serverConfig.Name, sr.Error)
+			sr.Duration = time.Since(serverStart)
+			log.Printf("[mcp] server %q: %v (duration=%s)", serverConfig.Name, sr.Error, sr.Duration)
 			client.Close()
 			result.ServerResults = append(result.ServerResults, sr)
 			continue
@@ -98,9 +112,14 @@ func IntegrateMCPServersWithOptions(ctx context.Context, registry *tool.Registry
 			sr.ToolsRegistered++
 		}
 		result.clients = append(result.clients, client)
+		sr.Duration = time.Since(serverStart)
 
-		log.Printf("[mcp] server %q: registered %d/%d tools", serverConfig.Name, sr.ToolsRegistered, len(mcpTools))
+		log.Printf("[mcp] server %q: registered %d/%d tools (duration=%s)", serverConfig.Name, sr.ToolsRegistered, len(mcpTools), sr.Duration)
 		result.ServerResults = append(result.ServerResults, sr)
+	}
+
+	if len(serverConfigs) > 0 {
+		log.Printf("[mcp] integrated %d server(s) sequentially in %s total", len(serverConfigs), time.Since(integrationStart))
 	}
 
 	if len(serverConfigs) > 0 && len(result.MCPTools) == 0 {

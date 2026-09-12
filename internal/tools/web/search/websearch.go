@@ -62,6 +62,24 @@ func (t *Tool) SetRunner(fn RunnerFn) {
 	t.runner = fn
 }
 
+// effectiveRunner prefers the per-turn runner carried on ctx (see
+// types.WithWebSearchRunner) over t.runner, the value set via SetRunner. A
+// host that reuses one *Tool instance (owned by one *sdk.Client) across
+// concurrent turns - e.g. a per-user/provider client cache - must use the
+// context path to stay turn-isolated: t.runner is a single shared field, so
+// two concurrent turns calling SetRunner would otherwise race, potentially
+// running one user's search through another user's provider/quota.
+// t.runner remains as a fallback for callers that never share a tool
+// instance across turns.
+func (t *Tool) effectiveRunner(ctx context.Context) RunnerFn {
+	if v := types.WebSearchRunnerFromContext(ctx); v != nil {
+		if fn, ok := v.(RunnerFn); ok && fn != nil {
+			return fn
+		}
+	}
+	return t.runner
+}
+
 // NewTool creates a new WebSearch tool.
 func NewTool() *Tool {
 	return &Tool{
@@ -146,9 +164,9 @@ func (t *Tool) Call(ctx context.Context, input tool.CallInput, permissionCheck t
 	}
 
 	var output Output
-	if t.runner != nil {
+	if runner := t.effectiveRunner(ctx); runner != nil {
 		var err error
-		output, err = t.runner(ctx, parsedInput.Query, parsedInput.AllowedDomains, parsedInput.BlockedDomains)
+		output, err = runner(ctx, parsedInput.Query, parsedInput.AllowedDomains, parsedInput.BlockedDomains)
 		if err != nil {
 			return tool.NewErrorResult(fmt.Errorf("web search failed: %w", err)), nil
 		}

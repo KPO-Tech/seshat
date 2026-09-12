@@ -157,7 +157,16 @@ func (l *FileSkillLoader) GetSkillDirCommandsForUser(cwd string, userID string) 
 	// under skills/repos/ (e.g. by an older client or a manual checkout).
 	// Treat any other top-level directory there as a collection too, so
 	// skills are found regardless of which layout produced them.
-	reserved := map[string]bool{"managed": true, "user": true, "builtin": true, "repos": true}
+	// "user" is the legacy single-user path (GetUserSkillsPath); "users" is
+	// the real per-user directory this function already loads correctly and
+	// specifically for the current userID via the userSkills source above.
+	// Without "users" reserved here too, this fallback loop treats the whole
+	// multi-user directory as one giant unclaimed collection and recursively
+	// loads every OTHER user's skills as well - unbounded, and duplicating
+	// work already done above. See the perf investigation this comment
+	// documents: on a dev machine with hundreds of provisioned users, this
+	// alone added ~1s to every single tool-registry rebuild (i.e. every chat turn).
+	reserved := map[string]bool{"managed": true, "user": true, "users": true, "builtin": true, "repos": true}
 	if entries, err := os.ReadDir(GetSkillsRootPath()); err == nil {
 		for _, e := range entries {
 			if !e.IsDir() || reserved[e.Name()] {

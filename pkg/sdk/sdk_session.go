@@ -18,15 +18,17 @@ func (s *Session) SubmitMessage(ctx context.Context, content string) (*SessionRe
 		return nil, err
 	}
 	return &SessionResponse{
-		Messages:    response.Messages,
-		StopReason:  response.StopReason,
-		ToolUses:    response.ToolUses,
-		ToolResults: response.ToolResults,
-		Usage:       response.Usage,
-		TotalTokens: response.TotalTokens,
-		TurnNumber:  response.TurnNumber,
-		IsComplete:  response.IsComplete(),
-		Compacted:   response.Compacted,
+		Messages:          response.Messages,
+		StopReason:        response.StopReason,
+		ToolUses:          response.ToolUses,
+		ToolResults:       response.ToolResults,
+		Usage:             response.Usage,
+		TotalTokens:       response.TotalTokens,
+		TurnNumber:        response.TurnNumber,
+		IsComplete:        response.IsComplete(),
+		Compacted:         response.Compacted,
+		CompactPreTokens:  response.CompactPreTokens,
+		CompactPostTokens: response.CompactPostTokens,
 	}, nil
 }
 
@@ -36,15 +38,17 @@ func (s *Session) SubmitMessageWithContent(ctx context.Context, text string, ima
 		return nil, err
 	}
 	return &SessionResponse{
-		Messages:    response.Messages,
-		StopReason:  response.StopReason,
-		ToolUses:    response.ToolUses,
-		ToolResults: response.ToolResults,
-		Usage:       response.Usage,
-		TotalTokens: response.TotalTokens,
-		TurnNumber:  response.TurnNumber,
-		IsComplete:  response.IsComplete(),
-		Compacted:   response.Compacted,
+		Messages:          response.Messages,
+		StopReason:        response.StopReason,
+		ToolUses:          response.ToolUses,
+		ToolResults:       response.ToolResults,
+		Usage:             response.Usage,
+		TotalTokens:       response.TotalTokens,
+		TurnNumber:        response.TurnNumber,
+		IsComplete:        response.IsComplete(),
+		Compacted:         response.Compacted,
+		CompactPreTokens:  response.CompactPreTokens,
+		CompactPostTokens: response.CompactPostTokens,
 	}, nil
 }
 

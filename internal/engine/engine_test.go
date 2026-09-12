@@ -2708,6 +2708,8 @@ func TestCallModelNeverChainsPreviousResponseIDAcrossIterations(t *testing.T) {
 type fakeCompactionStrategy struct {
 	didCompact        bool
 	compactedMessages []types.Message
+	preTokens         int
+	postTokens        int
 }
 
 func (f *fakeCompactionStrategy) AutoCompact(
@@ -2722,7 +2724,12 @@ func (f *fakeCompactionStrategy) AutoCompact(
 	if !f.didCompact {
 		return compact.CompactionResult{Messages: messages, DidCompact: false}, nil
 	}
-	return compact.CompactionResult{Messages: f.compactedMessages, DidCompact: true}, nil
+	return compact.CompactionResult{
+		Messages:          f.compactedMessages,
+		DidCompact:        true,
+		PreCompactTokens:  f.preTokens,
+		PostCompactTokens: f.postTokens,
+	}, nil
 }
 
 // TestMaybeAutoCompactInvalidatesPreviousResponseID guards the defensive
@@ -2757,6 +2764,54 @@ func TestMaybeAutoCompactInvalidatesPreviousResponseID(t *testing.T) {
 	apiReq := loop.buildAPIRequest(state, RunRequest{}, codex)
 	if apiReq.PreviousResponseID != "" {
 		t.Fatal("expected no continuation hint to be offered after compaction invalidated it")
+	}
+}
+
+// TestRunResultCarriesCompactionTokenCounts guards the CompactPreTokens/
+// CompactPostTokens threading added alongside Compacted - previously
+// maybeAutoCompact computed these on CompactionResult and then discarded
+// them (only DidCompact survived into RunResult), leaving a host with no way
+// to show a before/after "saved N tokens" notice.
+func TestRunResultCarriesCompactionTokenCounts(t *testing.T) {
+	compacted := []types.Message{types.UserMessage("summary", "compacted history")}
+	loop := NewLoop(nil, nil, &fakeCompactionStrategy{
+		didCompact:        true,
+		compactedMessages: compacted,
+		preTokens:         12000,
+		postTokens:        3000,
+	}, nil, permissions.NewIntegrator(permissions.NewEngine()), nil,
+		&LoopConfig{MaxIterations: 3, AutoCompact: true, EnableStreaming: false}, nil)
+
+	loop.callModelFn = func(ctx context.Context, state *MutableState, req RunRequest) (*types.APIResponse, error) {
+		return &types.APIResponse{
+			Role:       types.RoleAssistant,
+			Content:    []types.ContentBlock{types.TextContent{Text: "done"}},
+			StopReason: types.StopReasonEndTurn,
+			Model:      req.Model,
+			ID:         "resp-1",
+		}, nil
+	}
+
+	result := loop.Run(context.Background(), RunRequest{
+		Messages:       []types.Message{types.UserMessage("msg-1", "hello")},
+		SessionID:      types.SessionID("session-1"),
+		TurnID:         types.TurnID("turn-1"),
+		PermissionMode: types.PermissionModeBypass,
+		Model:          types.ModelIdentifier{Provider: types.APIProviderAnthropic, Model: "claude-3-5-sonnet-20241022"},
+		MaxTokens:      256,
+	})
+
+	if result.Error != nil {
+		t.Fatalf("Run returned error: %v", result.Error)
+	}
+	if !result.Compacted {
+		t.Fatal("expected result.Compacted to be true")
+	}
+	if result.CompactPreTokens != 12000 {
+		t.Fatalf("expected CompactPreTokens=12000, got %d", result.CompactPreTokens)
+	}
+	if result.CompactPostTokens != 3000 {
+		t.Fatalf("expected CompactPostTokens=3000, got %d", result.CompactPostTokens)
 	}
 }
 

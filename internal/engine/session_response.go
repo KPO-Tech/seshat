@@ -7,14 +7,16 @@ import (
 
 // SessionResponse represents the response from a session turn.
 type SessionResponse struct {
-	Messages    []types.Message        `json:"messages"`
-	StopReason  string                 `json:"stop_reason"`
-	ToolUses    []types.ToolUseContent `json:"tool_uses"`
-	ToolResults []tool.CallResult      `json:"tool_results"`
-	Usage       *types.TokenUsage      `json:"usage"`
-	TotalTokens int                    `json:"total_tokens"`
-	TurnNumber  int                    `json:"turn_number"`
-	Compacted   bool                   `json:"compacted"`
+	Messages          []types.Message        `json:"messages"`
+	StopReason        string                 `json:"stop_reason"`
+	ToolUses          []types.ToolUseContent `json:"tool_uses"`
+	ToolResults       []tool.CallResult      `json:"tool_results"`
+	Usage             *types.TokenUsage      `json:"usage"`
+	TotalTokens       int                    `json:"total_tokens"`
+	TurnNumber        int                    `json:"turn_number"`
+	Compacted         bool                   `json:"compacted"`
+	CompactPreTokens  int                    `json:"compact_pre_tokens,omitempty"`
+	CompactPostTokens int                    `json:"compact_post_tokens,omitempty"`
 }
 
 // GetLastAssistantMessage returns the last assistant message.

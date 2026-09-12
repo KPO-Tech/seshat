@@ -8,6 +8,8 @@ import (
 
 type (
 	APIProvider           = internaltypes.APIProvider
+	APIRequest            = internaltypes.APIRequest
+	APIResponse           = internaltypes.APIResponse
 	APIChunkType          = internaltypes.APIChunkType
 	APIResponseChunk      = internaltypes.APIResponseChunk
 	ContentBlock          = internaltypes.ContentBlock
@@ -112,6 +114,42 @@ func SubAgentMaxDepthFromContext(ctx context.Context) int {
 	return internaltypes.SubAgentMaxDepthFromContext(ctx)
 }
 
+// WithPromptFn returns a context carrying this turn's interactive-prompt
+// bridge (consumed by ask_user_question and the permission integrator).
+// Prefer this over Client.SetPromptFn / Session.SetPromptFn when the same
+// *sdk.Client may be reused across concurrent turns (e.g. a per-user/provider
+// client cache) - those setters mutate shared state on the client/tools and
+// would otherwise race between turns sharing that client.
+func WithPromptFn(ctx context.Context, fn PromptFn) context.Context {
+	return internaltypes.WithPromptFn(ctx, fn)
+}
+
+// PromptFnFromContext returns the current turn's prompt bridge, or nil if none was set.
+func PromptFnFromContext(ctx context.Context) PromptFn {
+	return internaltypes.PromptFnFromContext(ctx)
+}
+
+// WithWebSearchRunner returns a context carrying this turn's web_search
+// execution runner (fn should be an sdk.WebSearchRunnerFn). Prefer this over
+// Client.SetWebSearchRunner for the same reason as WithPromptFn above.
+func WithWebSearchRunner(ctx context.Context, fn any) context.Context {
+	return internaltypes.WithWebSearchRunner(ctx, fn)
+}
+
+// WebSearchRunnerFromContext returns the current turn's web_search runner
+// (as `any` - assert to sdk.WebSearchRunnerFn), or nil if none was set.
+func WebSearchRunnerFromContext(ctx context.Context) any {
+	return internaltypes.WebSearchRunnerFromContext(ctx)
+}
+
 func GetContextWindow(model ModelIdentifier) ContextWindow {
 	return internaltypes.GetContextWindow(model)
+}
+
+// UserMessage builds a single-turn user Message - the minimal constructor
+// needed by callers doing a one-shot providers.Client.CreateMessage call
+// (title generation, memory extraction, and similar) rather than a full
+// agentic sdk.Session.
+func UserMessage(id string, content string) Message {
+	return internaltypes.UserMessage(id, content)
 }
