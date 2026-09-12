@@ -139,6 +139,86 @@ func TestOpenSearchUpsertUsesBulkAPI(t *testing.T) {
 	}
 }
 
+// TestOpenSearchDeleteKeysToleratesNotFound is a regression guard: deleting a
+// key that was never written (or already removed by a prior cleanup pass)
+// must no-op, matching every other VectorStore backend (Qdrant/Chroma
+// explicitly swallow their own "not found" shape; pgvector/sqlite/hnsw/memory
+// are naturally idempotent) and the contract DeleteFileChunks documents in
+// service.go. A real OpenSearch 404 delete response was previously surfaced
+// as a hard error by the opensearch-go client, aborting the whole batch.
+func TestOpenSearchDeleteKeysToleratesNotFound(t *testing.T) {
+	var deletedIDs []string
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		switch {
+		case r.URL.Path == "/":
+			_, _ = w.Write([]byte(`{"version":{"number":"2.19.0"},"tagline":"The OpenSearch Project: https://opensearch.org/"}`))
+		case r.URL.Path == "/_nodes/http":
+			_, _ = w.Write([]byte(`{"nodes":{}}`))
+		case r.Method == http.MethodDelete && strings.HasSuffix(r.URL.Path, "/missing-chunk"):
+			deletedIDs = append(deletedIDs, "missing-chunk")
+			w.WriteHeader(http.StatusNotFound)
+			_, _ = w.Write([]byte(`{"_index":"seshat-rag-kb","_id":"missing-chunk","_version":3,"result":"not_found","_shards":{"total":2,"successful":1,"failed":0},"_seq_no":356,"_primary_term":1}`))
+		case r.Method == http.MethodDelete && strings.HasSuffix(r.URL.Path, "/real-chunk"):
+			deletedIDs = append(deletedIDs, "real-chunk")
+			_, _ = w.Write([]byte(`{"_index":"seshat-rag-kb","_id":"real-chunk","_version":2,"result":"deleted","_shards":{"total":2,"successful":2,"failed":0},"_seq_no":10,"_primary_term":1}`))
+		default:
+			t.Fatalf("unexpected request: %s %s", r.Method, r.URL.Path)
+		}
+	}))
+	defer server.Close()
+
+	store, err := NewOpenSearchStore(context.Background(), OpenSearchConfig{
+		Addresses:   []string{server.URL},
+		CreateIndex: false,
+		KNN:         false,
+	})
+	if err != nil {
+		t.Fatalf("NewOpenSearchStore: %v", err)
+	}
+	t.Cleanup(func() { _ = store.Close() })
+
+	if err := store.DeleteKeys(context.Background(), "kb", []string{"missing-chunk", "real-chunk"}); err != nil {
+		t.Fatalf("expected DeleteKeys to no-op on a 404/not_found key, got: %v", err)
+	}
+	if !reflect.DeepEqual(deletedIDs, []string{"missing-chunk", "real-chunk"}) {
+		t.Fatalf("expected both keys to be attempted in order, got %v", deletedIDs)
+	}
+}
+
+// TestOpenSearchDeleteKeysStillFailsOnRealErrors is the flip side of the
+// tolerate-404 fix above: a genuine failure (a 500 here) must still abort
+// and surface an error, not be swallowed alongside the benign not-found case.
+func TestOpenSearchDeleteKeysStillFailsOnRealErrors(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		switch {
+		case r.URL.Path == "/":
+			_, _ = w.Write([]byte(`{"version":{"number":"2.19.0"},"tagline":"The OpenSearch Project: https://opensearch.org/"}`))
+		case r.URL.Path == "/_nodes/http":
+			_, _ = w.Write([]byte(`{"nodes":{}}`))
+		default:
+			w.WriteHeader(http.StatusInternalServerError)
+			_, _ = w.Write([]byte(`{"error":{"type":"internal_server_error","reason":"boom"}}`))
+		}
+	}))
+	defer server.Close()
+
+	store, err := NewOpenSearchStore(context.Background(), OpenSearchConfig{
+		Addresses:   []string{server.URL},
+		CreateIndex: false,
+		KNN:         false,
+	})
+	if err != nil {
+		t.Fatalf("NewOpenSearchStore: %v", err)
+	}
+	t.Cleanup(func() { _ = store.Close() })
+
+	if err := store.DeleteKeys(context.Background(), "kb", []string{"some-chunk"}); err == nil {
+		t.Fatal("expected a genuine server error to still be returned, got nil")
+	}
+}
+
 func TestOpenSearchFilterClauses(t *testing.T) {
 	clauses := openSearchFilterClauses(map[string]any{
 		"source":   "sharepoint",
