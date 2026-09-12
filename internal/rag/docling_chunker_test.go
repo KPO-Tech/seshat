@@ -219,3 +219,33 @@ func TestDoclingChunker_FallsBackToTextChunkerWhenUnavailable(t *testing.T) {
 		t.Fatalf("expected fallback paragraph chunks, got %d", len(chunks))
 	}
 }
+
+// TestNewDoclingChunkerForProfile_StructuredProfileGetsHeadingFallback is a
+// regression guard: only the "structured" profile should get the
+// heading-aware fallback - every other profile keeps plain ParagraphChunker,
+// matching today's behavior.
+func TestNewDoclingChunkerForProfile_StructuredProfileGetsHeadingFallback(t *testing.T) {
+	structured := NewDoclingChunkerForProfile(nil, ChunkProfile{Name: ChunkProfileStructured, MaxTokens: 1024}, docling.ChunkOptions{})
+	if _, ok := structured.Fallback.(*HeadingChunker); !ok {
+		t.Fatalf("expected the structured profile's fallback to be *HeadingChunker, got %T", structured.Fallback)
+	}
+
+	medium := NewDoclingChunkerForProfile(nil, ChunkProfile{Name: ChunkProfileMedium, MaxTokens: 768}, docling.ChunkOptions{})
+	if _, ok := medium.Fallback.(*HeadingChunker); ok {
+		t.Fatal("expected a non-structured profile's fallback to stay the plain chunker, not *HeadingChunker")
+	}
+
+	// End-to-end: with no client (docling path skipped entirely), the
+	// structured profile's SplitDocument call should still produce
+	// heading-aware output, not a flat paragraph split.
+	chunks, err := structured.SplitDocument(context.Background(), Document{
+		Filename: "policy.txt",
+		Text:     "Article 1 Scope\n\nApplies to all employees.\n",
+	})
+	if err != nil {
+		t.Fatalf("SplitDocument: %v", err)
+	}
+	if len(chunks) != 1 || chunks[0].Metadata["heading_path"] != "Article 1 Scope" {
+		t.Fatalf("expected heading-aware fallback output, got %+v", chunks)
+	}
+}
