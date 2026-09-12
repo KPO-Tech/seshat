@@ -223,3 +223,46 @@ func toRerankItems(results []rawRerankResult) []rerankItem {
 	}
 	return items
 }
+
+// NormalizeScores min-max scales scores into [0,1] so a rerank score can be
+// safely blended with a differently-scaled retrieval score (e.g. cosine
+// similarity), regardless of which provider produced it - Cohere/LangSearch
+// return an already-calibrated [0,1] relevance_score, but some
+// cross-encoder endpoints (raw logits) don't. Mirrors RAGFlow's
+// Base._normalize_rank: scores already inside [0,1] are left untouched
+// rather than needlessly rescaled; only an out-of-range batch is rescaled.
+//
+// A spreadless batch (every score identical, so max == min) would divide by
+// zero - returns 0.5 for every entry instead. That constant doesn't bias
+// relative order: added the same amount to every item in a blend, the
+// blended ranking for that batch just falls back to whatever the other
+// blend term (the original retrieval score) already ordered.
+func NormalizeScores(scores []float32) []float32 {
+	if len(scores) == 0 {
+		return scores
+	}
+	min, max := scores[0], scores[0]
+	for _, s := range scores[1:] {
+		if s < min {
+			min = s
+		}
+		if s > max {
+			max = s
+		}
+	}
+	if min >= 0 && max <= 1 {
+		return scores
+	}
+	out := make([]float32, len(scores))
+	if max == min {
+		for i := range out {
+			out[i] = 0.5
+		}
+		return out
+	}
+	spread := max - min
+	for i, s := range scores {
+		out[i] = (s - min) / spread
+	}
+	return out
+}
