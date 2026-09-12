@@ -282,14 +282,16 @@ func (s *Session) submitWithMessage(ctx context.Context, userMsg types.Message, 
 	s.rememberToolUsage(loopResult.ToolUses, loopResult.ToolResults)
 
 	response := &SessionResponse{
-		Messages:    s.state.CloneMessages(),
-		StopReason:  loopResult.StopReason,
-		ToolUses:    loopResult.ToolUses,
-		ToolResults: loopResult.ToolResults,
-		Usage:       loopResult.Usage,
-		TotalTokens: s.state.TotalTokens,
-		TurnNumber:  s.state.TurnNumber,
-		Compacted:   loopResult.Compacted,
+		Messages:          s.state.CloneMessages(),
+		StopReason:        loopResult.StopReason,
+		ToolUses:          loopResult.ToolUses,
+		ToolResults:       loopResult.ToolResults,
+		Usage:             loopResult.Usage,
+		TotalTokens:       s.state.TotalTokens,
+		TurnNumber:        s.state.TurnNumber,
+		Compacted:         loopResult.Compacted,
+		CompactPreTokens:  loopResult.CompactPreTokens,
+		CompactPostTokens: loopResult.CompactPostTokens,
 	}
 	s.emitRuntimeEvent(types.RuntimeEvent{
 		Type:          types.RuntimeEventTypeTurnCompleted,
@@ -300,6 +302,24 @@ func (s *Session) submitWithMessage(ctx context.Context, userMsg types.Message, 
 		ExecutionMode: s.state.CurrentExecutionMode(),
 		Usage:         cloneTokenUsage(response.Usage),
 	})
+	// Compaction otherwise happens completely silently - the token counts
+	// were already computed by maybeAutoCompact and would just be discarded.
+	// Emitted alongside (not instead of) turn.completed, in-band with the
+	// rest of this turn's stream, since - unlike a separate async
+	// condense call - compaction here already ran synchronously inside
+	// the turn that just completed.
+	if loopResult.Compacted {
+		s.emitRuntimeEvent(types.RuntimeEvent{
+			Type:       types.RuntimeEventTypeCompaction,
+			SessionID:  s.state.SessionID,
+			TurnID:     s.state.TurnID,
+			TurnNumber: response.TurnNumber,
+			CompactionEvent: &types.CompactionRuntimeEvent{
+				PreCompactTokens:  loopResult.CompactPreTokens,
+				PostCompactTokens: loopResult.CompactPostTokens,
+			},
+		})
+	}
 
 	return response, nil
 }

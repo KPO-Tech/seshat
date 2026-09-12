@@ -20,6 +20,14 @@ func NewClient(apiKey string, providerType internaltypes.APIProvider) *Client {
 	return internalproviders.NewClient(apiKey, providerType)
 }
 
+// NewClientWithConfig builds a provider client from an explicit Config
+// (provider type, base URL, etc.) rather than just a provider type - needed
+// by callers resolving a specific org/platform provider setting (custom
+// base URL, self-hosted endpoint) instead of using provider defaults.
+func NewClientWithConfig(apiKey string, config *Config) *Client {
+	return internalproviders.NewClientWithConfig(apiKey, config)
+}
+
 func StaticModels(providerName string) []FetchedModel {
 	return internalproviders.StaticModels(providerName)
 }

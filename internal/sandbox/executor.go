@@ -5,6 +5,8 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"reflect"
+	"sync"
 	"time"
 )
 
@@ -231,12 +233,39 @@ func defaultHistoryDir() string {
 	return filepath.Join(base, "seshat", "sandbox-history")
 }
 
+// dockerExecutorCache reuses a single *DockerExecutor across calls with the
+// same DockerExecutorConfig, instead of constructing (and orphan-reaping) a
+// brand new one on every call. This matters because a host embedding the SDK
+// as a library can end up calling NewExecutor far more often than "once at
+// process startup", which newDockerExecutor's own doc comment assumes:
+// seshat-backend rebuilds its whole sdk.Client (and therefore the bash tool,
+// and therefore this) fresh on every single chat turn. Without this cache,
+// every turn paid a `docker ps -a` (orphan reap) subprocess spawn for
+// nothing - the previous instance built seconds earlier had already reaped
+// everything there was to reap in this process's lifetime.
+var (
+	dockerExecutorCacheMu  sync.Mutex
+	dockerExecutorCacheCfg DockerExecutorConfig
+	dockerExecutorCached   *DockerExecutor
+)
+
 // NewExecutor creates the Executor selected by cfg.Kind.
 // Returns an error when the requested backend is unavailable.
 func NewExecutor(cfg ExecutorConfig) (Executor, error) {
 	switch cfg.Kind {
 	case EnvironmentDocker:
-		return newDockerExecutor(cfg.Docker)
+		dockerExecutorCacheMu.Lock()
+		defer dockerExecutorCacheMu.Unlock()
+		if dockerExecutorCached != nil && reflect.DeepEqual(dockerExecutorCacheCfg, cfg.Docker) {
+			return dockerExecutorCached, nil
+		}
+		executor, err := newDockerExecutor(cfg.Docker)
+		if err != nil {
+			return nil, err
+		}
+		dockerExecutorCached = executor
+		dockerExecutorCacheCfg = cfg.Docker
+		return executor, nil
 	default:
 		return NewNoopExecutor(), nil
 	}
