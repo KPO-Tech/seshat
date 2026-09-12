@@ -223,13 +223,26 @@ func (s *OpenSearchStore) DeleteKeys(ctx context.Context, namespace string, keys
 		if strings.TrimSpace(key) == "" {
 			continue
 		}
-		if _, err := s.client.Doc.Delete(ctx, opensearchapi.DeleteReq{
+		resp, err := s.client.Doc.Delete(ctx, opensearchapi.DeleteReq{
 			Index: index,
 			ID:    key,
 			Params: &opensearchapi.DeleteParams{
 				Refresh: "false",
 			},
-		}); err != nil {
+		})
+		if err != nil {
+			// A key that was never written, or already removed by a prior
+			// cleanup pass, is exactly what callers rely on this method
+			// no-op'ing on (see DeleteFileChunks' doc comment in service.go).
+			// OpenSearch reports that as a 404 "not_found" delete response,
+			// which the client surfaces as a Go error like any other non-2xx
+			// status - so it must be unwrapped and tolerated here, the same
+			// way HasNamespace above tolerates a 404 on Indices.Exists. Only
+			// a genuine failure (network error, 5xx, auth) should abort the
+			// batch.
+			if resp != nil && resp.Inspect().Response != nil && resp.Inspect().Response.StatusCode == http.StatusNotFound {
+				continue
+			}
 			return fmt.Errorf("opensearch delete key %q: %w", key, err)
 		}
 	}
