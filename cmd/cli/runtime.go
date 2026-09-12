@@ -6,6 +6,7 @@ import (
 	"log"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"time"
 
@@ -353,6 +354,15 @@ func buildRAGService(config engineconfig.Config, hnswDir, sqliteFallbackPath str
 	// raw text against the query text, not embeddings, so it works in
 	// vectorless mode too.
 	svc.SetReranker(reranker.NewFromEnv())
+
+	// RAG_RERANK_WEIGHT overrides the default blend weight (0.7) between the
+	// reranker's normalized score and each result's original retrieval
+	// score - see Service.SetRerankWeight. Left unset, the default applies.
+	if raw := strings.TrimSpace(os.Getenv("RAG_RERANK_WEIGHT")); raw != "" {
+		if w, err := strconv.ParseFloat(raw, 32); err == nil {
+			svc.SetRerankWeight(float32(w))
+		}
+	}
 
 	return svc
 }

@@ -59,6 +59,18 @@ type SearchRequest struct {
 	// HybridWeight blends vector similarity with BM25 keyword search.
 	// 0 (default) = pure vector; 1 = pure BM25; intermediate = linear blend.
 	HybridWeight float32
+	// RerankWeight blends the (normalized) reranker score with the original
+	// retrieval score, when a reranker is configured - a separate knob from
+	// HybridWeight, which blends at retrieval time (vector vs BM25); this
+	// one blends after retrieval (retrieval score vs rerank score). Above 0
+	// and up to 1, an explicit weight (1 = fully trust the reranker). Left
+	// at the zero value (0, the common case for a caller with no opinion)
+	// falls back to the service's configured default (see
+	// Service.SetRerankWeight) instead of silently disabling the blend - a
+	// caller that genuinely wants zero reranker influence should simply not
+	// configure a reranker, rather than rely on this field to suppress one.
+	// Ignored when no reranker is configured.
+	RerankWeight float32
 	// Filter restricts results by metadata key-value predicates.
 	// Passed through to vector.Query.Filter unchanged.
 	Filter map[string]any
