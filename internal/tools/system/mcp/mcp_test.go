@@ -177,7 +177,7 @@ func TestIntegrationResultCloseClosesIntegratedClientsOnce(t *testing.T) {
 }
 
 func TestWrapperWrapToolReturnsErrorForInvalidDefinition(t *testing.T) {
-	wrapper := NewWrapper(nil, "server", nil)
+	wrapper := NewWrapper(nil, ServerConfig{Name: "server"}, nil)
 
 	_, err := wrapper.WrapTool(Tool{
 		Name:        "",

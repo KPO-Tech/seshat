@@ -14,15 +14,17 @@ type AskResponse struct {
 
 // SessionResponse represents the response from a multi-turn session.
 type SessionResponse struct {
-	Messages    []Message        `json:"messages"`
-	StopReason  string           `json:"stop_reason"`
-	ToolUses    []ToolUseContent `json:"tool_uses"`
-	ToolResults []CallResult     `json:"tool_results"`
-	Usage       *TokenUsage      `json:"usage"`
-	TotalTokens int              `json:"total_tokens"`
-	TurnNumber  int              `json:"turn_number"`
-	IsComplete  bool             `json:"is_complete"`
-	Compacted   bool             `json:"compacted,omitempty"`
+	Messages          []Message        `json:"messages"`
+	StopReason        string           `json:"stop_reason"`
+	ToolUses          []ToolUseContent `json:"tool_uses"`
+	ToolResults       []CallResult     `json:"tool_results"`
+	Usage             *TokenUsage      `json:"usage"`
+	TotalTokens       int              `json:"total_tokens"`
+	TurnNumber        int              `json:"turn_number"`
+	IsComplete        bool             `json:"is_complete"`
+	Compacted         bool             `json:"compacted,omitempty"`
+	CompactPreTokens  int              `json:"compact_pre_tokens,omitempty"`
+	CompactPostTokens int              `json:"compact_post_tokens,omitempty"`
 }
 
 // --- message helpers (used by Ask and sdk_session) ---

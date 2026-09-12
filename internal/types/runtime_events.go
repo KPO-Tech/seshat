@@ -27,6 +27,20 @@ const (
 	RuntimeEventTypeExecutionModeChanged RuntimeEventType = "execution_mode.changed"
 	RuntimeEventTypeTaskChanged          RuntimeEventType = "task.changed"
 
+	// RuntimeEventTypeStage marks a named phase of pre-generation turn setup
+	// (loading tools, resuming a session, searching knowledge) so a client can
+	// show what's happening instead of a generic spinner during the otherwise
+	// silent gap before the first response chunk arrives.
+	RuntimeEventTypeStage RuntimeEventType = "turn.stage"
+
+	// RuntimeEventTypeCompaction is emitted alongside turn.completed whenever
+	// that turn triggered auto-compaction - otherwise compaction happens
+	// completely silently even though the before/after token counts are
+	// already computed internally (see CompactionResult in
+	// internal/runtime/memory). Lets a client show a "conversation
+	// compacted, saved N tokens" notice.
+	RuntimeEventTypeCompaction RuntimeEventType = "context.compacted"
+
 	// Goal events — mirrors Codex ThreadGoalUpdatedNotification / ThreadGoalUpdatedEvent.
 	RuntimeEventTypeGoalUpdated RuntimeEventType = "goal.updated"
 
@@ -74,6 +88,12 @@ type RuntimeEvent struct {
 
 	// AgentEvent carries structured payload for multi-agent collab events.
 	AgentEvent *AgentRuntimeEvent `json:"agent_event,omitempty"`
+
+	// StageEvent carries structured payload for turn.stage events.
+	StageEvent *StageRuntimeEvent `json:"stage_event,omitempty"`
+
+	// CompactionEvent carries structured payload for context.compacted events.
+	CompactionEvent *CompactionRuntimeEvent `json:"compaction_event,omitempty"`
 
 	Error string `json:"error,omitempty"`
 }
@@ -137,6 +157,24 @@ type TaskRuntimeEvent struct {
 	Action  string `json:"action"`
 	Status  string `json:"status,omitempty"`
 	Subject string `json:"subject,omitempty"`
+}
+
+// StageRuntimeEvent is the structured payload for turn.stage events - a
+// named phase of pre-generation turn setup, superseded implicitly once real
+// generation begins (turn.started/response.chunk arrive on the same channel
+// and already update client-side agent state, so no explicit "stage ended"
+// event is emitted).
+type StageRuntimeEvent struct {
+	// Stage is a stable machine-readable identifier (e.g. "tools", "session", "knowledge").
+	Stage string `json:"stage"`
+	// Label is the human-readable phrase a client can show directly.
+	Label string `json:"label"`
+}
+
+// CompactionRuntimeEvent is the structured payload for context.compacted events.
+type CompactionRuntimeEvent struct {
+	PreCompactTokens  int `json:"pre_compact_tokens"`
+	PostCompactTokens int `json:"post_compact_tokens"`
 }
 
 // BrowserRuntimeEvent is the structured payload emitted for browser lifecycle and interaction activity.

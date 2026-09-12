@@ -112,7 +112,31 @@ type DockerExecutor struct {
 
 	mu   sync.Mutex
 	envs map[string]*dockerEnv // keyed by EnvironmentID ("" = default)
+
+	// healthMu guards the Healthy() result cache below. Docker's
+	// installed/running state is an external fact that essentially never
+	// changes between two chat turns seconds apart, but every bash-tool
+	// construction used to re-probe it with a fresh `docker version`
+	// subprocess (see healthCacheTTL's doc comment for why this matters).
+	healthMu        sync.Mutex
+	healthCheckedAt time.Time
+	healthErr       error
 }
+
+// healthCacheTTL bounds how long a Healthy() result is reused before
+// re-probing. seshat-backend calls sdk.NewClient (which reconstructs the bash
+// tool, which calls Healthy) fresh per chat turn - see NewExecutor's caching,
+// the other half of this fix, which keeps the *DockerExecutor instance (and
+// therefore this cache) alive across turns instead of a fresh, cold one every
+// time. A short TTL (an earlier version of this fix used 30s) defeats the
+// point: real chat turns are commonly minutes apart, so a 30s window still
+// re-probed on nearly every single message. Docker's installed/running state
+// is an external fact that essentially never changes over the course of one
+// chat session, so this can be long - long enough to make repeated turns
+// within a session effectively free, short enough that a Docker daemon
+// stopped or started mid-session is still noticed within a turn or two of it
+// happening (not "for the rest of the process's life").
+const healthCacheTTL = 10 * time.Minute
 
 // dockerEnv tracks one persistent environment container.
 type dockerEnv struct {
@@ -235,7 +259,34 @@ func (e *DockerExecutor) Kind() EnvironmentKind { return EnvironmentDocker }
 // calls this once at startup so the host application can fall back
 // (typically to NoopExecutor with a visible warning) instead of failing
 // every subsequent bash call individually.
+//
+// Result is cached for healthCacheTTL: a host that calls this on every turn
+// (seshat-backend does, via bash.NewTool on every sdk.NewClient) would
+// otherwise pay a `docker version` subprocess spawn - and, if Runtime or
+// TrackFileChanges is configured, one or two more - on every single chat
+// message even though Docker's availability essentially never changes
+// between consecutive turns.
 func (e *DockerExecutor) Healthy(ctx context.Context) error {
+	e.healthMu.Lock()
+	if !e.healthCheckedAt.IsZero() && time.Since(e.healthCheckedAt) < healthCacheTTL {
+		err := e.healthErr
+		e.healthMu.Unlock()
+		return err
+	}
+	e.healthMu.Unlock()
+
+	err := e.probeHealthy(ctx)
+
+	e.healthMu.Lock()
+	e.healthCheckedAt = time.Now()
+	e.healthErr = err
+	e.healthMu.Unlock()
+	return err
+}
+
+// probeHealthy does the actual, uncached Docker daemon/runtime probing that
+// Healthy caches the result of.
+func (e *DockerExecutor) probeHealthy(ctx context.Context) error {
 	cmd := exec.CommandContext(ctx, e.cfg.DockerBinary, "version", "--format", "{{.Server.Version}}")
 	var stderr bytes.Buffer
 	cmd.Stderr = &stderr

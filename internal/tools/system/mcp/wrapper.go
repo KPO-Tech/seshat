@@ -3,6 +3,8 @@ package mcp
 import (
 	"context"
 	"fmt"
+	"log"
+	"sync"
 
 	tool "github.com/KPO-Tech/seshat/internal/tools/registry"
 	"github.com/KPO-Tech/seshat/internal/tools/schema"
@@ -13,17 +15,75 @@ const ListMcpResourcesToolName = "mcp_list_resources"
 const ReadMcpResourceToolName = "mcp_read_resource"
 
 type Wrapper struct {
-	client     *Client
 	serverName string
 	nameMode   ToolNameMode
+	config     ServerConfig
+
+	// mu guards client - every wrapped tool/resource/prompt handler reads it
+	// through activeClient, which may swap it for a freshly reconnected one
+	// (see activeClient's doc comment). All handlers close over the same
+	// *Wrapper, so this is the one place that needs to be race-safe.
+	mu     sync.Mutex
+	client *Client
 }
 
-func NewWrapper(client *Client, serverName string, options *IntegrationOptions) *Wrapper {
+func NewWrapper(client *Client, config ServerConfig, options *IntegrationOptions) *Wrapper {
 	resolved := normalizeIntegrationOptions(options)
 	if client != nil {
 		client.SetToolNameMode(resolved.ToolNameMode)
 	}
-	return &Wrapper{client: client, serverName: serverName, nameMode: resolved.ToolNameMode}
+	return &Wrapper{client: client, serverName: config.Name, nameMode: resolved.ToolNameMode, config: config}
+}
+
+// activeClient returns a client ready to serve the next request, reconnecting
+// once first if the current one has failed or closed.
+//
+// Mirrors OpenHands' MCPToolExecutor.call_tool (openhands-sdk/mcp/tool.py):
+// checking connection health right before use and retrying once "prevents a
+// single transient error from permanently disabling all MCP tools" for the
+// rest of this connection's lifetime - which, since seshat-backend now
+// caches the whole sdk.Client (and everything built into it, including this
+// MCP connection) for up to 30 minutes, is a much longer window to be stuck
+// than the old per-turn-fresh-client world this was originally written
+// against. Without this, a server that crashes or drops its connection mid-
+// session would stay broken for every turn until the cache entry expires.
+//
+// The underlying transport can't simply be restarted in place (see
+// StdioTransport.Start's "already started" guard), so a genuine reconnect
+// means building a brand new *Client from the original ServerConfig - this
+// is why Wrapper keeps config around, not just the live client.
+func (w *Wrapper) activeClient(ctx context.Context) *Client {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+
+	switch w.client.Metadata().Status {
+	case ClientStatusFailed, ClientStatusClosed, ClientStatusExpired:
+		// fall through to reconnect attempt below
+	default:
+		return w.client
+	}
+
+	fresh, err := NewClient(w.config)
+	if err != nil {
+		log.Printf("[mcp] server %q: reconnect failed (create client): %v", w.serverName, err)
+		return w.client
+	}
+	if err := fresh.Start(ctx); err != nil {
+		log.Printf("[mcp] server %q: reconnect failed (start): %v", w.serverName, err)
+		return w.client
+	}
+	if _, err := fresh.Initialize(ctx); err != nil {
+		log.Printf("[mcp] server %q: reconnect failed (initialize): %v", w.serverName, err)
+		_ = fresh.Close()
+		return w.client
+	}
+	fresh.SetToolNameMode(w.nameMode)
+
+	log.Printf("[mcp] server %q: reconnected after a dropped connection", w.serverName)
+	stale := w.client
+	w.client = fresh
+	go func() { _ = stale.Close() }() // best-effort; never block this call on cleaning up the dead one
+	return fresh
 }
 
 func (w *Wrapper) WrapTool(mcpTool Tool) (tool.Tool, error) {
@@ -73,7 +133,7 @@ func (w *Wrapper) WrapTool(mcpTool Tool) (tool.Tool, error) {
 			}
 		}
 
-		result, err := w.client.CallToolWithProgress(ctx, mcpTool.Name, input.Parsed, onProgress)
+		result, err := w.activeClient(ctx).CallToolWithProgress(ctx, mcpTool.Name, input.Parsed, onProgress)
 		if err != nil {
 			return tool.NewErrorResult(err), nil
 		}
@@ -169,7 +229,7 @@ func (w *Wrapper) WrapResource(resource Resource) (tool.Tool, error) {
 				uri = u
 			}
 		}
-		readResult, err := w.client.CanonicalReadResource(ctx, uri)
+		readResult, err := w.activeClient(ctx).CanonicalReadResource(ctx, uri)
 		if err != nil {
 			return tool.NewErrorResult(err), nil
 		}
@@ -241,7 +301,7 @@ func (w *Wrapper) WrapPrompt(prompt Prompt) (tool.Tool, error) {
 		if input.Parsed != nil {
 			arguments = input.Parsed
 		}
-		promptResult, err := w.client.CanonicalPrompt(ctx, prompt.Name, arguments)
+		promptResult, err := w.activeClient(ctx).CanonicalPrompt(ctx, prompt.Name, arguments)
 		if err != nil {
 			return tool.NewErrorResult(err), nil
 		}
@@ -291,7 +351,7 @@ func (w *Wrapper) WrapListResourcesTool() (tool.Tool, error) {
 		IsConcurrencySafe: true,
 	}
 	handler := func(ctx context.Context, input tool.CallInput, toolCtx tool.ToolUseContext) (tool.CallResult, error) {
-		resources, err := w.client.ListResources(ctx)
+		resources, err := w.activeClient(ctx).ListResources(ctx)
 		if err != nil {
 			return tool.NewErrorResult(err), nil
 		}
@@ -322,7 +382,7 @@ func (w *Wrapper) WrapReadResourceTool() (tool.Tool, error) {
 	}
 	handler := func(ctx context.Context, input tool.CallInput, toolCtx tool.ToolUseContext) (tool.CallResult, error) {
 		uri, _ := input.Parsed["uri"].(string)
-		readResult, err := w.client.CanonicalReadResource(ctx, uri)
+		readResult, err := w.activeClient(ctx).CanonicalReadResource(ctx, uri)
 		if err != nil {
 			return tool.NewErrorResult(err), nil
 		}
@@ -343,7 +403,7 @@ func (w *Wrapper) WrapReadResourceTool() (tool.Tool, error) {
 
 func (w *Wrapper) WrapAll(ctx context.Context) ([]tool.Tool, error) {
 	allTools := make([]tool.Tool, 0)
-	mcpTools, err := w.client.ListTools(ctx)
+	mcpTools, err := w.activeClient(ctx).ListTools(ctx)
 	if err == nil && len(mcpTools) > 0 {
 		wrappedTools, err := w.WrapTools(mcpTools)
 		if err != nil {
@@ -351,7 +411,7 @@ func (w *Wrapper) WrapAll(ctx context.Context) ([]tool.Tool, error) {
 		}
 		allTools = append(allTools, wrappedTools...)
 	}
-	resources, err := w.client.ListResources(ctx)
+	resources, err := w.activeClient(ctx).ListResources(ctx)
 	if err == nil && len(resources) > 0 {
 		wrappedResources, err := w.WrapResources(resources)
 		if err != nil {
@@ -359,7 +419,7 @@ func (w *Wrapper) WrapAll(ctx context.Context) ([]tool.Tool, error) {
 		}
 		allTools = append(allTools, wrappedResources...)
 	}
-	prompts, err := w.client.ListPrompts(ctx)
+	prompts, err := w.activeClient(ctx).ListPrompts(ctx)
 	if err == nil && len(prompts) > 0 {
 		for _, prompt := range prompts {
 			wrappedPrompt, err := w.WrapPrompt(prompt)

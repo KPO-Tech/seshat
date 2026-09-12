@@ -173,7 +173,13 @@ func (m *MCPClientManager) AllTools(ctx context.Context, registry *tool.Registry
 			continue
 		}
 
-		wrapper := NewWrapper(client, serverName, nil)
+		// No ServerConfig on hand here (see MCPClientManager.clients' shape) -
+		// a Name-only stub means activeClient's reconnect attempt will
+		// predictably fail-fast on a dropped connection rather than silently
+		// reconnecting, same as before this change; this path is the
+		// interactive/dynamic connect_mcp_server tool, not the cached-client
+		// startup path the reconnect logic targets.
+		wrapper := NewWrapper(client, ServerConfig{Name: serverName}, nil)
 		wrapped, err := wrapper.WrapTools(mcpTools)
 		if err != nil {
 			continue

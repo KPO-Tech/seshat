@@ -93,13 +93,15 @@ type RunnerRequest struct {
 
 // RunnerResult represents the result of running a turn through the runner facade.
 type RunnerResult struct {
-	Messages    []types.Message        `json:"messages"`
-	StopReason  string                 `json:"stop_reason"`
-	ToolUses    []types.ToolUseContent `json:"tool_uses"`
-	ToolResults []tool.CallResult      `json:"tool_results"`
-	Usage       *types.TokenUsage      `json:"usage"`
-	Compacted   bool                   `json:"compacted"`
-	Iterations  int                    `json:"iterations"`
+	Messages          []types.Message        `json:"messages"`
+	StopReason        string                 `json:"stop_reason"`
+	ToolUses          []types.ToolUseContent `json:"tool_uses"`
+	ToolResults       []tool.CallResult      `json:"tool_results"`
+	Usage             *types.TokenUsage      `json:"usage"`
+	Compacted         bool                   `json:"compacted"`
+	CompactPreTokens  int                    `json:"compact_pre_tokens,omitempty"`
+	CompactPostTokens int                    `json:"compact_post_tokens,omitempty"`
+	Iterations        int                    `json:"iterations"`
 }
 
 // Run executes a single turn by delegating to the canonical query loop.
@@ -122,12 +124,14 @@ func (r *Runner) Run(ctx context.Context, req RunnerRequest) (RunnerResult, erro
 	}
 
 	return RunnerResult{
-		Messages:    result.Messages,
-		StopReason:  result.StopReason,
-		ToolUses:    result.ToolUses,
-		ToolResults: result.ToolResults,
-		Usage:       result.Usage,
-		Compacted:   result.Compacted,
-		Iterations:  result.Iterations,
+		Messages:          result.Messages,
+		StopReason:        result.StopReason,
+		ToolUses:          result.ToolUses,
+		ToolResults:       result.ToolResults,
+		Usage:             result.Usage,
+		Compacted:         result.Compacted,
+		CompactPreTokens:  result.CompactPreTokens,
+		CompactPostTokens: result.CompactPostTokens,
+		Iterations:        result.Iterations,
 	}, nil
 }

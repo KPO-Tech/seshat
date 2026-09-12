@@ -60,6 +60,21 @@ func (i *Integrator) SetPromptFn(fn types.PromptFn) {
 	i.promptFn = fn
 }
 
+// effectivePromptFn prefers the per-turn prompt bridge carried on ctx (see
+// types.WithPromptFn) over i.promptFn, the value set via SetPromptFn. A host
+// that reuses one *Integrator (owned by one *sdk.Client) across concurrent
+// turns - e.g. a per-user/provider client cache - must use the context path
+// to stay turn-isolated: i.promptFn is a single shared field, so two
+// concurrent turns calling SetPromptFn would otherwise race and could route
+// a permission prompt to the wrong session. i.promptFn remains as a fallback
+// for callers that never share an Integrator across turns.
+func (i *Integrator) effectivePromptFn(ctx context.Context) types.PromptFn {
+	if fn := types.PromptFnFromContext(ctx); fn != nil {
+		return fn
+	}
+	return i.promptFn
+}
+
 // Resolver creates a typed PermissionResolver that integrates with the permission engine.
 func (i *Integrator) Resolver(sessionID types.SessionID, turnID types.TurnID, mode types.PermissionMode) types.PermissionResolver {
 	return i.ResolverWithContext(sessionID, turnID, &types.PermissionContext{Mode: mode}, nil)
@@ -241,7 +256,8 @@ func (i *Integrator) ResolverWithContext(
 			)
 		}
 
-		if i.promptFn == nil {
+		promptFn := i.effectivePromptFn(ctx)
+		if promptFn == nil {
 			return result
 		}
 
@@ -256,7 +272,7 @@ func (i *Integrator) ResolverWithContext(
 			},
 		}
 
-		response, err := i.promptFn(ctx, promptReq)
+		response, err := promptFn(ctx, promptReq)
 		if err != nil {
 			return types.DenyWithDecisionReason(fmt.Sprintf("prompt failed: %v", err), &types.PermissionDecisionReason{
 				Type:   types.PermissionDecisionReasonPrompt,
@@ -725,7 +741,7 @@ func (i *Integrator) PermissionMiddleware(
 			return nil
 		}
 
-		if result.IsAsk() && i.promptFn == nil {
+		if result.IsAsk() && i.effectivePromptFn(ctx) == nil {
 			return &PermissionDeniedError{
 				ToolName: toolName,
 				Reason:   "permission required but no prompt function available",

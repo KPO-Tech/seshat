@@ -527,6 +527,14 @@ type MutableState struct {
 	// Compacted indicates if compaction occurred
 	Compacted bool
 
+	// CompactPreTokens and CompactPostTokens carry the token counts from the
+	// most recent compaction this turn (zero unless Compacted is true) - see
+	// maybeAutoCompact. Threaded through RunResult/SessionResponse so a host
+	// can show a before/after "saved N tokens" toast instead of compaction
+	// happening completely silently.
+	CompactPreTokens  int
+	CompactPostTokens int
+
 	// PreviousResponseID and PreviousResponseMessageCount enable a provider
 	// that supports server-side conversation continuation (currently:
 	// Codex's Responses API previous_response_id) to send only the messages

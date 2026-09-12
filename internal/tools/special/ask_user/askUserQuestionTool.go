@@ -533,13 +533,27 @@ func (t *Tool) askQuestions(ctx context.Context, input *Input, toolUseID string)
 }
 
 func (t *Tool) askSingleQuestion(ctx context.Context, question Question, allQuestions []Question, questionIndex int, toolUseID string) (string, Annotation, error) {
-	if t.promptFn != nil {
-		return t.askWithPromptFn(ctx, question, allQuestions, questionIndex, toolUseID)
+	if promptFn := t.effectivePromptFn(ctx); promptFn != nil {
+		return t.askWithPromptFn(ctx, promptFn, question, allQuestions, questionIndex, toolUseID)
 	}
 	return t.askWithReader(ctx, question)
 }
 
-func (t *Tool) askWithPromptFn(ctx context.Context, question Question, allQuestions []Question, questionIndex int, toolUseID string) (string, Annotation, error) {
+// effectivePromptFn prefers the per-turn prompt bridge carried on ctx (see
+// types.WithPromptFn) over t.promptFn, the construction-time default set via
+// Config.PromptFn / SetPromptFn. The context path is what a host reusing one
+// *Tool instance across concurrent turns (a cached sdk.Client) must use to
+// stay turn-isolated; t.promptFn remains as a fallback for callers that never
+// share a tool instance across turns and so have no reason to thread it
+// through context.
+func (t *Tool) effectivePromptFn(ctx context.Context) types.PromptFn {
+	if fn := types.PromptFnFromContext(ctx); fn != nil {
+		return fn
+	}
+	return t.promptFn
+}
+
+func (t *Tool) askWithPromptFn(ctx context.Context, promptFn types.PromptFn, question Question, allQuestions []Question, questionIndex int, toolUseID string) (string, Annotation, error) {
 	options := make([]types.PromptOption, 0, len(question.Options)+1)
 	for _, option := range question.Options {
 		options = append(options, types.PromptOption{
@@ -563,7 +577,7 @@ func (t *Tool) askWithPromptFn(ctx context.Context, question Question, allQuesti
 		}
 	}
 
-	response, err := t.promptFn(ctx, types.PromptRequest{
+	response, err := promptFn(ctx, types.PromptRequest{
 		Type:     types.PromptTypeChoice,
 		Message:  question.Question,
 		Options:  options,
@@ -597,7 +611,7 @@ func (t *Tool) askWithPromptFn(ctx context.Context, question Question, allQuesti
 			return "", Annotation{}, err
 		}
 		if custom {
-			customText, err := t.askCustomText(ctx, question, toolUseID)
+			customText, err := t.askCustomText(ctx, promptFn, question, toolUseID)
 			return customText, Annotation{}, err
 		}
 
@@ -619,7 +633,7 @@ func (t *Tool) askWithPromptFn(ctx context.Context, question Question, allQuesti
 
 	selection := fmt.Sprintf("%v", response.Value)
 	if selection == "__other__" {
-		customText, err := t.askCustomText(ctx, question, toolUseID)
+		customText, err := t.askCustomText(ctx, promptFn, question, toolUseID)
 		return customText, Annotation{}, err
 	}
 
@@ -630,12 +644,12 @@ func (t *Tool) askWithPromptFn(ctx context.Context, question Question, allQuesti
 	return selection, annotation, nil
 }
 
-func (t *Tool) askCustomText(ctx context.Context, question Question, toolUseID string) (string, error) {
-	if t.promptFn == nil {
+func (t *Tool) askCustomText(ctx context.Context, promptFn types.PromptFn, question Question, toolUseID string) (string, error) {
+	if promptFn == nil {
 		return "", fmt.Errorf("no prompt function available for custom text input")
 	}
 
-	response, err := t.promptFn(ctx, types.PromptRequest{
+	response, err := promptFn(ctx, types.PromptRequest{
 		Type:    types.PromptTypeText,
 		Message: fmt.Sprintf("%s (custom answer)", question.Question),
 		Metadata: map[string]any{
