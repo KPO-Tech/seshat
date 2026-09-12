@@ -4,18 +4,26 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"sort"
 	"strings"
 
+	"github.com/KPO-Tech/seshat/internal/rag/reranker"
 	"github.com/KPO-Tech/seshat/internal/storage"
 	"github.com/KPO-Tech/seshat/internal/vector"
 )
 
+// defaultRerankWeight is used whenever a SearchRequest doesn't specify its
+// own RerankWeight - see SetRerankWeight's doc comment for why 0.7 (weighted
+// toward the reranker, but not a full override) is the chosen default.
+const defaultRerankWeight float32 = 0.7
+
 type Service struct {
-	artifacts storage.ArtifactStore // optional — nil = skip rag-doc blob storage
-	vectors   vector.Store
-	embedder  Embedder
-	chunker   Chunker
-	reranker  Reranker // optional — nil = return vector results as-is
+	artifacts    storage.ArtifactStore // optional — nil = skip rag-doc blob storage
+	vectors      vector.Store
+	embedder     Embedder
+	chunker      Chunker
+	reranker     Reranker // optional — nil = return vector results as-is
+	rerankWeight float32
 }
 
 func NewService(artifacts storage.ArtifactStore, vectors vector.Store, embedder Embedder, chunker Chunker) *Service {
@@ -23,10 +31,11 @@ func NewService(artifacts storage.ArtifactStore, vectors vector.Store, embedder 
 		chunker = DefaultChunker()
 	}
 	return &Service{
-		artifacts: artifacts,
-		vectors:   vectors,
-		embedder:  embedder,
-		chunker:   chunker,
+		artifacts:    artifacts,
+		vectors:      vectors,
+		embedder:     embedder,
+		chunker:      chunker,
+		rerankWeight: defaultRerankWeight,
 	}
 }
 
@@ -37,6 +46,25 @@ func (s *Service) SetReranker(r Reranker) {
 		return
 	}
 	s.reranker = r
+}
+
+// SetRerankWeight overrides the default blend weight (0.7) applied between
+// the reranker's normalized score and each result's original retrieval
+// score, for any SearchRequest that doesn't set its own RerankWeight. 0.7
+// was chosen to stay close to the previous behavior (which fully trusted
+// the reranker) while still being a genuine blend rather than a wholesale
+// override. w is clamped to [0,1].
+func (s *Service) SetRerankWeight(w float32) {
+	if s == nil {
+		return
+	}
+	switch {
+	case w < 0:
+		w = 0
+	case w > 1:
+		w = 1
+	}
+	s.rerankWeight = w
 }
 
 // Vectors returns the underlying vector store, e.g. for callers that need to
@@ -291,22 +319,36 @@ func (s *Service) Search(ctx context.Context, request SearchRequest) (SearchResp
 		}
 		indices, scores, rerankErr := s.reranker.Rerank(ctx, request.Query, texts, topK)
 		if rerankErr == nil && len(indices) > 0 {
+			normScores := reranker.NormalizeScores(scores)
+			weight := request.RerankWeight
+			if weight <= 0 {
+				weight = s.rerankWeight
+			}
 			reranked := make([]SearchResult, 0, len(indices))
 			for i, idx := range indices {
 				if idx < 0 || idx >= len(results) {
 					continue
 				}
-				score := float32(0)
-				if i < len(scores) {
-					score = scores[i]
+				normScore := float32(0)
+				if i < len(normScores) {
+					normScore = normScores[i]
 				}
+				// Blend, don't override: the original retrieval score
+				// (results[idx].Score) still counts for weight (1-w), so a
+				// confidently-wrong rerank call can't fully bury a strong
+				// vector/BM25 match.
+				blended := (1-weight)*results[idx].Score + weight*normScore
 				reranked = append(reranked, SearchResult{
 					Key:      results[idx].Record.Key,
 					Text:     results[idx].Record.Text,
-					Score:    score,
+					Score:    blended,
 					Metadata: results[idx].Record.Metadata,
 				})
 			}
+			// The reranker's own index order no longer determines final
+			// order once blended with the retrieval score - re-sort by the
+			// blended score itself.
+			sort.Slice(reranked, func(i, j int) bool { return reranked[i].Score > reranked[j].Score })
 			return SearchResponse{CorpusID: request.CorpusID, Results: reranked}, nil
 		}
 		// reranker failed — fall through to vector order below

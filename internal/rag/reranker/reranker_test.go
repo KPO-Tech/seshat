@@ -220,3 +220,39 @@ func TestNewLangSearchRerankerWithKey_NonEmptyKeyIsConfigured(t *testing.T) {
 		t.Error("expected a non-empty API key to configure the LangSearch reranker")
 	}
 }
+
+func TestNormalizeScores_AlreadyInRangeIsUntouched(t *testing.T) {
+	in := []float32{0.95, 0.2, 0.0, 1.0}
+	out := NormalizeScores(in)
+	for i := range in {
+		if out[i] != in[i] {
+			t.Fatalf("expected already-in-[0,1] scores to pass through unchanged, got %v want %v", out, in)
+		}
+	}
+}
+
+func TestNormalizeScores_OutOfRangeIsMinMaxScaled(t *testing.T) {
+	// Unbounded logits, e.g. a raw cross-encoder that doesn't calibrate to [0,1].
+	out := NormalizeScores([]float32{5.2, 1.1, -0.3})
+	want := []float32{1.0, (1.1 - -0.3) / (5.2 - -0.3), 0.0}
+	for i := range want {
+		if diff := out[i] - want[i]; diff > 1e-4 || diff < -1e-4 {
+			t.Fatalf("index %d: got %v want %v (full: %v)", i, out[i], want[i], out)
+		}
+	}
+}
+
+func TestNormalizeScores_SpreadlessBatchAvoidsDivideByZero(t *testing.T) {
+	out := NormalizeScores([]float32{3.0, 3.0, 3.0})
+	for i, v := range out {
+		if v != 0.5 {
+			t.Fatalf("index %d: expected the spreadless-batch fallback 0.5, got %v (full: %v)", i, v, out)
+		}
+	}
+}
+
+func TestNormalizeScores_EmptyInput(t *testing.T) {
+	if out := NormalizeScores(nil); len(out) != 0 {
+		t.Fatalf("expected empty input to produce empty output, got %v", out)
+	}
+}
