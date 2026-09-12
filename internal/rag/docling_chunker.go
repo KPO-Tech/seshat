@@ -30,16 +30,23 @@ func NewDoclingChunker(client *docling.Client, opts docling.ChunkOptions) *Docli
 }
 
 // NewDoclingChunkerForProfile creates a document-aware chunker using one of
-// Seshat's recommended chunking profiles.
+// Seshat's recommended chunking profiles. When docling-serve is unavailable
+// or fails, the fallback for the "structured" profile is HeadingChunker
+// (heading/numbering-hierarchy aware) instead of plain ParagraphChunker -
+// every other profile keeps the plain fallback unchanged.
 func NewDoclingChunkerForProfile(client *docling.Client, profile ChunkProfile, opts docling.ChunkOptions) *DoclingChunker {
 	if profile.MaxTokens <= 0 {
 		profile = DefaultChunkProfile()
+	}
+	fallback := DefaultChunker()
+	if profile.Name == ChunkProfileStructured {
+		fallback = NewHeadingChunker(profile)
 	}
 	return &DoclingChunker{
 		Client:   client,
 		Options:  DoclingChunkOptionsForProfile(profile, opts),
 		Profile:  profile,
-		Fallback: DefaultChunker(),
+		Fallback: fallback,
 	}
 }
 
