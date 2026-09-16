@@ -3,6 +3,7 @@ package vector
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -146,8 +147,10 @@ func TestOpenSearchUpsertUsesBulkAPI(t *testing.T) {
 // are naturally idempotent) and the contract DeleteFileChunks documents in
 // service.go. A real OpenSearch 404 delete response was previously surfaced
 // as a hard error by the opensearch-go client, aborting the whole batch.
+// DeleteKeys goes through the _bulk API (not one DELETE per key - see
+// TestOpenSearchDeleteKeysUsesBulkAPI), so this exercises the per-item 404
+// tolerance in a bulk response instead of a standalone DELETE's status code.
 func TestOpenSearchDeleteKeysToleratesNotFound(t *testing.T) {
-	var deletedIDs []string
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		switch {
@@ -155,13 +158,11 @@ func TestOpenSearchDeleteKeysToleratesNotFound(t *testing.T) {
 			_, _ = w.Write([]byte(`{"version":{"number":"2.19.0"},"tagline":"The OpenSearch Project: https://opensearch.org/"}`))
 		case r.URL.Path == "/_nodes/http":
 			_, _ = w.Write([]byte(`{"nodes":{}}`))
-		case r.Method == http.MethodDelete && strings.HasSuffix(r.URL.Path, "/missing-chunk"):
-			deletedIDs = append(deletedIDs, "missing-chunk")
-			w.WriteHeader(http.StatusNotFound)
-			_, _ = w.Write([]byte(`{"_index":"seshat-rag-kb","_id":"missing-chunk","_version":3,"result":"not_found","_shards":{"total":2,"successful":1,"failed":0},"_seq_no":356,"_primary_term":1}`))
-		case r.Method == http.MethodDelete && strings.HasSuffix(r.URL.Path, "/real-chunk"):
-			deletedIDs = append(deletedIDs, "real-chunk")
-			_, _ = w.Write([]byte(`{"_index":"seshat-rag-kb","_id":"real-chunk","_version":2,"result":"deleted","_shards":{"total":2,"successful":2,"failed":0},"_seq_no":10,"_primary_term":1}`))
+		case r.URL.Path == "/_bulk":
+			_, _ = w.Write([]byte(`{"errors":true,"took":1,"items":[` +
+				`{"delete":{"_index":"seshat-rag-kb","_id":"missing-chunk","status":404,"result":"not_found"}},` +
+				`{"delete":{"_index":"seshat-rag-kb","_id":"real-chunk","status":200,"result":"deleted"}}` +
+				`]}`))
 		default:
 			t.Fatalf("unexpected request: %s %s", r.Method, r.URL.Path)
 		}
@@ -181,14 +182,12 @@ func TestOpenSearchDeleteKeysToleratesNotFound(t *testing.T) {
 	if err := store.DeleteKeys(context.Background(), "kb", []string{"missing-chunk", "real-chunk"}); err != nil {
 		t.Fatalf("expected DeleteKeys to no-op on a 404/not_found key, got: %v", err)
 	}
-	if !reflect.DeepEqual(deletedIDs, []string{"missing-chunk", "real-chunk"}) {
-		t.Fatalf("expected both keys to be attempted in order, got %v", deletedIDs)
-	}
 }
 
 // TestOpenSearchDeleteKeysStillFailsOnRealErrors is the flip side of the
-// tolerate-404 fix above: a genuine failure (a 500 here) must still abort
-// and surface an error, not be swallowed alongside the benign not-found case.
+// tolerate-404 fix above: a genuine per-item failure (not a 404) must still
+// abort and surface an error, not be swallowed alongside the benign
+// not-found case.
 func TestOpenSearchDeleteKeysStillFailsOnRealErrors(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
@@ -197,9 +196,12 @@ func TestOpenSearchDeleteKeysStillFailsOnRealErrors(t *testing.T) {
 			_, _ = w.Write([]byte(`{"version":{"number":"2.19.0"},"tagline":"The OpenSearch Project: https://opensearch.org/"}`))
 		case r.URL.Path == "/_nodes/http":
 			_, _ = w.Write([]byte(`{"nodes":{}}`))
+		case r.URL.Path == "/_bulk":
+			_, _ = w.Write([]byte(`{"errors":true,"took":1,"items":[` +
+				`{"delete":{"_index":"seshat-rag-kb","_id":"some-chunk","status":500,"error":{"type":"internal_server_error","reason":"boom"}}}` +
+				`]}`))
 		default:
-			w.WriteHeader(http.StatusInternalServerError)
-			_, _ = w.Write([]byte(`{"error":{"type":"internal_server_error","reason":"boom"}}`))
+			t.Fatalf("unexpected request: %s %s", r.Method, r.URL.Path)
 		}
 	}))
 	defer server.Close()
@@ -216,6 +218,174 @@ func TestOpenSearchDeleteKeysStillFailsOnRealErrors(t *testing.T) {
 
 	if err := store.DeleteKeys(context.Background(), "kb", []string{"some-chunk"}); err == nil {
 		t.Fatal("expected a genuine server error to still be returned, got nil")
+	}
+}
+
+// TestOpenSearchDeleteKeysUsesBulkAPI is the P1 regression test: deleting
+// many keys used to make one DELETE request per key, painfully slow for the
+// thousands of chunks a stale-chunk cleanup or whole-file delete can
+// involve. It now goes through the same _bulk endpoint Upsert already uses.
+func TestOpenSearchDeleteKeysUsesBulkAPI(t *testing.T) {
+	var bulkRequests int
+	var lastBody string
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		switch r.URL.Path {
+		case "/":
+			_, _ = w.Write([]byte(`{"version":{"number":"2.19.0"},"tagline":"The OpenSearch Project: https://opensearch.org/"}`))
+		case "/_nodes/http":
+			_, _ = w.Write([]byte(`{"nodes":{}}`))
+		case "/_bulk":
+			bulkRequests++
+			data, err := io.ReadAll(r.Body)
+			if err != nil {
+				t.Fatalf("read request body: %v", err)
+			}
+			lastBody = string(data)
+			_, _ = w.Write([]byte(`{"errors":false,"took":1,"items":[` +
+				`{"delete":{"_index":"seshat-rag-kb","_id":"c1","status":200,"result":"deleted"}},` +
+				`{"delete":{"_index":"seshat-rag-kb","_id":"c2","status":200,"result":"deleted"}}` +
+				`]}`))
+		default:
+			t.Fatalf("unexpected request: %s %s", r.Method, r.URL.Path)
+		}
+	}))
+	defer server.Close()
+
+	store, err := NewOpenSearchStore(context.Background(), OpenSearchConfig{
+		Addresses:   []string{server.URL},
+		CreateIndex: false,
+		KNN:         false,
+		BulkSize:    10,
+	})
+	if err != nil {
+		t.Fatalf("NewOpenSearchStore: %v", err)
+	}
+	t.Cleanup(func() { _ = store.Close() })
+
+	if err := store.DeleteKeys(context.Background(), "kb", []string{"c1", "c2"}); err != nil {
+		t.Fatalf("DeleteKeys: %v", err)
+	}
+	if bulkRequests != 1 {
+		t.Fatalf("expected exactly one bulk request for 2 keys under BulkSize=10, got %d", bulkRequests)
+	}
+	if !strings.Contains(lastBody, `"delete"`) || !strings.Contains(lastBody, `"_id":"c1"`) || !strings.Contains(lastBody, `"_id":"c2"`) {
+		t.Fatalf("expected both keys as delete actions in the bulk body, got:\n%s", lastBody)
+	}
+}
+
+// TestOpenSearchEnsureIndexToleratesConcurrentCreateRace is the P1
+// regression test: two ingests racing to create the same not-yet-existing
+// namespace's index both see HasNamespace() == false, both call
+// Indices.Create, and the loser gets "resource_already_exists_exception"
+// back from OpenSearch - previously surfaced as a hard Upsert failure
+// instead of the idempotent success it actually is (the index exists,
+// which is all ensureIndex's caller asked for).
+func TestOpenSearchEnsureIndexToleratesConcurrentCreateRace(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		switch {
+		case r.URL.Path == "/":
+			_, _ = w.Write([]byte(`{"version":{"number":"2.19.0"},"tagline":"The OpenSearch Project: https://opensearch.org/"}`))
+		case r.URL.Path == "/_nodes/http":
+			_, _ = w.Write([]byte(`{"nodes":{}}`))
+		case r.Method == http.MethodHead:
+			// Indices.Exists -> index not found yet.
+			w.WriteHeader(http.StatusNotFound)
+		case r.Method == http.MethodPut:
+			// Indices.Create -> lost the race, index was just created by
+			// another process/goroutine.
+			w.WriteHeader(http.StatusBadRequest)
+			_, _ = w.Write([]byte(`{"error":{"type":"resource_already_exists_exception","reason":"index [seshat-rag-kb/abc] already exists"},"status":400}`))
+		case r.URL.Path == "/_bulk":
+			_, _ = w.Write([]byte(`{"errors":false,"took":1,"items":[{"index":{"_index":"seshat-rag-kb","_id":"doc-1","status":201}}]}`))
+		default:
+			t.Fatalf("unexpected request: %s %s", r.Method, r.URL.Path)
+		}
+	}))
+	defer server.Close()
+
+	store, err := NewOpenSearchStore(context.Background(), OpenSearchConfig{
+		Addresses:   []string{server.URL},
+		CreateIndex: true,
+		KNN:         false,
+		BulkSize:    10,
+	})
+	if err != nil {
+		t.Fatalf("NewOpenSearchStore: %v", err)
+	}
+	t.Cleanup(func() { _ = store.Close() })
+
+	err = store.Upsert(context.Background(), []Record{{Namespace: "kb", Key: "doc-1", Text: "hello"}})
+	if err != nil {
+		t.Fatalf("expected Upsert to tolerate a concurrent index-create race, got: %v", err)
+	}
+}
+
+// TestOpenSearchGetAllRecordsPaginatesBeyondPageSize is the P1 regression
+// test: Get(ctx, namespace, nil) ("all records") used to issue a single
+// query capped at size:10000 - a namespace with more chunks than that
+// silently lost the rest, with no error to signal the truncation, breaking
+// the Store interface's own documented "all records in the namespace are
+// returned" contract. It now pages with search_after until a page comes
+// back short of a full page.
+func TestOpenSearchGetAllRecordsPaginatesBeyondPageSize(t *testing.T) {
+	makeHit := func(id string) string {
+		doc := openSearchDocument{Namespace: "kb", Key: id, Text: "t"}
+		data, err := json.Marshal(doc)
+		if err != nil {
+			t.Fatalf("marshal doc: %v", err)
+		}
+		return fmt.Sprintf(`{"_id":%q,"_score":1,"_source":%s}`, id, data)
+	}
+
+	var pageRequests int
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		switch {
+		case r.URL.Path == "/":
+			_, _ = w.Write([]byte(`{"version":{"number":"2.19.0"},"tagline":"The OpenSearch Project: https://opensearch.org/"}`))
+		case r.URL.Path == "/_nodes/http":
+			_, _ = w.Write([]byte(`{"nodes":{}}`))
+		case strings.HasSuffix(r.URL.Path, "/_search"):
+			pageRequests++
+			var hits []string
+			if pageRequests == 1 {
+				// A full page - triggers a second request.
+				for i := 0; i < getAllRecordsPageSize; i++ {
+					hits = append(hits, makeHit(fmt.Sprintf("chunk-%05d", i)))
+				}
+			} else {
+				// A short page - the loop must stop after this one.
+				hits = []string{makeHit("chunk-last-1"), makeHit("chunk-last-2")}
+			}
+			_, _ = w.Write([]byte(fmt.Sprintf(`{"took":1,"hits":{"total":{"value":0},"hits":[%s]}}`, strings.Join(hits, ","))))
+		default:
+			t.Fatalf("unexpected request: %s %s", r.Method, r.URL.Path)
+		}
+	}))
+	defer server.Close()
+
+	store, err := NewOpenSearchStore(context.Background(), OpenSearchConfig{
+		Addresses:   []string{server.URL},
+		CreateIndex: false,
+		KNN:         false,
+	})
+	if err != nil {
+		t.Fatalf("NewOpenSearchStore: %v", err)
+	}
+	t.Cleanup(func() { _ = store.Close() })
+
+	records, err := store.Get(context.Background(), "kb", nil)
+	if err != nil {
+		t.Fatalf("Get: %v", err)
+	}
+	if pageRequests != 2 {
+		t.Fatalf("expected exactly 2 pages fetched, got %d", pageRequests)
+	}
+	want := getAllRecordsPageSize + 2
+	if len(records) != want {
+		t.Fatalf("expected %d records across both pages, got %d", want, len(records))
 	}
 }
 

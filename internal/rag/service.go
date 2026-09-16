@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"sort"
+	"strconv"
 	"strings"
 
 	"github.com/KPO-Tech/seshat/internal/rag/reranker"
@@ -84,16 +85,41 @@ func (s *Service) DeleteNamespace(ctx context.Context, namespace string) error {
 	return s.vectors.DeleteNamespace(ctx, namespace)
 }
 
-// DeleteFileChunks removes stale chunk records that exceed the new chunk count.
-// Called after re-ingesting a file that now has fewer chunks than its previous run,
-// to avoid leaving orphaned vectors from the old (longer) version.
-func (s *Service) DeleteFileChunks(ctx context.Context, namespace, artifactKey string, fromChunk, toChunk int) error {
-	if s == nil || s.vectors == nil || fromChunk >= toChunk {
+// DeleteFileChunks removes artifactKey's chunk records whose position is
+// keepBelow or greater - either stale chunks left over from a re-ingest
+// that produced fewer chunks than its previous run (keepBelow = the new
+// chunk count), or every chunk for the file when deleting it outright
+// (keepBelow = 0).
+//
+// This lists every record actually in namespace and filters by the
+// artifact_key/position metadata Ingest attaches to each chunk, rather than
+// guessing an upper bound on how many old chunks might exist: an earlier
+// version capped the search at a fixed ceiling past the new count (500 here,
+// 2000 for rag_delete's whole-file case), so a file that shrank by more than
+// that many chunks - or was simply larger than the ceiling to begin with -
+// left orphaned vectors beyond it that no delete call could ever reach,
+// still returned by future searches as phantom results.
+func (s *Service) DeleteFileChunks(ctx context.Context, namespace, artifactKey string, keepBelow int) error {
+	if s == nil || s.vectors == nil {
 		return nil
 	}
-	keys := make([]string, 0, toChunk-fromChunk)
-	for i := fromChunk; i < toChunk; i++ {
-		keys = append(keys, fmt.Sprintf("%s#chunk-%d", artifactKey, i))
+	all, err := s.vectors.Get(ctx, namespace, nil)
+	if err != nil {
+		return fmt.Errorf("list existing chunks for %q: %w", artifactKey, err)
+	}
+	keys := make([]string, 0)
+	for _, rec := range all {
+		if rec.Metadata["artifact_key"] != artifactKey {
+			continue
+		}
+		pos, err := strconv.Atoi(rec.Metadata["position"])
+		if err != nil || pos < keepBelow {
+			continue
+		}
+		keys = append(keys, rec.Key)
+	}
+	if len(keys) == 0 {
+		return nil
 	}
 	return s.vectors.DeleteKeys(ctx, namespace, keys)
 }
@@ -223,11 +249,12 @@ func (s *Service) Ingest(ctx context.Context, request IngestRequest) (IngestResu
 	// version) would otherwise leave the old version's trailing chunks
 	// behind - Upsert only replaces keys present in the new set, it can't
 	// know a key from the old ingest no longer exists in the new one.
-	// DeleteKeys silently no-ops on keys that were never written, so this
-	// blind range-delete is safe even when there was no previous version
-	// (the common case) or the new version is the same size or longer.
+	// DeleteFileChunks finds every chunk still tagged with this
+	// artifact_key at or past the new chunk count, however many there are,
+	// so this is safe even when there was no previous version (the common
+	// case) or the new version is the same size or longer (finds nothing).
 	if request.FileID != "" {
-		if err := s.DeleteFileChunks(ctx, request.CorpusID, artifact.Key, len(records), len(records)+staleChunkCleanupCeiling); err != nil {
+		if err := s.DeleteFileChunks(ctx, request.CorpusID, artifact.Key, len(records)); err != nil {
 			return IngestResult{}, fmt.Errorf("cleanup stale chunks: %w", err)
 		}
 	}
@@ -248,13 +275,6 @@ func (s *Service) splitChunks(ctx context.Context, request IngestRequest) ([]Chu
 	}
 	return s.chunker.Split(ctx, request.Text)
 }
-
-// staleChunkCleanupCeiling bounds how many chunk-position keys beyond the
-// new chunk count are speculatively deleted after a FileID-based re-ingest,
-// to catch a shrunk document's leftover trailing chunks without needing an
-// expensive full-namespace scan to find the previous chunk count. Generous
-// enough to cover any realistic single-document shrink.
-const staleChunkCleanupCeiling = 500
 
 func (s *Service) Search(ctx context.Context, request SearchRequest) (SearchResponse, error) {
 	if s == nil || s.vectors == nil {

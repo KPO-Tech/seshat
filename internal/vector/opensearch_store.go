@@ -159,14 +159,7 @@ func (s *OpenSearchStore) Search(ctx context.Context, query Query) ([]SearchResu
 func (s *OpenSearchStore) Get(ctx context.Context, namespace string, keys []string) ([]Record, error) {
 	index := s.indexName(namespace)
 	if len(keys) == 0 {
-		results, err := s.searchRaw(ctx, namespace, map[string]any{
-			"query": map[string]any{"match_all": map[string]any{}},
-			"size":  10000,
-		})
-		if err != nil {
-			return nil, err
-		}
-		return recordsFromSearchResults(results), nil
+		return s.getAllRecords(ctx, namespace)
 	}
 
 	results, err := s.searchRaw(ctx, namespace, map[string]any{
@@ -179,6 +172,69 @@ func (s *OpenSearchStore) Get(ctx context.Context, namespace string, keys []stri
 		return nil, fmt.Errorf("opensearch get from %q: %w", index, err)
 	}
 	return recordsFromSearchResults(results), nil
+}
+
+// getAllRecordsPageSize is how many documents getAllRecords fetches per
+// page while paginating past OpenSearch's hard 10,000-hit window limit for
+// a plain query (search_after has no such cap).
+const getAllRecordsPageSize = 1000
+
+// getAllRecords returns every record in namespace, paginating with
+// search_after (sorted by _id, which is always present and unique - it's
+// the record's own Key) instead of a single query capped at OpenSearch's
+// default 10,000-hit window. A namespace with more documents than that used
+// to have Get(ctx, namespace, nil) silently return only the first 10,000 -
+// violating the Store interface's own documented contract ("all records in
+// the namespace are returned") with no error to signal the truncation,
+// which corrupted any caller that assumed it was seeing everything (e.g.
+// DeleteFileChunks scanning for an artifact's stale chunks).
+func (s *OpenSearchStore) getAllRecords(ctx context.Context, namespace string) ([]Record, error) {
+	if strings.TrimSpace(namespace) == "" {
+		return nil, fmt.Errorf("opensearch get: namespace is required")
+	}
+	index := s.indexName(namespace)
+	var all []Record
+	var searchAfter *string
+	for {
+		body := map[string]any{
+			"query": map[string]any{"match_all": map[string]any{}},
+			"sort":  []any{map[string]any{"_id": "asc"}},
+			"size":  getAllRecordsPageSize,
+		}
+		if searchAfter != nil {
+			body["search_after"] = []any{*searchAfter}
+		}
+		payload, err := json.Marshal(body)
+		if err != nil {
+			return nil, fmt.Errorf("opensearch marshal get-all query: %w", err)
+		}
+		resp, err := s.client.Search(ctx, &opensearchapi.SearchReq{
+			Indices:    []string{index},
+			BodyReader: bytes.NewReader(payload),
+		})
+		if err != nil {
+			return nil, fmt.Errorf("opensearch get-all from %q: %w", index, err)
+		}
+		if len(resp.Hits.Hits) == 0 {
+			break
+		}
+		for _, hit := range resp.Hits.Hits {
+			var doc openSearchDocument
+			if err := json.Unmarshal(hit.Source, &doc); err != nil {
+				return nil, fmt.Errorf("opensearch decode hit: %w", err)
+			}
+			all = append(all, doc.toRecord())
+		}
+		last := resp.Hits.Hits[len(resp.Hits.Hits)-1]
+		if last.ID == nil {
+			break
+		}
+		searchAfter = last.ID
+		if len(resp.Hits.Hits) < getAllRecordsPageSize {
+			break
+		}
+	}
+	return all, nil
 }
 
 func (s *OpenSearchStore) HasNamespace(ctx context.Context, namespace string) (bool, error) {
@@ -217,36 +273,92 @@ func (s *OpenSearchStore) DeleteNamespace(ctx context.Context, namespace string)
 	return nil
 }
 
+// DeleteKeys removes keys via the _bulk API in batches of s.cfg.BulkSize,
+// not one HTTP request per key - a namespace cleanup after a shrunk
+// re-ingest, or a whole-file delete, can mean thousands of keys, and a
+// per-key round trip made that painfully slow (and, on a slow network, a
+// good way to blow past a caller's timeout partway through).
 func (s *OpenSearchStore) DeleteKeys(ctx context.Context, namespace string, keys []string) error {
 	index := s.indexName(namespace)
+	filtered := make([]string, 0, len(keys))
 	for _, key := range keys {
-		if strings.TrimSpace(key) == "" {
-			continue
+		if strings.TrimSpace(key) != "" {
+			filtered = append(filtered, key)
 		}
-		resp, err := s.client.Doc.Delete(ctx, opensearchapi.DeleteReq{
-			Index: index,
-			ID:    key,
-			Params: &opensearchapi.DeleteParams{
-				Refresh: "false",
-			},
-		})
-		if err != nil {
-			// A key that was never written, or already removed by a prior
-			// cleanup pass, is exactly what callers rely on this method
-			// no-op'ing on (see DeleteFileChunks' doc comment in service.go).
-			// OpenSearch reports that as a 404 "not_found" delete response,
-			// which the client surfaces as a Go error like any other non-2xx
-			// status - so it must be unwrapped and tolerated here, the same
-			// way HasNamespace above tolerates a 404 on Indices.Exists. Only
-			// a genuine failure (network error, 5xx, auth) should abort the
-			// batch.
-			if resp != nil && resp.Inspect().Response != nil && resp.Inspect().Response.StatusCode == http.StatusNotFound {
-				continue
-			}
-			return fmt.Errorf("opensearch delete key %q: %w", key, err)
+	}
+	batchSize := s.cfg.BulkSize
+	if batchSize <= 0 {
+		batchSize = defaultOpenSearchBulkSize
+	}
+	for start := 0; start < len(filtered); start += batchSize {
+		end := start + batchSize
+		if end > len(filtered) {
+			end = len(filtered)
+		}
+		if err := s.bulkDelete(ctx, index, filtered[start:end]); err != nil {
+			return err
 		}
 	}
 	return nil
+}
+
+func (s *OpenSearchStore) bulkDelete(ctx context.Context, index string, keys []string) error {
+	if len(keys) == 0 {
+		return nil
+	}
+	body, err := openSearchBulkDeleteBody(index, keys)
+	if err != nil {
+		return err
+	}
+	resp, err := s.client.Doc.Bulk(ctx, opensearchapi.BulkReq{
+		Body: bytes.NewReader(body),
+		Params: &opensearchapi.BulkParams{
+			Refresh: "false",
+		},
+	})
+	if err != nil {
+		return fmt.Errorf("opensearch bulk delete %q: %w", index, err)
+	}
+	// A key that was never written, or already removed by a prior cleanup
+	// pass, is exactly what callers rely on this method no-op'ing on (see
+	// DeleteFileChunks' doc comment in internal/rag/service.go) - each
+	// item's own 404 "not_found" result is not a failure, only a genuine
+	// per-item error (network/5xx/auth) is.
+	for _, item := range resp.Items {
+		if item.Delete == nil || item.Delete.Error == nil {
+			continue
+		}
+		if item.Delete.Status == http.StatusNotFound {
+			continue
+		}
+		return fmt.Errorf("opensearch bulk delete %q: item %s: %s", index, safeItemID(item.Delete.ID), safeItemID(item.Delete.Error.Reason))
+	}
+	return nil
+}
+
+func openSearchBulkDeleteBody(index string, keys []string) ([]byte, error) {
+	var body bytes.Buffer
+	encoder := json.NewEncoder(&body)
+	encoder.SetEscapeHTML(false)
+	for _, key := range keys {
+		action := map[string]any{
+			"delete": map[string]string{
+				"_index": index,
+				"_id":    key,
+			},
+		}
+		if err := encoder.Encode(action); err != nil {
+			return nil, fmt.Errorf("opensearch marshal bulk delete action %q: %w", key, err)
+		}
+	}
+	return body.Bytes(), nil
+}
+
+func safeItemID(id *string) string {
+	if id == nil {
+		return "<unknown>"
+	}
+	return *id
 }
 
 func (s *OpenSearchStore) ensureIndex(ctx context.Context, namespace string) error {
@@ -265,9 +377,21 @@ func (s *OpenSearchStore) ensureIndex(ctx context.Context, namespace string) err
 		Index:      s.indexName(namespace),
 		BodyReader: bytes.NewReader(body),
 	}); err != nil {
+		// Two concurrent ingests into a not-yet-existing namespace can both
+		// observe HasNamespace() == false and both race to create it - the
+		// loser gets "resource_already_exists_exception" back, which is a
+		// success from this method's point of view (the index exists, which
+		// is all callers actually asked for), not a real failure.
+		if isOpenSearchIndexAlreadyExists(err) {
+			return nil
+		}
 		return fmt.Errorf("opensearch create index %q: %w", namespace, err)
 	}
 	return nil
+}
+
+func isOpenSearchIndexAlreadyExists(err error) bool {
+	return err != nil && strings.Contains(err.Error(), "resource_already_exists_exception")
 }
 
 func (s *OpenSearchStore) bulkIndex(ctx context.Context, index string, records []Record) error {
