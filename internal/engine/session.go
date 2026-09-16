@@ -33,11 +33,26 @@ type Session struct {
 	systemPromptTemplateOverride *string
 	workingDirectoryOverride     *string
 
-	// mu guards cancelFn.
+	// mu guards cancelFn and phase.
 	mu sync.Mutex
 	// cancelFn cancels the context passed to the current Loop.Run.
 	cancelFn context.CancelFunc
+	// phase enforces that only one lifecycle-mutating operation
+	// (SubmitMessage/SubmitMessageWithContent, Close) runs at a time - two
+	// concurrent calls would otherwise both mutate s.state.Messages and
+	// persist independently, silently corrupting/dropping one of them.
+	// Interrupt is exempt: it only ever cancels whatever IS running.
+	phase sessionPhase
 }
+
+// sessionPhase is Session's single-flight lifecycle state, guarded by mu.
+type sessionPhase int32
+
+const (
+	sessionPhaseIdle sessionPhase = iota
+	sessionPhaseRunning
+	sessionPhaseClosed
+)
 
 // NewSession creates a new session.
 func (e *Engine) NewSession(ctx context.Context) (*Session, error) {
@@ -94,7 +109,7 @@ func (e *Engine) NewSessionFromState(
 	}
 
 	if e.memoryService != nil {
-		if err := e.memoryService.LoadProject(metadata.RootPath); err != nil {
+		if _, err := e.memoryService.LoadProject(metadata.RootPath); err != nil {
 			slog.Warn("failed to load project memory", "error", err)
 		}
 		if err := e.memoryService.LoadUser(); err != nil {
@@ -167,6 +182,11 @@ func (s *Session) SubmitMessageWithContent(ctx context.Context, text string, ima
 
 // submitWithMessage is the shared implementation for SubmitMessage and SubmitMessageWithContent.
 func (s *Session) submitWithMessage(ctx context.Context, userMsg types.Message, text string) (*SessionResponse, error) {
+	if err := s.beginTurn(); err != nil {
+		return nil, err
+	}
+	defer s.endTurn()
+
 	if err := s.enforceMaxTurns(); err != nil {
 		return nil, err
 	}
@@ -335,7 +355,36 @@ func recordGoalTokenUsage(sessionID types.SessionID, usage *types.TokenUsage) {
 	coregoal.GetDefaultStore().RecordTokenUsage(sessionID.String(), tokens)
 }
 
+// beginTurn enforces that submitWithMessage is single-flight: a session
+// that's already running a turn, or has been closed, refuses a new one
+// instead of letting two calls race on s.state.
+func (s *Session) beginTurn() error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	switch s.phase {
+	case sessionPhaseClosed:
+		return fmt.Errorf("session is closed")
+	case sessionPhaseRunning:
+		return fmt.Errorf("session is busy: a turn is already in progress")
+	}
+	s.phase = sessionPhaseRunning
+	return nil
+}
+
+// endTurn releases the single-flight guard beginTurn acquired, unless
+// Close() has since moved the session to sessionPhaseClosed - closing must
+// win over a turn that was still in flight when it happened.
+func (s *Session) endTurn() {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.phase == sessionPhaseRunning {
+		s.phase = sessionPhaseIdle
+	}
+}
+
 // Interrupt cancels the current turn and marks the session as interrupted.
+// Not gated by beginTurn/endTurn: it targets whatever IS currently running,
+// so it must work regardless of the single-flight guard.
 func (s *Session) Interrupt() error {
 	s.mu.Lock()
 	fn := s.cancelFn
@@ -348,8 +397,23 @@ func (s *Session) Interrupt() error {
 	return s.persistSessionState(messages)
 }
 
-// Close closes the session, persists memory, and releases the browser session.
+// Close closes the session, persists memory, and releases the browser
+// session. Idempotent (a second call is a no-op) and safe to call while a
+// turn is running: it cancels that turn first, before tearing down the
+// event queues underneath it.
 func (s *Session) Close() error {
+	s.mu.Lock()
+	if s.phase == sessionPhaseClosed {
+		s.mu.Unlock()
+		return nil
+	}
+	fn := s.cancelFn
+	s.phase = sessionPhaseClosed
+	s.mu.Unlock()
+	if fn != nil {
+		fn()
+	}
+
 	if s.eventQueue != nil {
 		s.eventQueue.Close()
 	}
@@ -361,7 +425,7 @@ func (s *Session) Close() error {
 
 	if s.engine.memoryService != nil {
 		s.rememberSessionSummary()
-		if err := s.engine.memoryService.SaveProject(); err != nil {
+		if err := s.engine.memoryService.SaveProject(s.sessionProjectID()); err != nil {
 			slog.Warn("failed to save project memory", "error", err)
 		}
 		if err := s.engine.memoryService.SaveUser(); err != nil {

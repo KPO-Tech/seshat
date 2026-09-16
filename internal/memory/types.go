@@ -1,11 +1,12 @@
 package memory
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"os"
 	"path/filepath"
-	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -67,6 +68,7 @@ type Entry struct {
 	LastAccessed time.Time  `json:"last_accessed"`        // Last access time
 	ExpiresAt    *time.Time `json:"expires_at,omitempty"` // Optional expiration
 	SessionID    string     `json:"session_id,omitempty"` // Optional session context
+	ProjectID    string     `json:"project_id,omitempty"` // Set when Scope == MemoryScopeProject; see ProjectID()
 }
 
 // EntryMetadata contains additional entry metadata
@@ -266,8 +268,7 @@ func NewFileStore(basePath string) (*FileStore, error) {
 
 // LoadProjectMemory loads project-specific memory
 func (s *FileStore) LoadProjectMemory(projectPath string) (*ProjectMemory, error) {
-	// Generate stable ID for project (git root or hash of path)
-	rootID := getProjectRootID(projectPath)
+	rootID := ProjectID(projectPath)
 
 	filePath := filepath.Join(s.basePath, "projects", rootID+".json")
 
@@ -289,7 +290,7 @@ func (s *FileStore) LoadProjectMemory(projectPath string) (*ProjectMemory, error
 
 // SaveProjectMemory saves project memory
 func (s *FileStore) SaveProjectMemory(m *ProjectMemory) error {
-	rootID := getProjectRootID(m.ProjectPath)
+	rootID := ProjectID(m.ProjectPath)
 
 	// Ensure projects directory
 	dir := filepath.Join(s.basePath, "projects")
@@ -387,41 +388,28 @@ func (s *FileStore) SaveCrossSession(m *CrossSession) error {
 // Helpers
 // ============================================================================
 
-// getProjectRootID generates a stable ID for a project
-func getProjectRootID(projectPath string) string {
-	// Try to find .git directory
-	gitPath := filepath.Join(projectPath, ".git")
-	if _, err := os.Stat(gitPath); err == nil {
-		// Use git root - check for HEAD
-		headPath := filepath.Join(gitPath, "HEAD")
-		if data, err := os.ReadFile(headPath); err == nil {
-			content := string(data)
-			// Check for gitdir reference ("gitdir: " is 8 chars)
-			if len(content) > 8 && content[:8] == "gitdir: " {
-				// It's a worktree reference, find actual repo
-				refPath := strings.TrimSpace(content[8:])
-				if filepath.IsAbs(refPath) {
-					return filepath.Base(refPath)
-				}
-				return filepath.Base(filepath.Join(projectPath, refPath))
-			}
-			// Just use project dir name as identifier
-			return filepath.Base(projectPath)
-		}
+// ProjectID returns a stable identifier for projectPath: the hex-encoded
+// SHA256 of its canonical (symlink-resolved, cleaned, absolute) form. Two
+// different paths never collide just because they share a basename - unlike
+// the git-repo case this replaces, which returned filepath.Base(projectPath)
+// unconditionally (so /home/a/backend and /home/b/backend would have shared
+// one memory file). Not based on the git remote: a plain path hash means a
+// renamed/moved project directory starts a fresh memory history rather than
+// silently merging with an unrelated project that happens to reuse the
+// address space of a stale hash - the same trade-off the previous fnv32
+// path-hash fallback (for non-git directories) already made.
+func ProjectID(projectPath string) string {
+	canonical := projectPath
+	if abs, err := filepath.Abs(projectPath); err == nil {
+		canonical = abs
 	}
-
-	// Fallback: hash the path
-	hash := fnv32(projectPath)
-	return fmt.Sprintf("project_%d", hash)
-}
-
-func fnv32(s string) uint32 {
-	h := uint32(2166136261)
-	for _, c := range []byte(s) {
-		h ^= uint32(c)
-		h *= 16777619
+	if resolved, err := filepath.EvalSymlinks(canonical); err == nil {
+		canonical = resolved
 	}
-	return h
+	canonical = filepath.Clean(canonical)
+
+	sum := sha256.Sum256([]byte(canonical))
+	return hex.EncodeToString(sum[:])
 }
 
 // ============================================================================

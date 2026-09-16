@@ -3391,7 +3391,9 @@ func TestSessionRuntimeMemoryLearningPersistsAcrossSessions(t *testing.T) {
 		t.Fatalf("submit message: %v", err)
 	}
 
-	contextBeforeClose := engine.memoryContext()
+	projectID := memory.ProjectID(engine.workingDirectory())
+
+	contextBeforeClose := engine.memoryContext(projectID)
 	if !strings.Contains(contextBeforeClose, "Answer in French") {
 		t.Fatalf("expected user preference in memory context, got %q", contextBeforeClose)
 	}
@@ -3402,7 +3404,7 @@ func TestSessionRuntimeMemoryLearningPersistsAcrossSessions(t *testing.T) {
 		t.Fatalf("expected learned tool usage in memory context, got %q", contextBeforeClose)
 	}
 
-	usage, err := mem.GetToolUsagePatterns("stub")
+	usage, err := mem.GetToolUsagePatterns(projectID, "stub")
 	if err != nil {
 		t.Fatalf("get tool usage patterns: %v", err)
 	}
@@ -3425,7 +3427,8 @@ func TestSessionRuntimeMemoryLearningPersistsAcrossSessions(t *testing.T) {
 	if err != nil {
 		t.Fatalf("reload memory service: %v", err)
 	}
-	if err := reloaded.LoadProject(projectPath); err != nil {
+	reloadedProjectID, err := reloaded.LoadProject(projectPath)
+	if err != nil {
 		t.Fatalf("load project memory: %v", err)
 	}
 	if err := reloaded.LoadUser(); err != nil {
@@ -3435,7 +3438,7 @@ func TestSessionRuntimeMemoryLearningPersistsAcrossSessions(t *testing.T) {
 		t.Fatalf("load cross-session memory: %v", err)
 	}
 
-	reloadedContext := reloaded.Context()
+	reloadedContext := reloaded.Context(reloadedProjectID)
 	if !strings.Contains(reloadedContext, "Answer in French") {
 		t.Fatalf("expected persisted user preference in memory context, got %q", reloadedContext)
 	}
@@ -3452,7 +3455,7 @@ func TestSessionRuntimeMemoryLearningPersistsAcrossSessions(t *testing.T) {
 		t.Fatalf("expected session summary content in memory context, got %q", reloadedContext)
 	}
 
-	reloadedUsage, err := reloaded.GetToolUsagePatterns("stub")
+	reloadedUsage, err := reloaded.GetToolUsagePatterns(reloadedProjectID, "stub")
 	if err != nil {
 		t.Fatalf("get reloaded tool usage patterns: %v", err)
 	}
@@ -4392,6 +4395,167 @@ func TestForkParseModel(t *testing.T) {
 			t.Errorf("forkParseModel(%q): got %s:%s, want %s:%s",
 				tc.raw, got.Provider, got.Model, tc.wantProvider, tc.wantModel)
 		}
+	}
+}
+
+// TestSessionSubmitMessage_RejectsConcurrentSubmit is the P0 regression test
+// for Session's single-flight lifecycle: before beginTurn/endTurn existed,
+// only cancelFn was mutex-guarded, so two concurrent SubmitMessage calls
+// would both mutate s.state.Messages/Metadata and persist independently -
+// a lost-update race, not just a theoretical one.
+func TestSessionSubmitMessage_RejectsConcurrentSubmit(t *testing.T) {
+	config := DefaultConfig()
+	config.PermissionMode = types.PermissionModeBypass
+
+	engine := NewEngine(
+		nil,
+		execution.NewOrchestrator(),
+		nil,
+		prompt.NewAssembler(),
+		permissions.NewIntegrator(permissions.NewEngine()),
+		registry.NewRegistry(),
+		nil,
+		config,
+		nil,
+		nil,
+	)
+	engine.loop.config.AutoCompact = false
+
+	loopStarted := make(chan struct{})
+	release := make(chan struct{})
+	var once sync.Once
+	engine.loop.callModelFn = func(ctx context.Context, state *MutableState, req RunRequest) (*types.APIResponse, error) {
+		once.Do(func() { close(loopStarted) })
+		<-release
+		return &types.APIResponse{
+			Role:       types.RoleAssistant,
+			Content:    []types.ContentBlock{types.TextContent{Text: "done"}},
+			StopReason: types.StopReasonEndTurn,
+			Model:      req.Model,
+			ID:         "resp-1",
+		}, nil
+	}
+
+	session, err := engine.NewSession(context.Background())
+	if err != nil {
+		t.Fatalf("new session: %v", err)
+	}
+
+	firstErrCh := make(chan error, 1)
+	go func() {
+		_, err := session.SubmitMessage(context.Background(), "first")
+		firstErrCh <- err
+	}()
+
+	select {
+	case <-loopStarted:
+	case <-time.After(2 * time.Second):
+		t.Fatal("first submit did not start within 2s")
+	}
+
+	if _, err := session.SubmitMessage(context.Background(), "second"); err == nil {
+		t.Fatal("expected the concurrent submit to be rejected")
+	} else if !strings.Contains(err.Error(), "session is busy") {
+		t.Fatalf("expected a busy error, got %v", err)
+	}
+
+	close(release)
+
+	select {
+	case err := <-firstErrCh:
+		if err != nil {
+			t.Fatalf("expected the first (non-concurrent) submit to succeed, got %v", err)
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("first submit did not complete within 2s")
+	}
+
+	// The guard releases once the turn finishes - a normal follow-up submit
+	// must work again.
+	engine.loop.callModelFn = func(ctx context.Context, state *MutableState, req RunRequest) (*types.APIResponse, error) {
+		return &types.APIResponse{
+			Role:       types.RoleAssistant,
+			Content:    []types.ContentBlock{types.TextContent{Text: "done again"}},
+			StopReason: types.StopReasonEndTurn,
+			Model:      req.Model,
+			ID:         "resp-2",
+		}, nil
+	}
+	if _, err := session.SubmitMessage(context.Background(), "third"); err != nil {
+		t.Fatalf("expected submit after the first turn finished to succeed, got %v", err)
+	}
+}
+
+// TestSessionClose_StopsRunningTurnAndIsIdempotent is the P0 regression test
+// for Close(): before this fix, closing a session mid-turn tore down the
+// event queues while the running turn's callbacks could still be writing to
+// them, and nothing stopped a second Close() call from doing it all again.
+func TestSessionClose_StopsRunningTurnAndIsIdempotent(t *testing.T) {
+	config := DefaultConfig()
+	config.PermissionMode = types.PermissionModeBypass
+
+	engine := NewEngine(
+		nil,
+		execution.NewOrchestrator(),
+		nil,
+		prompt.NewAssembler(),
+		permissions.NewIntegrator(permissions.NewEngine()),
+		registry.NewRegistry(),
+		nil,
+		config,
+		nil,
+		nil,
+	)
+	engine.loop.config.AutoCompact = false
+
+	loopStarted := make(chan struct{})
+	var once sync.Once
+	engine.loop.callModelFn = func(ctx context.Context, state *MutableState, req RunRequest) (*types.APIResponse, error) {
+		once.Do(func() { close(loopStarted) })
+		<-ctx.Done()
+		return nil, ctx.Err()
+	}
+
+	session, err := engine.NewSession(context.Background())
+	if err != nil {
+		t.Fatalf("new session: %v", err)
+	}
+
+	submitErrCh := make(chan error, 1)
+	go func() {
+		_, err := session.SubmitMessage(context.Background(), "go")
+		submitErrCh <- err
+	}()
+
+	select {
+	case <-loopStarted:
+	case <-time.After(2 * time.Second):
+		t.Fatal("submit did not start within 2s")
+	}
+
+	if err := session.Close(); err != nil {
+		t.Fatalf("close: %v", err)
+	}
+
+	select {
+	case err := <-submitErrCh:
+		if err == nil {
+			t.Fatal("expected the in-flight turn to fail once Close cancelled it")
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("in-flight submit did not unblock within 2s after Close")
+	}
+
+	// A second Close is a safe no-op, not a re-run of teardown.
+	if err := session.Close(); err != nil {
+		t.Fatalf("expected a second Close to be a no-op, got %v", err)
+	}
+
+	// A submit after Close is rejected, not silently accepted.
+	if _, err := session.SubmitMessage(context.Background(), "after close"); err == nil {
+		t.Fatal("expected SubmitMessage after Close to be rejected")
+	} else if !strings.Contains(err.Error(), "session is closed") {
+		t.Fatalf("expected a closed-session error, got %v", err)
 	}
 }
 

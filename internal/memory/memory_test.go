@@ -570,7 +570,7 @@ func TestLearnerOnToolUse_LearnPatternAfterThirdUse(t *testing.T) {
 	if err := l.memory.LoadCrossSession(); err != nil {
 		t.Fatalf("LoadCrossSession: %v", err)
 	}
-	if err := l.memory.LoadProject("/tmp/proj"); err != nil {
+	if _, err := l.memory.LoadProject("/tmp/proj"); err != nil {
 		t.Fatalf("LoadProject: %v", err)
 	}
 
@@ -650,7 +650,7 @@ func TestLearnerAddInstruction_RequiresProjectLoaded(t *testing.T) {
 		t.Fatalf("AddInstruction: %v", err)
 	}
 
-	project := l.memory.GetProject()
+	project := l.memory.GetProject(l.projectID)
 	if project == nil {
 		t.Fatal("expected project memory")
 		return
@@ -756,14 +756,14 @@ func TestErrorLearnerOnError_LearnsSuggestionAfterRepeat(t *testing.T) {
 	if err != nil {
 		t.Fatalf("NewErrorLearner: %v", err)
 	}
-	if err := el.memory.LoadProject("/tmp/proj-err"); err != nil {
+	if _, err := el.memory.LoadProject("/tmp/proj-err"); err != nil {
 		t.Fatalf("LoadProject: %v", err)
 	}
 
 	_ = el.OnError(errors.New("file not found: config.yaml"))
 	_ = el.OnError(errors.New("no such file: config.yaml"))
 
-	project := el.memory.GetProject()
+	project := el.memory.GetProject(el.projectID)
 	if project == nil {
 		t.Fatal("expected project memory after errors")
 		return
@@ -1020,18 +1020,19 @@ func TestManagerLoadAll_AndContext(t *testing.T) {
 	if err != nil {
 		t.Fatalf("NewManagerWithPath: %v", err)
 	}
-	if err := m.LoadAll("/tmp/proj-ctx"); err != nil {
+	projectID, err := m.LoadAll("/tmp/proj-ctx")
+	if err != nil {
 		t.Fatalf("LoadAll: %v", err)
 	}
 
-	if err := m.LearnPreference(MemoryScopeUser, "pref-key", "pref-value", "test"); err != nil {
+	if err := m.LearnPreference(projectID, MemoryScopeUser, "pref-key", "pref-value", "test"); err != nil {
 		t.Fatalf("LearnPreference: %v", err)
 	}
-	if err := m.LearnInstruction(MemoryScopeProject, "instr-key", "always use tabs", "test"); err != nil {
+	if err := m.LearnInstruction(projectID, MemoryScopeProject, "instr-key", "always use tabs", "test"); err != nil {
 		t.Fatalf("LearnInstruction: %v", err)
 	}
 
-	ctx := m.Context()
+	ctx := m.Context(projectID)
 	if !strings.Contains(ctx, "User Preferences") {
 		t.Fatalf("expected 'User Preferences' in context, got %q", ctx)
 	}
@@ -1050,12 +1051,13 @@ func TestManagerSaveAll_PersistsEverything(t *testing.T) {
 	if err != nil {
 		t.Fatalf("NewManagerWithPath: %v", err)
 	}
-	if err := m.LoadAll("/tmp/proj-save"); err != nil {
+	projectID, err := m.LoadAll("/tmp/proj-save")
+	if err != nil {
 		t.Fatalf("LoadAll: %v", err)
 	}
 
-	_ = m.LearnPreference(MemoryScopeUser, "save-key", "save-value", "test")
-	if err := m.SaveAll(); err != nil {
+	_ = m.LearnPreference(projectID, MemoryScopeUser, "save-key", "save-value", "test")
+	if err := m.SaveAll(projectID); err != nil {
 		t.Fatalf("SaveAll: %v", err)
 	}
 
@@ -1107,15 +1109,16 @@ func TestManagerLearnInstruction_ProjectScope(t *testing.T) {
 	if err != nil {
 		t.Fatalf("NewManagerWithPath: %v", err)
 	}
-	if err := m.LoadProject("/tmp/proj-instr"); err != nil {
+	projectID, err := m.LoadProject("/tmp/proj-instr")
+	if err != nil {
 		t.Fatalf("LoadProject: %v", err)
 	}
 
-	if err := m.LearnInstruction(MemoryScopeProject, "tab-pref", "use 4-space tabs", "test"); err != nil {
+	if err := m.LearnInstruction(projectID, MemoryScopeProject, "tab-pref", "use 4-space tabs", "test"); err != nil {
 		t.Fatalf("LearnInstruction: %v", err)
 	}
 
-	project := m.GetProject()
+	project := m.GetProject(projectID)
 	entry, ok := project.Entries["tab-pref"]
 	if !ok {
 		t.Fatal("expected 'tab-pref' in project entries")
@@ -1131,7 +1134,8 @@ func TestManagerAddSessionSummary_AndGetProjectHistory(t *testing.T) {
 	if err != nil {
 		t.Fatalf("NewManagerWithPath: %v", err)
 	}
-	if err := m.LoadProject("/proj/history"); err != nil {
+	projectID, err := m.LoadProject("/proj/history")
+	if err != nil {
 		t.Fatalf("LoadProject: %v", err)
 	}
 	if err := m.LoadCrossSession(); err != nil {
@@ -1151,7 +1155,7 @@ func TestManagerAddSessionSummary_AndGetProjectHistory(t *testing.T) {
 	}
 
 	// Context should include session history
-	ctx := m.Context()
+	ctx := m.Context(projectID)
 	if !strings.Contains(ctx, "Recent Session History") {
 		t.Fatalf("expected 'Recent Session History' in context, got %q", ctx)
 	}
@@ -1175,8 +1179,12 @@ func TestManagerSearch_FindsByContent(t *testing.T) {
 	if err != nil {
 		t.Fatalf("NewManagerWithPath: %v", err)
 	}
+	projectID, err := m.LoadProject("/tmp/proj-search")
+	if err != nil {
+		t.Fatalf("LoadProject: %v", err)
+	}
 
-	if err := m.StoreEntry(Entry{
+	if err := m.StoreEntry(projectID, Entry{
 		Scope:   MemoryScopeProject,
 		Type:    MemoryTypeKnowledge,
 		Key:     "test-entry",
@@ -1186,7 +1194,7 @@ func TestManagerSearch_FindsByContent(t *testing.T) {
 		t.Fatalf("StoreEntry: %v", err)
 	}
 
-	result, err := m.Search(MemoryQuery{Content: "deployment", Limit: 10})
+	result, err := m.Search(projectID, MemoryQuery{Content: "deployment", Limit: 10})
 	if err != nil {
 		t.Fatalf("Search: %v", err)
 	}
@@ -1202,6 +1210,11 @@ func TestManagerGetEntry_AndDeleteEntry(t *testing.T) {
 		t.Fatalf("NewManagerWithPath: %v", err)
 	}
 
+	projectID, err := m.LoadProject("/tmp/proj-delete")
+	if err != nil {
+		t.Fatalf("LoadProject: %v", err)
+	}
+
 	// Store to catalog first
 	stored := Entry{
 		Scope:   MemoryScopeProject,
@@ -1210,11 +1223,11 @@ func TestManagerGetEntry_AndDeleteEntry(t *testing.T) {
 		Value:   "some value",
 		Content: "some content",
 	}
-	if err := m.StoreEntry(stored); err != nil {
+	if err := m.StoreEntry(projectID, stored); err != nil {
 		t.Fatalf("StoreEntry: %v", err)
 	}
 
-	result, err := m.Search(MemoryQuery{Content: "some content", Limit: 1})
+	result, err := m.Search(projectID, MemoryQuery{Content: "some content", Limit: 1})
 	if err != nil || len(result.Entries) == 0 {
 		t.Fatal("expected to find stored entry")
 	}
@@ -1243,9 +1256,13 @@ func TestManagerStats(t *testing.T) {
 	if err != nil {
 		t.Fatalf("NewManagerWithPath: %v", err)
 	}
+	projectID, err := m.LoadProject("/tmp/proj-stats")
+	if err != nil {
+		t.Fatalf("LoadProject: %v", err)
+	}
 
-	_ = m.StoreEntry(Entry{Scope: MemoryScopeProject, Type: MemoryTypeKnowledge, Key: "k1", Value: "v1", Content: "c1"})
-	_ = m.StoreEntry(Entry{Scope: MemoryScopeUser, Type: MemoryTypePreference, Key: "k2", Value: "v2", Content: "c2"})
+	_ = m.StoreEntry(projectID, Entry{Scope: MemoryScopeProject, Type: MemoryTypeKnowledge, Key: "k1", Value: "v1", Content: "c1"})
+	_ = m.StoreEntry(projectID, Entry{Scope: MemoryScopeUser, Type: MemoryTypePreference, Key: "k2", Value: "v2", Content: "c2"})
 
 	stats := m.Stats()
 	if stats.TotalEntries != 2 {
@@ -1270,7 +1287,7 @@ func TestManagerContext_EmptyWhenNothingLoaded(t *testing.T) {
 	if err != nil {
 		t.Fatalf("NewManagerWithPath: %v", err)
 	}
-	ctx := m.Context()
+	ctx := m.Context("")
 	if ctx != "" {
 		t.Fatalf("expected empty context when nothing loaded, got %q", ctx)
 	}
@@ -1282,15 +1299,16 @@ func TestManagerContextLinesForToolUsage(t *testing.T) {
 	if err != nil {
 		t.Fatalf("NewManagerWithPath: %v", err)
 	}
-	if err := m.LoadProject("/tmp/proj-tool"); err != nil {
+	projectID, err := m.LoadProject("/tmp/proj-tool")
+	if err != nil {
 		t.Fatalf("LoadProject: %v", err)
 	}
 
-	if err := m.LearnToolUsage("awk", map[string]any{"pattern": "NR"}, true, nil); err != nil {
+	if err := m.LearnToolUsage(projectID, "awk", map[string]any{"pattern": "NR"}, true, nil); err != nil {
 		t.Fatalf("LearnToolUsage: %v", err)
 	}
 
-	ctx := m.Context()
+	ctx := m.Context(projectID)
 	if !strings.Contains(ctx, "Learned Tool Usage") {
 		t.Fatalf("expected 'Learned Tool Usage' section in context, got %q", ctx)
 	}
@@ -1346,11 +1364,12 @@ func TestManagerLearnToolUsagePersistsProjectPatterns(t *testing.T) {
 	if err != nil {
 		t.Fatalf("new manager: %v", err)
 	}
-	if err := manager.LoadProject("/tmp/project-alpha"); err != nil {
+	projectID, err := manager.LoadProject("/tmp/project-alpha")
+	if err != nil {
 		t.Fatalf("load project: %v", err)
 	}
 
-	if err := manager.LearnToolUsage("grep", map[string]any{"pattern": "TODO"}, true, nil); err != nil {
+	if err := manager.LearnToolUsage(projectID, "grep", map[string]any{"pattern": "TODO"}, true, nil); err != nil {
 		t.Fatalf("learn tool usage: %v", err)
 	}
 
@@ -1358,11 +1377,15 @@ func TestManagerLearnToolUsagePersistsProjectPatterns(t *testing.T) {
 	if err != nil {
 		t.Fatalf("reload manager: %v", err)
 	}
-	if err := reloaded.LoadProject("/tmp/project-alpha"); err != nil {
+	reloadedProjectID, err := reloaded.LoadProject("/tmp/project-alpha")
+	if err != nil {
 		t.Fatalf("reload project: %v", err)
 	}
+	if reloadedProjectID != projectID {
+		t.Fatalf("expected stable project ID across reload, got %q then %q", projectID, reloadedProjectID)
+	}
 
-	usage, err := reloaded.GetToolUsagePatterns("grep")
+	usage, err := reloaded.GetToolUsagePatterns(reloadedProjectID, "grep")
 	if err != nil {
 		t.Fatalf("get tool usage patterns: %v", err)
 	}
@@ -1373,11 +1396,178 @@ func TestManagerLearnToolUsagePersistsProjectPatterns(t *testing.T) {
 		t.Fatalf("expected success rate 1, got %v", usage.SuccessRate)
 	}
 
-	entry, ok := reloaded.GetProject().Entries["tool_usage:grep"]
+	entry, ok := reloaded.GetProject(reloadedProjectID).Entries["tool_usage:grep"]
 	if !ok {
 		t.Fatal("expected persisted project entry for tool usage")
 	}
 	if entry.Type != MemoryTypeToolUsage {
 		t.Fatalf("expected tool usage entry type, got %s", entry.Type)
+	}
+}
+
+// ─── Regression: DeleteEntry / ProjectID / concurrent projects ────────────────
+
+// TestManagerDeleteEntry_DoesNotReappearAfterReload is the P0 regression
+// test: DeleteEntry used to only remove the entry from the search catalog,
+// never from the underlying ProjectMemory.Entries map, so the very next
+// rebuildCatalog (triggered by any Load*) silently resurrected it.
+func TestManagerDeleteEntry_DoesNotReappearAfterReload(t *testing.T) {
+	dir := t.TempDir()
+	m, err := NewManagerWithPath(dir)
+	if err != nil {
+		t.Fatalf("NewManagerWithPath: %v", err)
+	}
+	projectID, err := m.LoadProject("/tmp/proj-delete-reload")
+	if err != nil {
+		t.Fatalf("LoadProject: %v", err)
+	}
+
+	if err := m.StoreEntry(projectID, Entry{
+		Scope: MemoryScopeProject, Type: MemoryTypeKnowledge,
+		Key: "will-be-deleted", Value: "v", Content: "delete me",
+	}); err != nil {
+		t.Fatalf("StoreEntry: %v", err)
+	}
+	if err := m.SaveProject(projectID); err != nil {
+		t.Fatalf("SaveProject: %v", err)
+	}
+
+	project := m.GetProject(projectID)
+	if _, ok := project.Entries["will-be-deleted"]; !ok {
+		t.Fatal("expected entry to exist before delete")
+	}
+
+	result, err := m.Search(projectID, MemoryQuery{Content: "delete me", Limit: 1})
+	if err != nil || len(result.Entries) != 1 {
+		t.Fatalf("expected to find the entry before delete, got %+v, err=%v", result, err)
+	}
+	id := result.Entries[0].ID
+
+	if err := m.DeleteEntry(id); err != nil {
+		t.Fatalf("DeleteEntry: %v", err)
+	}
+
+	// Removed from the project's own map, not just the catalog.
+	if _, ok := project.Entries["will-be-deleted"]; ok {
+		t.Fatal("expected entry removed from ProjectMemory.Entries, not just the catalog")
+	}
+
+	// Simulate a restart: fresh Manager, reload the same project from disk.
+	reloaded, err := NewManagerWithPath(dir)
+	if err != nil {
+		t.Fatalf("reload NewManagerWithPath: %v", err)
+	}
+	reloadedID, err := reloaded.LoadProject("/tmp/proj-delete-reload")
+	if err != nil {
+		t.Fatalf("reload LoadProject: %v", err)
+	}
+	reloadedProject := reloaded.GetProject(reloadedID)
+	if _, ok := reloadedProject.Entries["will-be-deleted"]; ok {
+		t.Fatal("deleted entry reappeared after reload - DeleteEntry did not persist the removal")
+	}
+	if result, err := reloaded.Search(reloadedID, MemoryQuery{Content: "delete me", Limit: 1}); err != nil || len(result.Entries) != 0 {
+		t.Fatalf("expected deleted entry to stay gone from search after reload, got %+v, err=%v", result, err)
+	}
+}
+
+// TestProjectID_DifferentPathsSameBasenameDoNotCollide is the P0 regression
+// test for the old getProjectRootID, which returned filepath.Base(path)
+// unconditionally for any git-tracked project - so two different repos that
+// happened to share a directory name collided on the same memory file.
+func TestProjectID_DifferentPathsSameBasenameDoNotCollide(t *testing.T) {
+	base := t.TempDir()
+	pathA := base + "/client-a/backend"
+	pathB := base + "/client-b/backend"
+
+	idA := ProjectID(pathA)
+	idB := ProjectID(pathB)
+
+	if idA == idB {
+		t.Fatalf("expected different IDs for %q and %q (same basename, different paths), got the same: %q", pathA, pathB, idA)
+	}
+
+	// Stable across repeated calls for the same path.
+	if again := ProjectID(pathA); again != idA {
+		t.Fatalf("expected ProjectID to be stable, got %q then %q", idA, again)
+	}
+}
+
+// TestManagerConcurrentProjects_DoNotClobberEachOther is the P0 regression
+// test for the old single m.project field: loading a second project into
+// one Manager used to silently replace the first, so a session still
+// working with project A would start reading/writing project B's memory
+// the moment any other session on the same Engine loaded a different
+// project. With per-project scoping, both stay independently addressable.
+func TestManagerConcurrentProjects_DoNotClobberEachOther(t *testing.T) {
+	dir := t.TempDir()
+	m, err := NewManagerWithPath(dir)
+	if err != nil {
+		t.Fatalf("NewManagerWithPath: %v", err)
+	}
+
+	idA, err := m.LoadProject("/tmp/project-a")
+	if err != nil {
+		t.Fatalf("LoadProject A: %v", err)
+	}
+	if err := m.StoreEntry(idA, Entry{
+		Scope: MemoryScopeProject, Type: MemoryTypeKnowledge,
+		Key: "marker", Value: "A", Content: "belongs to project A",
+	}); err != nil {
+		t.Fatalf("StoreEntry A: %v", err)
+	}
+
+	// Loading a second, different project used to wipe out project A's
+	// entry in m.project.
+	idB, err := m.LoadProject("/tmp/project-b")
+	if err != nil {
+		t.Fatalf("LoadProject B: %v", err)
+	}
+	if err := m.StoreEntry(idB, Entry{
+		Scope: MemoryScopeProject, Type: MemoryTypeKnowledge,
+		Key: "marker", Value: "B", Content: "belongs to project B",
+	}); err != nil {
+		t.Fatalf("StoreEntry B: %v", err)
+	}
+
+	if idA == idB {
+		t.Fatal("expected distinct project IDs for two different paths")
+	}
+
+	projectA := m.GetProject(idA)
+	if projectA == nil {
+		t.Fatal("expected project A to still be loaded after project B was loaded")
+	}
+	if entry, ok := projectA.Entries["marker"]; !ok || entry.Value != "A" {
+		t.Fatalf("expected project A's own marker entry to survive, got %+v", projectA.Entries["marker"])
+	}
+
+	projectB := m.GetProject(idB)
+	if projectB == nil {
+		t.Fatal("expected project B to be loaded")
+	}
+	if entry, ok := projectB.Entries["marker"]; !ok || entry.Value != "B" {
+		t.Fatalf("expected project B's own marker entry, got %+v", projectB.Entries["marker"])
+	}
+
+	// A search scoped to project A must not see project B's entry, and vice
+	// versa - entries are tagged with their own ProjectID by StoreEntry.
+	resultA, err := m.Search(idA, MemoryQuery{Content: "belongs to", Limit: 10})
+	if err != nil {
+		t.Fatalf("Search A: %v", err)
+	}
+	for _, e := range resultA.Entries {
+		if e.Value == "B" {
+			t.Fatal("search scoped to project A leaked project B's entry")
+		}
+	}
+
+	resultB, err := m.Search(idB, MemoryQuery{Content: "belongs to", Limit: 10})
+	if err != nil {
+		t.Fatalf("Search B: %v", err)
+	}
+	for _, e := range resultB.Entries {
+		if e.Value == "A" {
+			t.Fatal("search scoped to project B leaked project A's entry")
+		}
 	}
 }

@@ -5,6 +5,7 @@ import (
 	"os"
 	"sort"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/KPO-Tech/seshat/pkg/runtimepath"
@@ -14,16 +15,21 @@ import (
 // Memory Manager
 // ============================================================================
 
-// Manager manages all memory types
+// Manager manages all memory types. Safe for concurrent use: every method
+// takes an explicit projectID (see ProjectID) for anything project-scoped,
+// rather than relying on "whichever project was loaded most recently" - a
+// single Manager (and the Engine that owns it) can serve multiple sessions
+// against different projects without one clobbering another's state.
 type Manager struct {
 	projectStore Store
 	userStore    Store
 	crossStore   Store
 
-	project *ProjectMemory
-	user    *UserMemory
-	cross   *CrossSession
-	catalog *Catalog
+	mu       sync.Mutex
+	projects map[string]*ProjectMemory // keyed by ProjectID(path)
+	user     *UserMemory
+	cross    *CrossSession
+	catalog  *Catalog
 }
 
 // NewManager creates a new memory manager
@@ -42,6 +48,7 @@ func NewManager() (*Manager, error) {
 		projectStore: fs,
 		userStore:    fs,
 		crossStore:   fs,
+		projects:     make(map[string]*ProjectMemory),
 		catalog:      NewCatalog(),
 	}, nil
 }
@@ -57,27 +64,41 @@ func NewManagerWithPath(basePath string) (*Manager, error) {
 		projectStore: fs,
 		userStore:    fs,
 		crossStore:   fs,
+		projects:     make(map[string]*ProjectMemory),
 		catalog:      NewCatalog(),
 	}, nil
 }
 
-// LoadProject loads project memory
-func (m *Manager) LoadProject(projectPath string) error {
+// LoadProject loads project memory for projectPath and returns its stable
+// ID (ProjectID(projectPath)) - callers use this ID on every subsequent
+// project-scoped call instead of passing the path again.
+func (m *Manager) LoadProject(projectPath string) (string, error) {
 	project, err := m.projectStore.LoadProjectMemory(projectPath)
 	if err != nil {
-		return fmt.Errorf("load project memory: %w", err)
+		return "", fmt.Errorf("load project memory: %w", err)
 	}
-	m.project = project
+	id := ProjectID(projectPath)
+
+	m.mu.Lock()
+	if m.projects == nil {
+		m.projects = make(map[string]*ProjectMemory)
+	}
+	m.projects[id] = project
+	m.mu.Unlock()
+
 	m.rebuildCatalog()
-	return nil
+	return id, nil
 }
 
-// SaveProject saves project memory
-func (m *Manager) SaveProject() error {
-	if m.project == nil {
+// SaveProject saves projectID's memory.
+func (m *Manager) SaveProject(projectID string) error {
+	m.mu.Lock()
+	project := m.projects[projectID]
+	m.mu.Unlock()
+	if project == nil {
 		return nil
 	}
-	return m.projectStore.SaveProjectMemory(m.project)
+	return m.projectStore.SaveProjectMemory(project)
 }
 
 // LoadUser loads user memory
@@ -86,17 +107,22 @@ func (m *Manager) LoadUser() error {
 	if err != nil {
 		return fmt.Errorf("load user memory: %w", err)
 	}
+	m.mu.Lock()
 	m.user = user
+	m.mu.Unlock()
 	m.rebuildCatalog()
 	return nil
 }
 
 // SaveUser saves user memory
 func (m *Manager) SaveUser() error {
-	if m.user == nil {
+	m.mu.Lock()
+	user := m.user
+	m.mu.Unlock()
+	if user == nil {
 		return nil
 	}
-	return m.userStore.SaveUserMemory(m.user)
+	return m.userStore.SaveUserMemory(user)
 }
 
 // LoadCrossSession loads cross-session memory
@@ -105,37 +131,46 @@ func (m *Manager) LoadCrossSession() error {
 	if err != nil {
 		return fmt.Errorf("load cross-session memory: %w", err)
 	}
+	m.mu.Lock()
 	m.cross = cross
+	m.mu.Unlock()
 	m.rebuildCatalog()
 	return nil
 }
 
 // SaveCrossSession saves cross-session memory
 func (m *Manager) SaveCrossSession() error {
-	if m.cross == nil {
+	m.mu.Lock()
+	cross := m.cross
+	m.mu.Unlock()
+	if cross == nil {
 		return nil
 	}
-	return m.crossStore.SaveCrossSession(m.cross)
+	return m.crossStore.SaveCrossSession(cross)
 }
 
-// LoadAll loads all memory types
-func (m *Manager) LoadAll(projectPath string) error {
-	if err := m.LoadProject(projectPath); err != nil {
-		return err
+// LoadAll loads all memory types and returns projectPath's project ID.
+func (m *Manager) LoadAll(projectPath string) (string, error) {
+	id, err := m.LoadProject(projectPath)
+	if err != nil {
+		return "", err
 	}
 	if err := m.LoadUser(); err != nil {
-		return err
+		return "", err
 	}
 	if err := m.LoadCrossSession(); err != nil {
-		return err
+		return "", err
 	}
-	return nil
+	return id, nil
 }
 
-// SaveAll saves all memory types
-func (m *Manager) SaveAll() error {
-	if err := m.SaveProject(); err != nil {
-		return err
+// SaveAll saves user and cross-session memory, plus projectID's project
+// memory if projectID is non-empty.
+func (m *Manager) SaveAll(projectID string) error {
+	if projectID != "" {
+		if err := m.SaveProject(projectID); err != nil {
+			return err
+		}
 	}
 	if err := m.SaveUser(); err != nil {
 		return err
@@ -146,18 +181,24 @@ func (m *Manager) SaveAll() error {
 	return nil
 }
 
-// GetProject returns the current project memory
-func (m *Manager) GetProject() *ProjectMemory {
-	return m.project
+// GetProject returns projectID's project memory, or nil if not loaded.
+func (m *Manager) GetProject(projectID string) *ProjectMemory {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	return m.projects[projectID]
 }
 
 // GetUser returns the current user memory
 func (m *Manager) GetUser() *UserMemory {
+	m.mu.Lock()
+	defer m.mu.Unlock()
 	return m.user
 }
 
 // GetCrossSession returns the cross-session memory
 func (m *Manager) GetCrossSession() *CrossSession {
+	m.mu.Lock()
+	defer m.mu.Unlock()
 	return m.cross
 }
 
@@ -165,24 +206,30 @@ func (m *Manager) GetCrossSession() *CrossSession {
 // Entry Management
 // ============================================================================
 
-// LearnPreference adds a learned preference
-func (m *Manager) LearnPreference(scope MemoryScope, key, value, source string) error {
-	return m.learnScopedEntry(scope, MemoryTypePreference, key, value, source)
+// LearnPreference adds a learned preference. projectID is only used when
+// scope == MemoryScopeProject.
+func (m *Manager) LearnPreference(projectID string, scope MemoryScope, key, value, source string) error {
+	return m.learnScopedEntry(projectID, scope, MemoryTypePreference, key, value, source)
 }
 
-// LearnInstruction adds a learned persistent instruction.
-func (m *Manager) LearnInstruction(scope MemoryScope, key, value, source string) error {
-	return m.learnScopedEntry(scope, MemoryTypeInstruction, key, value, source)
+// LearnInstruction adds a learned persistent instruction. projectID is only
+// used when scope == MemoryScopeProject.
+func (m *Manager) LearnInstruction(projectID string, scope MemoryScope, key, value, source string) error {
+	return m.learnScopedEntry(projectID, scope, MemoryTypeInstruction, key, value, source)
 }
 
-// GetPreferences retrieves preferences for a scope
-func (m *Manager) GetPreferences(scope MemoryScope) []*Entry {
+// GetPreferences retrieves preferences for a scope. projectID is only used
+// when scope == MemoryScopeProject.
+func (m *Manager) GetPreferences(projectID string, scope MemoryScope) []*Entry {
 	var entries []*Entry
+
+	m.mu.Lock()
+	defer m.mu.Unlock()
 
 	switch scope {
 	case MemoryScopeProject:
-		if m.project != nil {
-			for _, e := range m.project.Entries {
+		if project := m.projects[projectID]; project != nil {
+			for _, e := range project.Entries {
 				if e.Type == MemoryTypePreference {
 					entries = append(entries, e)
 				}
@@ -203,7 +250,9 @@ func (m *Manager) GetPreferences(scope MemoryScope) []*Entry {
 
 // AddSessionSummary adds a session summary for cross-session recall
 func (m *Manager) AddSessionSummary(sessionID, projectPath, summary string, toolsUsed []string) error {
+	m.mu.Lock()
 	if m.cross == nil {
+		m.mu.Unlock()
 		return fmt.Errorf("cross-session memory not loaded")
 	}
 
@@ -215,8 +264,12 @@ func (m *Manager) AddSessionSummary(sessionID, projectPath, summary string, tool
 		ToolsUsed:   toolsUsed,
 		CompletedAt: completedAt,
 	}
-	if m.catalog != nil {
-		_ = m.catalog.StoreEntry(Entry{
+	cross := m.cross
+	catalog := m.catalog
+	m.mu.Unlock()
+
+	if catalog != nil {
+		_ = catalog.StoreEntry(Entry{
 			ID:        sessionID,
 			Scope:     MemoryScopeSession,
 			Type:      MemoryTypeSummary,
@@ -230,12 +283,15 @@ func (m *Manager) AddSessionSummary(sessionID, projectPath, summary string, tool
 		})
 	}
 
-	return m.crossStore.SaveCrossSession(m.cross)
+	return m.crossStore.SaveCrossSession(cross)
 }
 
 // GetProjectHistory retrieves past session summaries for a project
 func (m *Manager) GetProjectHistory(projectPath string) []*SessionSummary {
 	var summaries []*SessionSummary
+
+	m.mu.Lock()
+	defer m.mu.Unlock()
 
 	if m.cross == nil {
 		return summaries
@@ -254,20 +310,22 @@ func (m *Manager) GetProjectHistory(projectPath string) []*SessionSummary {
 // Context for LLM
 // ============================================================================
 
-// Context returns memory context for inclusion in LLM prompts
-func (m *Manager) Context() string {
+// Context returns memory context for inclusion in LLM prompts, scoped to
+// projectID (pass "" for none - only user preferences/tool usage/history
+// sections will be empty).
+func (m *Manager) Context(projectID string) string {
 	sections := make([]string, 0, 4)
 
-	if lines := m.contextLinesForEntries(m.projectEntriesByType(MemoryTypePreference, MemoryTypeInstruction)); len(lines) > 0 {
+	if lines := m.contextLinesForEntries(m.projectEntriesByType(projectID, MemoryTypePreference, MemoryTypeInstruction)); len(lines) > 0 {
 		sections = append(sections, "## Project Memory\n"+strings.Join(lines, "\n"))
 	}
 	if lines := m.contextLinesForEntries(m.userEntriesByType(MemoryTypePreference, MemoryTypeInstruction)); len(lines) > 0 {
 		sections = append(sections, "## User Preferences\n"+strings.Join(lines, "\n"))
 	}
-	if lines := m.contextLinesForToolUsage(); len(lines) > 0 {
+	if lines := m.contextLinesForToolUsage(projectID); len(lines) > 0 {
 		sections = append(sections, "## Learned Tool Usage\n"+strings.Join(lines, "\n"))
 	}
-	if lines := m.contextLinesForProjectHistory(3); len(lines) > 0 {
+	if lines := m.contextLinesForProjectHistory(projectID, 3); len(lines) > 0 {
 		sections = append(sections, "## Recent Session History\n"+strings.Join(lines, "\n"))
 	}
 
@@ -299,20 +357,50 @@ func EnsureDirectory() error {
 	return os.MkdirAll(path, 0755)
 }
 
-// Search looks up entries in the central searchable catalog.
-func (m *Manager) Search(query MemoryQuery) (*MemorySearchResult, error) {
+// Search looks up entries in the central searchable catalog. Project-scoped
+// entries (Scope == MemoryScopeProject) are only returned when their
+// ProjectID matches projectID; user/session-scoped entries are always
+// visible regardless of projectID. Pass "" for projectID to exclude every
+// project-scoped entry.
+func (m *Manager) Search(projectID string, query MemoryQuery) (*MemorySearchResult, error) {
+	m.mu.Lock()
 	if m.catalog == nil {
 		m.catalog = NewCatalog()
 	}
-	return m.catalog.Search(query)
+	catalog := m.catalog
+	m.mu.Unlock()
+
+	result, err := catalog.Search(query)
+	if err != nil || result == nil {
+		return result, err
+	}
+	filtered := make([]Entry, 0, len(result.Entries))
+	for _, entry := range result.Entries {
+		if entry.Scope == MemoryScopeProject && entry.ProjectID != projectID {
+			continue
+		}
+		filtered = append(filtered, entry)
+	}
+	result.Entries = filtered
+	result.Total = len(filtered)
+	return result, nil
 }
 
-// StoreEntry stores an entry in the central catalog and persists scoped entries when possible.
-func (m *Manager) StoreEntry(entry Entry) error {
+// StoreEntry stores an entry in the central catalog and persists it to
+// projectID's project memory (when entry.Scope == MemoryScopeProject) or
+// user memory (when entry.Scope == MemoryScopeUser).
+func (m *Manager) StoreEntry(projectID string, entry Entry) error {
+	m.mu.Lock()
 	if m.catalog == nil {
 		m.catalog = NewCatalog()
 	}
-	if err := m.catalog.StoreEntry(entry); err != nil {
+	if entry.Scope == MemoryScopeProject {
+		entry.ProjectID = projectID
+	}
+	catalog := m.catalog
+	m.mu.Unlock()
+
+	if err := catalog.StoreEntry(entry); err != nil {
 		return err
 	}
 
@@ -320,12 +408,15 @@ func (m *Manager) StoreEntry(entry Entry) error {
 	if key == "" {
 		key = entry.ID
 	}
+
+	m.mu.Lock()
+	defer m.mu.Unlock()
 	switch entry.Scope {
 	case MemoryScopeProject:
-		if m.project != nil {
+		if project := m.projects[projectID]; project != nil {
 			cloned := entry
-			m.project.Entries[key] = &cloned
-			return m.projectStore.SaveProjectMemory(m.project)
+			project.Entries[key] = &cloned
+			return m.projectStore.SaveProjectMemory(project)
 		}
 	case MemoryScopeUser:
 		if m.user != nil {
@@ -338,49 +429,110 @@ func (m *Manager) StoreEntry(entry Entry) error {
 	return nil
 }
 
+// GetEntry looks up an entry by its unique ID - unambiguous regardless of
+// project, so it takes no projectID.
 func (m *Manager) GetEntry(id string) (*Entry, error) {
+	m.mu.Lock()
 	if m.catalog == nil {
 		m.catalog = NewCatalog()
 	}
-	return m.catalog.GetEntry(id)
+	catalog := m.catalog
+	m.mu.Unlock()
+	return catalog.GetEntry(id)
 }
 
+// DeleteEntry removes id from the catalog AND from its owning project/user
+// memory map - deleting only from the catalog (the previous behavior) meant
+// the entry silently reappeared on the next rebuildCatalog (i.e. the next
+// Load*), since that rebuild repopulates the catalog straight from these
+// same maps.
 func (m *Manager) DeleteEntry(id string) error {
+	m.mu.Lock()
 	if m.catalog == nil {
+		m.mu.Unlock()
 		return fmt.Errorf("memory catalog not initialized")
 	}
-	return m.catalog.DeleteEntry(id)
-}
+	catalog := m.catalog
+	m.mu.Unlock()
 
-func (m *Manager) LearnToolUsage(toolName string, parameters map[string]any, success bool, err error) error {
-	if m.catalog == nil {
-		m.catalog = NewCatalog()
+	entry, err := catalog.GetEntry(id)
+	if err != nil {
+		return err
 	}
-	if learnErr := m.catalog.LearnToolUsage(toolName, parameters, success, err); learnErr != nil {
-		return learnErr
+	if err := catalog.DeleteEntry(id); err != nil {
+		return err
 	}
-	if m.project == nil {
+	if entry == nil {
 		return nil
 	}
 
-	usage, usageErr := m.catalog.GetToolUsagePatterns(toolName)
+	key := entry.Key
+	if key == "" {
+		key = entry.ID
+	}
+
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	switch entry.Scope {
+	case MemoryScopeProject:
+		if project := m.projects[entry.ProjectID]; project != nil {
+			delete(project.Entries, key)
+			return m.projectStore.SaveProjectMemory(project)
+		}
+	case MemoryScopeUser:
+		if m.user != nil {
+			delete(m.user.Entries, key)
+			return m.userStore.SaveUserMemory(m.user)
+		}
+	}
+
+	return nil
+}
+
+// LearnToolUsage records a tool call outcome against the catalog's global
+// search index and, when projectID is non-empty, as the authoritative
+// per-project usage record (the source GetToolUsagePatterns prefers).
+func (m *Manager) LearnToolUsage(projectID, toolName string, parameters map[string]any, success bool, err error) error {
+	m.mu.Lock()
+	if m.catalog == nil {
+		m.catalog = NewCatalog()
+	}
+	catalog := m.catalog
+	m.mu.Unlock()
+
+	if learnErr := catalog.LearnToolUsage(toolName, parameters, success, err); learnErr != nil {
+		return learnErr
+	}
+	if projectID == "" {
+		return nil
+	}
+
+	usage, usageErr := catalog.GetToolUsagePatterns(toolName)
 	if usageErr != nil {
 		return usageErr
 	}
 
-	if m.project.ToolUsage == nil {
-		m.project.ToolUsage = make(map[string]*ToolUsageMemory)
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	project := m.projects[projectID]
+	if project == nil {
+		return nil
 	}
-	m.project.ToolUsage[toolName] = cloneToolUsageMemory(usage)
 
-	if m.project.Entries == nil {
-		m.project.Entries = make(map[string]*Entry)
+	if project.ToolUsage == nil {
+		project.ToolUsage = make(map[string]*ToolUsageMemory)
+	}
+	project.ToolUsage[toolName] = cloneToolUsageMemory(usage)
+
+	if project.Entries == nil {
+		project.Entries = make(map[string]*Entry)
 	}
 	entryKey := fmt.Sprintf("tool_usage:%s", toolName)
-	entry, exists := m.project.Entries[entryKey]
+	entry, exists := project.Entries[entryKey]
 	if !exists || entry == nil {
 		entry = NewEntry(MemoryScopeProject, MemoryTypeToolUsage, entryKey, "", "tool_execution")
 	}
+	entry.ProjectID = projectID
 	entry.Value = describeToolUsage(usage)
 	entry.Content = entry.Value
 	entry.Source = "tool_execution"
@@ -392,26 +544,46 @@ func (m *Manager) LearnToolUsage(toolName string, parameters map[string]any, suc
 		SuccessRate: usage.SuccessRate,
 		LastUsedAt:  &usage.LastUsed,
 	}
-	m.project.Entries[entryKey] = entry
+	project.Entries[entryKey] = entry
 
-	return m.projectStore.SaveProjectMemory(m.project)
+	return m.projectStore.SaveProjectMemory(project)
 }
 
-func (m *Manager) GetToolUsagePatterns(toolName string) (*ToolUsageMemory, error) {
+// GetToolUsagePatterns returns toolName's usage stats for projectID,
+// preferring that project's own persisted record over the catalog's
+// cross-project aggregate (which mixes stats from every project sharing
+// this Manager's catalog once more than one is loaded).
+func (m *Manager) GetToolUsagePatterns(projectID, toolName string) (*ToolUsageMemory, error) {
+	m.mu.Lock()
+	if project := m.projects[projectID]; project != nil {
+		if usage := project.ToolUsage[toolName]; usage != nil {
+			m.mu.Unlock()
+			return usage, nil
+		}
+	}
 	if m.catalog == nil {
+		m.mu.Unlock()
 		return nil, fmt.Errorf("memory catalog not initialized")
 	}
-	return m.catalog.GetToolUsagePatterns(toolName)
+	catalog := m.catalog
+	m.mu.Unlock()
+	return catalog.GetToolUsagePatterns(toolName)
 }
 
 func (m *Manager) Stats() MemoryStats {
+	m.mu.Lock()
 	if m.catalog == nil {
+		m.mu.Unlock()
 		return MemoryStats{EntriesByType: make(map[MemoryType]int), MostAccessed: []string{}}
 	}
-	return m.catalog.Stats()
+	catalog := m.catalog
+	m.mu.Unlock()
+	return catalog.Stats()
 }
 
 func (m *Manager) Catalog() *Catalog {
+	m.mu.Lock()
+	defer m.mu.Unlock()
 	if m.catalog == nil {
 		m.catalog = NewCatalog()
 	}
@@ -419,19 +591,28 @@ func (m *Manager) Catalog() *Catalog {
 }
 
 func (m *Manager) rebuildCatalog() {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
 	if m.catalog == nil {
 		m.catalog = NewCatalog()
 	}
 
 	entries := make([]Entry, 0)
 	toolUsage := make(map[string]*ToolUsageMemory)
-	if m.project != nil {
-		for _, entry := range m.project.Entries {
-			if entry != nil {
-				entries = append(entries, *entry)
-			}
+	for projectID, project := range m.projects {
+		if project == nil {
+			continue
 		}
-		for name, usage := range m.project.ToolUsage {
+		for _, entry := range project.Entries {
+			if entry == nil {
+				continue
+			}
+			cloned := *entry
+			cloned.ProjectID = projectID
+			entries = append(entries, cloned)
+		}
+		for name, usage := range project.ToolUsage {
 			if usage != nil {
 				toolUsage[name] = cloneToolUsageMemory(usage)
 			}
@@ -490,19 +671,23 @@ func (m *Manager) rebuildCatalog() {
 	m.catalog.ResetToolUsage(toolUsage)
 }
 
-func (m *Manager) learnScopedEntry(scope MemoryScope, entryType MemoryType, key, value, source string) error {
+func (m *Manager) learnScopedEntry(projectID string, scope MemoryScope, entryType MemoryType, key, value, source string) error {
 	entry := NewEntry(scope, entryType, key, value, source)
 	entry.Content = value
 	entry.Tags = []string{string(entryType)}
 
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
 	switch scope {
 	case MemoryScopeProject:
-		if m.project != nil {
-			m.project.Entries[key] = entry
+		if project := m.projects[projectID]; project != nil {
+			entry.ProjectID = projectID
+			project.Entries[key] = entry
 			if m.catalog != nil {
 				_ = m.catalog.StoreEntry(*entry)
 			}
-			return m.projectStore.SaveProjectMemory(m.project)
+			return m.projectStore.SaveProjectMemory(project)
 		}
 	case MemoryScopeUser:
 		if m.user != nil {
@@ -517,14 +702,19 @@ func (m *Manager) learnScopedEntry(scope MemoryScope, entryType MemoryType, key,
 	return nil
 }
 
-func (m *Manager) projectEntriesByType(types ...MemoryType) []*Entry {
-	if m.project == nil {
+func (m *Manager) projectEntriesByType(projectID string, types ...MemoryType) []*Entry {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	project := m.projects[projectID]
+	if project == nil {
 		return nil
 	}
-	return filterEntriesByType(m.project.Entries, types...)
+	return filterEntriesByType(project.Entries, types...)
 }
 
 func (m *Manager) userEntriesByType(types ...MemoryType) []*Entry {
+	m.mu.Lock()
+	defer m.mu.Unlock()
 	if m.user == nil {
 		return nil
 	}
@@ -550,8 +740,11 @@ func (m *Manager) contextLinesForEntries(entries []*Entry) []string {
 	return lines
 }
 
-func (m *Manager) contextLinesForToolUsage() []string {
-	if m.project == nil || len(m.project.ToolUsage) == 0 {
+func (m *Manager) contextLinesForToolUsage(projectID string) []string {
+	m.mu.Lock()
+	project := m.projects[projectID]
+	m.mu.Unlock()
+	if project == nil || len(project.ToolUsage) == 0 {
 		return nil
 	}
 
@@ -559,8 +752,8 @@ func (m *Manager) contextLinesForToolUsage() []string {
 		Name  string
 		Usage *ToolUsageMemory
 	}
-	ordered := make([]toolUsageLine, 0, len(m.project.ToolUsage))
-	for name, usage := range m.project.ToolUsage {
+	ordered := make([]toolUsageLine, 0, len(project.ToolUsage))
+	for name, usage := range project.ToolUsage {
 		if usage == nil {
 			continue
 		}
@@ -580,12 +773,16 @@ func (m *Manager) contextLinesForToolUsage() []string {
 	return lines
 }
 
-func (m *Manager) contextLinesForProjectHistory(limit int) []string {
-	if m.project == nil || m.cross == nil || limit <= 0 {
+func (m *Manager) contextLinesForProjectHistory(projectID string, limit int) []string {
+	m.mu.Lock()
+	project := m.projects[projectID]
+	cross := m.cross
+	m.mu.Unlock()
+	if project == nil || cross == nil || limit <= 0 {
 		return nil
 	}
 
-	summaries := m.GetProjectHistory(m.project.ProjectPath)
+	summaries := m.GetProjectHistory(project.ProjectPath)
 	if len(summaries) == 0 {
 		return nil
 	}
