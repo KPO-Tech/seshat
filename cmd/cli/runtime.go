@@ -390,7 +390,7 @@ func buildVectorStore(config engineconfig.Config, hnswDir, sqliteFallbackPath st
 		return nil
 	}
 
-	if hnswStore, err := vector.NewHNSWStore(hnswDir); err == nil {
+	if hnswStore, err := vector.NewHNSWStore(hnswDir); err == nil { //nolint:staticcheck // SA4023: only dead on the Windows build (hnsw_store_windows.go's stub always errors); live on every other platform's real implementation
 		return hnswStore
 	} else {
 		log.Printf("[cli] hnsw vector store unavailable (%v), falling back to sqlite", err)

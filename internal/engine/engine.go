@@ -228,11 +228,11 @@ func (e *Engine) defaultPermissionContext() *types.PermissionContext {
 	}
 }
 
-func (e *Engine) memoryContext() string {
+func (e *Engine) memoryContext(projectID string) string {
 	if e == nil || e.memoryService == nil {
 		return ""
 	}
-	return e.memoryService.Context()
+	return e.memoryService.Context(projectID)
 }
 
 // SetOnSessionTitled registers a callback that is invoked once — as soon as

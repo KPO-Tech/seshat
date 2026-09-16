@@ -420,6 +420,8 @@ func runMemory(args []string, stdout, stderr io.Writer) error {
 		return fmt.Errorf("create memory manager: %w", err)
 	}
 
+	projectID := memory.ProjectID(*projectPath)
+
 	// Load based on scope
 	switch *scope {
 	case "user":
@@ -427,7 +429,7 @@ func runMemory(args []string, stdout, stderr io.Writer) error {
 			return fmt.Errorf("load user memory: %w", err)
 		}
 	case "project":
-		if err := memManager.LoadProject(*projectPath); err != nil {
+		if _, err := memManager.LoadProject(*projectPath); err != nil {
 			return fmt.Errorf("load project memory: %w", err)
 		}
 	case "cross":
@@ -435,7 +437,7 @@ func runMemory(args []string, stdout, stderr io.Writer) error {
 			return fmt.Errorf("load cross-session: %w", err)
 		}
 	default:
-		if err := memManager.LoadAll(*projectPath); err != nil {
+		if _, err := memManager.LoadAll(*projectPath); err != nil {
 			return fmt.Errorf("load memory: %w", err)
 		}
 	}
@@ -443,23 +445,23 @@ func runMemory(args []string, stdout, stderr io.Writer) error {
 	// Handle actions
 	switch *action {
 	case "show":
-		return showMemory(memManager, *scope, stdout)
+		return showMemory(memManager, projectID, *scope, stdout)
 	case "set":
 		if *key == "" || *value == "" {
 			return fmt.Errorf("key and value required for set action")
 		}
-		return setMemory(memManager, *scope, *key, *value, stdout)
+		return setMemory(memManager, projectID, *scope, *key, *value, stdout)
 	case "clear":
 		return clearMemory(memManager, *scope, stdout)
 	case "context":
-		return showContext(memManager, stdout)
+		return showContext(memManager, projectID, stdout)
 	default:
 		// Default: show all
-		return showMemory(memManager, *scope, stdout)
+		return showMemory(memManager, projectID, *scope, stdout)
 	}
 }
 
-func showMemory(mem *memory.Manager, scope string, stdout io.Writer) error {
+func showMemory(mem *memory.Manager, projectID, scope string, stdout io.Writer) error {
 	switch scope {
 	case "user":
 		user := mem.GetUser()
@@ -472,7 +474,7 @@ func showMemory(mem *memory.Manager, scope string, stdout io.Writer) error {
 			fmt.Fprintf(stdout, "- %s: %s (%.0f%% confidence)\n", e.Key, e.Value, e.Confidence*100)
 		}
 	case "project":
-		project := mem.GetProject()
+		project := mem.GetProject(projectID)
 		if project == nil || len(project.Entries) == 0 {
 			fmt.Fprintln(stdout, "No project memory")
 			return nil
@@ -507,7 +509,7 @@ func showMemory(mem *memory.Manager, scope string, stdout io.Writer) error {
 				fmt.Fprintf(stdout, "- %s: %s\n", e.Key, e.Value)
 			}
 		}
-		project := mem.GetProject()
+		project := mem.GetProject(projectID)
 		if project != nil && len(project.Entries) > 0 {
 			fmt.Fprintln(stdout, "## Project Memory")
 			for _, e := range project.Entries {
@@ -518,20 +520,20 @@ func showMemory(mem *memory.Manager, scope string, stdout io.Writer) error {
 	return nil
 }
 
-func setMemory(mem *memory.Manager, scope, key, value string, stdout io.Writer) error {
+func setMemory(mem *memory.Manager, projectID, scope, key, value string, stdout io.Writer) error {
 	switch scope {
 	case "user":
-		if err := mem.LearnPreference(memory.MemoryScopeUser, key, value, "cli"); err != nil {
+		if err := mem.LearnPreference(projectID, memory.MemoryScopeUser, key, value, "cli"); err != nil {
 			return fmt.Errorf("set preference: %w", err)
 		}
 		if err := mem.SaveUser(); err != nil {
 			return fmt.Errorf("save user memory: %w", err)
 		}
 	case "project":
-		if err := mem.LearnPreference(memory.MemoryScopeProject, key, value, "cli"); err != nil {
+		if err := mem.LearnPreference(projectID, memory.MemoryScopeProject, key, value, "cli"); err != nil {
 			return fmt.Errorf("set project preference: %w", err)
 		}
-		if err := mem.SaveProject(); err != nil {
+		if err := mem.SaveProject(projectID); err != nil {
 			return fmt.Errorf("save project memory: %w", err)
 		}
 	default:
@@ -567,8 +569,8 @@ func clearMemory(mem *memory.Manager, scope string, stdout io.Writer) error {
 	return nil
 }
 
-func showContext(mem *memory.Manager, stdout io.Writer) error {
-	ctx := mem.Context()
+func showContext(mem *memory.Manager, projectID string, stdout io.Writer) error {
+	ctx := mem.Context(projectID)
 	if ctx == "" {
 		fmt.Fprintln(stdout, "No memory context")
 		return nil
