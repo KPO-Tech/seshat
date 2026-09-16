@@ -14,6 +14,7 @@ import (
 type Learner struct {
 	memory      *Manager
 	projectPath string
+	projectID   string
 	sessionID   string
 	toolStats   map[string]*ToolStats // tool_name -> stats
 }
@@ -43,11 +44,12 @@ func NewLearner(projectPath, sessionID string) (*Learner, error) {
 	// Load existing memory
 	_ = mem.LoadUser()
 	_ = mem.LoadCrossSession()
-	_ = mem.LoadProject(projectPath)
+	projectID, _ := mem.LoadProject(projectPath)
 
 	return &Learner{
 		memory:      mem,
 		projectPath: projectPath,
+		projectID:   projectID,
 		sessionID:   sessionID,
 		toolStats:   make(map[string]*ToolStats),
 	}, nil
@@ -128,7 +130,7 @@ func (l *Learner) learnToolPattern(toolName string, stats *ToolStats, lastError 
 
 // learnProjectPatternToStore learns a pattern to project memory
 func (l *Learner) learnProjectPatternToStore(toolName string, stats *ToolStats) error {
-	project := l.memory.GetProject()
+	project := l.memory.GetProject(l.projectID)
 	if project == nil {
 		return nil
 	}
@@ -157,20 +159,21 @@ func (l *Learner) learnProjectPatternToStore(toolName string, stats *ToolStats) 
 
 // AddUserPreference learns a user preference
 func (l *Learner) AddUserPreference(key, value, source string) error {
-	return l.memory.LearnPreference(MemoryScopeUser, key, value, source)
+	return l.memory.LearnPreference(l.projectID, MemoryScopeUser, key, value, source)
 }
 
 // AddInstruction learns a persistent instruction
 func (l *Learner) AddInstruction(key, instruction, source string) error {
-	project := l.memory.GetProject()
+	project := l.memory.GetProject(l.projectID)
 	if project == nil {
 		return fmt.Errorf("project memory not loaded")
 	}
 
 	entry := NewEntry(MemoryScopeProject, MemoryTypeInstruction, key, instruction, source)
+	entry.ProjectID = l.projectID
 	project.Entries[key] = entry
 
-	return l.memory.SaveProject()
+	return l.memory.SaveProject(l.projectID)
 }
 
 // Flush saves learned patterns to storage
@@ -181,7 +184,7 @@ func (l *Learner) Flush() error {
 	if err := l.memory.SaveCrossSession(); err != nil {
 		return err
 	}
-	if err := l.memory.SaveProject(); err != nil {
+	if err := l.memory.SaveProject(l.projectID); err != nil {
 		return err
 	}
 	return nil
@@ -193,8 +196,9 @@ func (l *Learner) Flush() error {
 
 // ErrorLearner learns from errors
 type ErrorLearner struct {
-	memory *Manager
-	errors map[string]*ErrorPattern
+	memory    *Manager
+	projectID string
+	errors    map[string]*ErrorPattern
 }
 
 // ErrorPattern represents a learned error pattern
@@ -214,11 +218,12 @@ func NewErrorLearner(projectPath string) (*ErrorLearner, error) {
 		return nil, err
 	}
 
-	_ = mem.LoadProject(projectPath)
+	projectID, _ := mem.LoadProject(projectPath)
 
 	return &ErrorLearner{
-		memory: mem,
-		errors: make(map[string]*ErrorPattern),
+		memory:    mem,
+		projectID: projectID,
+		errors:    make(map[string]*ErrorPattern),
 	}, nil
 }
 
@@ -250,14 +255,15 @@ func (e *ErrorLearner) OnError(err error) error {
 
 	// Learn to memory if frequent
 	if pattern.Frequency >= 2 {
-		project := e.memory.GetProject()
+		project := e.memory.GetProject(e.projectID)
 		if project != nil {
 			entryKey := fmt.Sprintf("error:%s", errType)
 			entry := NewEntry(MemoryScopeProject, MemoryTypeKnowledge, entryKey, pattern.Suggestion, "error_learner")
+			entry.ProjectID = e.projectID
 			entry.Confidence = float64(pattern.Frequency) / float64(pattern.Frequency+1)
 			project.Entries[entryKey] = entry
 
-			return e.memory.SaveProject()
+			return e.memory.SaveProject(e.projectID)
 		}
 	}
 
@@ -310,7 +316,8 @@ func getSuggestion(errType string) string {
 
 // ContextBuilder builds context from learned patterns
 type ContextBuilder struct {
-	memory *Manager
+	memory    *Manager
+	projectID string
 }
 
 // NewContextBuilder creates a new context builder
@@ -320,11 +327,11 @@ func NewContextBuilder(projectPath string) (*ContextBuilder, error) {
 		return nil, err
 	}
 
-	_ = mem.LoadProject(projectPath)
+	projectID, _ := mem.LoadProject(projectPath)
 	_ = mem.LoadUser()
 	_ = mem.LoadCrossSession()
 
-	return &ContextBuilder{memory: mem}, nil
+	return &ContextBuilder{memory: mem, projectID: projectID}, nil
 }
 
 // Build returns learned context for prompts
@@ -348,7 +355,7 @@ func (b *ContextBuilder) Build() string {
 	}
 
 	// Project-specific patterns
-	project := b.memory.GetProject()
+	project := b.memory.GetProject(b.projectID)
 	if project != nil {
 		context += "\n## Project Patterns\n"
 		count := 0

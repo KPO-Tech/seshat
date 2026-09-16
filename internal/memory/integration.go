@@ -71,7 +71,7 @@ func (im *IntegrationManager) StorePreference(scope MemoryScope, key, value, sou
 		return im.catalog.StoreEntry(entry)
 	}
 
-	return im.manager.LearnPreference(scope, key, value, source)
+	return im.manager.LearnPreference("", scope, key, value, source)
 }
 
 // GetPreferences retrieves preferences for a scope
@@ -96,7 +96,7 @@ func (im *IntegrationManager) GetPreferences(scope MemoryScope) []*Entry {
 		return entries
 	}
 
-	return im.manager.GetPreferences(scope)
+	return im.manager.GetPreferences("", scope)
 }
 
 // LearnToolUsage learns from tool execution.
@@ -138,7 +138,7 @@ func (im *IntegrationManager) Context() string {
 	}
 
 	if ctx == "" {
-		ctx += im.manager.Context()
+		ctx += im.manager.Context("")
 	}
 
 	return ctx

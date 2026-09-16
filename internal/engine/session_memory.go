@@ -23,13 +23,14 @@ func (s *Session) rememberUserDirectives(content string) {
 		return
 	}
 
+	projectID := s.sessionProjectID()
 	for _, directive := range extractPersistentDirectives(content) {
 		var err error
 		switch directive.Kind {
 		case memory.MemoryTypeInstruction:
-			err = s.engine.memoryService.LearnInstruction(directive.Scope, directive.Key, directive.Value, "runtime:user_message")
+			err = s.engine.memoryService.LearnInstruction(projectID, directive.Scope, directive.Key, directive.Value, "runtime:user_message")
 		default:
-			err = s.engine.memoryService.LearnPreference(directive.Scope, directive.Key, directive.Value, "runtime:user_message")
+			err = s.engine.memoryService.LearnPreference(projectID, directive.Scope, directive.Key, directive.Value, "runtime:user_message")
 		}
 		if err != nil {
 			slog.Warn("failed to learn directive", "key", directive.Key, "error", err)
@@ -52,7 +53,7 @@ func (s *Session) rememberToolUsage(toolUses []types.ToolUseContent, results []t
 			toolErr = fmt.Errorf("missing tool result for %s", toolUse.Name)
 		}
 
-		if err := s.engine.memoryService.LearnToolUsage(toolUse.Name, toolUse.Input, success, toolErr); err != nil {
+		if err := s.engine.memoryService.LearnToolUsage(s.sessionProjectID(), toolUse.Name, toolUse.Input, success, toolErr); err != nil {
 			slog.Warn("failed to learn tool usage", "tool", toolUse.Name, "error", err)
 		}
 	}
@@ -86,6 +87,14 @@ func (s *Session) sessionProjectPath() string {
 		return s.workingDirectory()
 	}
 	return ""
+}
+
+// sessionProjectID is the stable memory.ProjectID for this session's
+// project path - a pure function of sessionProjectPath, safe to recompute
+// on every call rather than caching (see memory.Manager's projects map,
+// keyed the same way).
+func (s *Session) sessionProjectID() string {
+	return memory.ProjectID(s.sessionProjectPath())
 }
 
 func extractPersistentDirectives(content string) []learnedDirective {
