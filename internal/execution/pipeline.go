@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"unicode/utf8"
 
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
@@ -211,20 +212,45 @@ func (o *Orchestrator) formatAndTruncateResult(t tool.Tool, result tool.CallResu
 	maxSize := t.Definition().MaxResultSize
 	if maxSize > 0 && len(result.Content) > maxSize {
 		original := result.Content
-		result.Content = original[:maxSize] + "\n\n... [truncated: original " +
+		truncated := truncateUTF8Safe(original, maxSize)
+		result.Content = truncated + "\n\n... [truncated: original " +
 			fmt.Sprintf("%d", len(original)) + " chars exceeded limit of " +
 			fmt.Sprintf("%d", maxSize) + "]"
-		result.Metadata = &tool.ResultMetadata{
-			ContentReplacement: &types.ContentReplacementState{
-				OriginalSize:    int64(len(original)),
-				ReplacedSize:    int64(len(result.Content)),
-				ReplacementType: types.ContentReplacementTypeTruncated,
-				Preview:         original[:min(maxSize, 200)],
-			},
+
+		// Preserve whatever the tool already put in Metadata (e.g. bash's
+		// ExecutionDuration/exit_code/sandboxed flag in Additional) - this
+		// used to allocate a fresh ResultMetadata here, silently discarding
+		// all of it the moment a result got truncated.
+		if result.Metadata == nil {
+			result.Metadata = &tool.ResultMetadata{}
+		}
+		result.Metadata.ContentReplacement = &types.ContentReplacementState{
+			OriginalSize:    int64(len(original)),
+			ReplacedSize:    int64(len(result.Content)),
+			ReplacementType: types.ContentReplacementTypeTruncated,
+			Preview:         truncateUTF8Safe(original, min(maxSize, 200)),
 		}
 	}
 
 	return result
+}
+
+// truncateUTF8Safe returns the longest prefix of s that is at most maxBytes
+// bytes AND valid UTF-8 - a plain s[:maxBytes] byte slice can land inside a
+// multi-byte rune (French/Arabic/Chinese/Japanese content, emoji, etc.),
+// producing a string with a mangled character at the cut point.
+func truncateUTF8Safe(s string, maxBytes int) string {
+	if maxBytes <= 0 {
+		return ""
+	}
+	if len(s) <= maxBytes {
+		return s
+	}
+	cut := maxBytes
+	for cut > 0 && !utf8.RuneStart(s[cut]) {
+		cut--
+	}
+	return s[:cut]
 }
 
 func min(a, b int) int {

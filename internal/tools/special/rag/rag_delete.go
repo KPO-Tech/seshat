@@ -85,7 +85,7 @@ func (t *DeleteTool) Call(ctx context.Context, input tool.CallInput, _ types.Can
 	}
 
 	artifactKey := rag.ArtifactKey(corpusID, fileID)
-	if err := t.svc.DeleteFileChunks(ctx, corpusID, artifactKey, 0, deleteFileChunkCeiling); err != nil {
+	if err := t.svc.DeleteFileChunks(ctx, corpusID, artifactKey, 0); err != nil {
 		return tool.NewErrorResult(fmt.Errorf("rag delete failed: %w", err)), nil
 	}
 	msg := fmt.Sprintf("Deleted chunks for %q in corpus %q (artifact: %s).", fileID, corpusID, artifactKey)
