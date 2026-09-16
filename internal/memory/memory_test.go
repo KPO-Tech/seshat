@@ -1021,7 +1021,14 @@ func TestFileStoreCrossSessionMissingFileReturnsEmpty(t *testing.T) {
 // summaries). Saves now go through atomicWriteFile (temp file + fsync +
 // rename) at 0600/0700.
 func TestFileStoreWritesAreAtomicAndPrivate(t *testing.T) {
-	dir := t.TempDir()
+	// A fresh, not-yet-existing subdirectory - unlike t.TempDir() itself
+	// (already created with its own default mode before NewFileStore ever
+	// runs), this lets NewFileStore's os.MkdirAll actually be the one to
+	// create it, so the 0700 it asks for is the mode that lands. MkdirAll
+	// is a no-op on a directory that already exists - it never revisits
+	// that directory's permissions - so asserting on t.TempDir() itself
+	// would only ever reflect Go's own default for it, not this code path.
+	dir := filepath.Join(t.TempDir(), "memory-root")
 	fs, err := NewFileStore(dir)
 	if err != nil {
 		t.Fatalf("NewFileStore: %v", err)
