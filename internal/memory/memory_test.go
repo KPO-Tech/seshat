@@ -4,6 +4,9 @@ import (
 	"errors"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"os"
+	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 	"time"
@@ -1008,6 +1011,116 @@ func TestFileStoreCrossSessionMissingFileReturnsEmpty(t *testing.T) {
 	}
 	if cross == nil {
 		t.Fatal("expected empty CrossSession")
+	}
+}
+
+// TestFileStoreWritesAreAtomicAndPrivate is the P1 regression test: saves
+// used to go through a plain os.WriteFile (a crash mid-write could leave a
+// truncated, unparseable JSON file behind) at 0644/0755 (world-readable,
+// for content that can include personal preferences and conversation
+// summaries). Saves now go through atomicWriteFile (temp file + fsync +
+// rename) at 0600/0700.
+func TestFileStoreWritesAreAtomicAndPrivate(t *testing.T) {
+	// A fresh, not-yet-existing subdirectory - unlike t.TempDir() itself
+	// (already created with its own default mode before NewFileStore ever
+	// runs), this lets NewFileStore's os.MkdirAll actually be the one to
+	// create it, so the 0700 it asks for is the mode that lands. MkdirAll
+	// is a no-op on a directory that already exists - it never revisits
+	// that directory's permissions - so asserting on t.TempDir() itself
+	// would only ever reflect Go's own default for it, not this code path.
+	dir := filepath.Join(t.TempDir(), "memory-root")
+	fs, err := NewFileStore(dir)
+	if err != nil {
+		t.Fatalf("NewFileStore: %v", err)
+	}
+
+	user := NewUserMemory("u1")
+	user.Entries["k"] = NewEntry(MemoryScopeUser, MemoryTypePreference, "k", "v", "test")
+	if err := fs.SaveUserMemory(user); err != nil {
+		t.Fatalf("SaveUserMemory: %v", err)
+	}
+
+	userPath := filepath.Join(dir, "user.json")
+	info, err := os.Stat(userPath)
+	if err != nil {
+		t.Fatalf("stat user.json: %v", err)
+	}
+	if runtime.GOOS != "windows" {
+		if info.Mode().Perm() != 0600 {
+			t.Fatalf("expected user.json to be 0600, got %o", info.Mode().Perm())
+		}
+		dirInfo, err := os.Stat(dir)
+		if err != nil {
+			t.Fatalf("stat memory dir: %v", err)
+		}
+		if dirInfo.Mode().Perm() != 0700 {
+			t.Fatalf("expected memory dir to be 0700, got %o", dirInfo.Mode().Perm())
+		}
+	}
+
+	// No leftover temp files from the write-then-rename sequence.
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		t.Fatalf("read dir: %v", err)
+	}
+	for _, e := range entries {
+		if strings.HasPrefix(e.Name(), ".tmp-") {
+			t.Fatalf("expected no leftover temp file, found %q", e.Name())
+		}
+	}
+
+	// The file is readable back correctly (round trip still works through
+	// the new write path).
+	reloaded, err := fs.LoadUserMemory()
+	if err != nil {
+		t.Fatalf("LoadUserMemory: %v", err)
+	}
+	if reloaded.Entries["k"].Value != "v" {
+		t.Fatalf("expected round-tripped entry value 'v', got %q", reloaded.Entries["k"].Value)
+	}
+}
+
+// TestAtomicWriteFileLeavesNoPartialFileOnFailure proves atomicWriteFile
+// never touches the destination path when the write itself fails midway -
+// the old os.WriteFile(path, ...) approach wrote directly into the
+// destination, so a failure partway through could leave a truncated file
+// where a good one used to be.
+func TestAtomicWriteFileLeavesNoPartialFileOnFailure(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "existing.json")
+	if err := os.WriteFile(path, []byte(`{"good":true}`), 0600); err != nil {
+		t.Fatalf("seed existing file: %v", err)
+	}
+
+	// A directory used as the target path makes the temp-file rename fail
+	// (can't rename a regular file onto a directory), without needing to
+	// simulate disk-full/permission-error conditions.
+	badDir := filepath.Join(dir, "is-a-dir")
+	if err := os.Mkdir(badDir, 0700); err != nil {
+		t.Fatalf("mkdir: %v", err)
+	}
+	if err := atomicWriteFile(badDir, []byte("new data"), 0600); err == nil {
+		t.Fatal("expected atomicWriteFile to fail when the destination is a directory")
+	}
+
+	// The unrelated existing file is untouched.
+	data, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("read existing file: %v", err)
+	}
+	if string(data) != `{"good":true}` {
+		t.Fatalf("expected existing file untouched, got %q", data)
+	}
+
+	// No leftover temp file after the failed rename.
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		t.Fatalf("read dir: %v", err)
+	}
+	for _, e := range entries {
+		if strings.HasPrefix(e.Name(), ".tmp-") {
+			t.Fatalf("expected no leftover temp file after a failed write, found %q", e.Name())
+		}
 	}
 }
 

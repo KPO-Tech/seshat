@@ -10,10 +10,4 @@ const (
 	DeleteHint = "Delete an entire corpus, or a single file's chunks within a corpus."
 
 	DefaultTopK = 5
-
-	// deleteFileChunkCeiling bounds how many chunk-position keys are
-	// speculatively deleted when removing a single file's chunks by
-	// file_id/filename - see staleChunkCleanupCeiling in internal/rag for
-	// why a generous blind range is safe and cheap.
-	deleteFileChunkCeiling = 2000
 )

@@ -258,8 +258,9 @@ func NewFileStore(basePath string) (*FileStore, error) {
 		basePath = filepath.Join(homeDir, ".seshat", "memory")
 	}
 
-	// Create directory if needed
-	if err := os.MkdirAll(basePath, 0755); err != nil {
+	// Create directory if needed. 0700: memory files can hold personal
+	// conversation content, preferences, and learned instructions.
+	if err := os.MkdirAll(basePath, 0700); err != nil {
 		return nil, fmt.Errorf("create memory dir: %w", err)
 	}
 
@@ -294,7 +295,7 @@ func (s *FileStore) SaveProjectMemory(m *ProjectMemory) error {
 
 	// Ensure projects directory
 	dir := filepath.Join(s.basePath, "projects")
-	if err := os.MkdirAll(dir, 0755); err != nil {
+	if err := os.MkdirAll(dir, 0700); err != nil {
 		return fmt.Errorf("create projects dir: %w", err)
 	}
 
@@ -305,7 +306,7 @@ func (s *FileStore) SaveProjectMemory(m *ProjectMemory) error {
 		return fmt.Errorf("marshal project memory: %w", err)
 	}
 
-	if err := os.WriteFile(filePath, data, 0644); err != nil {
+	if err := atomicWriteFile(filePath, data, 0600); err != nil {
 		return fmt.Errorf("write project memory: %w", err)
 	}
 
@@ -341,7 +342,7 @@ func (s *FileStore) SaveUserMemory(m *UserMemory) error {
 		return fmt.Errorf("marshal user memory: %w", err)
 	}
 
-	if err := os.WriteFile(filePath, data, 0644); err != nil {
+	if err := atomicWriteFile(filePath, data, 0600); err != nil {
 		return fmt.Errorf("write user memory: %w", err)
 	}
 
@@ -377,7 +378,7 @@ func (s *FileStore) SaveCrossSession(m *CrossSession) error {
 		return fmt.Errorf("marshal cross-session memory: %w", err)
 	}
 
-	if err := os.WriteFile(filePath, data, 0644); err != nil {
+	if err := atomicWriteFile(filePath, data, 0600); err != nil {
 		return fmt.Errorf("write cross-session memory: %w", err)
 	}
 
@@ -410,6 +411,42 @@ func ProjectID(projectPath string) string {
 
 	sum := sha256.Sum256([]byte(canonical))
 	return hex.EncodeToString(sum[:])
+}
+
+// atomicWriteFile writes data to path by first writing to a temp file in
+// the same directory, fsyncing it, then renaming it into place. A plain
+// os.WriteFile can leave a truncated/partial file behind if the process
+// dies mid-write (crash, power loss, OOM kill) - the next read would then
+// hit a corrupt, unparseable JSON file instead of the previous good state.
+// rename is atomic on the same filesystem, which creating the temp file in
+// path's own directory guarantees.
+func atomicWriteFile(path string, data []byte, perm os.FileMode) error {
+	dir := filepath.Dir(path)
+	tmp, err := os.CreateTemp(dir, ".tmp-*")
+	if err != nil {
+		return fmt.Errorf("create temp file: %w", err)
+	}
+	tmpPath := tmp.Name()
+	defer os.Remove(tmpPath) // no-op once the rename below succeeds
+
+	if _, err := tmp.Write(data); err != nil {
+		tmp.Close()
+		return fmt.Errorf("write temp file: %w", err)
+	}
+	if err := tmp.Sync(); err != nil {
+		tmp.Close()
+		return fmt.Errorf("fsync temp file: %w", err)
+	}
+	if err := tmp.Close(); err != nil {
+		return fmt.Errorf("close temp file: %w", err)
+	}
+	if err := os.Chmod(tmpPath, perm); err != nil {
+		return fmt.Errorf("chmod temp file: %w", err)
+	}
+	if err := os.Rename(tmpPath, path); err != nil {
+		return fmt.Errorf("rename temp file into place: %w", err)
+	}
+	return nil
 }
 
 // ============================================================================

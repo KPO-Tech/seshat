@@ -3,6 +3,7 @@ package rag
 import (
 	"context"
 	"fmt"
+	"strconv"
 	"strings"
 	"testing"
 	"unicode/utf8"
@@ -584,4 +585,81 @@ func (semanticTestEmbedder) EmbedTexts(_ context.Context, texts []string) ([][]f
 		}
 	}
 	return out, nil
+}
+
+// TestDeleteFileChunksHasNoCeiling is the P1 regression test: an earlier
+// version bounded the stale-chunk scan at a fixed ceiling past the new
+// chunk count (500 for re-ingest cleanup, 2000 for a whole-file delete), so
+// a file that shrank by more than that many chunks - or was simply larger
+// than the ceiling - left orphaned vectors beyond it that no delete call
+// could ever reach. DeleteFileChunks now lists every record actually in the
+// namespace and filters by metadata, so it finds stale chunks regardless of
+// how many there are.
+func TestDeleteFileChunksHasNoCeiling(t *testing.T) {
+	svc := newTestService(t)
+	ctx := context.Background()
+	const namespace = "corpus-1"
+	const artifactKey = "rag/corpus-1/big-file"
+
+	// Simulate a file that was previously ingested with far more chunks
+	// than any fixed ceiling would have covered.
+	const oldChunkCount = 3000
+	records := make([]vector.Record, 0, oldChunkCount)
+	for i := 0; i < oldChunkCount; i++ {
+		records = append(records, vector.Record{
+			Namespace: namespace,
+			Key:       fmt.Sprintf("%s#chunk-%d", artifactKey, i),
+			Text:      "chunk text",
+			Metadata: map[string]string{
+				"artifact_key": artifactKey,
+				"position":     fmt.Sprintf("%d", i),
+			},
+		})
+	}
+	// An unrelated artifact in the same namespace must survive untouched.
+	records = append(records, vector.Record{
+		Namespace: namespace,
+		Key:       "rag/corpus-1/other-file#chunk-0",
+		Text:      "unrelated chunk",
+		Metadata:  map[string]string{"artifact_key": "rag/corpus-1/other-file", "position": "0"},
+	})
+	if err := svc.Vectors().Upsert(ctx, records); err != nil {
+		t.Fatalf("seed chunks: %v", err)
+	}
+
+	// Re-ingest shrank the file to 10 chunks - everything from position 10
+	// onward (2990 chunks, far past any old fixed ceiling) is stale.
+	const newChunkCount = 10
+	if err := svc.DeleteFileChunks(ctx, namespace, artifactKey, newChunkCount); err != nil {
+		t.Fatalf("DeleteFileChunks: %v", err)
+	}
+
+	remaining, err := svc.Vectors().Get(ctx, namespace, nil)
+	if err != nil {
+		t.Fatalf("Get all: %v", err)
+	}
+	var keptForArtifact, otherSurvived bool
+	kept := 0
+	for _, rec := range remaining {
+		if rec.Metadata["artifact_key"] == artifactKey {
+			kept++
+			pos, _ := strconv.Atoi(rec.Metadata["position"])
+			if pos >= newChunkCount {
+				t.Fatalf("expected chunk at position %d to be deleted as stale, still present", pos)
+			}
+			keptForArtifact = true
+		}
+		if rec.Key == "rag/corpus-1/other-file#chunk-0" {
+			otherSurvived = true
+		}
+	}
+	if kept != newChunkCount {
+		t.Fatalf("expected exactly %d surviving chunks for the shrunk file, got %d", newChunkCount, kept)
+	}
+	if !keptForArtifact {
+		t.Fatal("expected the new (kept) chunks for the artifact to still be present")
+	}
+	if !otherSurvived {
+		t.Fatal("expected the unrelated artifact's chunk to survive untouched")
+	}
 }

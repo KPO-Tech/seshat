@@ -14,6 +14,7 @@ import (
 	"sync/atomic"
 	"testing"
 	"time"
+	"unicode/utf8"
 )
 
 func TestBrowserProgressForPageResult(t *testing.T) {
@@ -818,6 +819,100 @@ func TestMaxResultSizeTruncatesContent(t *testing.T) {
 	}
 	if result.Results[0].Metadata.ContentReplacement.ReplacementType != types.ContentReplacementTypeTruncated {
 		t.Fatalf("expected truncated replacement type, got %s", result.Results[0].Metadata.ContentReplacement.ReplacementType)
+	}
+}
+
+// TestMaxResultSizeTruncationPreservesExistingMetadata is the P1 regression
+// test: formatAndTruncateResult used to allocate a fresh ResultMetadata on
+// truncation, silently discarding whatever the tool itself had already set
+// there (e.g. bash's ExecutionDuration and Additional exit_code/sandboxed
+// info) - a truncated bash result lost all of that, not just its content.
+func TestMaxResultSizeTruncationPreservesExistingMetadata(t *testing.T) {
+	orch := NewOrchestrator()
+	stub := &stubTool{}
+	stub.definition = tool.Definition{
+		Name:          "stub",
+		Description:   "stub",
+		MaxResultSize: 100,
+		InputSchema:   schema.JSONSchema{},
+	}
+
+	longContent := strings.Repeat("x", 500)
+	stub.call = func(ctx context.Context, input tool.CallInput, permissionCheck types.CanUseToolFn) (tool.CallResult, error) {
+		res := tool.NewTextResult(longContent)
+		res.Metadata = &tool.ResultMetadata{
+			ExecutionDuration: 42,
+			Additional: map[string]any{
+				"exit_code": 0,
+				"sandboxed": true,
+			},
+		}
+		return res, nil
+	}
+
+	result, err := orch.Execute(context.Background(), ExecuteRequest{
+		ToolUses: []types.ToolUseContent{
+			{ID: "t1", Name: "stub", Input: map[string]any{}},
+		},
+		Tools:          map[string]tool.Tool{"stub": stub},
+		SessionID:      types.SessionID("s1"),
+		TurnID:         types.TurnID("t1"),
+		PermissionMode: types.PermissionModeOnRequest,
+	})
+	require.NoError(t, err)
+
+	meta := result.Results[0].Metadata
+	require.NotNil(t, meta)
+	if meta.ExecutionDuration != 42 {
+		t.Fatalf("expected ExecutionDuration to survive truncation, got %d", meta.ExecutionDuration)
+	}
+	if meta.Additional["exit_code"] != 0 || meta.Additional["sandboxed"] != true {
+		t.Fatalf("expected Additional metadata to survive truncation, got %+v", meta.Additional)
+	}
+	if meta.ContentReplacement == nil {
+		t.Fatal("expected ContentReplacement to still be set alongside the preserved fields")
+	}
+}
+
+// TestMaxResultSizeTruncationIsUTF8Safe is the P1 regression test for the
+// old byte-slice truncation (original[:maxSize]), which could land inside a
+// multi-byte rune and produce invalid UTF-8 in both the truncated content
+// and its preview.
+func TestMaxResultSizeTruncationIsUTF8Safe(t *testing.T) {
+	orch := NewOrchestrator()
+	stub := &stubTool{}
+	stub.definition = tool.Definition{
+		Name:          "stub",
+		Description:   "stub",
+		MaxResultSize: 100,
+		InputSchema:   schema.JSONSchema{},
+	}
+
+	// "é" is 2 bytes in UTF-8 - repeating it means every odd byte offset
+	// lands mid-rune, guaranteeing the naive byte-100 cut point used to
+	// split one in half.
+	longContent := strings.Repeat("é", 300)
+	stub.call = func(ctx context.Context, input tool.CallInput, permissionCheck types.CanUseToolFn) (tool.CallResult, error) {
+		return tool.NewTextResult(longContent), nil
+	}
+
+	result, err := orch.Execute(context.Background(), ExecuteRequest{
+		ToolUses: []types.ToolUseContent{
+			{ID: "t1", Name: "stub", Input: map[string]any{}},
+		},
+		Tools:          map[string]tool.Tool{"stub": stub},
+		SessionID:      types.SessionID("s1"),
+		TurnID:         types.TurnID("t1"),
+		PermissionMode: types.PermissionModeOnRequest,
+	})
+	require.NoError(t, err)
+
+	if !utf8.ValidString(result.Results[0].Content) {
+		t.Fatalf("truncated content is not valid UTF-8: %q", result.Results[0].Content)
+	}
+	preview := result.Results[0].Metadata.ContentReplacement.Preview
+	if !utf8.ValidString(preview) {
+		t.Fatalf("truncation preview is not valid UTF-8: %q", preview)
 	}
 }
 
