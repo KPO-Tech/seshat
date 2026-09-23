@@ -106,6 +106,12 @@ type ClientConfig struct {
 	// Browser
 	BrowserRemoteControlURL string `json:"browser_remote_control_url"`
 	BrowserExecutablePath   string `json:"browser_executable_path"`
+	// BrowserSessionTargetResolver, when set, lets a caller (the desktop app)
+	// attach a session's browser tool calls directly to an existing CDP tab
+	// it already shows live to the user, instead of opening an invisible
+	// incognito context - see internal/web/browser.Config.TargetResolver for
+	// the full rationale. Optional; nil preserves the default behavior.
+	BrowserSessionTargetResolver func(ctx context.Context, sessionID SessionID) (targetID string, ok bool) `json:"-"`
 
 	// Storage
 	StorageConfig       *StorageConfig `json:"-"`

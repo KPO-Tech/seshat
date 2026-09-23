@@ -44,6 +44,15 @@ func initBrowserManager(config *ClientConfig, artifactStore ArtifactStore) (brow
 	browserConfig.ArtifactStore = artifactStore
 	browserConfig.RemoteControlURL = strings.TrimSpace(config.BrowserRemoteControlURL)
 	browserConfig.ExecutablePath = strings.TrimSpace(config.BrowserExecutablePath)
+	if resolve := config.BrowserSessionTargetResolver; resolve != nil {
+		// SessionID (this package) is a true alias of the browser package's
+		// types.SessionID (see types.go), so this closure's signature is
+		// identical to browsercore.Config.TargetResolver's - no conversion,
+		// no need to import internal/types here.
+		browserConfig.TargetResolver = func(ctx context.Context, sessionID SessionID) (string, bool) {
+			return resolve(ctx, sessionID)
+		}
+	}
 	browserManager := browsercore.NewManager(browserConfig)
 
 	var reaper *storage.Reaper
