@@ -257,6 +257,7 @@ Rules:
 // onSessionTitled callback with the result.
 func (e *Engine) generateTitleAsync(sessionID types.SessionID, firstUserMsg string) {
 	if e.apiClient == nil || e.onSessionTitled == nil {
+		fmt.Fprintf(os.Stderr, "[engine] session %s title generation not wired: api_client_nil=%v on_session_titled_nil=%v\n", sessionID, e.apiClient == nil, e.onSessionTitled == nil)
 		return
 	}
 	const maxInputRunes = 500
@@ -298,5 +299,6 @@ func (e *Engine) generateTitleAsync(sessionID types.SessionID, firstUserMsg stri
 	if title == "" {
 		return
 	}
+	fmt.Fprintf(os.Stderr, "[engine] session %s title generated: %q\n", sessionID, title)
 	e.onSessionTitled(sessionID, title)
 }

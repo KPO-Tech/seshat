@@ -215,6 +215,10 @@ func (s *Session) submitWithMessage(ctx context.Context, userMsg types.Message, 
 	if s.state.Metadata != nil && s.state.Metadata.TotalTurns == 0 && text != "" {
 		sid := s.state.SessionID
 		go s.engine.generateTitleAsync(sid, text)
+	} else if s.state.Metadata != nil {
+		slog.Info("title generation skipped", "session_id", s.state.SessionID, "total_turns", s.state.Metadata.TotalTurns, "text_empty", text == "")
+	} else {
+		slog.Info("title generation skipped: nil metadata", "session_id", s.state.SessionID)
 	}
 
 	s.rememberUserDirectives(text)
