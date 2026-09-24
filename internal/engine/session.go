@@ -182,6 +182,7 @@ func (s *Session) SubmitMessageWithContent(ctx context.Context, text string, ima
 
 // submitWithMessage is the shared implementation for SubmitMessage and SubmitMessageWithContent.
 func (s *Session) submitWithMessage(ctx context.Context, userMsg types.Message, text string) (*SessionResponse, error) {
+	slog.Info("submitWithMessage entered", "session_id", s.state.SessionID, "engine_ptr", fmt.Sprintf("%p", s.engine))
 	if err := s.beginTurn(); err != nil {
 		return nil, err
 	}
