@@ -276,7 +276,15 @@ func (e *Engine) generateTitleAsync(sessionID types.SessionID, firstUserMsg stri
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 	resp, err := e.apiClient.CreateMessage(ctx, req)
-	if err != nil || resp == nil {
+	if err != nil {
+		// Silent otherwise (a session just keeps its default title, no user-
+		// facing failure) - but that previously meant a broken title call left
+		// zero trace anywhere, unlike the auto-mode classifier's own logged
+		// errors on the exact same CreateMessage path.
+		fmt.Fprintf(os.Stderr, "[engine] session %s title generation failed: %v\n", sessionID, err)
+		return
+	}
+	if resp == nil {
 		return
 	}
 	// Extract the text from the first content block.
