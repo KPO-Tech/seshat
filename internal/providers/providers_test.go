@@ -2495,6 +2495,69 @@ func TestCreateMessageParsesOpenAIResponse(t *testing.T) {
 	}
 }
 
+// TestCreateMessageDecodesZAiSSEResponse covers the auto-mode classifier's
+// call path: it calls the non-streaming CreateMessage, but Z.ai only
+// supports streaming, so CreateMessage forces req.Stream = true for it and
+// the server answers with an SSE body ("data: {...}") instead of one JSON
+// object. Before the fix, decodeOpenAIResponse tried to json.Decode that SSE
+// body directly and failed on the literal first byte with "invalid
+// character 'd' looking for beginning of value" - see zAiAdapter.decodeResponse.
+func TestCreateMessageDecodesZAiSSEResponse(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var payload map[string]any
+		if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
+			t.Fatalf("decode request payload: %v", err)
+		}
+		if stream, _ := payload["stream"].(bool); !stream {
+			t.Fatalf("expected CreateMessage to force a streaming request for Z.ai, got %#v", payload)
+		}
+
+		w.Header().Set("Content-Type", "text/event-stream")
+		events := []map[string]any{
+			{
+				"id": "chatcmpl-1",
+				"choices": []map[string]any{
+					{"delta": map[string]any{"content": "blocking for safety"}},
+				},
+			},
+			{
+				"id": "chatcmpl-1",
+				"choices": []map[string]any{
+					{"finish_reason": "stop"},
+				},
+				"usage": map[string]any{
+					"prompt_tokens":     10,
+					"completion_tokens": 3,
+				},
+			},
+		}
+		for _, event := range events {
+			data, _ := json.Marshal(event)
+			_, _ = fmt.Fprintf(w, "data: %s\n\n", data)
+		}
+		_, _ = fmt.Fprint(w, "data: [DONE]\n\n")
+	}))
+	defer server.Close()
+
+	client := NewClientWithConfig("test-key", &Config{Provider: types.APIProviderZAi, BaseURL: server.URL})
+	client.SetHTTPClient(server.Client())
+
+	resp, err := client.CreateMessage(context.Background(), types.APIRequest{
+		Model:     types.ModelIdentifier{Provider: types.APIProviderZAi, Model: "glm-5.1"},
+		MaxTokens: 256,
+		Messages:  []types.Message{types.UserMessage("msg-1", "classify this")},
+	})
+	if err != nil {
+		t.Fatalf("CreateMessage failed: %v", err)
+	}
+	if resp.StopReason != types.StopReasonEndTurn {
+		t.Fatalf("expected stop reason %q, got %q", types.StopReasonEndTurn, resp.StopReason)
+	}
+	if len(resp.Content) != 1 {
+		t.Fatalf("expected a single text content block, got %d blocks", len(resp.Content))
+	}
+}
+
 func TestCreateMessageParsesOllamaResponse(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")

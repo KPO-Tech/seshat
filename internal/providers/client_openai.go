@@ -360,6 +360,17 @@ func (c *Client) createOpenAIStreamResult(ctx context.Context, req types.APIRequ
 		return nil, c.handleErrorResponse(resp, nil)
 	}
 
+	return parseOpenAISSEStream(ctx, resp.Body, req.Model, onChunk)
+}
+
+// parseOpenAISSEStream reads an OpenAI-compatible "data: ..." SSE body and
+// aggregates it into a canonical APIStreamResult. Providers routed through
+// openAICompatAdapter (e.g. Z.ai) only support streaming responses, so
+// CreateMessage forces req.Stream = true for them even when the caller (like
+// the auto-mode classifier) wants a single non-streaming response - see
+// codexAdapter.decodeResponse for the same fix applied to Codex, which failed
+// the same way decoding "event: ..." as a single JSON document.
+func parseOpenAISSEStream(ctx context.Context, body io.Reader, model types.ModelIdentifier, onChunk func(types.APIResponseChunk)) (*types.APIStreamResult, error) {
 	var text strings.Builder
 	var thinking strings.Builder
 	toolCalls := make(map[int]*openAIStreamToolCallState)
@@ -368,7 +379,7 @@ func (c *Client) createOpenAIStreamResult(ctx context.Context, req types.APIRequ
 	usage := types.TokenUsage{}
 	finishReason := ""
 
-	reader := bufio.NewReader(resp.Body)
+	reader := bufio.NewReader(body)
 	for {
 		select {
 		case <-ctx.Done():
@@ -384,7 +395,7 @@ func (c *Client) createOpenAIStreamResult(ctx context.Context, req types.APIRequ
 					}
 					emitStreamChunk(onChunk, stopChunk)
 					collected = append(collected, stopChunk)
-					return buildOpenAIStreamResult(req.Model, "openai-stream-response", text.String(), thinking.String(), toolCalls, order, finishReason, usage, collected)
+					return buildOpenAIStreamResult(model, "openai-stream-response", text.String(), thinking.String(), toolCalls, order, finishReason, usage, collected)
 				}
 				return nil, types.WrapError(types.ErrCodeAPIResponse, "failed to read openai stream", err)
 			}
@@ -401,7 +412,7 @@ func (c *Client) createOpenAIStreamResult(ctx context.Context, req types.APIRequ
 				}
 				emitStreamChunk(onChunk, stopChunk)
 				collected = append(collected, stopChunk)
-				return buildOpenAIStreamResult(req.Model, "openai-stream-response", text.String(), thinking.String(), toolCalls, order, finishReason, usage, collected)
+				return buildOpenAIStreamResult(model, "openai-stream-response", text.String(), thinking.String(), toolCalls, order, finishReason, usage, collected)
 			}
 
 			var chunk struct {
