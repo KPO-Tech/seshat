@@ -3,7 +3,9 @@
 package parser
 
 import (
+	"bytes"
 	"context"
+	"image/png"
 	"os"
 	"path/filepath"
 	"strings"
@@ -106,6 +108,46 @@ func TestConvertPDF_ScannedRequiresOCR(t *testing.T) {
 	lower := strings.ToLower(result.Markdown)
 	if !strings.Contains(lower, "report") {
 		t.Errorf("expected recognizable text from the scanned page, got:\n%s", result.Markdown)
+	}
+}
+
+// Exercises the vision-LLM fallback's page-rendering half for real, against
+// the real text_layer.pdf fixture - not just a compile-time check that
+// Converter satisfies pdfsmart.PageRenderer (see pkg/nativedoc's own
+// var _ assertion for that). Needs no ONNX models: rendering goes through
+// pdfium only.
+func TestRenderPage_ProducesValidPNG(t *testing.T) {
+	c := New("")
+	data := readTestdata(t, "text_layer.pdf")
+
+	png1, err := c.RenderPage(context.Background(), data, 1)
+	if err != nil {
+		t.Fatalf("RenderPage: %v", err)
+	}
+	if len(png1) == 0 {
+		t.Fatal("expected non-empty PNG bytes")
+	}
+
+	img, err := png.Decode(bytes.NewReader(png1))
+	if err != nil {
+		t.Fatalf("decode rendered page as PNG: %v", err)
+	}
+	bounds := img.Bounds()
+	if bounds.Dx() <= 0 || bounds.Dy() <= 0 {
+		t.Fatalf("expected non-empty image dimensions, got %dx%d", bounds.Dx(), bounds.Dy())
+	}
+	// At the default 150 DPI, a standard letter/A4 page renders well over
+	// 1000px tall - a sanity floor against a degenerate 1x1 render.
+	if bounds.Dy() < 500 {
+		t.Errorf("rendered page height %d looks too small for a real page at 150 DPI", bounds.Dy())
+	}
+}
+
+func TestRenderPage_InvalidPageNumberErrors(t *testing.T) {
+	c := New("")
+	data := readTestdata(t, "text_layer.pdf")
+	if _, err := c.RenderPage(context.Background(), data, 9999); err == nil {
+		t.Fatal("expected an error for an out-of-range page number")
 	}
 }
 

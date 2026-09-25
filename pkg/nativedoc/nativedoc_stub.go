@@ -7,6 +7,7 @@ import (
 	"errors"
 
 	"github.com/KPO-Tech/seshat/pkg/docling"
+	"github.com/KPO-Tech/seshat/pkg/pdfsmart"
 )
 
 // ErrUnavailable is returned by the fallback build when the native document
@@ -54,4 +55,10 @@ func (c *Converter) ConvertURL(context.Context, string) (*docling.ConversionResu
 	return nil, ErrUnavailable
 }
 
+// RenderPage returns ErrUnavailable in non-nativedoc builds.
+func (c *Converter) RenderPage(context.Context, []byte, int) ([]byte, error) {
+	return nil, ErrUnavailable
+}
+
 var _ docling.DocumentConverterBackend = (*Converter)(nil)
+var _ pdfsmart.PageRenderer = (*Converter)(nil)

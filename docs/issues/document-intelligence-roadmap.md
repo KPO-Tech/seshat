@@ -28,7 +28,7 @@ roadmap is about closing that gap.
 | 1 | Native PDF/DOCX/XLSX parsing (OCR, layout, table structure) | **Done, all platforms (2026-09-25)** — PDF/DOCX/XLSX all confirmed end-to-end through the real `DocumentConverterBackend` interface, real tests in place, model provisioning + CGO build tooling scripted and tested, on Linux/macOS *and* natively on Windows. |
 | 1.W | Make Phase 1 work on Windows (see "Windows" note in Phase 1) | **Done (2026-09-25)** — validated on a real native Windows 11 machine, not emulation. See log below. |
 | 2 | Chunk-level LLM enrichment (synthetic questions) | **Done (2026-09-25)** — opt-in, cached, bounded-concurrency. See log below. |
-| 3 | Vision-LLM fallback for pages native parsing can't handle | Not started |
+| 3 | Vision-LLM fallback for pages native parsing can't handle | **Done (2026-09-25)** — opt-in, CGO-independent interface, real pdfium render test. See log below. |
 | 4 | Specialized chunkers (QA-formatted docs, table-heavy docs) | Not started |
 
 **Phase 1 progress log**:
@@ -565,6 +565,82 @@ no page rendering step at all.
 4. Keep `pdfsmart`'s existing safety contract (`ok=false` when any page
    couldn't get usable text) — this becomes one more thing tried before
    giving up, not a silent behavior change.
+
+**Done. Design decisions and what got built:**
+
+- **`internal/pdfsmart` stays CGO-independent.** `PageRenderer` and
+  `VisionTranscriber` are new interfaces in `internal/pdfsmart/pdfsmart.go`
+  (exactly the same injection pattern as `docling.DocumentConverterBackend`)
+  rather than a direct import of `internal/nativedoc/pdfium` - `pdfsmart`
+  itself never depends on CGO or the nativedoc build tag, confirmed by the
+  full-repo plain `go build ./...`/`go vet ./...` passing with these changes
+  in place, same as every other nativedoc-adjacent addition.
+- **`Convert`'s signature grew one parameter**, not two: the two new
+  collaborators are bundled into a single `VisionFallback{Renderer,
+  Transcriber}` struct rather than two more positional args, specifically so
+  a future fallback stage doesn't force another breaking signature change.
+  `VisionFallback{}` (zero value) disables the stage entirely, the same as a
+  nil docling client already disabled that stage. This is a breaking
+  signature change for `pkg/pdfsmart.Convert`'s external callers
+  (seshat-backend) - documented here and in the commit, matching how earlier
+  phases already changed `pdfsmart.Convert`'s `doclingClient` parameter type
+  once before.
+- **`internal/nativedoc/parser.Converter` gained a `RenderPage` method**
+  (`render.go`, new file, same `cgo && nativedoc` build tag) reusing the
+  `RenderDPI` field/`renderDPI()` helper the OCR path (`pdf.go`) already
+  had - one `Converter` now satisfies both
+  `docling.DocumentConverterBackend` (existing) and `pdfsmart.PageRenderer`
+  (new), duck-typed, no import of `internal/pdfsmart` needed. `pkg/nativedoc`
+  (both the real, CGO-tagged facade and its always-compiles stub) each carry
+  a `var _ pdfsmart.PageRenderer = (*Converter)(nil)` compile-time proof, so
+  the two builds can never silently drift apart on this interface. **Verified
+  for real, not just compiled**: a new test renders `testdata/text_layer.pdf`
+  via `Converter.RenderPage`, decodes the result as a real PNG, and checks
+  its dimensions are sane (>500px tall at the default 150 DPI) - run against
+  the actual fixture on the same native Windows CGO setup Phase 1.W
+  validated, not mocked.
+- **`internal/pdfsmart/vision.Transcriber`** (new subpackage, mirrors
+  `internal/rag/enricher`'s split between interface-in-parent and
+  implementation-in-subpackage) calls an `LLMCaller` - the same minimal
+  local-interface pattern as `internal/rag/enricher.LLMCaller` and
+  `internal/memory/longterm.Extractor`'s `LLMCaller`, so `internal/pdfsmart`
+  never depends on `internal/providers` either.
+  - **Multimodal-capability gate**: `IsAvailable` checks
+    `model.Registry.VisionCapable(provider, modelID)` - the same capability
+    registry already used elsewhere in this codebase for this exact
+    purpose, not a new mechanism. `Config.Registry` defaults to
+    `model.Global` (populated at startup by `internal/providers`) but is
+    overridable, primarily for tests - see the new `pkg/model` facade below
+    for why this is a real, usable field rather than a leak.
+  - The transcription prompt asks for faithful markdown transcription, no
+    summarization, with an explicit `(no text)` sentinel for a blank page -
+    `TranscribePage` maps that sentinel back to an empty string, which
+    `Convert` then treats the same as any other "still no usable text"
+    outcome (falls through to `ok=false` if nothing else recovers it).
+- **New `pkg/model` facade** - `Config.Registry` (in
+  `internal/pdfsmart/vision.Config`, exposed publicly via
+  `pkg/pdfsmart/vision.Config`) is typed `*internal/model.Registry`. Per
+  this repo's own rule against leaking `internal/` types into `pkg/`
+  signatures, added a small `pkg/model` package (type aliases + `NewRegistry`
+  + `Global`, mirroring `internal/model.go`'s own small, dependency-free
+  shape) so external consumers can actually construct and pass a `*Registry`
+  through that field instead of it being an internal type they can compile
+  against but never populate.
+- **`pkg/pdfsmart` and a new `pkg/pdfsmart/vision` facade** expose all of
+  the above, mirroring `pkg/rag`/`pkg/rag/enricher`'s exact shape.
+- **Tests**: unit tests with fakes for the LLM-calling and interface-wiring
+  logic (`internal/pdfsmart/vision`, `internal/pdfsmart`'s new
+  `VisionFallback` test cases - fallback used when docling is nil/
+  unavailable, tried after docling fails, skipped when the transcriber
+  reports itself unavailable, garbled vision output rejected the same as
+  garbled docling output, renderer errors handled cleanly), plus the one
+  real/non-mocked test described above for the actual pdfium rendering
+  path. All pass under `go test -race`, both in the plain build (CGO
+  disabled, nativedoc code entirely absent) and under `-tags nativedoc`.
+- **Verified for real**: `go build`/`go vet`/`golangci-lint`/
+  `go test -race ./...` all pass clean across the whole repo in the plain
+  build, and the same four checks pass clean again for the touched packages
+  under `-tags nativedoc` on the real native Windows CGO setup.
 
 ---
 

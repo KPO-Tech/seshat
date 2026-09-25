@@ -18,12 +18,18 @@ package nativedoc
 import (
 	internalnativedoc "github.com/KPO-Tech/seshat/internal/nativedoc"
 	"github.com/KPO-Tech/seshat/internal/nativedoc/parser"
+	"github.com/KPO-Tech/seshat/pkg/pdfsmart"
 )
 
 // Converter implements docling.DocumentConverterBackend for PDF, DOCX, and
 // XLSX using only native Go/CGO components. See parser.Converter's own doc
-// comment for exactly what each format path does and doesn't do yet.
+// comment for exactly what each format path does and doesn't do yet. It also
+// implements pdfsmart.PageRenderer (RenderPage, see render.go in the parser
+// package) - the same Converter doubles as the page renderer for
+// pdfsmart's vision-LLM fallback, no extra wiring needed.
 type Converter = parser.Converter
+
+var _ pdfsmart.PageRenderer = (*Converter)(nil)
 
 // New creates a Converter. modelDir must contain det.ort, rec.ort, and
 // ocr.res (the ONNX models used for OCR on scanned/image-only PDF pages) -
