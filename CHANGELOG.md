@@ -9,6 +9,8 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [1.2.52] - 2026-09-25
+
 ### Added
 - `internal/nativedoc`, `internal/pdfsmart`, `internal/rag` (re-exported via `pkg/nativedoc`, `pkg/pdfsmart`, `pkg/rag`, `pkg/model`): the document-intelligence roadmap's Phases 1-4 - native (Go/CGO, no external service) PDF/DOCX/XLSX parsing with OCR/layout/table-structure via ported-and-adapted RAGFlow components (opt-in behind the `nativedoc` build tag; Windows/Linux/macOS all validated), opt-in chunk-level LLM enrichment (`rag.Enricher`/`rag.SetEnricher` - synthetic questions per chunk folded into embedded text only, never into stored/returned chunk text), an opt-in vision-LLM fallback for `pdfsmart.Convert` (`pdfsmart.VisionFallback`) for a page that still has no usable text after native extraction and docling, and two new chunk profiles/chunkers (`rag.TableChunker`/`ChunkProfileTable` - keeps GFM table rows intact, repeating the header row on an oversized split instead of a generic splitter cutting through a table; `rag.QAChunker`/`ChunkProfileQA` - one chunk per detected Q/A pair, from either `Q:`/`A:` labels or Markdown headings ending in `?`). New public packages: `pkg/nativedoc`, `internal/rag/enricher`/`pkg/rag/enricher`, `internal/pdfsmart/vision`/`pkg/pdfsmart/vision`, `pkg/model` (a small facade over `internal/model`'s LLM capability registry, needed so `pdfsmart/vision.Config.Registry` isn't an internal type leaking into a public signature). See `docs/issues/document-intelligence-roadmap.md` for the full design log.
 - `pkg/connectors`: Google Drive, SharePoint, OneDrive, S3-compatible, Azure Blob, Confluence, and Notion Discover/Sync connectors, moved here from seshat-ai's private `seshat-core/connectors` module - tenant-agnostic mechanism (no organization/user/ACL concepts), previously duplicated across seshat-ai's desktop and server products before being extracted into a shared internal module; now a public capability of the runtime itself, matching how the rest of `pkg/` already separates mechanism (here) from product policy (seshat-ai). Same code, same tests, only the import path changes for existing consumers.
@@ -288,5 +290,6 @@ a real ChatGPT-account session (documented in
 - `internal/tools/special/brief`: a "send message to the user" tool from the pre-rename codebase, never registered at any point in its history.
 - `internal/tools/special/config/configTool.go`: an arbitrary key/value settings store predating the current `contract.Tool` interface (incompatible signatures — could never have been registered as-is), replaced by the real `get_config` tool.
 
-[Unreleased]: https://github.com/KPO-Tech/seshat/compare/v1.1.0...HEAD
+[Unreleased]: https://github.com/KPO-Tech/seshat/compare/v1.2.52...HEAD
+[1.2.52]: https://github.com/KPO-Tech/seshat/compare/v1.2.51...v1.2.52
 [1.1.0]: https://github.com/KPO-Tech/seshat/compare/v1.0.4...v1.1.0
