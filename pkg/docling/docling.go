@@ -17,6 +17,16 @@ type (
 	ExtractedImage   = internaldocling.ExtractedImage
 	Option           = internaldocling.Option
 	RetryConfig      = internaldocling.RetryConfig
+
+	// DocumentConverterBackend is anything that can convert documents to
+	// markdown - Client (docling-serve) is the default implementation. See
+	// internaldocling.DocumentConverterBackend's own doc comment.
+	DocumentConverterBackend = internaldocling.DocumentConverterBackend
+
+	// HybridChunkBackend is anything that can produce document-aware hybrid
+	// chunks - Client (docling-serve) is the default implementation. See
+	// internaldocling.HybridChunkBackend's own doc comment.
+	HybridChunkBackend = internaldocling.HybridChunkBackend
 )
 
 // NewClient creates a client pointing at a docling-serve base URL.

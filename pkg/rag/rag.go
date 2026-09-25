@@ -59,12 +59,14 @@ func DefaultChunker() Chunker {
 	return internalrag.DefaultChunker()
 }
 
-// NewDoclingChunker creates a document-aware chunker backed by docling-serve.
-func NewDoclingChunker(client *publicdocling.Client, opts publicdocling.ChunkOptions) *DoclingChunker {
+// NewDoclingChunker creates a document-aware chunker backed by the given
+// HybridChunkBackend (docling-serve's publicdocling.Client by default, but
+// any implementation works - see publicdocling.HybridChunkBackend).
+func NewDoclingChunker(client publicdocling.HybridChunkBackend, opts publicdocling.ChunkOptions) *DoclingChunker {
 	return internalrag.NewDoclingChunker(client, opts)
 }
 
-func NewDoclingChunkerForProfile(client *publicdocling.Client, profile ChunkProfile, opts publicdocling.ChunkOptions) *DoclingChunker {
+func NewDoclingChunkerForProfile(client publicdocling.HybridChunkBackend, profile ChunkProfile, opts publicdocling.ChunkOptions) *DoclingChunker {
 	return internalrag.NewDoclingChunkerForProfile(client, profile, opts)
 }
 

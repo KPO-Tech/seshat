@@ -28,7 +28,7 @@ type Tool struct {
 
 	// doclingClient converts PDFs to structured markdown when set.
 	// When nil the tool falls back to base64 pass-through.
-	doclingClient *docling.Client
+	doclingClient docling.DocumentConverterBackend
 }
 
 // ToolConfig represents the FileRead tool configuration
@@ -45,10 +45,15 @@ type ToolConfig struct {
 	// MaxLimit is the maximum number of lines to read
 	MaxLimit int
 
-	// DoclingURL is the base URL of a running docling-serve instance.
-	// When non-empty a Client is created and PDFs are converted to markdown.
+	// DoclingURL is the base URL of a running docling-serve instance. Used
+	// to build the default DocumentConverter when that field is left nil.
 	// Example: "http://localhost:5001"
 	DoclingURL string
+	// DocumentConverter, when set, is used instead of building a
+	// docling-serve client from DoclingURL - inject a custom
+	// docling.DocumentConverterBackend implementation to convert PDFs with
+	// something other than docling-serve. Takes precedence over DoclingURL.
+	DocumentConverter docling.DocumentConverterBackend
 }
 
 // DefaultToolConfig returns default tool configuration
@@ -71,7 +76,10 @@ func NewTool(config *ToolConfig) *Tool {
 		config:           config,
 		filesystemPolicy: sandbox.NewDefaultFilesystemPolicy(),
 	}
-	if config.DoclingURL != "" {
+	switch {
+	case config.DocumentConverter != nil:
+		t.doclingClient = config.DocumentConverter
+	case config.DoclingURL != "":
 		t.doclingClient = docling.NewClient(config.DoclingURL)
 	}
 	return t

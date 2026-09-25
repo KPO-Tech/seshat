@@ -8,6 +8,7 @@ import (
 	"github.com/KPO-Tech/seshat/internal/sandbox"
 	bashTool "github.com/KPO-Tech/seshat/internal/tools/bash"
 	"github.com/KPO-Tech/seshat/pkg/companion"
+	"github.com/KPO-Tech/seshat/pkg/docling"
 	"github.com/KPO-Tech/seshat/pkg/runtimepath"
 )
 
@@ -185,7 +186,19 @@ type ClientConfig struct {
 	UserID string `json:"-"`
 
 	// Document conversion
+	// DoclingURL is the base URL of a running docling-serve instance. Used
+	// to build the default DocumentConverter when that field is left nil -
+	// the SDK's own document-conversion tools (read_file's PDF path,
+	// docling_convert, read_document_url) stay backed by docling-serve
+	// unless DocumentConverter overrides it.
 	DoclingURL string `json:"docling_url,omitempty"`
+	// DocumentConverter, when set, is used instead of building a
+	// docling-serve client from DoclingURL. Inject a custom
+	// docling.DocumentConverterBackend implementation (e.g. one backed by a
+	// different document-intelligence service) to back the SDK's
+	// document-conversion tools with something other than docling-serve.
+	// Takes precedence over DoclingURL.
+	DocumentConverter docling.DocumentConverterBackend `json:"-"`
 
 	// Automation daemon connection (seshat-automation).
 	// When set, the schedule_job / list_jobs / update_job / delete_job / pause_job /

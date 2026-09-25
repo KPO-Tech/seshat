@@ -75,6 +75,13 @@ func BackendDBPath(root string) string { return Join(root, "seshat.db") }
 
 func HNSWDataDir(root string) string { return Join(root, "data", "hnsw") }
 
+// DeepDocModelsDir holds the ONNX models (det.ort, rec.ort, layout.ort,
+// tsr.ort, ocr.res) that back pkg/nativedoc's native OCR/layout/table
+// pipeline - fetched by scripts/install-deepdoc-models.sh from
+// https://huggingface.co/InfiniFlow/deepdoc (Apache-2.0), mirroring
+// docling-serve's own .venv provisioning convention.
+func DeepDocModelsDir(root string) string { return Join(root, "models", "deepdoc") }
+
 // RAGSQLiteDBPath is the fallback vector store used when the embedded HNSW
 // backend isn't available on the current platform (Windows - see
 // internal/vector/hnsw_store_windows.go).

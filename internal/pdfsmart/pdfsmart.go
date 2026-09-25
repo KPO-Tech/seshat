@@ -109,7 +109,7 @@ func (r Result) DoclingPageCount() int {
 // it must never produce that same failure mode on a page it couldn't.
 // Callers should fall back to sending the whole document through docling
 // when ok is false, the same as if this package didn't exist.
-func Convert(ctx context.Context, data []byte, doclingClient *docling.Client) (Result, bool, error) {
+func Convert(ctx context.Context, data []byte, doclingClient docling.DocumentConverterBackend) (Result, bool, error) {
 	warmUpPDFCPUConfig()
 
 	reader, err := pdf.NewReader(bytes.NewReader(data), int64(len(data)))

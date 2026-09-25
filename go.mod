@@ -50,6 +50,7 @@ require (
 	github.com/go-sql-driver/mysql v1.10.0
 	github.com/google/uuid v1.6.0
 	github.com/gorilla/websocket v1.5.3
+	github.com/infiniflow/onnxruntime_go v1.29.0
 	github.com/invopop/jsonschema v0.14.0
 	github.com/itchyny/gojq v0.12.19
 	github.com/jordanella/go-ansi-paintbrush v0.0.0-20240728195301-b7ad996ecf3d
@@ -76,6 +77,7 @@ require (
 	github.com/tidwall/gjson v1.19.0
 	github.com/tidwall/sjson v1.2.5
 	github.com/xuri/excelize/v2 v2.11.0
+	github.com/yfedoseev/pdf_oxide/go v0.3.78
 	github.com/zeebo/xxh3 v1.1.0
 	go.mongodb.org/mongo-driver/v2 v2.8.2
 	go.opentelemetry.io/otel v1.44.0
@@ -133,7 +135,7 @@ require (
 	github.com/chewxy/math32 v1.10.1 // indirect
 	github.com/cyphar/filepath-securejoin v0.6.1 // indirect
 	github.com/dlclark/regexp2/v2 v2.5.2 // indirect
-	github.com/ebitengine/purego v0.10.1 // indirect
+	github.com/ebitengine/purego v0.10.2 // indirect
 	github.com/esiqveland/notify v0.13.3 // indirect
 	github.com/felixge/httpsnoop v1.0.4 // indirect
 	github.com/fsnotify/fsnotify v1.9.0 // indirect

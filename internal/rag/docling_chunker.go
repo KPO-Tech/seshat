@@ -10,18 +10,21 @@ import (
 	"github.com/KPO-Tech/seshat/internal/docling"
 )
 
-// DoclingChunker chunks rich documents with docling-serve's hybrid chunker.
-// It falls back to a plain text chunker unless FailOnError is set.
+// DoclingChunker chunks rich documents with a document-aware hybrid chunker
+// (docling-serve by default - see docling.HybridChunkBackend for why Client
+// is an interface, not the concrete *docling.Client). It falls back to a
+// plain text chunker unless FailOnError is set.
 type DoclingChunker struct {
-	Client      *docling.Client
+	Client      docling.HybridChunkBackend
 	Options     docling.ChunkOptions
 	Profile     ChunkProfile
 	Fallback    Chunker
 	FailOnError bool
 }
 
-// NewDoclingChunker creates a document-aware chunker backed by docling-serve.
-func NewDoclingChunker(client *docling.Client, opts docling.ChunkOptions) *DoclingChunker {
+// NewDoclingChunker creates a document-aware chunker backed by the given
+// HybridChunkBackend (docling-serve's *docling.Client by default).
+func NewDoclingChunker(client docling.HybridChunkBackend, opts docling.ChunkOptions) *DoclingChunker {
 	return &DoclingChunker{
 		Client:   client,
 		Options:  opts,
@@ -30,11 +33,11 @@ func NewDoclingChunker(client *docling.Client, opts docling.ChunkOptions) *Docli
 }
 
 // NewDoclingChunkerForProfile creates a document-aware chunker using one of
-// Seshat's recommended chunking profiles. When docling-serve is unavailable
+// Seshat's recommended chunking profiles. When the backend is unavailable
 // or fails, the fallback for the "structured" profile is HeadingChunker
 // (heading/numbering-hierarchy aware) instead of plain ParagraphChunker -
 // every other profile keeps the plain fallback unchanged.
-func NewDoclingChunkerForProfile(client *docling.Client, profile ChunkProfile, opts docling.ChunkOptions) *DoclingChunker {
+func NewDoclingChunkerForProfile(client docling.HybridChunkBackend, profile ChunkProfile, opts docling.ChunkOptions) *DoclingChunker {
 	if profile.MaxTokens <= 0 {
 		profile = DefaultChunkProfile()
 	}
