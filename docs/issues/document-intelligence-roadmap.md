@@ -770,3 +770,17 @@ chunking *strategies* worth having:
   background job system; Phase 2's chunk/enrichment caching already gets
   the practical benefit (idempotent re-runs) without needing the job
   infrastructure.
+- **Wiring DLA (layout detection) / TSR (table structure recognition) into
+  `internal/nativedoc/parser.Converter`** — both models were ported from
+  RAGFlow into `internal/nativedoc` (`dla.go`/`dla_preprocess.go`,
+  `tsr.go`/`tsr_decode.go`) but never actually wired into `convertPDF`
+  (OCR det/rec only). Confirmed via web search (2026-09-25) that
+  docling-serve's own pipeline already does both - TableFormer for table
+  structure (handles partial/no borderlines, spans, hierarchy) and
+  multi-column reading-order reconstruction as standard parts of its
+  layout analysis - so for any deployment with docling-serve configured,
+  this wiring would be redundant. It only matters for a fully offline
+  deployment (no docling-serve at all) that also needs table-aware/
+  layout-aware reading specifically on scanned/image-only PDFs - revisit
+  only if that concrete need shows up. The ported models already exist;
+  the remaining work is wiring, not porting.
