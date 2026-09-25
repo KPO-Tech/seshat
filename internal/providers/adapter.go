@@ -130,6 +130,22 @@ func (zAiAdapter) applyAuthHeaders(c *Client, req *http.Request) {
 	}
 }
 
+// decodeResponse overrides openAICompatAdapter's non-streaming decode: Z.ai
+// only supports streaming, so CreateMessage forces req.Stream = true for it
+// even when the caller (e.g. the auto-mode classifier) wants a single
+// response, and the body it needs to decode is therefore an OpenAI-style SSE
+// stream ("data: {...}"), not one JSON object. Decoding it as one document
+// failed on the literal first byte of "data: " with "invalid character 'd'
+// looking for beginning of value" - the same class of bug already fixed for
+// Codex in codexAdapter.decodeResponse.
+func (zAiAdapter) decodeResponse(_ *Client, body io.Reader, model types.ModelIdentifier) (types.APIResponse, error) {
+	result, err := parseOpenAISSEStream(context.Background(), body, model, nil)
+	if err != nil {
+		return types.APIResponse{}, err
+	}
+	return result.Response, nil
+}
+
 // ---------------------------------------------------------------------------
 // OpenAI-compatible /chat/completions (openai, minimax, openrouter, mistral)
 // ---------------------------------------------------------------------------

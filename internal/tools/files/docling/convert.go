@@ -41,23 +41,20 @@ const (
 		"- Pass the whole file in one call (`path` is the deck/document itself, e.g. \"deck.pptx\") — docling-serve converts every slide/page in a single request. Never split a deck into individual slide images and OCR them one at a time: it's slower, it's more tool calls, and it throws away the layout/reading-order/table-structure analysis docling does for a whole document at once.\n"
 )
 
-// ConvertTool converts a local file to markdown via docling-serve.
+// ConvertTool converts a local file to markdown via a document-conversion backend.
 type ConvertTool struct {
 	workingDir       string
-	doclingClient    *docling.Client
+	doclingClient    docling.DocumentConverterBackend
 	filesystemPolicy *sandbox.FilesystemPolicy
 }
 
 // NewConvertTool creates a new docling_convert tool.
 func NewConvertTool(cfg Config, workingDir string) *ConvertTool {
-	t := &ConvertTool{
+	return &ConvertTool{
 		workingDir:       workingDir,
+		doclingClient:    cfg.converter(),
 		filesystemPolicy: sandbox.NewDefaultFilesystemPolicy(),
 	}
-	if cfg.DoclingURL != "" {
-		t.doclingClient = docling.NewClient(cfg.DoclingURL)
-	}
-	return t
 }
 
 func (t *ConvertTool) Definition() tool.Definition {

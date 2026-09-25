@@ -137,6 +137,10 @@ type ClientConfig struct {
     SystemPromptTemplate string       // replace default system prompt
     PromptConfig         *PromptConfig // stage overlays, tool hints, append text
 
+    // Document conversion
+    DoclingURL        string // optional docling-serve base URL for PDF/document conversion
+    DocumentConverter docling.DocumentConverterBackend // override DoclingURL with a custom backend
+
     // ── Stop hooks ────────────────────────────────────────────────────────
     StopHooks []StopHook // post-turn policy checks (append messages, request continuation)
 }

@@ -249,3 +249,43 @@ func TestNewDoclingChunkerForProfile_StructuredProfileGetsHeadingFallback(t *tes
 		t.Fatalf("expected heading-aware fallback output, got %+v", chunks)
 	}
 }
+
+// TestNewDoclingChunkerForProfile_TableAndQAProfilesGetMatchingFallbacks is
+// the same regression guard as the structured-profile test above, extended
+// for the two chunkers added in document-intelligence roadmap Phase 4.
+func TestNewDoclingChunkerForProfile_TableAndQAProfilesGetMatchingFallbacks(t *testing.T) {
+	table := NewDoclingChunkerForProfile(nil, ChunkProfile{Name: ChunkProfileTable, MaxTokens: 1536}, docling.ChunkOptions{})
+	if _, ok := table.Fallback.(*TableChunker); !ok {
+		t.Fatalf("expected the table profile's fallback to be *TableChunker, got %T", table.Fallback)
+	}
+
+	qa := NewDoclingChunkerForProfile(nil, ChunkProfile{Name: ChunkProfileQA, MaxTokens: 512}, docling.ChunkOptions{})
+	if _, ok := qa.Fallback.(*QAChunker); !ok {
+		t.Fatalf("expected the qa profile's fallback to be *QAChunker, got %T", qa.Fallback)
+	}
+
+	// End-to-end: with no client (docling path skipped entirely), the table
+	// profile's SplitDocument call should still keep a table's rows intact.
+	tableChunks, err := table.SplitDocument(context.Background(), Document{
+		Filename: "data.txt",
+		Text:     "| A | B |\n| --- | --- |\n| 1 | 2 |\n",
+	})
+	if err != nil {
+		t.Fatalf("SplitDocument (table): %v", err)
+	}
+	if len(tableChunks) != 1 || tableChunks[0].Metadata["chunk_type"] != "table" {
+		t.Fatalf("expected table-aware fallback output, got %+v", tableChunks)
+	}
+
+	// End-to-end: same for the qa profile - one chunk per Q/A pair.
+	qaChunks, err := qa.SplitDocument(context.Background(), Document{
+		Filename: "faq.txt",
+		Text:     "Q: What is X?\nA: X is a thing.\n",
+	})
+	if err != nil {
+		t.Fatalf("SplitDocument (qa): %v", err)
+	}
+	if len(qaChunks) != 1 || qaChunks[0].Metadata["qa_question"] != "What is X?" {
+		t.Fatalf("expected qa-aware fallback output, got %+v", qaChunks)
+	}
+}

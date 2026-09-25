@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/KPO-Tech/seshat/internal/docling"
 	"github.com/KPO-Tech/seshat/internal/providers"
 	"github.com/KPO-Tech/seshat/internal/rag"
 	engineconfig "github.com/KPO-Tech/seshat/pkg/config"
@@ -33,8 +34,15 @@ type RunnerConfig struct {
 	// and converts a remote document (PDF, webpage, ...) to markdown via a
 	// running docling-serve instance. Unlike WebSearchKeys/RAGService this
 	// isn't a secret or per-tenant value, so it's fine to read straight
-	// from RunnerConfig rather than resolved per execution.
+	// from RunnerConfig rather than resolved per execution. Used to build
+	// the default DocumentConverter when that field is left nil.
 	DoclingURL string
+	// DocumentConverter, when set, is used instead of building a
+	// docling-serve client from DoclingURL - inject a custom
+	// docling.DocumentConverterBackend implementation to back
+	// read_document_url with something other than docling-serve. Takes
+	// precedence over DoclingURL.
+	DocumentConverter docling.DocumentConverterBackend
 	// ArtifactStore backs the SDK client's file I/O (e.g. artifacts written
 	// by the bash/file tools) for this execution when set. Like RAGService,
 	// callers embedding automation in a multi-tenant host are expected to
@@ -167,6 +175,7 @@ func (r *Runner) buildClientConfig(model sdk.ModelIdentifier) *sdk.ClientConfig 
 		WebSearchKeys:          r.cfg.WebSearchKeys,
 		RAGService:             r.cfg.RAGService,
 		DoclingURL:             r.cfg.DoclingURL,
+		DocumentConverter:      r.cfg.DocumentConverter,
 		ArtifactStore:          r.cfg.ArtifactStore,
 		MCPServers:             r.cfg.MCPServers,
 		RequireSandbox:         r.cfg.RequireSandbox,

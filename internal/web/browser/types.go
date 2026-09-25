@@ -34,9 +34,19 @@ type Manager interface {
 
 // Config controls the local browser runtime.
 type Config struct {
-	Headless              bool
-	ExecutablePath        string
-	RemoteControlURL      string
+	Headless         bool
+	ExecutablePath   string
+	RemoteControlURL string
+	// TargetResolver, when set, is consulted once per new session (see
+	// ensureSessionLocked). If it returns a target ID, the session attaches
+	// directly to that existing CDP page/target on the root browser instead
+	// of opening a fresh incognito context - used by the desktop app to let
+	// a session's browser tool calls drive the same tab the user already
+	// sees live in its own embedded browser panel, rather than an invisible
+	// headless one. Returning ok=false (or leaving this nil) preserves the
+	// exact pre-existing behavior (a fresh incognito context per session) -
+	// this is purely additive, never required.
+	TargetResolver        func(ctx context.Context, sessionID types.SessionID) (targetID string, ok bool)
 	NavigationTimeout     time.Duration
 	ActionTimeout         time.Duration
 	MaxPagesPerSession    int

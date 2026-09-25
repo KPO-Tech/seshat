@@ -7,6 +7,7 @@ import (
 
 	"github.com/KPO-Tech/seshat/internal/audio/stt"
 	"github.com/KPO-Tech/seshat/internal/audio/tts"
+	"github.com/KPO-Tech/seshat/internal/docling"
 	"github.com/KPO-Tech/seshat/internal/fim"
 	"github.com/KPO-Tech/seshat/internal/image"
 	longterm "github.com/KPO-Tech/seshat/internal/memory/longterm"
@@ -45,10 +46,18 @@ type Config struct {
 	// Provide any implementation that satisfies longterm.Store when wiring the runtime.
 	LongTermMemory longterm.Store
 
-	// DoclingURL is the base URL of a running docling-serve instance.
+	// DoclingURL is the base URL of a running docling-serve instance. Used
+	// to build the default DocumentConverter when that field is left nil.
 	// When set, the read_file tool converts PDFs to structured markdown.
 	// Example: "http://localhost:5001"
 	DoclingURL string
+	// DocumentConverter, when set, is used instead of building a
+	// docling-serve client from DoclingURL - inject a custom
+	// docling.DocumentConverterBackend implementation to back the
+	// docling-facing tools (read_file's PDF path, docling_convert,
+	// read_document_url) with something other than docling-serve. Takes
+	// precedence over DoclingURL.
+	DocumentConverter docling.DocumentConverterBackend
 
 	// ImageGenerator enables the generate_image tool when set.
 	// Use imageproviders.NewOpenAI(apiKey) or imageproviders.NewGemini(apiKey)
