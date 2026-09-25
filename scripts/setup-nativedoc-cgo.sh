@@ -153,12 +153,25 @@ if $is_windows; then
     # colon collides with it and comes out corrupted (confirmed: it produced
     # a bogus lone "C" entry, and mangled the rest by prefixing Git's own
     # install path onto it). cygpath -u avoids the whole ambiguity.
+    #
+    # PDFIUM_DIR/ORT_DIR are derived from CACHE_DIR, which defaults to
+    # "$HOME/.cache/...", and $HOME under git-bash/MSYS is itself
+    # POSIX-style ("/c/Users/..."), NOT Windows-style - unlike pdf_oxide's
+    # own CFLAGS/LDFLAGS (normalized above), this was never converted.
+    # Native (non-MSYS) gcc.exe/ld.exe and Windows LoadLibrary can't
+    # resolve a literal "/c/..." path argument - confirmed hitting this for
+    # real (ld.exe: "cannot find /c/Users/.../pdfium.dll.lib: No such file
+    # or directory", the file existed, just under its Windows-form path).
+    # cygpath -w + forward-slash normalization fixes both CGO_LDFLAGS/
+    # CGO_CFLAGS and SESHAT_NATIVEDOC_ONNXRUNTIME_PATH.
     PDFIUM_BIN_POSIX="$(cygpath -u "$PDFIUM_DIR/bin" 2>/dev/null || echo "$PDFIUM_DIR/bin")"
+    PDFIUM_DIR_WIN="$(cygpath -w "$PDFIUM_DIR" 2>/dev/null | tr '\\' '/' || echo "$PDFIUM_DIR")"
+    ORT_DIR_WIN="$(cygpath -w "$ORT_DIR" 2>/dev/null | tr '\\' '/' || echo "$ORT_DIR")"
     echo "export NATIVEDOC_BUILD_TAGS=\"nativedoc\""
-    echo "export CGO_CFLAGS=\"$PDF_OXIDE_CFLAGS -I$PDFIUM_DIR/include\""
-    echo "export CGO_LDFLAGS=\"$PDF_OXIDE_LDFLAGS $PDFIUM_DIR/lib/pdfium.dll.lib\""
+    echo "export CGO_CFLAGS=\"$PDF_OXIDE_CFLAGS -I$PDFIUM_DIR_WIN/include\""
+    echo "export CGO_LDFLAGS=\"$PDF_OXIDE_LDFLAGS $PDFIUM_DIR_WIN/lib/pdfium.dll.lib\""
     echo "export PATH=\"$PDFIUM_BIN_POSIX:\$PATH\""
-    echo "export SESHAT_NATIVEDOC_ONNXRUNTIME_PATH=\"$ORT_DIR/onnxruntime.dll\""
+    echo "export SESHAT_NATIVEDOC_ONNXRUNTIME_PATH=\"$ORT_DIR_WIN/onnxruntime.dll\""
     log 'Done. Build with: go build -tags "$NATIVEDOC_BUILD_TAGS" ./your/package/...'
     log 'Copy $PDFIUM_DIR/bin/pdfium.dll next to any binary you ship (PATH covers `go run`/`go test`, not a built .exe moved elsewhere).'
     exit 0

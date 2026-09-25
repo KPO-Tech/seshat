@@ -314,7 +314,7 @@ func newRecSession(modelPath, inName string, inShape []int64, outName string, we
 	// The C session copies these options at creation time, so the options handle
 	// can be released once the session is built. The shared weight buffers are
 	// owned by the process-wide weightCache and outlive every session.
-	defer opts.Destroy()
+	defer func() { _ = opts.Destroy() }()
 	sess, err := ort.NewDynamicAdvancedSession(modelPath,
 		[]string{inName}, []string{outName}, opts)
 	if err != nil {
@@ -335,7 +335,7 @@ func (s *recSession) Run(ctx context.Context, input []float32) ([]float32, error
 	if err != nil {
 		return nil, err
 	}
-	defer opts.Destroy()
+	defer func() { _ = opts.Destroy() }()
 	// Cancel an in-flight Run when the context is done. done closes once Run
 	// returns so the watcher exits even on the success path.
 	done := make(chan struct{})
@@ -354,7 +354,7 @@ func (s *recSession) Run(ctx context.Context, input []float32) ([]float32, error
 	if err != nil {
 		return nil, err
 	}
-	defer inT.Destroy()
+	defer func() { _ = inT.Destroy() }()
 	outputs := []ort.Value{nil}
 	if err := s.sess.RunWithOptions([]ort.Value{inT}, outputs, opts); err != nil {
 		if ctx.Err() != nil {
@@ -366,7 +366,7 @@ func (s *recSession) Run(ctx context.Context, input []float32) ([]float32, error
 	if outVal == nil {
 		return nil, fmt.Errorf("recSession %s: nil output tensor", s.outName)
 	}
-	defer outVal.Destroy()
+	defer func() { _ = outVal.Destroy() }()
 	t, ok := outVal.(*ort.Tensor[float32])
 	if !ok {
 		return nil, fmt.Errorf("recSession %s: unexpected output type %T", s.outName, outVal)
@@ -381,7 +381,7 @@ func (s *recSession) Run(ctx context.Context, input []float32) ([]float32, error
 // owned by the session (allocated per Run and freed there).
 func (s *recSession) Destroy() {
 	if s.sess != nil {
-		s.sess.Destroy()
+		_ = s.sess.Destroy()
 	}
 }
 

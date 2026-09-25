@@ -175,19 +175,19 @@ func sharedWeights(modelPath, inName string, inShape []int64, outName string) (*
 	if err != nil {
 		return nil, fmt.Errorf("allocate extraction input for %s: %w", modelPath, err)
 	}
-	defer inT.Destroy()
+	defer func() { _ = inT.Destroy() }()
 	outT, err := ort.NewTensor(ort.NewShape(1), []float32{0})
 	if err != nil {
 		return nil, fmt.Errorf("allocate extraction output for %s: %w", modelPath, err)
 	}
-	defer outT.Destroy()
+	defer func() { _ = outT.Destroy() }()
 	ext, err := ort.NewAdvancedSession(modelPath,
 		[]string{inName}, []string{outName},
 		[]ort.Value{inT}, []ort.Value{outT}, nil)
 	if err != nil {
 		return nil, fmt.Errorf("open extraction session for %s: %w", modelPath, err)
 	}
-	defer ext.Destroy()
+	defer func() { _ = ext.Destroy() }()
 
 	count, err := ext.GetInitializerCount()
 	if err != nil {
@@ -258,7 +258,7 @@ func newRawSession(modelPath, inName string, inShape []int64, outName string, we
 	// the session is built. The shared weight buffers themselves are owned by
 	// the process-wide weightCache and outlive every session, so releasing opts
 	// here does not free them.
-	defer opts.Destroy()
+	defer func() { _ = opts.Destroy() }()
 	sess, err := ort.NewDynamicAdvancedSession(modelPath,
 		[]string{inName}, []string{outName}, opts)
 	if err != nil {
@@ -287,7 +287,7 @@ func newSessionOptions(weights *weightSet) (*ort.SessionOptions, error) {
 	// each, so the process-wide inference ceiling is exactly the number of
 	// concurrent Runs the caller admits (see the intraOpThreads constant).
 	if err := opts.SetIntraOpNumThreads(intraOpThreads); err != nil {
-		opts.Destroy()
+		_ = opts.Destroy()
 		return nil, err
 	}
 	// Disable the BFC memory arena for this session. The arena pre-reserves a
@@ -298,13 +298,13 @@ func newSessionOptions(weights *weightSet) (*ort.SessionOptions, error) {
 	// only their weights; activation tensors are allocated directly and freed
 	// after each Run.
 	if err := opts.SetCpuMemArena(false); err != nil {
-		opts.Destroy()
+		_ = opts.Destroy()
 		return nil, err
 	}
 	if weights != nil {
 		for i, v := range weights.vals {
 			if err := opts.AddInitializer(weights.names[i], v); err != nil {
-				opts.Destroy()
+				_ = opts.Destroy()
 				return nil, fmt.Errorf("inject shared initializer %q: %w",
 					weights.names[i], err)
 			}
@@ -343,7 +343,7 @@ func (s *session) Run(ctx context.Context, input []float32) ([]float32, error) {
 	if err != nil {
 		return nil, err
 	}
-	defer opts.Destroy()
+	defer func() { _ = opts.Destroy() }()
 	// Cancel an in-flight Run when the context is done. done closes once Run
 	// returns so the watcher exits even on the success path.
 	done := make(chan struct{})
@@ -366,7 +366,7 @@ func (s *session) Run(ctx context.Context, input []float32) ([]float32, error) {
 	if err != nil {
 		return nil, err
 	}
-	defer inT.Destroy()
+	defer func() { _ = inT.Destroy() }()
 	outputs := []ort.Value{nil}
 	if err := s.sess.RunWithOptions([]ort.Value{inT}, outputs, opts); err != nil {
 		if ctx.Err() != nil {
@@ -378,7 +378,7 @@ func (s *session) Run(ctx context.Context, input []float32) ([]float32, error) {
 	if outVal == nil {
 		return nil, fmt.Errorf("session %s: nil output tensor", s.outName)
 	}
-	defer outVal.Destroy()
+	defer func() { _ = outVal.Destroy() }()
 	outT, ok := outVal.(*ort.Tensor[float32])
 	if !ok {
 		return nil, fmt.Errorf("session %s: unexpected output value type %T",
@@ -395,7 +395,7 @@ func (s *session) Run(ctx context.Context, input []float32) ([]float32, error) {
 // process-global environment.
 func (s *session) Destroy() {
 	if s.sess != nil {
-		s.sess.Destroy()
+		_ = s.sess.Destroy()
 	}
 }
 
