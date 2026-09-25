@@ -294,6 +294,97 @@ func TestServiceIngestAndSearch_MultiIdentityACL(t *testing.T) {
 	}
 }
 
+// recordingEmbedder records exactly which texts it was asked to embed, so a
+// test can verify enrichment altered the embedded text without altering the
+// chunk's stored/returned text.
+type recordingEmbedder struct {
+	received [][]string
+}
+
+func (r *recordingEmbedder) EmbedTexts(_ context.Context, texts []string) ([][]float32, error) {
+	r.received = append(r.received, append([]string(nil), texts...))
+	out := make([][]float32, len(texts))
+	for i := range texts {
+		out[i] = []float32{1}
+	}
+	return out, nil
+}
+
+// stubEnricher returns one fixed, identifiable question per chunk.
+type stubEnricher struct{}
+
+func (stubEnricher) EnrichChunks(_ context.Context, texts []string) ([][]string, error) {
+	out := make([][]string, len(texts))
+	for i, text := range texts {
+		out[i] = []string{"Q about: " + text}
+	}
+	return out, nil
+}
+
+func TestServiceIngest_EnricherAugmentsEmbeddingTextNotStoredText(t *testing.T) {
+	ctx := context.Background()
+	tmpDir := t.TempDir()
+	storage.SetConfig(storage.Config{Provider: storage.ProviderLocal, LocalPath: tmpDir})
+	t.Cleanup(storage.ResetProvider)
+	artifacts, err := storage.DefaultArtifactStore()
+	if err != nil {
+		t.Fatalf("DefaultArtifactStore: %v", err)
+	}
+	embedder := &recordingEmbedder{}
+	svc := NewService(artifacts, vector.NewMemoryStore(), embedder, nil)
+	svc.SetEnricher(stubEnricher{})
+
+	if _, err := svc.Ingest(ctx, IngestRequest{
+		CorpusID: "kb",
+		Filename: "notes.txt",
+		Text:     "alpha section",
+	}); err != nil {
+		t.Fatalf("Ingest: %v", err)
+	}
+
+	if len(embedder.received) != 1 || len(embedder.received[0]) != 1 {
+		t.Fatalf("expected exactly one embed call with one text, got %v", embedder.received)
+	}
+	embedded := embedder.received[0][0]
+	if !strings.Contains(embedded, "alpha section") || !strings.Contains(embedded, "Q about: alpha section") {
+		t.Fatalf("expected embedded text to contain chunk text and its question, got %q", embedded)
+	}
+
+	resp, err := svc.Search(ctx, SearchRequest{CorpusID: "kb", Query: "alpha", TopK: 1})
+	if err != nil {
+		t.Fatalf("Search: %v", err)
+	}
+	if len(resp.Results) != 1 {
+		t.Fatalf("expected 1 result, got %d", len(resp.Results))
+	}
+	if resp.Results[0].Text != "alpha section" {
+		t.Fatalf("expected stored/returned text to remain the original chunk text, got %q", resp.Results[0].Text)
+	}
+	if strings.Contains(resp.Results[0].Text, "Q about:") {
+		t.Fatalf("enrichment questions leaked into the stored/returned chunk text: %q", resp.Results[0].Text)
+	}
+}
+
+type erroringEnricher struct{}
+
+func (erroringEnricher) EnrichChunks(_ context.Context, _ []string) ([][]string, error) {
+	return nil, fmt.Errorf("simulated enrichment failure")
+}
+
+func TestServiceIngest_EnricherErrorPropagates(t *testing.T) {
+	ctx := context.Background()
+	svc := newTestService(t)
+	svc.SetEnricher(erroringEnricher{})
+
+	if _, err := svc.Ingest(ctx, IngestRequest{
+		CorpusID: "kb",
+		Filename: "notes.txt",
+		Text:     "alpha section",
+	}); err == nil {
+		t.Fatalf("expected Ingest to fail when the enricher errors")
+	}
+}
+
 func TestServiceIngestAndSearch_VectorlessWithoutEmbedder(t *testing.T) {
 	ctx := context.Background()
 	svc := newVectorlessTestService(t)

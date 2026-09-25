@@ -11,6 +11,25 @@ type Embedder interface {
 	EmbedTexts(ctx context.Context, texts []string) ([][]float32, error)
 }
 
+// Enricher generates synthetic questions per chunk - questions that chunk's
+// content would answer - so they can be indexed alongside it. This is a
+// known retrieval-recall technique: chunk text is usually declarative, but
+// users phrase queries as questions, so embedding the chunk together with
+// questions it answers closes that vocabulary gap (see RAGFlow's own
+// "Extractor" pipeline stage, which this mirrors). Optional: nil (the
+// default) disables enrichment entirely - see Service.SetEnricher. Costs one
+// LLM call per chunk, so it is opt-in, never a forced default.
+type Enricher interface {
+	// EnrichChunks returns, for each text in order, the synthetic questions
+	// generated for it. Implementations should be best-effort per item (see
+	// e.g. internal/rag/enricher.LLMEnricher) - a single chunk's failure
+	// returns an empty, not necessarily nil, slice at that index rather than
+	// failing the whole batch. A non-nil error here means something more
+	// fundamental went wrong (e.g. ctx cancelled) and Ingest should abort,
+	// the same contract Embedder.EmbedTexts already has.
+	EnrichChunks(ctx context.Context, texts []string) ([][]string, error)
+}
+
 type Chunk struct {
 	Key      string
 	Text     string

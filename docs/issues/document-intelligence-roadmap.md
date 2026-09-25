@@ -27,7 +27,7 @@ roadmap is about closing that gap.
 | 0 | License/dependency due diligence | Done (2026-09-25) |
 | 1 | Native PDF/DOCX/XLSX parsing (OCR, layout, table structure) | **Done, all platforms (2026-09-25)** — PDF/DOCX/XLSX all confirmed end-to-end through the real `DocumentConverterBackend` interface, real tests in place, model provisioning + CGO build tooling scripted and tested, on Linux/macOS *and* natively on Windows. |
 | 1.W | Make Phase 1 work on Windows (see "Windows" note in Phase 1) | **Done (2026-09-25)** — validated on a real native Windows 11 machine, not emulation. See log below. |
-| 2 | Chunk-level LLM enrichment (keywords/summary/questions) | Not started |
+| 2 | Chunk-level LLM enrichment (synthetic questions) | **Done (2026-09-25)** — opt-in, cached, bounded-concurrency. See log below. |
 | 3 | Vision-LLM fallback for pages native parsing can't handle | Not started |
 | 4 | Specialized chunkers (QA-formatted docs, table-heavy docs) | Not started |
 
@@ -436,6 +436,100 @@ how users actually phrase queries).
    to cover enrichment results too so re-ingestion doesn't re-bill the LLM.
 4. Wire into `rag.Service.Ingest` as an optional step (config flag), not a
    forced default — it costs LLM calls per chunk, callers should opt in.
+
+**Done. Design decisions and what got built:**
+
+- **Enrichment shape: synthetic questions only**, not keywords or summary.
+  Keywords mostly help BM25, which this repo's hybrid search already gets
+  from `vector.Store`'s own FTS indexing of the chunk text — an LLM-generated
+  keyword list wouldn't add much there. Summary helps more for
+  already-large chunks; this repo's chunkers already bound chunk size (see
+  `ChunkProfile`), so a summary of an already-small chunk isn't clearly
+  worth an LLM call. Synthetic questions are the one RAGFlow's own rationale
+  singles out by name ("help match how users actually phrase queries") and
+  the one with a direct, uncontroversial mechanism: chunk text is
+  declarative, queries are often question-shaped, embedding the chunk
+  together with questions it answers closes that gap. Don't build all three
+  without a reason, per the step above — this is the one with a clear reason.
+- **`internal/rag.Enricher`** (`internal/rag/types.go`) is the new optional
+  interface, exactly mirroring `Embedder`'s shape:
+  `EnrichChunks(ctx, texts) ([][]string, error)`, each inner slice being
+  that chunk's synthetic questions. Deliberately primitive-typed (no
+  `EnrichmentResult` struct) so a concrete implementation never needs to
+  import `internal/rag` at all — the same reason `Embedder`/`Reranker`'s
+  own signatures stay primitive-typed.
+- **`internal/rag/enricher.LLMEnricher`** (new subpackage, mirrors
+  `internal/rag/embedder`/`internal/rag/reranker`'s split between the
+  interface in `internal/rag` and its concrete implementation in a
+  subpackage) calls an `LLMCaller` — a minimal local interface
+  (`CreateMessage(ctx, types.APIRequest) (*types.APIResponse, error)`) that
+  `*providers.Client` satisfies structurally, so `internal/rag` never has to
+  import `internal/providers` at all. Exact same pattern as
+  `internal/memory/longterm.Extractor`'s own `LLMCaller` — not a
+  coincidence, it's the established idiom in this codebase for "a package
+  needs to call the chat LLM without depending on the whole provider
+  stack."
+  - Runs one LLM call per chunk, fanned out concurrently with a bounded
+    worker pool (`Config.MaxConcurrency`, default 4) — the "bounded worker
+    pool" RAGFlow's own Extractor uses.
+  - **No retry/backoff logic here, deliberately**: `*providers.Client`
+    already retries transient failures internally
+    (`Client.sendMessageWithRetry`) before `LLMCaller.CreateMessage` ever
+    returns, so re-wrapping that in `internal/rag/enricher` would just
+    double the backoff. Confirmed by reading `internal/providers/client.go`
+    before writing this, not assumed.
+  - Best-effort per chunk, matching `longterm.Extractor`'s own philosophy: a
+    single chunk's LLM failure is logged at DEBUG and that chunk's slot
+    stays empty rather than failing the whole batch — callers opted into
+    enrichment for better recall, not for ingestion to become less reliable
+    than before. `EnrichChunks` only returns a hard error for something
+    more fundamental (context cancellation, or a caller-visible bug like a
+    result-count mismatch).
+- **Cache**: `internal/rag/enrichment_cache.go` adds `EnrichmentCache`,
+  `ArtifactEnrichmentCache`, `MemoryEnrichmentCache`, and `CachedEnricher` —
+  same shape and same file-per-concern convention as `chunk_cache.go`'s
+  `ChunkCache`/`ArtifactChunkCache`/`MemoryChunkCache`/
+  `CachedDocumentChunker`, reusing that file's own `writeCachePart` hashing
+  helper directly (same package). `CachedEnricher.EnrichChunks` batches
+  correctly: for a mix of cached and new chunk texts, only the cache misses
+  are forwarded to the wrapped `Enricher`, and only those get written back —
+  verified by a test asserting the underlying enricher sees exactly the
+  miss set, not the whole batch. `LLMEnricher` implements
+  `EnricherCacheKeyProvider` (model + questions-per-chunk fingerprinted into
+  the cache key) so changing that configuration doesn't silently reuse
+  stale enrichment results, mirroring `ChunkCacheKeyProvider`'s exact
+  purpose for `DoclingChunker`.
+- **Wiring**: `Service.SetEnricher(e Enricher)` (`internal/rag/service.go`),
+  same nil-means-off pattern as `SetReranker`/the `embedder` field — not a
+  forced default, not a per-`IngestRequest` flag (no request-level opt-out
+  was asked for; a service either has enrichment configured or it doesn't,
+  matching how the embedder/reranker are already toggled by presence, not
+  a request field). Inside `Ingest`, when an enricher is configured, each
+  chunk's questions are appended to the text handed to the *embedder* only
+  (`buildEmbeddingText`) — the chunk's stored/returned `Text` (what
+  `rag_search` displays) is never touched. Verified by a test
+  (`TestServiceIngest_EnricherAugmentsEmbeddingTextNotStoredText`) that
+  fails if either side leaks into the other.
+- **`pkg/rag`** exposes all of the above (`Enricher`, `EnrichmentCache`,
+  `ArtifactEnrichmentCache`, `MemoryEnrichmentCache`, `CachedEnricher`,
+  `ChunkEnrichmentCacheKey`, matching constructors) plus a new
+  `pkg/rag/enricher` facade subpackage for `LLMEnricher`, mirroring
+  `pkg/rag/reranker`'s exact shape.
+- **Tests**: unit tests only, no live LLM calls — matching how
+  `longterm.Extractor`, `internal/rag/embedder`, and `internal/rag/reranker`
+  are all tested in this repo (a fake satisfying the minimal caller
+  interface, not a real network call). Covers: plain/fenced/prose-wrapped
+  JSON parsing, the `QuestionsPerChunk` cap, best-effort per-chunk failure
+  isolation, bounded concurrency (asserted via an instrumented fake caller
+  tracking max in-flight calls), cache hit/miss/partial-miss behavior,
+  cache-key invalidation on config change, and the embed-vs-stored-text
+  separation in `Service.Ingest`. All pass under `go test -race`.
+- **Verified for real**: `go build ./...`, `go vet ./...`,
+  `golangci-lint run ./...`, and `go test -race ./...` all pass clean
+  (one unrelated, pre-existing `internal/sandbox` Docker-cleanup-timing
+  test flaked under full-suite load and passed cleanly in isolation — not
+  touched by this phase, confirmed via `git diff --stat -- internal/sandbox/`
+  showing no changes there).
 
 ---
 

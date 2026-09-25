@@ -8,27 +8,33 @@ import (
 )
 
 type (
-	Chunk                 = internalrag.Chunk
-	ChunkCache            = internalrag.ChunkCache
-	ChunkCacheKeyProvider = internalrag.ChunkCacheKeyProvider
-	ChunkProfile          = internalrag.ChunkProfile
-	ChunkProfileName      = internalrag.ChunkProfileName
-	Chunker               = internalrag.Chunker
-	CachedDocumentChunker = internalrag.CachedDocumentChunker
-	Document              = internalrag.Document
-	DocumentChunker       = internalrag.DocumentChunker
-	DoclingChunker        = internalrag.DoclingChunker
-	Embedder              = internalrag.Embedder
-	IngestRequest         = internalrag.IngestRequest
-	IngestResult          = internalrag.IngestResult
-	Reranker              = internalrag.Reranker
-	SearchRequest         = internalrag.SearchRequest
-	SearchResponse        = internalrag.SearchResponse
-	SearchResult          = internalrag.SearchResult
-	Service               = internalrag.Service
-	VectorStore           = publicvector.Store
-	ArtifactChunkCache    = internalrag.ArtifactChunkCache
-	MemoryChunkCache      = internalrag.MemoryChunkCache
+	Chunk                    = internalrag.Chunk
+	ChunkCache               = internalrag.ChunkCache
+	ChunkCacheKeyProvider    = internalrag.ChunkCacheKeyProvider
+	ChunkProfile             = internalrag.ChunkProfile
+	ChunkProfileName         = internalrag.ChunkProfileName
+	Chunker                  = internalrag.Chunker
+	CachedDocumentChunker    = internalrag.CachedDocumentChunker
+	Document                 = internalrag.Document
+	DocumentChunker          = internalrag.DocumentChunker
+	DoclingChunker           = internalrag.DoclingChunker
+	Embedder                 = internalrag.Embedder
+	Enricher                 = internalrag.Enricher
+	EnrichmentCache          = internalrag.EnrichmentCache
+	EnricherCacheKeyProvider = internalrag.EnricherCacheKeyProvider
+	CachedEnricher           = internalrag.CachedEnricher
+	ArtifactEnrichmentCache  = internalrag.ArtifactEnrichmentCache
+	MemoryEnrichmentCache    = internalrag.MemoryEnrichmentCache
+	IngestRequest            = internalrag.IngestRequest
+	IngestResult             = internalrag.IngestResult
+	Reranker                 = internalrag.Reranker
+	SearchRequest            = internalrag.SearchRequest
+	SearchResponse           = internalrag.SearchResponse
+	SearchResult             = internalrag.SearchResult
+	Service                  = internalrag.Service
+	VectorStore              = publicvector.Store
+	ArtifactChunkCache       = internalrag.ArtifactChunkCache
+	MemoryChunkCache         = internalrag.MemoryChunkCache
 
 	// ParagraphChunker splits on blank lines with a hard character cap per
 	// chunk. The default Chunker (see DefaultChunker) when none is given.
@@ -100,6 +106,28 @@ func NewMemoryChunkCache() *MemoryChunkCache {
 
 func DocumentChunkCacheKey(doc Document, chunkerKey string) string {
 	return internalrag.DocumentChunkCacheKey(doc, chunkerKey)
+}
+
+// NewCachedEnricher wraps enricher with a deterministic cache (see
+// internal/rag.CachedEnricher's doc comment) so a re-ingest of unchanged
+// chunks doesn't re-bill the LLM for enrichment.
+func NewCachedEnricher(enricher Enricher, cache EnrichmentCache) *CachedEnricher {
+	return internalrag.NewCachedEnricher(enricher, cache)
+}
+
+func NewArtifactEnrichmentCache(store publicstorage.ArtifactStore) *ArtifactEnrichmentCache {
+	return internalrag.NewArtifactEnrichmentCache(store)
+}
+
+func NewMemoryEnrichmentCache() *MemoryEnrichmentCache {
+	return internalrag.NewMemoryEnrichmentCache()
+}
+
+// ChunkEnrichmentCacheKey builds the deterministic cache key for a chunk's
+// enrichment result, matching what CachedEnricher uses internally - useful
+// for callers that want to pre-warm or invalidate the cache directly.
+func ChunkEnrichmentCacheKey(chunkText, enricherKey string) string {
+	return internalrag.ChunkEnrichmentCacheKey(chunkText, enricherKey)
 }
 
 // NewSemanticChunker creates a SemanticChunker. threshold <= 0 uses the
