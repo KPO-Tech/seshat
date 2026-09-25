@@ -27,7 +27,34 @@ type (
 	// chunks - Client (docling-serve) is the default implementation. See
 	// internaldocling.HybridChunkBackend's own doc comment.
 	HybridChunkBackend = internaldocling.HybridChunkBackend
+
+	// GenericClient is a configurable client for any document-intelligence
+	// HTTP server that accepts a multipart file upload and returns JSON -
+	// unlike Client (docling-serve-specific), every protocol detail
+	// (paths, the multipart file field name, response parsing) is supplied
+	// via GenericConfig. See internaldocling.GenericClient's own doc
+	// comment for the full rationale and how a concrete backend's own
+	// adapter (e.g. for a seshat-intelligence deployment) is meant to use
+	// this from a downstream repo.
+	GenericClient = internaldocling.GenericClient
+
+	// GenericConfig configures a GenericClient.
+	GenericConfig = internaldocling.GenericConfig
+
+	// ConvertParser translates a server's raw convert-endpoint response
+	// body into ConversionResult.
+	ConvertParser = internaldocling.ConvertParser
+
+	// ChunkParser translates a server's raw chunk-endpoint response body
+	// into []Chunk.
+	ChunkParser = internaldocling.ChunkParser
 )
+
+// NewGenericClient validates cfg and builds a GenericClient - see
+// GenericConfig's own field docs for what's required.
+func NewGenericClient(cfg GenericConfig) (*GenericClient, error) {
+	return internaldocling.NewGenericClient(cfg)
+}
 
 // NewClient creates a client pointing at a docling-serve base URL.
 // baseURL is typically "http://localhost:5001". Defaults to a 120s

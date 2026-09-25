@@ -139,7 +139,7 @@ type ClientConfig struct {
 
     // Document conversion
     DoclingURL        string // optional docling-serve base URL for PDF/document conversion
-    DocumentConverter docling.DocumentConverterBackend // override DoclingURL with a custom backend
+    DocumentConverter docling.DocumentConverterBackend // override DoclingURL with a custom backend - docling.GenericClient covers any HTTP server speaking "multipart upload, JSON response" (e.g. a seshat-intelligence deployment), not just docling-serve
 
     // ── Stop hooks ────────────────────────────────────────────────────────
     StopHooks []StopHook // post-turn policy checks (append messages, request continuation)

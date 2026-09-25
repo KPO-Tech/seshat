@@ -9,6 +9,12 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added
+- `internal/docling`/`pkg/docling`: `GenericClient` - a configurable client for any document-intelligence HTTP server that accepts a multipart file upload and returns JSON (the shape docling-serve, seshat-intelligence, and similar services all share), unlike `Client` which is hardcoded to docling-serve's own paths/JSON shape. Every protocol detail (paths, the multipart file field name, response parsing via the new `ConvertParser`/`ChunkParser` function types) is supplied by the caller through `GenericConfig`, so a concrete backend's own adapter (e.g. for a seshat-intelligence deployment) is a small amount of code in a downstream repo, not a change here. `Client`'s own HTTP mechanics (multipart streaming, retry, health-check caching) were extracted into a shared, unexported `httpTransport` that both `Client` and `GenericClient` build on - `Client`'s public API and behavior are unchanged (all existing tests pass unmodified). Validated against a real, running seshat-intelligence instance (not just a mock), including a live conversion and hybrid-chunk round trip.
+
+### Changed
+- `internal/docling`: `Client`'s internal fields moved onto a new embedded `*httpTransport` (see the `GenericClient` entry above) - purely internal, no public API change; existing direct field access in tests (`c.httpClient`, etc.) continues to work via Go's struct-embedding promotion.
+
 ## [1.2.52] - 2026-09-25
 
 ### Added

@@ -28,8 +28,16 @@ const defaultTimeout = 120 * time.Second
 const defaultMaxResponseBytes = 128 * 1024 * 1024
 const defaultHealthCacheTTL = 5 * time.Second
 
-// Client calls a running docling-serve instance to convert documents to markdown.
-type Client struct {
+// httpTransport is the protocol-agnostic HTTP mechanics shared by every
+// document-intelligence backend that speaks "multipart file upload, JSON
+// response, a health-check endpoint" - docling-serve (Client, this file)
+// and any other server of this shape (GenericClient, generic.go) both
+// build on this instead of each reimplementing retry/health-caching/
+// multipart-streaming from scratch. Embedded anonymously by both so their
+// existing field/method access (c.httpClient, c.postMultipart(...), ...)
+// keeps working unchanged via Go's embedding promotion - this type only
+// exists to be shared, callers never construct or reference it directly.
+type httpTransport struct {
 	baseURL          string
 	httpClient       *http.Client
 	apiKey           string
@@ -41,6 +49,11 @@ type Client struct {
 	healthMu         sync.Mutex
 	healthCached     bool
 	healthCacheUntil time.Time
+}
+
+// Client calls a running docling-serve instance to convert documents to markdown.
+type Client struct {
+	*httpTransport
 }
 
 // Option configures a Client at construction time.
@@ -136,12 +149,23 @@ func WithHealthCacheTTL(ttl time.Duration) Option {
 // baseURL is typically "http://localhost:5001". Defaults to a 120s
 // per-request timeout - pass WithTimeout to override it.
 func NewClient(baseURL string, opts ...Option) *Client {
+	c := &Client{httpTransport: newDefaultTransport(baseURL, "seshat-docling-client")}
+	for _, opt := range opts {
+		opt(c)
+	}
+	return c
+}
+
+// newDefaultTransport builds an httpTransport with the same defaults
+// NewClient has always used - shared with NewGenericClient (generic.go) so
+// both constructors stay in lockstep rather than drifting apart.
+func newDefaultTransport(baseURL, userAgent string) *httpTransport {
 	if strings.TrimSpace(baseURL) == "" {
 		baseURL = "http://localhost:5001"
 	}
-	c := &Client{
+	return &httpTransport{
 		baseURL:          strings.TrimRight(baseURL, "/"),
-		userAgent:        "seshat-docling-client",
+		userAgent:        userAgent,
 		maxResponseBytes: defaultMaxResponseBytes,
 		retry: RetryConfig{
 			MaxAttempts: 1,
@@ -153,10 +177,6 @@ func NewClient(baseURL string, opts ...Option) *Client {
 			Timeout: defaultTimeout,
 		},
 	}
-	for _, opt := range opts {
-		opt(c)
-	}
-	return c
 }
 
 // APIError is returned for non-2xx docling-serve responses.
@@ -284,7 +304,7 @@ func (c *Client) ConvertFile(ctx context.Context, filePath string) (*ConversionR
 
 // ConvertFileWithOptions sends filePath to docling-serve with conversion options.
 func (c *Client) ConvertFileWithOptions(ctx context.Context, filePath string, opts ConvertOptions) (*ConversionResult, error) {
-	rawBody, err := c.postMultipartReplayable(ctx, "/v1/convert/file", filepath.Base(filePath), func() (io.ReadCloser, error) {
+	rawBody, err := c.postMultipartReplayable(ctx, "/v1/convert/file", "files", filepath.Base(filePath), func() (io.ReadCloser, error) {
 		return os.Open(filePath)
 	}, convertFields(opts, ""))
 	if err != nil {
@@ -301,7 +321,7 @@ func (c *Client) ConvertBytes(ctx context.Context, data []byte, filename string)
 
 // ConvertBytesWithOptions converts an in-memory document with conversion options.
 func (c *Client) ConvertBytesWithOptions(ctx context.Context, data []byte, filename string, opts ConvertOptions) (*ConversionResult, error) {
-	rawBody, err := c.postMultipartReplayable(ctx, "/v1/convert/file", filename, func() (io.ReadCloser, error) {
+	rawBody, err := c.postMultipartReplayable(ctx, "/v1/convert/file", "files", filename, func() (io.ReadCloser, error) {
 		return io.NopCloser(bytes.NewReader(data)), nil
 	}, convertFields(opts, ""))
 	if err != nil {
@@ -312,7 +332,7 @@ func (c *Client) ConvertBytesWithOptions(ctx context.Context, data []byte, filen
 
 // ChunkHybridFile sends filePath to docling-serve's hybrid chunk endpoint.
 func (c *Client) ChunkHybridFile(ctx context.Context, filePath string, opts ChunkOptions) ([]Chunk, error) {
-	rawBody, err := c.postMultipartReplayable(ctx, "/v1/chunk/hybrid/file", filepath.Base(filePath), func() (io.ReadCloser, error) {
+	rawBody, err := c.postMultipartReplayable(ctx, "/v1/chunk/hybrid/file", "files", filepath.Base(filePath), func() (io.ReadCloser, error) {
 		return os.Open(filePath)
 	}, chunkFields(opts))
 	if err != nil {
@@ -323,7 +343,7 @@ func (c *Client) ChunkHybridFile(ctx context.Context, filePath string, opts Chun
 
 // ChunkHybridBytes chunks an in-memory document without writing it to disk.
 func (c *Client) ChunkHybridBytes(ctx context.Context, data []byte, filename string, opts ChunkOptions) ([]Chunk, error) {
-	rawBody, err := c.postMultipartReplayable(ctx, "/v1/chunk/hybrid/file", filename, func() (io.ReadCloser, error) {
+	rawBody, err := c.postMultipartReplayable(ctx, "/v1/chunk/hybrid/file", "files", filename, func() (io.ReadCloser, error) {
 		return io.NopCloser(bytes.NewReader(data)), nil
 	}, chunkFields(opts))
 	if err != nil {
@@ -334,7 +354,7 @@ func (c *Client) ChunkHybridBytes(ctx context.Context, data []byte, filename str
 
 // ChunkHybrid sends a document to docling-serve's hybrid chunk endpoint.
 func (c *Client) ChunkHybrid(ctx context.Context, filename string, r io.Reader, opts ChunkOptions) ([]Chunk, error) {
-	rawBody, err := c.postMultipart(ctx, "/v1/chunk/hybrid/file", filename, r, chunkFields(opts))
+	rawBody, err := c.postMultipart(ctx, "/v1/chunk/hybrid/file", "files", filename, r, chunkFields(opts))
 	if err != nil {
 		return nil, err
 	}
@@ -365,7 +385,7 @@ func (c *Client) ConvertURL(ctx context.Context, docURL string) (*ConversionResu
 
 // convert is the shared multipart sender used by ConvertFile and ConvertBytes.
 func (c *Client) convert(ctx context.Context, filename string, r io.Reader, opts ConvertOptions) (*ConversionResult, error) {
-	rawBody, err := c.postMultipart(ctx, "/v1/convert/file", filename, r, convertFields(opts, ""))
+	rawBody, err := c.postMultipart(ctx, "/v1/convert/file", "files", filename, r, convertFields(opts, ""))
 	if err != nil {
 		return nil, err
 	}
@@ -375,25 +395,7 @@ func (c *Client) convert(ctx context.Context, filename string, r io.Reader, opts
 
 // IsAvailable does a cheap health check against the running service.
 func (c *Client) IsAvailable(ctx context.Context) bool {
-	if cached, ok := c.cachedHealth(); ok {
-		return cached
-	}
-	reqCtx, cancel := context.WithTimeout(ctx, 3*time.Second)
-	defer cancel()
-	req, err := c.newRequest(reqCtx, http.MethodGet, "/health", nil)
-	if err != nil {
-		c.cacheHealth(false)
-		return false
-	}
-	resp, err := c.httpClient.Do(req)
-	if err != nil {
-		c.cacheHealth(false)
-		return false
-	}
-	resp.Body.Close()
-	available := resp.StatusCode < 500
-	c.cacheHealth(available)
-	return available
+	return c.checkHealth(ctx, "/health")
 }
 
 // ── internal response parsing ─────────────────────────────────────────────────
@@ -403,48 +405,73 @@ type multipartField struct {
 	value string
 }
 
-func (c *Client) cachedHealth() (bool, bool) {
-	if c.healthCacheTTL <= 0 {
+// checkHealth is IsAvailable's shared implementation - path lets a
+// GenericClient (generic.go) point it at a different health endpoint than
+// docling-serve's own "/health".
+func (t *httpTransport) checkHealth(ctx context.Context, path string) bool {
+	if cached, ok := t.cachedHealth(); ok {
+		return cached
+	}
+	reqCtx, cancel := context.WithTimeout(ctx, 3*time.Second)
+	defer cancel()
+	req, err := t.newRequest(reqCtx, http.MethodGet, path, nil)
+	if err != nil {
+		t.cacheHealth(false)
+		return false
+	}
+	resp, err := t.httpClient.Do(req)
+	if err != nil {
+		t.cacheHealth(false)
+		return false
+	}
+	resp.Body.Close()
+	available := resp.StatusCode < 500
+	t.cacheHealth(available)
+	return available
+}
+
+func (t *httpTransport) cachedHealth() (bool, bool) {
+	if t.healthCacheTTL <= 0 {
 		return false, false
 	}
-	c.healthMu.Lock()
-	defer c.healthMu.Unlock()
-	if time.Now().Before(c.healthCacheUntil) {
-		return c.healthCached, true
+	t.healthMu.Lock()
+	defer t.healthMu.Unlock()
+	if time.Now().Before(t.healthCacheUntil) {
+		return t.healthCached, true
 	}
 	return false, false
 }
 
-func (c *Client) cacheHealth(available bool) {
-	if c.healthCacheTTL <= 0 {
+func (t *httpTransport) cacheHealth(available bool) {
+	if t.healthCacheTTL <= 0 {
 		return
 	}
-	c.healthMu.Lock()
-	defer c.healthMu.Unlock()
-	c.healthCached = available
-	c.healthCacheUntil = time.Now().Add(c.healthCacheTTL)
+	t.healthMu.Lock()
+	defer t.healthMu.Unlock()
+	t.healthCached = available
+	t.healthCacheUntil = time.Now().Add(t.healthCacheTTL)
 }
 
-func (c *Client) newRequest(ctx context.Context, method, path string, body io.Reader) (*http.Request, error) {
-	req, err := http.NewRequestWithContext(ctx, method, c.baseURL+path, body)
+func (t *httpTransport) newRequest(ctx context.Context, method, path string, body io.Reader) (*http.Request, error) {
+	req, err := http.NewRequestWithContext(ctx, method, t.baseURL+path, body)
 	if err != nil {
 		return nil, err
 	}
 	req.Header.Set("Accept", "application/json")
-	if c.userAgent != "" {
-		req.Header.Set("User-Agent", c.userAgent)
+	if t.userAgent != "" {
+		req.Header.Set("User-Agent", t.userAgent)
 	}
-	if c.apiKey != "" {
-		req.Header.Set("X-Api-Key", c.apiKey)
+	if t.apiKey != "" {
+		req.Header.Set("X-Api-Key", t.apiKey)
 	}
-	if c.tenantID != "" {
-		req.Header.Set("X-Tenant-Id", c.tenantID)
+	if t.tenantID != "" {
+		req.Header.Set("X-Tenant-Id", t.tenantID)
 	}
 	return req, nil
 }
 
-func (c *Client) doBytes(req *http.Request) ([]byte, error) {
-	attempts := c.retry.MaxAttempts
+func (t *httpTransport) doBytes(req *http.Request) ([]byte, error) {
+	attempts := t.retry.MaxAttempts
 	if attempts < 1 {
 		attempts = 1
 	}
@@ -464,28 +491,28 @@ func (c *Client) doBytes(req *http.Request) ([]byte, error) {
 				tryReq.Body = body
 			}
 		}
-		rawBody, status, err := c.doBytesOnce(tryReq)
+		rawBody, status, err := t.doBytesOnce(tryReq)
 		if err == nil {
 			return rawBody, nil
 		}
 		lastErr = err
-		if !c.shouldRetry(status, err) || attempt == attempts {
+		if !t.shouldRetry(status, err) || attempt == attempts {
 			break
 		}
-		if err := sleepWithContext(req.Context(), c.retryDelay(attempt)); err != nil {
+		if err := sleepWithContext(req.Context(), t.retryDelay(attempt)); err != nil {
 			return nil, err
 		}
 	}
 	return nil, lastErr
 }
 
-func (c *Client) doBytesOnce(req *http.Request) ([]byte, int, error) {
-	resp, err := c.httpClient.Do(req)
+func (t *httpTransport) doBytesOnce(req *http.Request) ([]byte, int, error) {
+	resp, err := t.httpClient.Do(req)
 	if err != nil {
-		return nil, 0, fmt.Errorf("docling-serve request: %w", err)
+		return nil, 0, fmt.Errorf("document-intelligence backend request: %w", err)
 	}
 	defer resp.Body.Close()
-	limit := c.maxResponseBytes
+	limit := t.maxResponseBytes
 	if limit <= 0 {
 		limit = defaultMaxResponseBytes
 	}
@@ -494,7 +521,7 @@ func (c *Client) doBytesOnce(req *http.Request) ([]byte, int, error) {
 		return nil, resp.StatusCode, fmt.Errorf("read response: %w", err)
 	}
 	if int64(len(rawBody)) > limit {
-		return nil, resp.StatusCode, fmt.Errorf("docling-serve response exceeded %d bytes", limit)
+		return nil, resp.StatusCode, fmt.Errorf("document-intelligence backend response exceeded %d bytes", limit)
 	}
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
 		return nil, resp.StatusCode, &APIError{Status: resp.StatusCode, Body: string(rawBody)}
@@ -502,7 +529,11 @@ func (c *Client) doBytesOnce(req *http.Request) ([]byte, int, error) {
 	return rawBody, resp.StatusCode, nil
 }
 
-func (c *Client) postMultipart(ctx context.Context, path, filename string, r io.Reader, fields []multipartField) ([]byte, error) {
+// postMultipart streams r to path as a multipart file upload under the
+// fileField form field (docling-serve expects "files"; other servers name
+// it differently - see GenericConfig.FileField), plus any extra form
+// fields.
+func (t *httpTransport) postMultipart(ctx context.Context, path, fileField, filename string, r io.Reader, fields []multipartField) ([]byte, error) {
 	pr, pw := io.Pipe()
 	mw := multipart.NewWriter(pw)
 
@@ -524,25 +555,25 @@ func (c *Client) postMultipart(ctx context.Context, path, filename string, r io.
 			}
 		}
 		var fw io.Writer
-		fw, err = mw.CreateFormFile("files", filepath.Base(filename))
+		fw, err = mw.CreateFormFile(fileField, filepath.Base(filename))
 		if err != nil {
 			return
 		}
 		_, err = io.Copy(fw, r)
 	}()
 
-	req, err := c.newRequest(ctx, http.MethodPost, path, pr)
+	req, err := t.newRequest(ctx, http.MethodPost, path, pr)
 	if err != nil {
 		_ = pr.Close()
 		_ = pw.Close()
 		return nil, fmt.Errorf("build request: %w", err)
 	}
 	req.Header.Set("Content-Type", mw.FormDataContentType())
-	return c.doBytes(req)
+	return t.doBytes(req)
 }
 
-func (c *Client) postMultipartReplayable(ctx context.Context, path, filename string, open func() (io.ReadCloser, error), fields []multipartField) ([]byte, error) {
-	attempts := c.retry.MaxAttempts
+func (t *httpTransport) postMultipartReplayable(ctx context.Context, path, fileField, filename string, open func() (io.ReadCloser, error), fields []multipartField) ([]byte, error) {
+	attempts := t.retry.MaxAttempts
 	if attempts < 1 {
 		attempts = 1
 	}
@@ -552,7 +583,7 @@ func (c *Client) postMultipartReplayable(ctx context.Context, path, filename str
 		if err != nil {
 			return nil, fmt.Errorf("open file: %w", err)
 		}
-		rawBody, err := c.postMultipart(ctx, path, filename, reader, fields)
+		rawBody, err := t.postMultipart(ctx, path, fileField, filename, reader, fields)
 		_ = reader.Close()
 		if err == nil {
 			return rawBody, nil
@@ -563,10 +594,10 @@ func (c *Client) postMultipartReplayable(ctx context.Context, path, filename str
 		if errors.As(err, &apiErr) {
 			status = apiErr.Status
 		}
-		if !c.shouldRetry(status, err) || attempt == attempts {
+		if !t.shouldRetry(status, err) || attempt == attempts {
 			break
 		}
-		if err := sleepWithContext(ctx, c.retryDelay(attempt)); err != nil {
+		if err := sleepWithContext(ctx, t.retryDelay(attempt)); err != nil {
 			return nil, err
 		}
 	}
@@ -649,7 +680,7 @@ func convertFields(opts ConvertOptions, prefix string) []multipartField {
 	return fields
 }
 
-func (c *Client) shouldRetry(status int, err error) bool {
+func (t *httpTransport) shouldRetry(status int, err error) bool {
 	if err == nil {
 		return false
 	}
@@ -659,15 +690,15 @@ func (c *Client) shouldRetry(status int, err error) bool {
 	return status == 0
 }
 
-func (c *Client) retryDelay(attempt int) time.Duration {
-	delay := c.retry.BaseDelay
+func (t *httpTransport) retryDelay(attempt int) time.Duration {
+	delay := t.retry.BaseDelay
 	if delay <= 0 {
 		delay = 250 * time.Millisecond
 	}
 	for i := 1; i < attempt; i++ {
 		delay *= 2
 	}
-	maxDelay := c.retry.MaxDelay
+	maxDelay := t.retry.MaxDelay
 	if maxDelay <= 0 {
 		maxDelay = 2 * time.Second
 	}
