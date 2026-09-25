@@ -34,16 +34,23 @@ func NewDoclingChunker(client docling.HybridChunkBackend, opts docling.ChunkOpti
 
 // NewDoclingChunkerForProfile creates a document-aware chunker using one of
 // Seshat's recommended chunking profiles. When the backend is unavailable
-// or fails, the fallback for the "structured" profile is HeadingChunker
-// (heading/numbering-hierarchy aware) instead of plain ParagraphChunker -
-// every other profile keeps the plain fallback unchanged.
+// or fails, the fallback depends on the profile: "structured" falls back to
+// HeadingChunker (heading/numbering-hierarchy aware), "table" to
+// TableChunker (keeps table rows intact), "qa" to QAChunker (one chunk per
+// detected Q/A pair) - every other profile keeps the plain fallback
+// unchanged.
 func NewDoclingChunkerForProfile(client docling.HybridChunkBackend, profile ChunkProfile, opts docling.ChunkOptions) *DoclingChunker {
 	if profile.MaxTokens <= 0 {
 		profile = DefaultChunkProfile()
 	}
 	fallback := DefaultChunker()
-	if profile.Name == ChunkProfileStructured {
+	switch profile.Name {
+	case ChunkProfileStructured:
 		fallback = NewHeadingChunker(profile)
+	case ChunkProfileTable:
+		fallback = NewTableChunker(profile)
+	case ChunkProfileQA:
+		fallback = NewQAChunker(profile)
 	}
 	return &DoclingChunker{
 		Client:   client,

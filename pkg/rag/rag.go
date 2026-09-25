@@ -45,6 +45,19 @@ type (
 	// quality, at the cost of one extra embedding call per sentence during
 	// ingest. Falls back to ParagraphChunker behavior if the embedder errors.
 	SemanticChunker = internalrag.SemanticChunker
+
+	// TableChunker keeps GFM/Markdown table rows intact as their own
+	// chunk(s), splitting an oversized table by data row while repeating
+	// the header row on every piece, instead of a generic splitter cutting
+	// through the middle of a table. Falls back to HeadingChunker behavior
+	// for a document with no table.
+	TableChunker = internalrag.TableChunker
+
+	// QAChunker splits a question/answer-formatted document (FAQs, support
+	// docs) into one chunk per Q/A pair, detected either from explicit
+	// "Q:"/"A:" labels or from Markdown headings ending in "?". Falls back
+	// to HeadingChunker behavior for a document with no QA structure.
+	QAChunker = internalrag.QAChunker
 )
 
 const (
@@ -52,6 +65,8 @@ const (
 	ChunkProfileMedium     = internalrag.ChunkProfileMedium
 	ChunkProfileLarge      = internalrag.ChunkProfileLarge
 	ChunkProfileStructured = internalrag.ChunkProfileStructured
+	ChunkProfileTable      = internalrag.ChunkProfileTable
+	ChunkProfileQA         = internalrag.ChunkProfileQA
 	ChunkProfileCustom     = internalrag.ChunkProfileCustom
 )
 
@@ -134,6 +149,18 @@ func ChunkEnrichmentCacheKey(chunkText, enricherKey string) string {
 // default (0.3) - see SemanticChunker's doc for the tradeoff it makes.
 func NewSemanticChunker(embedder Embedder, threshold float32) *SemanticChunker {
 	return internalrag.NewSemanticChunker(embedder, threshold)
+}
+
+// NewTableChunker creates a table-aware chunker using one of Seshat's
+// recommended chunk profiles - see TableChunker's own doc comment.
+func NewTableChunker(profile ChunkProfile) *TableChunker {
+	return internalrag.NewTableChunker(profile)
+}
+
+// NewQAChunker creates a QA-pair-aware chunker using one of Seshat's
+// recommended chunk profiles - see QAChunker's own doc comment.
+func NewQAChunker(profile ChunkProfile) *QAChunker {
+	return internalrag.NewQAChunker(profile)
 }
 
 // ArtifactKey builds the deterministic artifact key for a file within a

@@ -29,7 +29,7 @@ roadmap is about closing that gap.
 | 1.W | Make Phase 1 work on Windows (see "Windows" note in Phase 1) | **Done (2026-09-25)** — validated on a real native Windows 11 machine, not emulation. See log below. |
 | 2 | Chunk-level LLM enrichment (synthetic questions) | **Done (2026-09-25)** — opt-in, cached, bounded-concurrency. See log below. |
 | 3 | Vision-LLM fallback for pages native parsing can't handle | **Done (2026-09-25)** — opt-in, CGO-independent interface, real pdfium render test. See log below. |
-| 4 | Specialized chunkers (QA-formatted docs, table-heavy docs) | Not started |
+| 4 | Specialized chunkers (QA-formatted docs, table-heavy docs) | **Done (2026-09-25)** — TableChunker + QAChunker, wired as new ChunkProfiles. See log below. |
 
 **Phase 1 progress log**:
 - Validated in Docker (`golang:1.26-bookworm`, CGO): `pdf_oxide` opens a PDF,
@@ -668,6 +668,93 @@ chunking *strategies* worth having:
    (`internal/rag/chunker.go`, `chunk_profile.go`) as additional named
    profiles, following the same pattern `HeadingChunker` already
    established for the `"structured"` profile.
+
+**Done. Design decisions and what got built:**
+
+- **"Real table-structure data" ended up meaning GFM/Markdown table syntax
+  in already-produced text, not TSR bounding-box/cell-grid metadata.** The
+  native nativedoc pipeline (Phase 1) never actually wired TSR into
+  `Converter.convertPDF` (only det/rec OCR - see that file's own doc
+  comment: "considerably more... than the deliberately-scoped v1 here"), so
+  there is no structured table metadata flowing through
+  `docling.ConversionResult` from the native path. What genuinely does
+  produce real GFM tables today is docling-serve's own conversion output
+  (well-known for table-structure recognition) - `TableChunker` operates on
+  that already-produced Markdown text, recognizing table block syntax
+  syntactically, the same approach `HeadingChunker` already takes for
+  headings (it doesn't need semantic structure data either, just pattern
+  matching on the text). This is a real, valuable feature today, not
+  blocked on TSR ever getting wired into the native path.
+- **`TableChunker`** (`internal/rag/table_chunker.go`) partitions text into
+  alternating table/non-table spans (a table block = a pipe-delimited row
+  immediately followed by a valid GFM separator row, extended through every
+  further contiguous pipe-delimited row). Non-table spans delegate to
+  `Fallback` (default `HeadingChunker`, so heading context is preserved for
+  the surrounding prose too). An oversized table splits by data row, but
+  the header + separator row is repeated at the top of every resulting
+  piece, so each chunk stays a valid, self-contained table rather than a
+  headerless fragment - the well-known "repeat header on split" practice.
+  A document with no table delegates entirely to `Fallback` - additive,
+  never worse than the fallback's own baseline, the same contract
+  `HeadingChunker` already established.
+- **`QAChunker`** (`internal/rag/qa_chunker.go`) tries two independent
+  detection strategies, in order:
+  1. Explicit `Q:`/`A:` labels (also `Question:`/`Answer:`, numbered
+     `Q1:`/`A1:`, bold-markdown `**Q:**`) - the common plain-text FAQ shape.
+     A preamble before the first label is preserved as its own ordinary
+     chunk, never dropped.
+  2. Markdown headings ending in `?` - the common docling-converted FAQ
+     shape. Reuses `HeadingChunker`'s own `matchHeading`/ancestor-path
+     tracking directly (same package, same unexported helpers), so a
+     nested "Category > Question?" structure keeps its category context.
+     Critically, a heading that does *not* end in `?` still produces an
+     ordinary (non-QA-tagged) section chunk exactly as `HeadingChunker`
+     would - QA tagging is additive on top of `HeadingChunker`'s own
+     traversal, never a narrower view that could silently drop a
+     non-question section. Verified by a dedicated test
+     (`TestQAChunker_HeadingModeNonQuestionSectionNotDropped`).
+  Each detected pair becomes one chunk (split further via
+  `splitBodyByTokenBudget`, reused from `heading_chunker.go`, only if a
+  single pair exceeds the token budget), tagged
+  `Metadata["qa_question"]` for citation/UI display - the same idea as
+  `HeadingChunker`'s `Metadata["heading_path"]`. No QA structure at all
+  delegates entirely to `Fallback` (default `HeadingChunker`), same
+  additive contract.
+  - **Known, documented heuristic limitation**: the label regex also
+    matches a letter-lettered outline bullet ("a. First point") as an
+    answer label. Harmless in isolation (a pair only forms from a complete
+    question-then-answer sequence), but a document mixing real `Q:`/`A:`
+    labels with letter-bulleted sub-lists could occasionally misattribute
+    a bullet - the same class of imprecision `HeadingChunker`'s own
+    `maxHeadingLineRunes` guard already accepts elsewhere in this package,
+    not a new standard being introduced.
+- **New `ChunkProfileTable`/`ChunkProfileQA`** (`chunk_profile.go`), zero
+  `OverlapTokens` for both - deliberate, not an oversight: `TableChunker`'s
+  header-repeat already gives each split piece the context an overlap
+  would otherwise exist to provide, and `QAChunker`'s chunks are already
+  each a complete, self-contained pair with no "next chunk" content an
+  overlap would usefully carry forward.
+- **Wired into `NewDoclingChunkerForProfile`** (`docling_chunker.go`)
+  exactly like `ChunkProfileStructured` → `HeadingChunker` already was -
+  extended from an `if` to a `switch` covering all three profile names.
+  Regression-tested (`TestNewDoclingChunkerForProfile_TableAndQAProfilesGetMatchingFallbacks`)
+  the same way the existing structured-profile test already was.
+- **`pkg/rag`** exposes `TableChunker`/`QAChunker`/`NewTableChunker`/
+  `NewQAChunker`/`ChunkProfileTable`/`ChunkProfileQA`, matching the facade's
+  existing shape - no new subpackage needed here (unlike Phase 2/3's
+  `enricher`/`vision`), since neither chunker calls out to an LLM or any
+  other external collaborator - they're pure text-processing, same as
+  `HeadingChunker`/`ParagraphChunker` already are.
+- **Tests**: 13 new unit tests covering both chunkers' fallback behavior,
+  detection/splitting correctness (small table stays one chunk, large table
+  splits with the header repeated, multiple tables each get their own
+  chunk, all three label variants, preamble preservation, heading-mode
+  question/non-question mixing, nested category ancestor paths), plus
+  `SplitDocument` ignoring original bytes in favor of already-extracted
+  text (matching every other text-only chunker in this package). All pass
+  under `go test -race`.
+- **Verified for real**: `go build`/`go vet`/`golangci-lint`/
+  `go test -race ./...` all pass clean across the full repo.
 
 ---
 
