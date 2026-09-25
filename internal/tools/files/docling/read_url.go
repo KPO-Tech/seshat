@@ -31,18 +31,15 @@ const (
 		"Optionally saves the extracted markdown to a workspace path."
 )
 
-// ReadURLTool fetches a remote document and converts it to markdown via docling-serve.
+// ReadURLTool fetches a remote document and converts it to markdown via a
+// document-conversion backend.
 type ReadURLTool struct {
-	doclingClient *docling.Client
+	doclingClient docling.DocumentConverterBackend
 }
 
 // NewReadURLTool creates a new read_document_url tool.
 func NewReadURLTool(cfg Config) *ReadURLTool {
-	t := &ReadURLTool{}
-	if cfg.DoclingURL != "" {
-		t.doclingClient = docling.NewClient(cfg.DoclingURL)
-	}
-	return t
+	return &ReadURLTool{doclingClient: cfg.converter()}
 }
 
 func (t *ReadURLTool) Definition() tool.Definition {

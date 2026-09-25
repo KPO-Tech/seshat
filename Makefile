@@ -7,7 +7,7 @@ CMD_AUTOMATION := ./cmd/automation
 export PATH := $(CURDIR)/bin:$(PATH)
 
 .PHONY: all build build-cli build-grpc build-slack-bot build-automation build_linux test test-race fmt vet lint tidy \
-        clean clean-runtime clean-all hooks setup install-python start-docling slack-bot
+        clean clean-runtime clean-all hooks setup install-python start-docling slack-bot install-deepdoc-models
 
 # ── Default ────────────────────────────────────────────────────────────────────
 
@@ -127,3 +127,20 @@ install-python:
 
 start-docling:
 	@./scripts/start-docling.sh
+
+# ── pkg/nativedoc (optional, opt-in) ──────────────────────────────────────────
+# Fully native PDF/DOCX/XLSX conversion (including OCR/layout for scanned
+# PDFs) with no external service - not wired in anywhere by default, an
+# embedder opts in via sdk.ClientConfig.DocumentConverter. See
+# pkg/nativedoc's own doc comment and docs/issues/document-intelligence-roadmap.md.
+#
+# install-deepdoc-models fetches the ONNX models. Building anything that
+# imports pkg/nativedoc also needs native libs (pdf_oxide/pdfium/onnxruntime)
+# and the `static` build tag - that's scripts/setup-nativedoc-cgo.sh, which
+# prints shell exports rather than being a Make target (Make can't export
+# into your calling shell):
+#   source <(./scripts/setup-nativedoc-cgo.sh)
+#   go build -tags "static nativedoc" ./your/package/...
+
+install-deepdoc-models:
+	@./scripts/install-deepdoc-models.sh

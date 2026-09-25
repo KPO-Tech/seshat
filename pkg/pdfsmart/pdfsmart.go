@@ -10,21 +10,27 @@ import (
 )
 
 type (
-	PageSource = internalpdfsmart.PageSource
-	PageResult = internalpdfsmart.PageResult
-	Result     = internalpdfsmart.Result
+	PageSource        = internalpdfsmart.PageSource
+	PageResult        = internalpdfsmart.PageResult
+	Result            = internalpdfsmart.Result
+	PageRenderer      = internalpdfsmart.PageRenderer
+	VisionTranscriber = internalpdfsmart.VisionTranscriber
+	VisionFallback    = internalpdfsmart.VisionFallback
 )
 
 const (
 	PageSourceNative  = internalpdfsmart.PageSourceNative
 	PageSourceDocling = internalpdfsmart.PageSourceDocling
+	PageSourceVision  = internalpdfsmart.PageSourceVision
 )
 
 // Convert extracts a PDF's text page by page, sending only the pages that
 // actually need it (an embedded image, or a sparse/garbled native text
-// layer) through doclingClient instead of the whole document. See
-// internal/pdfsmart's package doc for the exact routing rule, and
-// Convert's own doc comment there for the ok=false safety contract.
-func Convert(ctx context.Context, data []byte, doclingClient *docling.Client) (Result, bool, error) {
-	return internalpdfsmart.Convert(ctx, data, doclingClient)
+// layer) through doclingClient instead of the whole document, with an
+// optional vision-LLM fallback (see VisionFallback) for a page that still
+// has no usable text afterward. See internal/pdfsmart's package doc for the
+// exact routing rule, and Convert's own doc comment there for the ok=false
+// safety contract. Pass VisionFallback{} to disable the vision stage.
+func Convert(ctx context.Context, data []byte, doclingClient docling.DocumentConverterBackend, vision VisionFallback) (Result, bool, error) {
+	return internalpdfsmart.Convert(ctx, data, doclingClient, vision)
 }

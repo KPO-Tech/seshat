@@ -89,8 +89,9 @@ func RegisterBuiltinToolsWithConfig(reg *tool.Registry, config *Config) error {
 
 	fileReadConfig := fileReadTool.DefaultToolConfig()
 	fileReadConfig.DoclingURL = config.DoclingURL
+	fileReadConfig.DocumentConverter = config.DocumentConverter
 
-	doclingConfig := doclingTool.Config{DoclingURL: config.DoclingURL}
+	doclingConfig := doclingTool.Config{DoclingURL: config.DoclingURL, DocumentConverter: config.DocumentConverter}
 
 	bashConfig := bashTool.DefaultToolConfig()
 	bashConfig.WorkingDirectory = config.WorkingDir

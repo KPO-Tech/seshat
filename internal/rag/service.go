@@ -25,6 +25,7 @@ type Service struct {
 	chunker      Chunker
 	reranker     Reranker // optional — nil = return vector results as-is
 	rerankWeight float32
+	enricher     Enricher // optional — nil = skip chunk enrichment
 }
 
 func NewService(artifacts storage.ArtifactStore, vectors vector.Store, embedder Embedder, chunker Chunker) *Service {
@@ -47,6 +48,18 @@ func (s *Service) SetReranker(r Reranker) {
 		return
 	}
 	s.reranker = r
+}
+
+// SetEnricher installs a chunk-enrichment step run during Ingest, before
+// embedding: each chunk's synthetic questions (see Enricher's doc comment)
+// are appended to the text that gets embedded, not to the chunk's stored/
+// displayed text. Pass nil (the default) to disable enrichment - it costs
+// one LLM call per chunk, so it is never on by default.
+func (s *Service) SetEnricher(e Enricher) {
+	if s == nil {
+		return
+	}
+	s.enricher = e
 }
 
 // SetRerankWeight overrides the default blend weight (0.7) applied between
@@ -189,13 +202,40 @@ func (s *Service) Ingest(ctx context.Context, request IngestRequest) (IngestResu
 	if len(chunks) == 0 {
 		return IngestResult{Artifact: artifact}, nil
 	}
+	// Chunk enrichment (synthetic questions) runs before embedding, if
+	// configured: the questions get folded into the text that is embedded,
+	// so retrieval benefits from them, but never into chunk.Text itself -
+	// records store and return the original, unenriched text (see
+	// buildEmbeddingText).
+	var embedTexts []string
+	if s.enricher != nil {
+		plain := make([]string, len(chunks))
+		for i, chunk := range chunks {
+			plain[i] = chunk.Text
+		}
+		questionSets, err := s.enricher.EnrichChunks(ctx, plain)
+		if err != nil {
+			return IngestResult{}, fmt.Errorf("enricher: %w", err)
+		}
+		if len(questionSets) != len(chunks) {
+			return IngestResult{}, fmt.Errorf("enricher returned %d results for %d chunks", len(questionSets), len(chunks))
+		}
+		embedTexts = make([]string, len(chunks))
+		for i, chunk := range chunks {
+			embedTexts[i] = buildEmbeddingText(chunk.Text, questionSets[i])
+		}
+	}
+
 	// vectorsOut stays nil when there's no embedder configured - records get
 	// stored without a vector (vectorless/BM25-only), see vector.Record.Vector.
 	var vectorsOut [][]float32
 	if s.embedder != nil {
-		texts := make([]string, 0, len(chunks))
-		for _, chunk := range chunks {
-			texts = append(texts, chunk.Text)
+		texts := embedTexts
+		if texts == nil {
+			texts = make([]string, 0, len(chunks))
+			for _, chunk := range chunks {
+				texts = append(texts, chunk.Text)
+			}
 		}
 		vectorsOut, err = s.embedder.EmbedTexts(ctx, texts)
 		if err != nil {
@@ -274,6 +314,24 @@ func (s *Service) splitChunks(ctx context.Context, request IngestRequest) ([]Chu
 		})
 	}
 	return s.chunker.Split(ctx, request.Text)
+}
+
+// buildEmbeddingText appends a chunk's synthetic questions to its text for
+// embedding purposes only - the returned string is never stored or returned
+// to search callers, see the vector.Record built from chunk.Text in Ingest.
+func buildEmbeddingText(chunkText string, questions []string) string {
+	if len(questions) == 0 {
+		return chunkText
+	}
+	var sb strings.Builder
+	sb.WriteString(chunkText)
+	sb.WriteString("\n\nQuestions this passage answers:\n")
+	for _, q := range questions {
+		sb.WriteString("- ")
+		sb.WriteString(q)
+		sb.WriteString("\n")
+	}
+	return strings.TrimRight(sb.String(), "\n")
 }
 
 func (s *Service) Search(ctx context.Context, request SearchRequest) (SearchResponse, error) {

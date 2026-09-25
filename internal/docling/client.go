@@ -182,6 +182,41 @@ type ConversionResult struct {
 	PageCount int
 }
 
+// HealthChecker reports whether a document-intelligence backend is reachable.
+// Embedded by both interfaces below rather than duplicated on each.
+type HealthChecker interface {
+	IsAvailable(ctx context.Context) bool
+}
+
+// DocumentConverterBackend is anything that can convert documents to
+// markdown. *Client (this package) is the default implementation, backed by
+// docling-serve - every consumer in internal/tools and internal/pdfsmart
+// depends on this interface rather than *Client directly, so a host
+// application can supply its own implementation (e.g. one backed by a
+// different service) via pkg/sdk.ClientConfig.DocumentConverter instead of
+// being forced onto docling-serve's wire format.
+type DocumentConverterBackend interface {
+	HealthChecker
+	ConvertFile(ctx context.Context, filePath string) (*ConversionResult, error)
+	ConvertBytes(ctx context.Context, data []byte, filename string) (*ConversionResult, error)
+	ConvertURL(ctx context.Context, docURL string) (*ConversionResult, error)
+}
+
+// HybridChunkBackend is anything that can produce document-aware hybrid
+// chunks. *Client (this package) is the default implementation, backed by
+// docling-serve's hybrid chunk endpoint - internal/rag.DoclingChunker
+// depends on this interface rather than *Client directly, so a caller
+// assembling its own rag.Service can supply a different backend.
+type HybridChunkBackend interface {
+	HealthChecker
+	ChunkHybridBytes(ctx context.Context, data []byte, filename string, opts ChunkOptions) ([]Chunk, error)
+}
+
+var (
+	_ DocumentConverterBackend = (*Client)(nil)
+	_ HybridChunkBackend       = (*Client)(nil)
+)
+
 // ConvertOptions tunes docling-serve conversion. Zero values keep server
 // defaults, which is the safest behavior across docling-serve versions.
 type ConvertOptions struct {
