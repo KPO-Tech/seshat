@@ -257,7 +257,6 @@ Rules:
 // onSessionTitled callback with the result.
 func (e *Engine) generateTitleAsync(sessionID types.SessionID, firstUserMsg string) {
 	if e.apiClient == nil || e.onSessionTitled == nil {
-		fmt.Fprintf(os.Stderr, "[engine] session %s title generation not wired: api_client_nil=%v on_session_titled_nil=%v\n", sessionID, e.apiClient == nil, e.onSessionTitled == nil)
 		return
 	}
 	const maxInputRunes = 500
@@ -277,15 +276,7 @@ func (e *Engine) generateTitleAsync(sessionID types.SessionID, firstUserMsg stri
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 	resp, err := e.apiClient.CreateMessage(ctx, req)
-	if err != nil {
-		// Silent otherwise (a session just keeps its default title, no user-
-		// facing failure) - but that previously meant a broken title call left
-		// zero trace anywhere, unlike the auto-mode classifier's own logged
-		// errors on the exact same CreateMessage path.
-		fmt.Fprintf(os.Stderr, "[engine] session %s title generation failed: %v\n", sessionID, err)
-		return
-	}
-	if resp == nil {
+	if err != nil || resp == nil {
 		return
 	}
 	// Extract the text from the first content block.
@@ -299,6 +290,5 @@ func (e *Engine) generateTitleAsync(sessionID types.SessionID, firstUserMsg stri
 	if title == "" {
 		return
 	}
-	fmt.Fprintf(os.Stderr, "[engine] session %s title generated: %q\n", sessionID, title)
 	e.onSessionTitled(sessionID, title)
 }
