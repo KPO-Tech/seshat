@@ -9,17 +9,17 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/KPO-Tech/seshat/internal/docling"
+	"github.com/KPO-Tech/seshat/internal/documentreader"
 )
 
-// A real docling-serve instance set up with the plain `docling-serve` package
+// A real the configured document reader instance set up with the plain `the configured document reader` package
 // (no DOCLING_EXTRAS=asr) fails WAV/MP3 conversion internally - openai-whisper
 // isn't installed - and surfaces it as an opaque "404 task result not found"
 // rather than mentioning whisper at all. This is reproduced here by having a
 // fake server return a 404 for /v1/convert/file, and asserts the tool's error
 // message adds the actionable DOCLING_EXTRAS=asr hint for audio formats
 // specifically, rather than leaving the agent with only the opaque upstream text.
-func TestReadDoclingFile_AudioConversionFailureHintsASRExtra(t *testing.T) {
+func TestReadDocumentReaderFile_AudioConversionFailureHintsASRExtra(t *testing.T) {
 	t.Parallel()
 
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -36,8 +36,8 @@ func TestReadDoclingFile_AudioConversionFailureHintsASRExtra(t *testing.T) {
 	defer server.Close()
 
 	tool := &Tool{
-		config:        DefaultToolConfig(),
-		doclingClient: docling.NewClient(server.URL),
+		config:         DefaultToolConfig(),
+		documentReader: documentreader.NewDoclingClient(server.URL),
 	}
 
 	dir := t.TempDir()
@@ -50,9 +50,9 @@ func TestReadDoclingFile_AudioConversionFailureHintsASRExtra(t *testing.T) {
 		t.Fatalf("stat fixture: %v", err)
 	}
 
-	result, err := tool.readDoclingFile(context.Background(), path, info)
+	result, err := tool.readDocumentReaderFile(context.Background(), path, info)
 	if err != nil {
-		t.Fatalf("readDoclingFile: %v", err)
+		t.Fatalf("readDocumentReaderFile: %v", err)
 	}
 	if result.Error == nil {
 		t.Fatalf("expected an error result for a failed audio conversion, got: %+v", result)

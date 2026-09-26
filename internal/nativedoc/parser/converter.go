@@ -11,7 +11,7 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/KPO-Tech/seshat/internal/docling"
+	"github.com/KPO-Tech/seshat/internal/documentreader"
 	"github.com/KPO-Tech/seshat/internal/nativedoc"
 )
 
@@ -28,7 +28,7 @@ const defaultRenderDPI = 150
 // correctness requirement for a first working version.
 const defaultMinCharsPerPage = 40
 
-// Converter implements docling.DocumentConverterBackend using only native
+// Converter implements documentreader.Converter using only native
 // Go components - no docling-serve, no seshat-intelligence. It dispatches
 // by file extension: .pdf goes through pdf_oxide/pdfium/OCR (see pdf.go,
 // CGO required for the OCR fallback path); .docx and .xlsx delegate to
@@ -75,7 +75,7 @@ func (c *Converter) IsAvailable(_ context.Context) bool {
 	return nativedoc.Initialized()
 }
 
-func (c *Converter) ConvertFile(ctx context.Context, filePath string) (*docling.ConversionResult, error) {
+func (c *Converter) ConvertFile(ctx context.Context, filePath string) (*documentreader.ConversionResult, error) {
 	data, err := os.ReadFile(filePath)
 	if err != nil {
 		return nil, fmt.Errorf("nativedoc/parser: read %s: %w", filePath, err)
@@ -85,7 +85,7 @@ func (c *Converter) ConvertFile(ctx context.Context, filePath string) (*docling.
 
 // ConvertURL fetches the document itself - unlike docling-serve, which
 // fetches server-side, there's no separate service here to delegate to.
-func (c *Converter) ConvertURL(ctx context.Context, docURL string) (*docling.ConversionResult, error) {
+func (c *Converter) ConvertURL(ctx context.Context, docURL string) (*documentreader.ConversionResult, error) {
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, docURL, nil)
 	if err != nil {
 		return nil, fmt.Errorf("nativedoc/parser: build request for %s: %w", docURL, err)
@@ -105,7 +105,7 @@ func (c *Converter) ConvertURL(ctx context.Context, docURL string) (*docling.Con
 	return c.ConvertBytes(ctx, data, docURL)
 }
 
-func (c *Converter) ConvertBytes(ctx context.Context, data []byte, filename string) (*docling.ConversionResult, error) {
+func (c *Converter) ConvertBytes(ctx context.Context, data []byte, filename string) (*documentreader.ConversionResult, error) {
 	switch strings.ToLower(filepath.Ext(filename)) {
 	case ".pdf":
 		return c.convertPDF(ctx, data, filename)
@@ -118,4 +118,4 @@ func (c *Converter) ConvertBytes(ctx context.Context, data []byte, filename stri
 	}
 }
 
-var _ docling.DocumentConverterBackend = (*Converter)(nil)
+var _ documentreader.Converter = (*Converter)(nil)

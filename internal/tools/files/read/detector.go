@@ -20,11 +20,11 @@ const (
 	FileTypeNotebook     FileType = "notebook"
 	FileTypeUnchanged    FileType = "file_unchanged"
 	FileTypeBinary       FileType = "binary"
-	// FileTypeDocling represents formats converted via docling-serve (DOCX, PPTX, XLSX, audio).
-	FileTypeDocling FileType = "docling"
+	// FileTypeDocumentReader represents formats converted via the configured document reader (DOCX, PPTX, XLSX, audio).
+	FileTypeDocumentReader FileType = "document_reader"
 )
 
-// DoclingExtensions lists binary formats that require docling-serve for extraction.
+// DoclingExtensions lists binary formats that require the configured document reader for extraction.
 // PDF has its own dedicated path (FileTypePDF); images go through the multimodal path.
 // Text-based formats (.tex, .html) remain in TextExtensions and are read directly.
 var DoclingExtensions = map[string]bool{
@@ -117,9 +117,9 @@ func DetectFileType(filePath string) (FileType, error) {
 		return FileTypeText, nil
 	}
 
-	// Docling-convertible binary formats (DOCX, PPTX, XLSX, audio)
+	// DocumentReader-convertible binary formats (DOCX, PPTX, XLSX, audio)
 	if DoclingExtensions[ext] {
-		return FileTypeDocling, nil
+		return FileTypeDocumentReader, nil
 	}
 
 	// Read first bytes to detect binary

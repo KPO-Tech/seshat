@@ -1,15 +1,15 @@
-package docling
+package documentreader
 
 import (
 	"context"
 	"strings"
 	"testing"
 
-	"github.com/KPO-Tech/seshat/internal/docling"
+	"github.com/KPO-Tech/seshat/internal/documentreader"
 	tool "github.com/KPO-Tech/seshat/internal/tools/registry"
 )
 
-func TestReadURLTool_Call_ReportsNotConfiguredWithoutDoclingURL(t *testing.T) {
+func TestReadURLTool_Call_ReportsNotConfiguredWithoutDocumentReader(t *testing.T) {
 	tl := NewReadURLTool(Config{})
 	result, err := tl.Call(context.Background(), tool.CallInput{
 		Parsed: map[string]any{"url": "https://example.com/paper.pdf"},
@@ -20,8 +20,8 @@ func TestReadURLTool_Call_ReportsNotConfiguredWithoutDoclingURL(t *testing.T) {
 	if result.Error != nil {
 		t.Fatalf("Call returned an error result: %v", result.Error)
 	}
-	if !strings.Contains(result.Content, "requires docling-serve") {
-		t.Errorf("expected a 'requires docling-serve' message, got:\n%s", result.Content)
+	if !strings.Contains(result.Content, "requires a configured document reader") {
+		t.Errorf("expected a 'requires a configured document reader' message, got:\n%s", result.Content)
 	}
 }
 
@@ -67,10 +67,10 @@ func TestReadURLTool_ValidateInput(t *testing.T) {
 }
 
 func TestFormatURLResult(t *testing.T) {
-	out := formatURLResult("https://example.com/paper.pdf", &docling.ConversionResult{
+	out := formatURLResult("https://example.com/paper.pdf", &documentreader.ConversionResult{
 		Markdown:  "# Paper\n\nAbstract here.",
 		PageCount: 8,
-		Images: []docling.ExtractedImage{
+		Images: []documentreader.ExtractedImage{
 			{Filename: "image_0001.png", MimeType: "image/png", Base64: "iVBORw0KGgo"},
 		},
 	}, "/tmp/paper.md")

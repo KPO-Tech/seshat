@@ -20,7 +20,7 @@ Seshat's RAG pipeline:
 
 ## Document ingestion
 
-Seshat uses [docling-serve](https://github.com/DS4SD/docling) (a local Python process managed by `seshat setup`) to convert documents before indexing:
+Seshat can convert rich documents before indexing through a configured document reader. The local/native readers are preferred when available; an HTTP document-reader service can be supplied through `document_reader_url` for OCR-heavy or layout-heavy formats:
 
 | Format | Support |
 |---|---|
@@ -45,14 +45,14 @@ seshat rag list
 
 The core RAG service can now accept both extracted text and the original document bytes through `rag.IngestRequest.Data`. Plain text chunkers continue to split `IngestRequest.Text` as before. Chunkers that implement `rag.DocumentChunker` can use the original bytes to preserve document structure.
 
-`rag.NewDoclingChunker` provides the first document-aware chunker. It calls docling-serve's hybrid chunk endpoint and maps Docling metadata onto Seshat chunk metadata:
+`rag.NewHybridDocumentChunker` provides a document-aware chunker. It calls the configured document reader's hybrid chunk path and maps returned structure onto neutral Seshat chunk metadata:
 
 - headings;
 - captions;
 - page numbers;
-- Docling document item references;
+- document item references;
 - raw text when it differs from contextualized chunk text;
-- token count when Docling returns it.
+- token count when the backend returns it.
 
 This path is intended for rich Knowledge ingestion, especially PDF, DOCX, PPTX, XLSX, and other structured enterprise documents. The existing paragraph and semantic chunkers remain useful fallbacks for local/simple text ingestion.
 

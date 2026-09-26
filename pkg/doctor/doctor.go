@@ -225,23 +225,23 @@ func checkCommand(add func(string, string, Status, string, string), section, nam
 }
 
 func checkDocling(add func(string, string, Status, string, string), cfg config.Config) {
-	if strings.TrimSpace(cfg.DoclingURL) != "" {
-		add("tools", "docling", StatusOK, "external URL configured: "+cfg.DoclingURL, "")
+	if strings.TrimSpace(cfg.DocumentReaderURL) != "" {
+		add("tools", "document_reader", StatusOK, "external URL configured: "+cfg.DocumentReaderURL, "")
 		return
 	}
 	root := config.EffectiveRuntimeRoot(cfg)
 	candidates := []string{
-		filepath.Join(root, ".venv", "bin", "docling-serve"),
-		filepath.Join(root, ".venv", "Scripts", "docling-serve.exe"),
-		filepath.Join(root, ".venv", "Scripts", "docling-serve"),
+		filepath.Join(root, ".venv", "bin", "document reader service"),
+		filepath.Join(root, ".venv", "Scripts", "document reader service.exe"),
+		filepath.Join(root, ".venv", "Scripts", "document reader service"),
 	}
 	for _, candidate := range candidates {
 		if _, err := os.Stat(candidate); err == nil {
-			add("tools", "docling", StatusOK, candidate, "")
+			add("tools", "document_reader", StatusOK, candidate, "")
 			return
 		}
 	}
-	add("tools", "docling", StatusWarn, "not installed in Seshat runtime venv", "Run `seshat setup` if you need PDF/DOCX/PPTX conversion.")
+	add("tools", "document_reader", StatusWarn, "not installed in Seshat runtime venv", "Run `seshat setup` if you need PDF/DOCX/PPTX conversion.")
 }
 
 func resolveModel(cfg config.Config) sdk.ModelIdentifier {

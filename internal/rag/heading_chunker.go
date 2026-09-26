@@ -35,7 +35,7 @@ type HeadingChunker struct {
 
 // NewHeadingChunker creates a heading-aware chunker using one of Seshat's
 // recommended chunk profiles (same defaulting guard as
-// NewDoclingChunkerForProfile).
+// NewHybridDocumentChunkerForProfile).
 func NewHeadingChunker(profile ChunkProfile) *HeadingChunker {
 	if profile.MaxTokens <= 0 {
 		profile = DefaultChunkProfile()

@@ -127,7 +127,7 @@ func setupInstall(stdout, stderr io.Writer, root, venv, pythonVer, extras string
 	fmt.Fprintf(stdout, "  Venv:         %s\n", venv)
 	fmt.Fprintf(stdout, "  Docling:      %s\n", doclingBin)
 	fmt.Fprintln(stdout, "")
-	fmt.Fprintln(stdout, "  seshat auto-starts docling on launch when the venv is present.")
+	fmt.Fprintln(stdout, "  TUI auto-start is explicit: set DOCUMENT_READER_URL=docling:auto.")
 	fmt.Fprintln(stdout, "  Run: seshat chat")
 	fmt.Fprintln(stdout, "")
 	return nil

@@ -6,7 +6,7 @@ import (
 	"context"
 	"errors"
 
-	"github.com/KPO-Tech/seshat/pkg/docling"
+	"github.com/KPO-Tech/seshat/pkg/documentreader"
 	"github.com/KPO-Tech/seshat/pkg/pdfsmart"
 )
 
@@ -41,17 +41,17 @@ func (c *Converter) IsAvailable(context.Context) bool {
 }
 
 // ConvertFile returns ErrUnavailable in non-nativedoc builds.
-func (c *Converter) ConvertFile(context.Context, string) (*docling.ConversionResult, error) {
+func (c *Converter) ConvertFile(context.Context, string) (*documentreader.ConversionResult, error) {
 	return nil, ErrUnavailable
 }
 
 // ConvertBytes returns ErrUnavailable in non-nativedoc builds.
-func (c *Converter) ConvertBytes(context.Context, []byte, string) (*docling.ConversionResult, error) {
+func (c *Converter) ConvertBytes(context.Context, []byte, string) (*documentreader.ConversionResult, error) {
 	return nil, ErrUnavailable
 }
 
 // ConvertURL returns ErrUnavailable in non-nativedoc builds.
-func (c *Converter) ConvertURL(context.Context, string) (*docling.ConversionResult, error) {
+func (c *Converter) ConvertURL(context.Context, string) (*documentreader.ConversionResult, error) {
 	return nil, ErrUnavailable
 }
 
@@ -60,5 +60,5 @@ func (c *Converter) RenderPage(context.Context, []byte, int) ([]byte, error) {
 	return nil, ErrUnavailable
 }
 
-var _ docling.DocumentConverterBackend = (*Converter)(nil)
+var _ documentreader.Converter = (*Converter)(nil)
 var _ pdfsmart.PageRenderer = (*Converter)(nil)

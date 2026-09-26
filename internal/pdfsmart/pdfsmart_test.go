@@ -10,14 +10,14 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/KPO-Tech/seshat/internal/docling"
+	"github.com/KPO-Tech/seshat/internal/documentreader"
 )
 
 // Fixtures are copied from internal/pdftext's own testdata (already
 // validated there): text_layer.pdf is a real multi-element text-layer PDF
 // with no embedded images; scanned.pdf is a real pdfcpu-built PDF whose
 // single page is nothing but an embedded screenshot image - exactly the
-// "has an embedded image XObject" case this package routes to docling.
+// "has an embedded image XObject" case this package routes to documentreader.
 func readTestdata(t *testing.T, name string) []byte {
 	t.Helper()
 	data, err := os.ReadFile(filepath.Join("..", "pdftext", "testdata", name))
@@ -78,7 +78,7 @@ func TestConvert_ImagePDFUsesDoclingWhenAvailable(t *testing.T) {
 	}))
 	defer server.Close()
 
-	client := docling.NewClient(server.URL)
+	client := documentreader.NewDoclingClient(server.URL)
 	result, ok, err := Convert(context.Background(), readTestdata(t, "scanned.pdf"), client, VisionFallback{})
 	if err != nil {
 		t.Fatalf("Convert: %v", err)
@@ -109,7 +109,7 @@ func TestConvert_GarbledDoclingOutputForAnImagePageFailsCleanly(t *testing.T) {
 	}))
 	defer server.Close()
 
-	client := docling.NewClient(server.URL)
+	client := documentreader.NewDoclingClient(server.URL)
 	_, ok, err := Convert(context.Background(), readTestdata(t, "scanned.pdf"), client, VisionFallback{})
 	if err != nil {
 		t.Fatalf("Convert: %v", err)
@@ -191,7 +191,7 @@ func TestConvert_VisionFallbackTriedAfterDoclingFails(t *testing.T) {
 	}))
 	defer server.Close()
 
-	client := docling.NewClient(server.URL)
+	client := documentreader.NewDoclingClient(server.URL)
 	vision := VisionFallback{
 		Renderer:    fakeRenderer{},
 		Transcriber: fakeTranscriber{available: true, transcribed: "recovered via vision"},

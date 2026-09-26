@@ -34,15 +34,15 @@ func runSeshatTUI(ctx context.Context, options runtimeOptions, initialSessionID 
 		return err
 	}
 
-	// Auto-start docling-serve when no URL is configured and the managed venv
-	// has docling-serve installed. Starts non-blocking; the tool falls back to
-	// "not configured" during the few seconds it takes to warm up.
-	var doclingManager *python.DoclingManager
-	if options.DoclingURL == "" || strings.EqualFold(options.DoclingURL, "auto") {
+	// Docling serve is an explicit developer choice, not the default document
+	// reader. Keep the old managed process available only behind an explicit
+	// adapter selector.
+	var documentReaderManager *python.DoclingManager
+	if strings.EqualFold(options.DocumentReaderURL, "docling:auto") {
 		if mgr := python.DefaultDoclingManager(); mgr != nil {
 			if err := mgr.Start(ctx); err == nil {
-				doclingManager = mgr
-				options.DoclingURL = mgr.BaseURL()
+				documentReaderManager = mgr
+				options.DocumentReaderURL = mgr.BaseURL()
 			}
 		}
 	}
@@ -104,8 +104,8 @@ func runSeshatTUI(ctx context.Context, options runtimeOptions, initialSessionID 
 	_, runErr := p.Run()
 
 	ws.Shutdown()
-	if doclingManager != nil {
-		doclingManager.Stop()
+	if documentReaderManager != nil {
+		documentReaderManager.Stop()
 	}
 	return runErr
 }
