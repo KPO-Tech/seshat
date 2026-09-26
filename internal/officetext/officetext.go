@@ -65,5 +65,5 @@ func emptyAsErr(md string, err error) error {
 
 // ErrEmpty is returned by format extractors when the document parsed
 // successfully but yielded no extractable text (e.g. an image-only slide
-// deck) - callers can use this to decide whether to still try docling.
+// deck) - callers can use this to decide whether to still try documentreader.
 var ErrEmpty = fmt.Errorf("no extractable text found")

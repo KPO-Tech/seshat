@@ -1,4 +1,4 @@
-package docling
+package documentreader
 
 import (
 	"context"
@@ -12,14 +12,14 @@ import (
 )
 
 func TestNewClient_DefaultsTo120SecondTimeout(t *testing.T) {
-	c := NewClient("http://localhost:5001")
+	c := NewDoclingClient("http://localhost:5001")
 	if c.httpClient.Timeout != 120*time.Second {
 		t.Fatalf("expected default timeout of 120s, got %v", c.httpClient.Timeout)
 	}
 }
 
 func TestNewClient_WithTimeoutOverridesTheDefault(t *testing.T) {
-	c := NewClient("http://localhost:5001", WithTimeout(10*time.Minute))
+	c := NewDoclingClient("http://localhost:5001", WithTimeout(10*time.Minute))
 	if c.httpClient.Timeout != 10*time.Minute {
 		t.Fatalf("expected WithTimeout to override the default, got %v", c.httpClient.Timeout)
 	}
@@ -40,7 +40,7 @@ func TestNewClient_WithAuthTenantAndUserAgentHeaders(t *testing.T) {
 	}))
 	defer server.Close()
 
-	c := NewClient(server.URL, WithAPIKey("sk-test"), WithTenantID("tenant-1"), WithUserAgent("seshat-test"))
+	c := NewDoclingClient(server.URL, WithAPIKey("sk-test"), WithTenantID("tenant-1"), WithUserAgent("seshat-test"))
 	if !c.IsAvailable(context.Background()) {
 		t.Fatal("expected client to be available")
 	}
@@ -65,7 +65,7 @@ func TestConvertBytes_WithTimeoutAllowsASlowResponseToSucceed(t *testing.T) {
 	}))
 	defer server.Close()
 
-	c := NewClient(server.URL, WithTimeout(200*time.Millisecond))
+	c := NewDoclingClient(server.URL, WithTimeout(200*time.Millisecond))
 	result, err := c.ConvertBytes(context.Background(), []byte("dummy pdf bytes"), "report.pdf")
 	if err != nil {
 		t.Fatalf("ConvertBytes: %v", err)
@@ -125,7 +125,7 @@ func TestConvertBytesWithOptions_SendsMultipartOptions(t *testing.T) {
 	}))
 	defer server.Close()
 
-	result, err := NewClient(server.URL).ConvertBytesWithOptions(
+	result, err := NewDoclingClient(server.URL).ConvertBytesWithOptions(
 		context.Background(),
 		[]byte("pdf"),
 		"report.pdf",
@@ -183,7 +183,7 @@ func TestChunkHybrid_SendsConvertAndChunkOptions(t *testing.T) {
 	}))
 	defer server.Close()
 
-	chunks, err := NewClient(server.URL).ChunkHybridBytes(context.Background(), []byte("pdf"), "report.pdf", ChunkOptions{
+	chunks, err := NewDoclingClient(server.URL).ChunkHybridBytes(context.Background(), []byte("pdf"), "report.pdf", ChunkOptions{
 		MaxTokens:      512,
 		Tokenizer:      "sentence-transformers/all-MiniLM-L6-v2",
 		MergePeers:     &mergePeers,
@@ -205,7 +205,7 @@ func TestConvertBytes_ReturnsAPIErrorForNon2xx(t *testing.T) {
 	}))
 	defer server.Close()
 
-	_, err := NewClient(server.URL).ConvertBytes(context.Background(), []byte("pdf"), "report.pdf")
+	_, err := NewDoclingClient(server.URL).ConvertBytes(context.Background(), []byte("pdf"), "report.pdf")
 	if err == nil {
 		t.Fatal("expected error")
 	}
@@ -234,7 +234,7 @@ func TestConvertBytesWithOptions_RetriesTransientFailures(t *testing.T) {
 	}))
 	defer server.Close()
 
-	result, err := NewClient(server.URL, WithRetry(2, time.Millisecond, time.Millisecond)).
+	result, err := NewDoclingClient(server.URL, WithRetry(2, time.Millisecond, time.Millisecond)).
 		ConvertBytes(context.Background(), []byte("pdf"), "report.pdf")
 	if err != nil {
 		t.Fatalf("ConvertBytes: %v", err)
@@ -256,7 +256,7 @@ func TestConvertBytesWithOptions_DoesNotRetryClientErrors(t *testing.T) {
 	}))
 	defer server.Close()
 
-	_, err := NewClient(server.URL, WithRetry(3, time.Millisecond, time.Millisecond)).
+	_, err := NewDoclingClient(server.URL, WithRetry(3, time.Millisecond, time.Millisecond)).
 		ConvertBytes(context.Background(), []byte("pdf"), "report.pdf")
 	if err == nil {
 		t.Fatal("expected error")
@@ -274,7 +274,7 @@ func TestIsAvailable_UsesHealthCache(t *testing.T) {
 	}))
 	defer server.Close()
 
-	c := NewClient(server.URL, WithHealthCacheTTL(time.Minute))
+	c := NewDoclingClient(server.URL, WithHealthCacheTTL(time.Minute))
 	if !c.IsAvailable(context.Background()) {
 		t.Fatal("first IsAvailable should be true")
 	}
@@ -294,7 +294,7 @@ func TestIsAvailable_CacheCanBeDisabled(t *testing.T) {
 	}))
 	defer server.Close()
 
-	c := NewClient(server.URL, WithHealthCacheTTL(0))
+	c := NewDoclingClient(server.URL, WithHealthCacheTTL(0))
 	_ = c.IsAvailable(context.Background())
 	_ = c.IsAvailable(context.Background())
 	if calls != 2 {

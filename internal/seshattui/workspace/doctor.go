@@ -17,7 +17,7 @@ func (w *SeshatWorkspace) DoctorReport(ctx context.Context) doctor.Report {
 	engineCfg.RuntimeRoot = runtimepath.ResolveRoot("")
 	engineCfg.Cwd = w.WorkingDir()
 	engineCfg.SessionDBPath = w.sqlitePath
-	engineCfg.DoclingURL = os.Getenv("DOCLING_URL")
+	engineCfg.DocumentReaderURL = os.Getenv("DOCUMENT_READER_URL")
 
 	if cfg != nil {
 		if selected, ok := cfg.Models[tuiconfig.SelectedModelTypeLarge]; ok {

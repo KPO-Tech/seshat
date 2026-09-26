@@ -7,39 +7,39 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/KPO-Tech/seshat/internal/docling"
+	"github.com/KPO-Tech/seshat/internal/documentreader"
 )
 
-// DoclingChunker chunks rich documents with a document-aware hybrid chunker
-// (docling-serve by default - see docling.HybridChunkBackend for why Client
-// is an interface, not the concrete *docling.Client). It falls back to a
+// HybridDocumentChunker chunks rich documents with a document-aware hybrid
+// chunker. The backend can be local, docling-serve, seshat-intelligence, or
+// any other document reader implementing documentreader.HybridChunker. It falls back to a
 // plain text chunker unless FailOnError is set.
-type DoclingChunker struct {
-	Client      docling.HybridChunkBackend
-	Options     docling.ChunkOptions
+type HybridDocumentChunker struct {
+	Client      documentreader.HybridChunker
+	Options     documentreader.ChunkOptions
 	Profile     ChunkProfile
 	Fallback    Chunker
 	FailOnError bool
 }
 
-// NewDoclingChunker creates a document-aware chunker backed by the given
-// HybridChunkBackend (docling-serve's *docling.Client by default).
-func NewDoclingChunker(client docling.HybridChunkBackend, opts docling.ChunkOptions) *DoclingChunker {
-	return &DoclingChunker{
+// NewHybridDocumentChunker creates a document-aware chunker backed by the given
+// document reader.
+func NewHybridDocumentChunker(client documentreader.HybridChunker, opts documentreader.ChunkOptions) *HybridDocumentChunker {
+	return &HybridDocumentChunker{
 		Client:   client,
 		Options:  opts,
 		Fallback: DefaultChunker(),
 	}
 }
 
-// NewDoclingChunkerForProfile creates a document-aware chunker using one of
+// NewHybridDocumentChunkerForProfile creates a document-aware chunker using one of
 // Seshat's recommended chunking profiles. When the backend is unavailable
 // or fails, the fallback depends on the profile: "structured" falls back to
 // HeadingChunker (heading/numbering-hierarchy aware), "table" to
 // TableChunker (keeps table rows intact), "qa" to QAChunker (one chunk per
 // detected Q/A pair) - every other profile keeps the plain fallback
 // unchanged.
-func NewDoclingChunkerForProfile(client docling.HybridChunkBackend, profile ChunkProfile, opts docling.ChunkOptions) *DoclingChunker {
+func NewHybridDocumentChunkerForProfile(client documentreader.HybridChunker, profile ChunkProfile, opts documentreader.ChunkOptions) *HybridDocumentChunker {
 	if profile.MaxTokens <= 0 {
 		profile = DefaultChunkProfile()
 	}
@@ -52,41 +52,41 @@ func NewDoclingChunkerForProfile(client docling.HybridChunkBackend, profile Chun
 	case ChunkProfileQA:
 		fallback = NewQAChunker(profile)
 	}
-	return &DoclingChunker{
+	return &HybridDocumentChunker{
 		Client:   client,
-		Options:  DoclingChunkOptionsForProfile(profile, opts),
+		Options:  DocumentReaderChunkOptionsForProfile(profile, opts),
 		Profile:  profile,
 		Fallback: fallback,
 	}
 }
 
-func (c *DoclingChunker) Split(ctx context.Context, text string) ([]Chunk, error) {
+func (c *HybridDocumentChunker) Split(ctx context.Context, text string) ([]Chunk, error) {
 	return c.fallback().Split(ctx, text)
 }
 
-func (c *DoclingChunker) ChunkCacheKey() string {
+func (c *HybridDocumentChunker) ChunkCacheKey() string {
 	if c == nil {
-		return "docling-hybrid:v1:nil"
+		return "document-hybrid:v1:nil"
 	}
 	data, err := json.Marshal(struct {
-		Options docling.ChunkOptions `json:"options"`
-		Profile ChunkProfile         `json:"profile,omitempty"`
+		Options documentreader.ChunkOptions `json:"options"`
+		Profile ChunkProfile                `json:"profile,omitempty"`
 	}{
 		Options: c.Options,
 		Profile: c.Profile,
 	})
 	if err != nil {
-		return "docling-hybrid:v1"
+		return "document-hybrid:v1"
 	}
-	return "docling-hybrid:v1:" + string(data)
+	return "document-hybrid:v1:" + string(data)
 }
 
-func (c *DoclingChunker) SplitDocument(ctx context.Context, doc Document) ([]Chunk, error) {
+func (c *HybridDocumentChunker) SplitDocument(ctx context.Context, doc Document) ([]Chunk, error) {
 	if c == nil || c.Client == nil || len(doc.Data) == 0 {
 		return c.fallback().Split(ctx, doc.Text)
 	}
 	if !c.Client.IsAvailable(ctx) {
-		return c.handleError(ctx, doc.Text, fmt.Errorf("docling-serve is unavailable"))
+		return c.handleError(ctx, doc.Text, fmt.Errorf("document reader is unavailable"))
 	}
 	chunks, err := c.Client.ChunkHybridBytes(ctx, doc.Data, doc.Filename, c.Options)
 	if err != nil {
@@ -108,33 +108,33 @@ func (c *DoclingChunker) SplitDocument(ctx context.Context, doc Document) ([]Chu
 		out = append(out, Chunk{
 			Text:     text,
 			Position: position,
-			Metadata: c.doclingChunkMetadata(chunk),
+			Metadata: c.documentChunkMetadata(chunk),
 		})
 	}
 	if len(out) == 0 {
-		return c.handleError(ctx, doc.Text, fmt.Errorf("docling returned no usable chunks"))
+		return c.handleError(ctx, doc.Text, fmt.Errorf("document reader returned no usable chunks"))
 	}
 	return out, nil
 }
 
-func (c *DoclingChunker) handleError(ctx context.Context, text string, err error) ([]Chunk, error) {
+func (c *HybridDocumentChunker) handleError(ctx context.Context, text string, err error) ([]Chunk, error) {
 	if c != nil && c.FailOnError {
 		return nil, err
 	}
 	return c.fallback().Split(ctx, text)
 }
 
-func (c *DoclingChunker) fallback() Chunker {
+func (c *HybridDocumentChunker) fallback() Chunker {
 	if c != nil && c.Fallback != nil {
 		return c.Fallback
 	}
 	return DefaultChunker()
 }
 
-func (c *DoclingChunker) doclingChunkMetadata(chunk docling.Chunk) map[string]string {
+func (c *HybridDocumentChunker) documentChunkMetadata(chunk documentreader.Chunk) map[string]string {
 	metadata := map[string]string{
-		"chunker":       "docling_hybrid",
-		"docling_index": strconv.Itoa(chunk.ChunkIndex),
+		"chunker":               "document_hybrid",
+		"document_reader_index": strconv.Itoa(chunk.ChunkIndex),
 	}
 	if c != nil && c.Profile.Name != "" {
 		metadata["chunk_profile"] = string(c.Profile.Name)
@@ -146,7 +146,7 @@ func (c *DoclingChunker) doclingChunkMetadata(chunk docling.Chunk) map[string]st
 		}
 	}
 	if strings.TrimSpace(chunk.Filename) != "" {
-		metadata["docling_filename"] = chunk.Filename
+		metadata["document_reader_filename"] = chunk.Filename
 	}
 	if chunk.NumTokens != nil {
 		metadata["num_tokens"] = strconv.Itoa(*chunk.NumTokens)
@@ -161,7 +161,7 @@ func (c *DoclingChunker) doclingChunkMetadata(chunk docling.Chunk) map[string]st
 	putJSON("captions", chunk.Captions)
 	putJSON("page_numbers", chunk.PageNumbers)
 	putJSON("doc_items", chunk.DocItems)
-	putJSON("docling_metadata", chunk.Metadata)
+	putJSON("document_reader_metadata", chunk.Metadata)
 	if strings.TrimSpace(chunk.RawText) != "" && strings.TrimSpace(chunk.RawText) != strings.TrimSpace(chunk.Text) {
 		metadata["raw_text"] = chunk.RawText
 	}

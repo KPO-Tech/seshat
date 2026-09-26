@@ -15,7 +15,7 @@
 // Changes made here: package renamed from `native` to `nativedoc`; no other
 // seshat-internal packages are imported by this package (it was already
 // self-contained upstream), so no rewiring was needed at this layer -
-// integration with seshat's own docling.DocumentConverterBackend interface
+// integration with seshat's own documentreader.Converter interface
 // lives in a separate file/package that calls into this one, not in these
 // ported files themselves. One behavioral change: the "shared weights"
 // memory optimization (session.go) is now off by default

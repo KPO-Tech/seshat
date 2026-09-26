@@ -39,7 +39,7 @@ import (
 	"github.com/pdfcpu/pdfcpu/pkg/api"
 	pdfcpumodel "github.com/pdfcpu/pdfcpu/pkg/pdfcpu/model"
 
-	"github.com/KPO-Tech/seshat/internal/docling"
+	"github.com/KPO-Tech/seshat/internal/documentreader"
 	"github.com/KPO-Tech/seshat/internal/pdftext"
 	"github.com/KPO-Tech/seshat/internal/textquality"
 )
@@ -80,7 +80,7 @@ const (
 // into the page-processing pipeline). Implementations reuse Phase 1's
 // internal/nativedoc/pdfium CGO rendering (internal/nativedoc/parser's
 // Converter implements this directly), wired in as an interface exactly
-// like docling.DocumentConverterBackend is, so this package itself never
+// like documentreader.Converter is, so this package itself never
 // depends on CGO or the nativedoc build tag.
 type PageRenderer interface {
 	// RenderPage renders 1-indexed page pageNum of the PDF in data,
@@ -174,7 +174,7 @@ func (r Result) VisionPageCount() int {
 // page it couldn't. Callers should fall back to sending the whole document
 // through docling when ok is false, the same as if this package didn't
 // exist.
-func Convert(ctx context.Context, data []byte, doclingClient docling.DocumentConverterBackend, vision VisionFallback) (Result, bool, error) {
+func Convert(ctx context.Context, data []byte, documentReader documentreader.Converter, vision VisionFallback) (Result, bool, error) {
 	warmUpPDFCPUConfig()
 
 	reader, err := pdf.NewReader(bytes.NewReader(data), int64(len(data)))
@@ -218,9 +218,9 @@ func Convert(ctx context.Context, data []byte, doclingClient docling.DocumentCon
 		if needsDocling {
 			source = PageSourceDocling
 			text = ""
-			if doclingClient != nil && doclingClient.IsAvailable(ctx) {
+			if documentReader != nil && documentReader.IsAvailable(ctx) {
 				if pageData, extractErr := extractSinglePage(data, i); extractErr == nil {
-					if conversion, convErr := doclingClient.ConvertBytes(ctx, pageData, fmt.Sprintf("page-%d.pdf", i)); convErr == nil &&
+					if conversion, convErr := documentReader.ConvertBytes(ctx, pageData, fmt.Sprintf("page-%d.pdf", i)); convErr == nil &&
 						strings.TrimSpace(conversion.Markdown) != "" && !textquality.IsGarbledText(conversion.Markdown) {
 						text = conversion.Markdown
 					}
@@ -282,7 +282,7 @@ func pagesWithEmbeddedImages(data []byte) (map[int]bool, error) {
 }
 
 // extractSinglePage produces a standalone one-page PDF containing just
-// page n, so doclingClient only has to process that one page instead of
+// page n, so documentReader only has to process that one page instead of
 // the whole document.
 func extractSinglePage(data []byte, n int) ([]byte, error) {
 	var buf bytes.Buffer

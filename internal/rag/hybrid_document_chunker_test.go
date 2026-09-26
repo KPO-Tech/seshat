@@ -8,11 +8,11 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/KPO-Tech/seshat/internal/docling"
+	"github.com/KPO-Tech/seshat/internal/documentreader"
 	"github.com/KPO-Tech/seshat/internal/vector"
 )
 
-func TestDoclingChunker_SplitDocument(t *testing.T) {
+func TestHybridDocumentChunker_SplitDocument(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
 		case "/health":
@@ -69,7 +69,7 @@ func TestDoclingChunker_SplitDocument(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	chunker := NewDoclingChunker(docling.NewClient(srv.URL), docling.ChunkOptions{MaxTokens: 512})
+	chunker := NewHybridDocumentChunker(documentreader.NewDoclingClient(srv.URL), documentreader.ChunkOptions{MaxTokens: 512})
 	chunks, err := chunker.SplitDocument(context.Background(), Document{
 		Filename: "policy.pdf",
 		Text:     "fallback text",
@@ -81,8 +81,8 @@ func TestDoclingChunker_SplitDocument(t *testing.T) {
 	if len(chunks) != 2 {
 		t.Fatalf("expected 2 chunks, got %d", len(chunks))
 	}
-	if chunks[0].Metadata["chunker"] != "docling_hybrid" {
-		t.Fatalf("expected docling metadata, got %+v", chunks[0].Metadata)
+	if chunks[0].Metadata["chunker"] != "document_hybrid" {
+		t.Fatalf("expected document reader metadata, got %+v", chunks[0].Metadata)
 	}
 	if chunks[0].Metadata["page_numbers"] != "[1]" {
 		t.Errorf("page_numbers metadata = %q", chunks[0].Metadata["page_numbers"])
@@ -92,7 +92,7 @@ func TestDoclingChunker_SplitDocument(t *testing.T) {
 	}
 }
 
-func TestDoclingChunkerForProfileSendsProfileMaxTokens(t *testing.T) {
+func TestHybridDocumentChunkerForProfileSendsProfileMaxTokens(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
 		case "/health":
@@ -131,7 +131,7 @@ func TestDoclingChunkerForProfileSendsProfileMaxTokens(t *testing.T) {
 	if !ok {
 		t.Fatal("large profile not found")
 	}
-	chunker := NewDoclingChunkerForProfile(docling.NewClient(server.URL), profile, docling.ChunkOptions{})
+	chunker := NewHybridDocumentChunkerForProfile(documentreader.NewDoclingClient(server.URL), profile, documentreader.ChunkOptions{})
 	chunks, err := chunker.SplitDocument(context.Background(), Document{
 		Filename: "policy.pdf",
 		Text:     "fallback",
@@ -175,7 +175,7 @@ func TestServiceIngest_UsesDocumentChunkerMetadata(t *testing.T) {
 	defer srv.Close()
 
 	store := vector.NewMemoryStore()
-	svc := NewService(nil, store, fakeEmbedder{}, NewDoclingChunker(docling.NewClient(srv.URL), docling.ChunkOptions{}))
+	svc := NewService(nil, store, fakeEmbedder{}, NewHybridDocumentChunker(documentreader.NewDoclingClient(srv.URL), documentreader.ChunkOptions{}))
 
 	result, err := svc.Ingest(context.Background(), IngestRequest{
 		CorpusID: "kb",
@@ -197,16 +197,16 @@ func TestServiceIngest_UsesDocumentChunkerMetadata(t *testing.T) {
 	if len(records) != 1 {
 		t.Fatalf("expected 1 record, got %d", len(records))
 	}
-	if records[0].Metadata["chunker"] != "docling_hybrid" {
-		t.Fatalf("missing docling chunker metadata: %+v", records[0].Metadata)
+	if records[0].Metadata["chunker"] != "document_hybrid" {
+		t.Fatalf("missing document reader chunker metadata: %+v", records[0].Metadata)
 	}
 	if records[0].Metadata["page_numbers"] != "[3]" {
 		t.Errorf("page_numbers metadata = %q", records[0].Metadata["page_numbers"])
 	}
 }
 
-func TestDoclingChunker_FallsBackToTextChunkerWhenUnavailable(t *testing.T) {
-	chunker := &DoclingChunker{Fallback: ParagraphChunker{MaxChunkChars: 50}}
+func TestHybridDocumentChunker_FallsBackToTextChunkerWhenUnavailable(t *testing.T) {
+	chunker := &HybridDocumentChunker{Fallback: ParagraphChunker{MaxChunkChars: 50}}
 	chunks, err := chunker.SplitDocument(context.Background(), Document{
 		Filename: "notes.pdf",
 		Text:     "First paragraph.\n\nSecond paragraph.",
@@ -220,22 +220,22 @@ func TestDoclingChunker_FallsBackToTextChunkerWhenUnavailable(t *testing.T) {
 	}
 }
 
-// TestNewDoclingChunkerForProfile_StructuredProfileGetsHeadingFallback is a
+// TestNewHybridDocumentChunkerForProfile_StructuredProfileGetsHeadingFallback is a
 // regression guard: only the "structured" profile should get the
 // heading-aware fallback - every other profile keeps plain ParagraphChunker,
 // matching today's behavior.
-func TestNewDoclingChunkerForProfile_StructuredProfileGetsHeadingFallback(t *testing.T) {
-	structured := NewDoclingChunkerForProfile(nil, ChunkProfile{Name: ChunkProfileStructured, MaxTokens: 1024}, docling.ChunkOptions{})
+func TestNewHybridDocumentChunkerForProfile_StructuredProfileGetsHeadingFallback(t *testing.T) {
+	structured := NewHybridDocumentChunkerForProfile(nil, ChunkProfile{Name: ChunkProfileStructured, MaxTokens: 1024}, documentreader.ChunkOptions{})
 	if _, ok := structured.Fallback.(*HeadingChunker); !ok {
 		t.Fatalf("expected the structured profile's fallback to be *HeadingChunker, got %T", structured.Fallback)
 	}
 
-	medium := NewDoclingChunkerForProfile(nil, ChunkProfile{Name: ChunkProfileMedium, MaxTokens: 768}, docling.ChunkOptions{})
+	medium := NewHybridDocumentChunkerForProfile(nil, ChunkProfile{Name: ChunkProfileMedium, MaxTokens: 768}, documentreader.ChunkOptions{})
 	if _, ok := medium.Fallback.(*HeadingChunker); ok {
 		t.Fatal("expected a non-structured profile's fallback to stay the plain chunker, not *HeadingChunker")
 	}
 
-	// End-to-end: with no client (docling path skipped entirely), the
+	// End-to-end: with no client (document-reader path skipped entirely), the
 	// structured profile's SplitDocument call should still produce
 	// heading-aware output, not a flat paragraph split.
 	chunks, err := structured.SplitDocument(context.Background(), Document{
@@ -250,21 +250,21 @@ func TestNewDoclingChunkerForProfile_StructuredProfileGetsHeadingFallback(t *tes
 	}
 }
 
-// TestNewDoclingChunkerForProfile_TableAndQAProfilesGetMatchingFallbacks is
+// TestNewHybridDocumentChunkerForProfile_TableAndQAProfilesGetMatchingFallbacks is
 // the same regression guard as the structured-profile test above, extended
 // for the two chunkers added in document-intelligence roadmap Phase 4.
-func TestNewDoclingChunkerForProfile_TableAndQAProfilesGetMatchingFallbacks(t *testing.T) {
-	table := NewDoclingChunkerForProfile(nil, ChunkProfile{Name: ChunkProfileTable, MaxTokens: 1536}, docling.ChunkOptions{})
+func TestNewHybridDocumentChunkerForProfile_TableAndQAProfilesGetMatchingFallbacks(t *testing.T) {
+	table := NewHybridDocumentChunkerForProfile(nil, ChunkProfile{Name: ChunkProfileTable, MaxTokens: 1536}, documentreader.ChunkOptions{})
 	if _, ok := table.Fallback.(*TableChunker); !ok {
 		t.Fatalf("expected the table profile's fallback to be *TableChunker, got %T", table.Fallback)
 	}
 
-	qa := NewDoclingChunkerForProfile(nil, ChunkProfile{Name: ChunkProfileQA, MaxTokens: 512}, docling.ChunkOptions{})
+	qa := NewHybridDocumentChunkerForProfile(nil, ChunkProfile{Name: ChunkProfileQA, MaxTokens: 512}, documentreader.ChunkOptions{})
 	if _, ok := qa.Fallback.(*QAChunker); !ok {
 		t.Fatalf("expected the qa profile's fallback to be *QAChunker, got %T", qa.Fallback)
 	}
 
-	// End-to-end: with no client (docling path skipped entirely), the table
+	// End-to-end: with no client (document-reader path skipped entirely), the table
 	// profile's SplitDocument call should still keep a table's rows intact.
 	tableChunks, err := table.SplitDocument(context.Background(), Document{
 		Filename: "data.txt",

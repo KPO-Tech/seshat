@@ -118,7 +118,7 @@ func (m *DoclingManager) Start(ctx context.Context) error {
 	)
 	// Silence output unless SESHAT_DOCLING_VERBOSE is set.
 	if os.Getenv("SESHAT_DOCLING_VERBOSE") == "" {
-		logPath := filepath.Join(runtimepath.ResolveRoot(""), "logs", "docling.log")
+		logPath := filepath.Join(runtimepath.ResolveRoot(""), "logs", "documentreader.log")
 		_ = os.MkdirAll(filepath.Dir(logPath), 0o755)
 		if f, err := os.OpenFile(logPath, os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0o644); err == nil {
 			cmd.Stdout = f

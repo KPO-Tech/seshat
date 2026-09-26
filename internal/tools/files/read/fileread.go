@@ -9,7 +9,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/KPO-Tech/seshat/internal/docling"
+	"github.com/KPO-Tech/seshat/internal/documentreader"
 	"github.com/KPO-Tech/seshat/internal/officetext"
 	"github.com/KPO-Tech/seshat/internal/pdftext"
 	"github.com/KPO-Tech/seshat/internal/sandbox"
@@ -26,9 +26,9 @@ type Tool struct {
 	// filesystemPolicy centralizes common path access checks.
 	filesystemPolicy *sandbox.FilesystemPolicy
 
-	// doclingClient converts PDFs to structured markdown when set.
+	// documentReader converts PDFs to structured markdown when set.
 	// When nil the tool falls back to base64 pass-through.
-	doclingClient docling.DocumentConverterBackend
+	documentReader documentreader.Converter
 }
 
 // ToolConfig represents the FileRead tool configuration
@@ -45,15 +45,15 @@ type ToolConfig struct {
 	// MaxLimit is the maximum number of lines to read
 	MaxLimit int
 
-	// DoclingURL is the base URL of a running docling-serve instance. Used
+	// DocumentReaderURL is the base URL of a document-reader service. Used
 	// to build the default DocumentConverter when that field is left nil.
 	// Example: "http://localhost:5001"
-	DoclingURL string
+	DocumentReaderURL string
+
 	// DocumentConverter, when set, is used instead of building a
-	// docling-serve client from DoclingURL - inject a custom
-	// docling.DocumentConverterBackend implementation to convert PDFs with
-	// something other than docling-serve. Takes precedence over DoclingURL.
-	DocumentConverter docling.DocumentConverterBackend
+	// service client from DocumentReaderURL. Takes precedence over
+	// DocumentReaderURL.
+	DocumentConverter documentreader.Converter
 }
 
 // DefaultToolConfig returns default tool configuration
@@ -78,9 +78,9 @@ func NewTool(config *ToolConfig) *Tool {
 	}
 	switch {
 	case config.DocumentConverter != nil:
-		t.doclingClient = config.DocumentConverter
-	case config.DoclingURL != "":
-		t.doclingClient = docling.NewClient(config.DoclingURL)
+		t.documentReader = config.DocumentConverter
+	case config.DocumentReaderURL != "":
+		t.documentReader = documentreader.NewDoclingClient(config.DocumentReaderURL)
 	}
 	return t
 }
@@ -266,8 +266,8 @@ func (t *Tool) Call(
 		return t.readTextFile(ctx, filePath, fileInfo, input.Parsed)
 	case FileTypeImage:
 		return t.readImageFile(ctx, filePath, fileInfo)
-	case FileTypeDocling:
-		return t.readDoclingFile(ctx, filePath, fileInfo)
+	case FileTypeDocumentReader:
+		return t.readDocumentReaderFile(ctx, filePath, fileInfo)
 	default:
 		return t.handleBinaryFile(filePath)
 	}
@@ -428,12 +428,12 @@ const markdownSidecarMaxAge = 24 * time.Hour
 
 // sidecarMarkdown checks for a pre-converted "<name>.md" file next to filePath
 // - the exact convention seshat-ai's upload pipeline writes when it eagerly
-// docling-converts an attachment - and returns its content if present and not
-// stale. This avoids a second full docling-serve round-trip (including OCR
+// DocumentReader-converts an attachment - and returns its content if present and not
+// stale. This avoids a second full the configured document reader round-trip (including OCR
 // cost for scanned PDFs/images) when the caller already paid for one.
 //
 // Images embedded in the original conversion are NOT recovered here: seshat-ai
-// writes extracted images into the same directory using docling's suggested
+// writes extracted images into the same directory using DocumentReader's suggested
 // filenames with no per-document prefix, so on a cache hit there's no reliable
 // way to tell which images (if any) belong to this specific document. Callers
 // that need embedded images back get a normal fresh conversion (no sidecar
@@ -459,7 +459,7 @@ func sidecarMarkdown(filePath string, sourceInfo os.FileInfo) string {
 }
 
 // readPDFFile reads a PDF file.
-// When a docling client is configured and reachable it converts the PDF to
+// When a DocumentReader client is configured and reachable it converts the PDF to
 // structured markdown (preserving tables, figures, headings). Otherwise it
 // falls back to base64 pass-through so the model can at least read the raw PDF.
 func (t *Tool) readPDFFile(
@@ -494,9 +494,9 @@ func (t *Tool) readPDFFile(
 
 	// Native text-layer extraction: most PDFs (reports, exports, invoices)
 	// carry a real text layer and need no OCR at all. Try this before ever
-	// reaching for docling - it's free (no process/network dependency) and
+	// reaching for DocumentReader - it's free (no process/network dependency) and
 	// instant. A Sparse result (little/no text relative to page count)
-	// means this is likely a scan, so fall through to docling for OCR.
+	// means this is likely a scan, so fall through to DocumentReader for OCR.
 	if data, readErr := os.ReadFile(filePath); readErr == nil {
 		if native, extractErr := pdftext.Extract(data); extractErr == nil && !native.Sparse {
 			result := &FileReadResult{
@@ -512,14 +512,14 @@ func (t *Tool) readPDFFile(
 		}
 	}
 
-	// Docling path: convert to markdown.
-	if t.doclingClient != nil && t.doclingClient.IsAvailable(ctx) {
-		conversion, err := t.doclingClient.ConvertFile(ctx, filePath)
+	// DocumentReader path: convert to markdown.
+	if t.documentReader != nil && t.documentReader.IsAvailable(ctx) {
+		conversion, err := t.documentReader.ConvertFile(ctx, filePath)
 		if err != nil {
 			if ctx.Err() != nil {
 				return tool.NewErrorResult(fmt.Errorf("file read cancelled")), nil
 			}
-			// Docling failed — fall through to the base64 path.
+			// DocumentReader failed — fall through to the base64 path.
 			goto fallback
 		}
 		images := make([]PDFImage, 0, len(conversion.Images))
@@ -544,7 +544,7 @@ func (t *Tool) readPDFFile(
 	}
 
 fallback:
-	// Base64 path (no docling).
+	// Base64 path (no DocumentReader).
 	if pagesParam != "" {
 		parsedRange, err := ParsePDFPageRange(pagesParam)
 		if err != nil {
@@ -612,7 +612,7 @@ func (t *Tool) readWholePDFFallback(ctx context.Context, filePath string, fileIn
 		return tool.NewErrorResult(fmt.Errorf("failed to get PDF page count after page extraction failed: %w", err)), nil
 	}
 	if pageCount > PDFATMentionInlineThreshold {
-		return tool.NewErrorResult(fmt.Errorf("%s The PDF has %d pages, which is too many to read at once. Try converting it with docling-serve or use a smaller page range.", warning, pageCount)), nil
+		return tool.NewErrorResult(fmt.Errorf("%s The PDF has %d pages, which is too many to read at once. Try converting it with the configured document reader or use a smaller page range.", warning, pageCount)), nil
 	}
 	pdfResult, err := ReadPDF(filePath)
 	if err != nil {
@@ -630,10 +630,10 @@ func (t *Tool) readWholePDFFallback(ctx context.Context, filePath string, fileIn
 	return tool.NewTextResult(warning + "\n\n" + t.formatPDFResult(result)), nil
 }
 
-// readDoclingFile converts a docling-supported binary file (DOCX, PPTX, XLSX, WAV, MP3)
-// to markdown via docling-serve. When docling is not configured it returns a descriptive
+// readDocumentReaderFile converts a DocumentReader-supported binary file (DOCX, PPTX, XLSX, WAV, MP3)
+// to markdown via the configured document reader. When DocumentReader is not configured it returns a descriptive
 // message so the agent understands why the file can't be read directly.
-func (t *Tool) readDoclingFile(
+func (t *Tool) readDocumentReaderFile(
 	ctx context.Context,
 	filePath string,
 	fileInfo os.FileInfo,
@@ -654,21 +654,21 @@ func (t *Tool) readDoclingFile(
 	if cached := sidecarMarkdown(filePath, fileInfo); cached != "" {
 		RecordExternalRead(filePath, fileInfo.ModTime(), cached, true)
 		result := &FileReadResult{
-			Type: FileTypeDocling,
-			Docling: &DoclingFileResult{
+			Type: FileTypeDocumentReader,
+			DocumentReader: &DocumentReaderFileResult{
 				FilePath:     filePath,
 				Format:       format,
 				Markdown:     cached,
 				OriginalSize: fileInfo.Size(),
 			},
 		}
-		return tool.NewTextResult(t.formatDoclingResult(result)), nil
+		return tool.NewTextResult(t.formatDocumentReaderResult(result)), nil
 	}
 
 	// DOCX/PPTX/XLSX are zipped XML, not scanned documents - no ML/OCR is
 	// needed to read them, so try the native, dependency-free extractor
-	// before ever reaching for docling-serve. WAV/MP3 (officetext.Extract
-	// returns ok=false for those) still need docling for transcription.
+	// before ever reaching for the configured document reader. WAV/MP3 (officetext.Extract
+	// returns ok=false for those) still need DocumentReader for transcription.
 	if officetext.SupportedExtensions[ext] {
 		data, readErr := os.ReadFile(filePath)
 		if readErr != nil {
@@ -677,48 +677,48 @@ func (t *Tool) readDoclingFile(
 		if markdown, ok, sparse, extractErr := officetext.Extract(filePath, data); ok && extractErr == nil && !sparse {
 			RecordExternalRead(filePath, fileInfo.ModTime(), markdown, true)
 			result := &FileReadResult{
-				Type: FileTypeDocling,
-				Docling: &DoclingFileResult{
+				Type: FileTypeDocumentReader,
+				DocumentReader: &DocumentReaderFileResult{
 					FilePath:     filePath,
 					Format:       format,
 					Markdown:     markdown,
 					OriginalSize: fileInfo.Size(),
 				},
 			}
-			return tool.NewTextResult(t.formatDoclingResult(result)), nil
+			return tool.NewTextResult(t.formatDocumentReaderResult(result)), nil
 		}
 		// Fell through: parse failure, no extractable text, or a sparse
 		// result (e.g. a slide deck that's mostly screenshots/diagrams with
 		// only a title or two of real text - see officetext.MinCharsPerSlide).
-		// Try docling next since it may still get something out of it (OCR
-		// on embedded images, etc.); if docling isn't available either, the
+		// Try DocumentReader next since it may still get something out of it (OCR
+		// on embedded images, etc.); if DocumentReader isn't available either, the
 		// message below reports both attempts.
 	}
 
-	if t.doclingClient == nil || !t.doclingClient.IsAvailable(ctx) {
+	if t.documentReader == nil || !t.documentReader.IsAvailable(ctx) {
 		return tool.NewTextResult(fmt.Sprintf(
-			"File: %s\nFormat: %s | Size: %d bytes\n\nThis file format requires docling-serve for text extraction. Configure the DOCLING_URL setting to enable automatic conversion of DOCX, PPTX, XLSX, and audio transcription.",
+			"File: %s\nFormat: %s | Size: %d bytes\n\nThis file format requires the configured document reader for text extraction. Configure the document_reader_url setting to enable automatic conversion of DOCX, PPTX, XLSX, and audio transcription.",
 			filePath, strings.ToUpper(format), fileInfo.Size(),
 		)), nil
 	}
 
-	conversion, err := t.doclingClient.ConvertFile(ctx, filePath)
+	conversion, err := t.documentReader.ConvertFile(ctx, filePath)
 	if err != nil {
 		if ctx.Err() != nil {
 			return tool.NewErrorResult(fmt.Errorf("file read cancelled")), nil
 		}
 		if ext == ".wav" || ext == ".mp3" {
-			// docling-serve's ASR pipeline needs openai-whisper, which is not
-			// part of its default install - a docling-serve instance set up
-			// via the plain `docling-serve` package (no DOCLING_EXTRAS=asr)
+			// the configured document reader's ASR pipeline needs openai-whisper, which is not
+			// part of its default install - a the configured document reader instance set up
+			// via the plain `the configured document reader` package (no DOCLING_EXTRAS=asr)
 			// fails this conversion internally and surfaces it as an opaque
 			// "task result not found" style error, not "whisper is missing".
 			return tool.NewErrorResult(fmt.Errorf(
-				"docling conversion failed for %s: %w\n\nAudio transcription requires docling-serve's ASR extra (openai-whisper), which is not installed by default. Reinstall it with DOCLING_EXTRAS=asr, e.g.: DOCLING_EXTRAS=asr ./scripts/install-python-env.sh",
+				"document-reader conversion failed for %s: %w\n\nAudio transcription requires the configured document reader's ASR extra (openai-whisper), which is not installed by default. Reinstall it with DOCLING_EXTRAS=asr, e.g.: DOCLING_EXTRAS=asr ./scripts/install-python-env.sh",
 				strings.ToUpper(format), err,
 			)), nil
 		}
-		return tool.NewErrorResult(fmt.Errorf("docling conversion failed for %s: %w", strings.ToUpper(format), err)), nil
+		return tool.NewErrorResult(fmt.Errorf("document-reader conversion failed for %s: %w", strings.ToUpper(format), err)), nil
 	}
 
 	images := make([]PDFImage, 0, len(conversion.Images))
@@ -732,8 +732,8 @@ func (t *Tool) readDoclingFile(
 
 	RecordExternalRead(filePath, fileInfo.ModTime(), conversion.Markdown, true)
 	result := &FileReadResult{
-		Type: FileTypeDocling,
-		Docling: &DoclingFileResult{
+		Type: FileTypeDocumentReader,
+		DocumentReader: &DocumentReaderFileResult{
 			FilePath:     filePath,
 			Format:       format,
 			Markdown:     conversion.Markdown,
@@ -742,7 +742,7 @@ func (t *Tool) readDoclingFile(
 			Images:       images,
 		},
 	}
-	return tool.NewTextResult(t.formatDoclingResult(result)), nil
+	return tool.NewTextResult(t.formatDocumentReaderResult(result)), nil
 }
 
 // readNotebookFile reads a Jupyter notebook file
@@ -879,8 +879,8 @@ func (t *Tool) formatPDFMarkdownResult(result *FileReadResult) string {
 	return b.String()
 }
 
-func (t *Tool) formatDoclingResult(result *FileReadResult) string {
-	r := result.Docling
+func (t *Tool) formatDocumentReaderResult(result *FileReadResult) string {
+	r := result.DocumentReader
 	var b strings.Builder
 	b.WriteString(fmt.Sprintf("File: %s\n", r.FilePath))
 	b.WriteString(fmt.Sprintf("Format: %s | Size: %d bytes", strings.ToUpper(r.Format), r.OriginalSize))
@@ -1033,7 +1033,7 @@ func (t *Tool) BackfillInput(ctx context.Context, input map[string]any) map[stri
 const ToolName = "read_file"
 
 // Description is the description of the file read tool.
-var Description = fmt.Sprintf(`Read the contents of a file. Supports text files, images, PDFs, and - when docling-serve is configured - DOCX, PPTX, XLSX documents and audio transcription (WAV, MP3). For large text files, use offset/limit to read specific ranges. For PDFs, use the pages parameter to read specific page ranges.
+var Description = fmt.Sprintf(`Read the contents of a file. Supports text files, images, PDFs, and - when the configured document reader is configured - DOCX, PPTX, XLSX documents and audio transcription (WAV, MP3). For large text files, use offset/limit to read specific ranges. For PDFs, use the pages parameter to read specific page ranges.
 
 Reads a file from the local filesystem. You can access any file directly by using this tool. Assume this tool is able to read all files on the machine. If the user provides a path to a file assume that path is valid. It is okay to read a file that does not exist; an error will be returned.
 
@@ -1044,10 +1044,10 @@ Usage:
 - Results are returned using cat -n format, with line numbers starting at 1
 - When you already know which part of the file you need, only read that part. This can be important for larger files.
 - This tool allows reading images (eg PNG, JPG, etc). When reading an image file the contents are presented visually.
-- This tool reads PDFs best when docling-serve is configured: Docling converts PDF text, tables, headings, and layout to markdown suitable for classic text LLMs.
-- Without docling-serve, PDFs fall back to raw PDF bytes/page extraction; this is less useful for classic text-only models and should be treated as a degraded fallback.
+- This tool reads PDFs best when the configured document reader is configured: DocumentReader converts PDF text, tables, headings, and layout to markdown suitable for classic text LLMs.
+- Without the configured document reader, PDFs fall back to raw PDF bytes/page extraction; this is less useful for classic text-only models and should be treated as a degraded fallback.
 - This tool can read Jupyter notebooks (.ipynb files) and returns all cells with their outputs, combining code, text, and visualizations.
-- When docling-serve is configured, this tool can convert DOCX, PPTX, XLSX documents and transcribe WAV/MP3 audio files to markdown automatically.
+- When the configured document reader is configured, this tool can convert DOCX, PPTX, XLSX documents and transcribe WAV/MP3 audio files to markdown automatically.
 - This tool can only read files, not directories. To read a directory, use an ls command via the Bash tool.
 - You will regularly be asked to read screenshots. If the user provides a path to a screenshot, always use this tool to view the file at the path.
 - If you read a file that exists but has empty contents you will receive a warning in place of file contents.`, MaxLinesToRead)

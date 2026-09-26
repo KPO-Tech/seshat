@@ -8,9 +8,9 @@ import (
 	"testing"
 )
 
-// These tests exercise readDoclingFile/readPDFFile through the actual
+// These tests exercise readDocumentReaderFile/readPDFFile through the actual
 // production entrypoints (not just internal/officetext or internal/pdftext
-// in isolation) with doclingClient == nil, proving the native extraction
+// in isolation) with documentReader == nil, proving the native extraction
 // path is really wired into the tool and not just unit-tested in a vacuum.
 // Fixtures are copied from the sibling internal/officetext and
 // internal/pdftext packages' testdata (real LibreOffice-produced files),
@@ -34,43 +34,43 @@ func copyFixture(t *testing.T, srcRel, destDir, destName string) (string, os.Fil
 	return destPath, info
 }
 
-func TestReadDoclingFile_NativeDOCXWithoutDoclingClient(t *testing.T) {
+func TestReadDocumentReaderFile_NativeDOCXWithoutDocumentReader(t *testing.T) {
 	t.Parallel()
-	tool := &Tool{config: DefaultToolConfig()} // doclingClient intentionally nil
+	tool := &Tool{config: DefaultToolConfig()} // documentReader intentionally nil
 	dir := t.TempDir()
 	path, info := copyFixture(t, "../../../officetext/testdata/sample.docx", dir, "report.docx")
 
-	result, err := tool.readDoclingFile(context.Background(), path, info)
+	result, err := tool.readDocumentReaderFile(context.Background(), path, info)
 	if err != nil {
-		t.Fatalf("readDoclingFile: %v", err)
+		t.Fatalf("readDocumentReaderFile: %v", err)
 	}
-	if strings.Contains(result.Content, "requires docling-serve") {
-		t.Fatalf("expected native extraction to succeed without docling, got the docling-required message:\n%s", result.Content)
+	if strings.Contains(result.Content, "requires the configured document reader") {
+		t.Fatalf("expected native extraction to succeed without DocumentReader, got the DocumentReader-required message:\n%s", result.Content)
 	}
 	if !strings.Contains(result.Content, "Sample Report") || !strings.Contains(result.Content, "Alice") {
 		t.Fatalf("expected extracted DOCX content, got:\n%s", result.Content)
 	}
 }
 
-func TestReadDoclingFile_NativeXLSXWithoutDoclingClient(t *testing.T) {
+func TestReadDocumentReaderFile_NativeXLSXWithoutDocumentReader(t *testing.T) {
 	t.Parallel()
 	tool := &Tool{config: DefaultToolConfig()}
 	dir := t.TempDir()
 	path, info := copyFixture(t, "../../../officetext/testdata/sample.xlsx", dir, "data.xlsx")
 
-	result, err := tool.readDoclingFile(context.Background(), path, info)
+	result, err := tool.readDocumentReaderFile(context.Background(), path, info)
 	if err != nil {
-		t.Fatalf("readDoclingFile: %v", err)
+		t.Fatalf("readDocumentReaderFile: %v", err)
 	}
-	if strings.Contains(result.Content, "requires docling-serve") {
-		t.Fatalf("expected native extraction to succeed without docling, got the docling-required message:\n%s", result.Content)
+	if strings.Contains(result.Content, "requires the configured document reader") {
+		t.Fatalf("expected native extraction to succeed without DocumentReader, got the DocumentReader-required message:\n%s", result.Content)
 	}
 	if !strings.Contains(result.Content, "Alice") || !strings.Contains(result.Content, "90") {
 		t.Fatalf("expected extracted XLSX content, got:\n%s", result.Content)
 	}
 }
 
-func TestReadPDFFile_NativeTextLayerWithoutDoclingClient(t *testing.T) {
+func TestReadPDFFile_NativeTextLayerWithoutDocumentReader(t *testing.T) {
 	t.Parallel()
 	tool := &Tool{config: DefaultToolConfig()}
 	dir := t.TempDir()
@@ -90,7 +90,7 @@ func TestReadPDFFile_NativeTextLayerWithoutDoclingClient(t *testing.T) {
 	}
 }
 
-func TestReadPDFFile_ScannedFallsBackToBase64WithoutDoclingClient(t *testing.T) {
+func TestReadPDFFile_ScannedFallsBackToBase64WithoutDocumentReader(t *testing.T) {
 	t.Parallel()
 	tool := &Tool{config: DefaultToolConfig()}
 	dir := t.TempDir()
@@ -100,9 +100,9 @@ func TestReadPDFFile_ScannedFallsBackToBase64WithoutDoclingClient(t *testing.T) 
 	if err != nil {
 		t.Fatalf("readPDFFile: %v", err)
 	}
-	// No text layer and no docling client configured - this must fall all
+	// No text layer and no DocumentReader client configured - this must fall all
 	// the way through to the base64 path, not silently return empty text.
 	if !strings.Contains(result.Content, "data:application/pdf;base64") {
-		t.Fatalf("expected a scanned PDF with no docling client to fall back to base64, got:\n%s", result.Content)
+		t.Fatalf("expected a scanned PDF with no DocumentReader client to fall back to base64, got:\n%s", result.Content)
 	}
 }

@@ -1,4 +1,4 @@
-package docling
+package documentreader
 
 import (
 	"context"
@@ -7,7 +7,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/KPO-Tech/seshat/internal/docling"
+	"github.com/KPO-Tech/seshat/internal/documentreader"
 	tool "github.com/KPO-Tech/seshat/internal/tools/registry"
 	"github.com/KPO-Tech/seshat/internal/types"
 )
@@ -23,7 +23,7 @@ func writeFixture(t *testing.T, path, content string) {
 	}
 }
 
-func TestConvertTool_Call_ReportsNotConfiguredWithoutDoclingURL(t *testing.T) {
+func TestConvertTool_Call_ReportsNotConfiguredWithoutDocumentReader(t *testing.T) {
 	dir := t.TempDir()
 	filePath := filepath.Join(dir, "scan.pdf")
 	writeFixture(t, filePath, "not a real pdf, just needs to exist")
@@ -38,8 +38,8 @@ func TestConvertTool_Call_ReportsNotConfiguredWithoutDoclingURL(t *testing.T) {
 	if result.Error != nil {
 		t.Fatalf("Call returned an error result: %v", result.Error)
 	}
-	if !strings.Contains(result.Content, "requires docling-serve") {
-		t.Errorf("expected a 'requires docling-serve' message, got:\n%s", result.Content)
+	if !strings.Contains(result.Content, "requires a configured document reader") {
+		t.Errorf("expected a 'requires a configured document reader' message, got:\n%s", result.Content)
 	}
 }
 
@@ -58,7 +58,7 @@ func TestConvertTool_Call_RejectsMissingPath(t *testing.T) {
 
 func TestConvertTool_Call_RejectsMissingFile(t *testing.T) {
 	dir := t.TempDir()
-	tl := NewConvertTool(Config{DoclingURL: "http://127.0.0.1:1"}, dir)
+	tl := NewConvertTool(Config{DocumentReaderURL: "http://127.0.0.1:1"}, dir)
 	result, err := tl.Call(context.Background(), tool.CallInput{
 		Parsed: map[string]any{"path": filepath.Join(dir, "does-not-exist.pdf")},
 	}, nil)
@@ -92,10 +92,10 @@ func TestConvertTool_CheckPermissions_UNCBlocked(t *testing.T) {
 }
 
 func TestFormatConvertResult(t *testing.T) {
-	out := formatConvertResult("scan.pdf", &docling.ConversionResult{
+	out := formatConvertResult("scan.pdf", &documentreader.ConversionResult{
 		Markdown:  "# Scanned Report\n\nOCR'd content here.",
 		PageCount: 3,
-		Images: []docling.ExtractedImage{
+		Images: []documentreader.ExtractedImage{
 			{Filename: "image_0001.png", MimeType: "image/png", Base64: "iVBORw0KGgo"},
 		},
 	}, "")
@@ -115,7 +115,7 @@ func TestFormatConvertResult(t *testing.T) {
 }
 
 func TestFormatConvertResult_IncludesSavedAt(t *testing.T) {
-	out := formatConvertResult("scan.pdf", &docling.ConversionResult{Markdown: "content"}, "/tmp/out.md")
+	out := formatConvertResult("scan.pdf", &documentreader.ConversionResult{Markdown: "content"}, "/tmp/out.md")
 	if !strings.Contains(out, "Saved to: /tmp/out.md") {
 		t.Errorf("expected saved-to line in output, got:\n%s", out)
 	}

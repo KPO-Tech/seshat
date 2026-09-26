@@ -87,7 +87,7 @@ type Config struct {
 	StorageGCNamespaces     string `mapstructure:"storage_gc_namespaces" yaml:"storage_gc_namespaces,omitempty"`
 	BrowserRemoteControlURL string `mapstructure:"browser_remote_control_url" yaml:"browser_remote_control_url,omitempty"`
 	BrowserExecutablePath   string `mapstructure:"browser_executable_path" yaml:"browser_executable_path,omitempty"`
-	DoclingURL              string `mapstructure:"docling_url" yaml:"docling_url,omitempty"`
+	DocumentReaderURL       string `mapstructure:"document_reader_url" yaml:"document_reader_url,omitempty"`
 	AutomationServiceURL    string `mapstructure:"automation_service_url" yaml:"automation_service_url,omitempty"`
 	AutomationAPIKey        string `mapstructure:"-" yaml:"-"` // loaded from env only, never persisted
 

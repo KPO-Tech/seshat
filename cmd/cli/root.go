@@ -104,7 +104,7 @@ func printUsage(out io.Writer) {
 	fmt.Fprintln(out, "                Runs a device-code flow — no API key required.")
 	fmt.Fprintln(out, "")
 	fmt.Fprintln(out, "  seshat setup   [--check] [--python VERSION] [--extras EXTRAS]")
-	fmt.Fprintln(out, "                Install uv + docling-serve for document processing.")
+	fmt.Fprintln(out, "                Install uv + the bundled docling-serve document-reader adapter.")
 	fmt.Fprintln(out, "                --check  show status without installing.")
 	fmt.Fprintln(out, "")
 	fmt.Fprintln(out, "  seshat version  Print the current version.")

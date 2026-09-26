@@ -4,7 +4,7 @@
 // (text extraction), pdfium (page rendering, see nativedoc/pdfium's own doc
 // comment for why rendering is split from pdf_oxide), nativedoc
 // (OCR/layout/table-structure ONNX models), and internal/officetext (DOCX,
-// XLSX) - into a real docling.DocumentConverterBackend implementation (see
+// XLSX) - into a real documentreader.Converter implementation (see
 // Converter in converter.go). This is what makes seshat's document-reading
 // tools work with no external service (docling-serve, seshat-intelligence)
 // configured, not just a validation harness.
@@ -25,7 +25,7 @@ import (
 
 	pdfoxide "github.com/yfedoseev/pdf_oxide/go"
 
-	"github.com/KPO-Tech/seshat/internal/docling"
+	"github.com/KPO-Tech/seshat/internal/documentreader"
 	"github.com/KPO-Tech/seshat/internal/nativedoc"
 	"github.com/KPO-Tech/seshat/internal/nativedoc/pdfium"
 )
@@ -37,7 +37,7 @@ import (
 // detected text boxes - correct for single-column pages, not yet
 // layout-aware for multi-column ones (that needs DLA-based column/region
 // detection, not built here yet).
-func (c *Converter) convertPDF(ctx context.Context, data []byte, filename string) (*docling.ConversionResult, error) {
+func (c *Converter) convertPDF(ctx context.Context, data []byte, filename string) (*documentreader.ConversionResult, error) {
 	doc, err := pdfoxide.OpenFromBytes(data)
 	if err != nil {
 		return nil, fmt.Errorf("nativedoc/parser: open %s: %w", filename, err)
@@ -66,7 +66,7 @@ func (c *Converter) convertPDF(ctx context.Context, data []byte, filename string
 		pages = append(pages, ocrText)
 	}
 
-	return &docling.ConversionResult{
+	return &documentreader.ConversionResult{
 		Markdown:  strings.Join(pages, "\n\n"),
 		PageCount: count,
 	}, nil
