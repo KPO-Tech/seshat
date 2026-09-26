@@ -1,4 +1,4 @@
-package docling
+package documentreader
 
 import (
 	"context"

@@ -174,7 +174,7 @@ regression check (`CGO_ENABLED=0 go build ./pkg/sdk/... ./internal/tools/builtin
 still passes after adding `pkg/nativedoc`). Instead: **opt-in**, same
 injection point as any custom backend
 (`sdk.ClientConfig.DocumentConverter`). Added `pkg/nativedoc` (mirrors the
-existing `pkg/docling`/`pkg/rag`/`pkg/pdfsmart` facade pattern) so external
+existing `pkg/documentreader`/`pkg/rag`/`pkg/pdfsmart` facade pattern) so external
 consumers (`seshat-backend`, which can't import `internal/*` per this
 repo's own package boundary rules) can actually reach it:
 
@@ -391,7 +391,7 @@ document-order sections (headings/tables/text). XLSX stays pure Go
    changes needed to `ConvertTool`/`ReadURLTool`/`FileRead`/`pdfsmart` —
    they already depend on the interface, not the concrete docling-serve
    client. The new native backend becomes an additional, swappable
-   implementation, selectable as the default when no `DoclingURL`/
+   implementation, selectable as the default when no `DocumentReaderURL`/
    `DocumentConverter` override is configured.
 6. **Tests**: at minimum, port RAGFlow's parity-test *concept* (not their
    exact fixtures) — a handful of real scanned/native/mixed PDFs and DOCX
@@ -498,7 +498,7 @@ how users actually phrase queries).
   `EnricherCacheKeyProvider` (model + questions-per-chunk fingerprinted into
   the cache key) so changing that configuration doesn't silently reuse
   stale enrichment results, mirroring `ChunkCacheKeyProvider`'s exact
-  purpose for `DoclingChunker`.
+  purpose for `HybridDocumentChunker`.
 - **Wiring**: `Service.SetEnricher(e Enricher)` (`internal/rag/service.go`),
   same nil-means-off pattern as `SetReranker`/the `embedder` field — not a
   forced default, not a per-`IngestRequest` flag (no request-level opt-out
@@ -734,10 +734,10 @@ chunking *strategies* worth having:
   would otherwise exist to provide, and `QAChunker`'s chunks are already
   each a complete, self-contained pair with no "next chunk" content an
   overlap would usefully carry forward.
-- **Wired into `NewDoclingChunkerForProfile`** (`docling_chunker.go`)
+- **Wired into `NewHybridDocumentChunkerForProfile`** (`hybrid_document_chunker.go`)
   exactly like `ChunkProfileStructured` → `HeadingChunker` already was -
   extended from an `if` to a `switch` covering all three profile names.
-  Regression-tested (`TestNewDoclingChunkerForProfile_TableAndQAProfilesGetMatchingFallbacks`)
+  Regression-tested (`TestNewHybridDocumentChunkerForProfile_TableAndQAProfilesGetMatchingFallbacks`)
   the same way the existing structured-profile test already was.
 - **`pkg/rag`** exposes `TableChunker`/`QAChunker`/`NewTableChunker`/
   `NewQAChunker`/`ChunkProfileTable`/`ChunkProfileQA`, matching the facade's

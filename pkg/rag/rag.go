@@ -2,7 +2,7 @@ package rag
 
 import (
 	internalrag "github.com/KPO-Tech/seshat/internal/rag"
-	publicdocling "github.com/KPO-Tech/seshat/pkg/docling"
+	publicreader "github.com/KPO-Tech/seshat/pkg/documentreader"
 	publicstorage "github.com/KPO-Tech/seshat/pkg/storage"
 	publicvector "github.com/KPO-Tech/seshat/pkg/vector"
 )
@@ -17,7 +17,7 @@ type (
 	CachedDocumentChunker    = internalrag.CachedDocumentChunker
 	Document                 = internalrag.Document
 	DocumentChunker          = internalrag.DocumentChunker
-	DoclingChunker           = internalrag.DoclingChunker
+	HybridDocumentChunker    = internalrag.HybridDocumentChunker
 	Embedder                 = internalrag.Embedder
 	Enricher                 = internalrag.Enricher
 	EnrichmentCache          = internalrag.EnrichmentCache
@@ -80,15 +80,14 @@ func DefaultChunker() Chunker {
 	return internalrag.DefaultChunker()
 }
 
-// NewDoclingChunker creates a document-aware chunker backed by the given
-// HybridChunkBackend (docling-serve's publicdocling.Client by default, but
-// any implementation works - see publicdocling.HybridChunkBackend).
-func NewDoclingChunker(client publicdocling.HybridChunkBackend, opts publicdocling.ChunkOptions) *DoclingChunker {
-	return internalrag.NewDoclingChunker(client, opts)
+// NewHybridDocumentChunker creates a document-aware chunker backed by the given
+// reader.
+func NewHybridDocumentChunker(client publicreader.HybridChunker, opts publicreader.ChunkOptions) *HybridDocumentChunker {
+	return internalrag.NewHybridDocumentChunker(client, opts)
 }
 
-func NewDoclingChunkerForProfile(client publicdocling.HybridChunkBackend, profile ChunkProfile, opts publicdocling.ChunkOptions) *DoclingChunker {
-	return internalrag.NewDoclingChunkerForProfile(client, profile, opts)
+func NewHybridDocumentChunkerForProfile(client publicreader.HybridChunker, profile ChunkProfile, opts publicreader.ChunkOptions) *HybridDocumentChunker {
+	return internalrag.NewHybridDocumentChunkerForProfile(client, profile, opts)
 }
 
 func DefaultChunkProfile() ChunkProfile {
@@ -103,8 +102,8 @@ func NewCustomChunkProfile(maxTokens, overlapTokens int) (ChunkProfile, error) {
 	return internalrag.NewCustomChunkProfile(maxTokens, overlapTokens)
 }
 
-func DoclingChunkOptionsForProfile(profile ChunkProfile, opts publicdocling.ChunkOptions) publicdocling.ChunkOptions {
-	return internalrag.DoclingChunkOptionsForProfile(profile, opts)
+func DocumentReaderChunkOptionsForProfile(profile ChunkProfile, opts publicreader.ChunkOptions) publicreader.ChunkOptions {
+	return internalrag.DocumentReaderChunkOptionsForProfile(profile, opts)
 }
 
 func NewCachedDocumentChunker(chunker DocumentChunker, cache ChunkCache) *CachedDocumentChunker {

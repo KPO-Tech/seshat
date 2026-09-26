@@ -1,4 +1,4 @@
-package docling
+package documentreader
 
 import (
 	"bytes"
@@ -34,8 +34,8 @@ type ChunkParser func(rawBody []byte) ([]Chunk, error)
 // GenericConfig: paths, the multipart file field name, and functions
 // translating that server's own JSON into the same ConversionResult/Chunk
 // types Client produces. The rest of seshat
-// (internal/rag.DoclingChunker, internal/pdfsmart, the file-read/convert
-// tools) depends only on the DocumentConverterBackend/HybridChunkBackend
+// (internal/rag.HybridDocumentChunker, internal/pdfsmart, the file-read/convert
+// tools) depends only on the Converter/HybridChunker
 // interfaces, so it works unchanged regardless of which concrete backend a
 // host configures.
 //
@@ -121,25 +121,25 @@ type GenericConfig struct {
 // would otherwise only fail at first use, far from the actual mistake.
 func NewGenericClient(cfg GenericConfig) (*GenericClient, error) {
 	if strings.TrimSpace(cfg.BaseURL) == "" {
-		return nil, fmt.Errorf("docling: GenericClient requires BaseURL")
+		return nil, fmt.Errorf("documentreader: GenericClient requires BaseURL")
 	}
 	if strings.TrimSpace(cfg.FileField) == "" {
-		return nil, fmt.Errorf("docling: GenericClient requires FileField (the multipart field name the server expects the file under)")
+		return nil, fmt.Errorf("documentreader: GenericClient requires FileField (the multipart field name the server expects the file under)")
 	}
 	if cfg.ConvertPath != "" && cfg.ParseConvert == nil {
-		return nil, fmt.Errorf("docling: GenericClient has ConvertPath set but no ParseConvert")
+		return nil, fmt.Errorf("documentreader: GenericClient has ConvertPath set but no ParseConvert")
 	}
 	if cfg.ConvertPath == "" && cfg.ParseConvert != nil {
-		return nil, fmt.Errorf("docling: GenericClient has ParseConvert set but no ConvertPath")
+		return nil, fmt.Errorf("documentreader: GenericClient has ParseConvert set but no ConvertPath")
 	}
 	if cfg.ChunkPath != "" && cfg.ParseChunk == nil {
-		return nil, fmt.Errorf("docling: GenericClient has ChunkPath set but no ParseChunk")
+		return nil, fmt.Errorf("documentreader: GenericClient has ChunkPath set but no ParseChunk")
 	}
 	if cfg.ChunkPath == "" && cfg.ParseChunk != nil {
-		return nil, fmt.Errorf("docling: GenericClient has ParseChunk set but no ChunkPath")
+		return nil, fmt.Errorf("documentreader: GenericClient has ParseChunk set but no ChunkPath")
 	}
 	if cfg.ConvertPath == "" && cfg.ChunkPath == "" {
-		return nil, fmt.Errorf("docling: GenericClient needs at least one of ConvertPath or ChunkPath configured")
+		return nil, fmt.Errorf("documentreader: GenericClient needs at least one of ConvertPath or ChunkPath configured")
 	}
 
 	transport := newDefaultTransport(cfg.BaseURL, cfg.UserAgent)
@@ -179,7 +179,7 @@ func NewGenericClient(cfg GenericConfig) (*GenericClient, error) {
 
 func (g *GenericClient) ConvertFile(ctx context.Context, filePath string) (*ConversionResult, error) {
 	if g.convertPath == "" {
-		return nil, fmt.Errorf("docling: this GenericClient has no ConvertPath configured")
+		return nil, fmt.Errorf("documentreader: this GenericClient has no ConvertPath configured")
 	}
 	rawBody, err := g.transport.postMultipartReplayable(ctx, g.convertPath, g.fileField, filepath.Base(filePath), func() (io.ReadCloser, error) {
 		return os.Open(filePath)
@@ -192,7 +192,7 @@ func (g *GenericClient) ConvertFile(ctx context.Context, filePath string) (*Conv
 
 func (g *GenericClient) ConvertBytes(ctx context.Context, data []byte, filename string) (*ConversionResult, error) {
 	if g.convertPath == "" {
-		return nil, fmt.Errorf("docling: this GenericClient has no ConvertPath configured")
+		return nil, fmt.Errorf("documentreader: this GenericClient has no ConvertPath configured")
 	}
 	rawBody, err := g.transport.postMultipartReplayable(ctx, g.convertPath, g.fileField, filename, func() (io.ReadCloser, error) {
 		return io.NopCloser(bytes.NewReader(data)), nil
@@ -208,16 +208,16 @@ func (g *GenericClient) ConvertBytes(ctx context.Context, data []byte, filename 
 // {"sources":[...]}) is specific enough per server that it isn't worth
 // generalizing here without a second real backend that needs it. Returns a
 // clear error rather than silently failing a caller that assumed every
-// DocumentConverterBackend supports it.
+// Converter supports it.
 func (g *GenericClient) ConvertURL(context.Context, string) (*ConversionResult, error) {
-	return nil, fmt.Errorf("docling: GenericClient does not support ConvertURL")
+	return nil, fmt.Errorf("documentreader: GenericClient does not support ConvertURL")
 }
 
 // ChunkHybridFile mirrors Client's own convenience method of the same name
 // (see ChunkHybridBytes's doc comment for why opts is unused here).
 func (g *GenericClient) ChunkHybridFile(ctx context.Context, filePath string, _ ChunkOptions) ([]Chunk, error) {
 	if g.chunkPath == "" {
-		return nil, fmt.Errorf("docling: this GenericClient has no ChunkPath configured")
+		return nil, fmt.Errorf("documentreader: this GenericClient has no ChunkPath configured")
 	}
 	rawBody, err := g.transport.postMultipartReplayable(ctx, g.chunkPath, g.fileField, filepath.Base(filePath), func() (io.ReadCloser, error) {
 		return os.Open(filePath)
@@ -228,7 +228,7 @@ func (g *GenericClient) ChunkHybridFile(ctx context.Context, filePath string, _ 
 	return g.parseChunk(rawBody)
 }
 
-// ChunkHybridBytes satisfies HybridChunkBackend. opts is accepted for
+// ChunkHybridBytes satisfies HybridChunker. opts is accepted for
 // interface compatibility but currently unused: unlike docling-serve,
 // there is no generic way to map ChunkOptions onto an arbitrary server's
 // own tuning knobs (or lack thereof - seshat-intelligence's own chunk
@@ -237,7 +237,7 @@ func (g *GenericClient) ChunkHybridFile(ctx context.Context, filePath string, _ 
 // GenericClient with that translation, once a real need for it shows up.
 func (g *GenericClient) ChunkHybridBytes(ctx context.Context, data []byte, filename string, _ ChunkOptions) ([]Chunk, error) {
 	if g.chunkPath == "" {
-		return nil, fmt.Errorf("docling: this GenericClient has no ChunkPath configured")
+		return nil, fmt.Errorf("documentreader: this GenericClient has no ChunkPath configured")
 	}
 	rawBody, err := g.transport.postMultipartReplayable(ctx, g.chunkPath, g.fileField, filename, func() (io.ReadCloser, error) {
 		return io.NopCloser(bytes.NewReader(data)), nil
@@ -253,6 +253,6 @@ func (g *GenericClient) IsAvailable(ctx context.Context) bool {
 }
 
 var (
-	_ DocumentConverterBackend = (*GenericClient)(nil)
-	_ HybridChunkBackend       = (*GenericClient)(nil)
+	_ Converter     = (*GenericClient)(nil)
+	_ HybridChunker = (*GenericClient)(nil)
 )

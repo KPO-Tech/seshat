@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/KPO-Tech/seshat/internal/docling"
+	"github.com/KPO-Tech/seshat/internal/documentreader"
 )
 
 // ChunkProfileName identifies a recommended chunking profile for RAG
@@ -112,9 +112,10 @@ func NewCustomChunkProfile(maxTokens, overlapTokens int) (ChunkProfile, error) {
 	}, nil
 }
 
-// DoclingChunkOptionsForProfile maps a RAG chunk profile to docling-serve's
-// hybrid chunker options while preserving caller-provided structural options.
-func DoclingChunkOptionsForProfile(profile ChunkProfile, opts docling.ChunkOptions) docling.ChunkOptions {
+// DocumentReaderChunkOptionsForProfile maps a RAG chunk profile to hybrid
+// document-reader chunk options while preserving caller-provided structural
+// options.
+func DocumentReaderChunkOptionsForProfile(profile ChunkProfile, opts documentreader.ChunkOptions) documentreader.ChunkOptions {
 	if profile.MaxTokens > 0 {
 		opts.MaxTokens = profile.MaxTokens
 	}

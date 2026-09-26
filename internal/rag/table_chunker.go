@@ -32,7 +32,7 @@ type TableChunker struct {
 
 // NewTableChunker creates a table-aware chunker using one of Seshat's
 // recommended chunk profiles (same defaulting guard as
-// NewHeadingChunker/NewDoclingChunkerForProfile). The fallback for
+// NewHeadingChunker/NewHybridDocumentChunkerForProfile). The fallback for
 // non-table text is HeadingChunker, so a table-and-headings document gets
 // both behaviors at once.
 func NewTableChunker(profile ChunkProfile) *TableChunker {

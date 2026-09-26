@@ -99,7 +99,7 @@ type UnchangedFileResult struct {
 	Message string `json:"message"`
 }
 
-// PDFMarkdownFileResult is the result of a docling-converted PDF.
+// PDFMarkdownFileResult is the result of a DocumentReader-converted PDF.
 type PDFMarkdownFileResult struct {
 	FilePath     string     `json:"file_path"`
 	Markdown     string     `json:"markdown"`
@@ -115,8 +115,8 @@ type PDFImage struct {
 	Base64   string `json:"base64"`
 }
 
-// DoclingFileResult is the result of converting a non-PDF file (DOCX, PPTX, XLSX, audio) via docling-serve.
-type DoclingFileResult struct {
+// DocumentReaderFileResult is the result of converting a non-PDF file (DOCX, PPTX, XLSX, audio) via the configured document reader.
+type DocumentReaderFileResult struct {
 	FilePath     string     `json:"file_path"`
 	Format       string     `json:"format"` // lowercase extension without dot, e.g. "docx"
 	Markdown     string     `json:"markdown"`
@@ -142,11 +142,11 @@ type FileReadResult struct {
 	// PDFExtracted contains the PDF extracted pages result (if Type == FileTypePDFExtracted)
 	PDFExtracted *PDFExtractedResult `json:"pdf_extracted,omitempty"`
 
-	// PDFMarkdown contains the docling-converted PDF result (if Type == FileTypePDFMarkdown)
+	// PDFMarkdown contains the DocumentReader-converted PDF result (if Type == FileTypePDFMarkdown)
 	PDFMarkdown *PDFMarkdownFileResult `json:"pdf_markdown,omitempty"`
 
-	// Docling contains the result of a docling conversion of a non-PDF format (if Type == FileTypeDocling)
-	Docling *DoclingFileResult `json:"docling,omitempty"`
+	// DocumentReader contains the result of a document-reader conversion of a non-PDF format (if Type == FileTypeDocumentReader)
+	DocumentReader *DocumentReaderFileResult `json:"document_reader,omitempty"`
 
 	// Notebook contains the notebook result (if Type == FileTypeNotebook)
 	Notebook *NotebookResult `json:"notebook,omitempty"`

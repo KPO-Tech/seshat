@@ -10,7 +10,7 @@
 // that wants native PDF/DOCX/XLSX conversion - including OCR for scanned
 // PDFs - constructs a Converter here and passes it as
 // sdk.ClientConfig.DocumentConverter, the same injection point used for any
-// custom DocumentConverterBackend. See
+// custom Converter. See
 // docs/issues/document-intelligence-roadmap.md for the full picture
 // (model provisioning, build tooling, Windows support).
 package nativedoc
@@ -21,7 +21,7 @@ import (
 	"github.com/KPO-Tech/seshat/pkg/pdfsmart"
 )
 
-// Converter implements docling.DocumentConverterBackend for PDF, DOCX, and
+// Converter implements documentreader.Converter for PDF, DOCX, and
 // XLSX using only native Go/CGO components. See parser.Converter's own doc
 // comment for exactly what each format path does and doesn't do yet. It also
 // implements pdfsmart.PageRenderer (RenderPage, see render.go in the parser

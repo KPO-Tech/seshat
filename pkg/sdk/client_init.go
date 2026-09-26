@@ -134,7 +134,7 @@ func initBuiltinRegistry(config *ClientConfig, browserManager browsercore.Manage
 		PlanStore:                  config.PlanStore,
 		UserID:                     config.UserID,
 		LongTermMemory:             config.LongTermMemory,
-		DoclingURL:                 config.DoclingURL,
+		DocumentReaderURL:          config.DocumentReaderURL,
 		DocumentConverter:          config.DocumentConverter,
 		AutomationServiceURL:       config.AutomationServiceURL,
 		AutomationAPIKey:           config.AutomationAPIKey,

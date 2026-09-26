@@ -7,7 +7,7 @@ import (
 	agentsTool "github.com/KPO-Tech/seshat/internal/tools/agents"
 	automationTool "github.com/KPO-Tech/seshat/internal/tools/automation"
 	bashTool "github.com/KPO-Tech/seshat/internal/tools/bash"
-	doclingTool "github.com/KPO-Tech/seshat/internal/tools/files/docling"
+	documentreaderTool "github.com/KPO-Tech/seshat/internal/tools/files/documentreader"
 	docxTool "github.com/KPO-Tech/seshat/internal/tools/files/docx"
 	editTool "github.com/KPO-Tech/seshat/internal/tools/files/edit"
 	excelTool "github.com/KPO-Tech/seshat/internal/tools/files/excel"
@@ -88,10 +88,13 @@ func RegisterBuiltinToolsWithConfig(reg *tool.Registry, config *Config) error {
 	webFetchConfig.ArtifactStore = config.ArtifactStore
 
 	fileReadConfig := fileReadTool.DefaultToolConfig()
-	fileReadConfig.DoclingURL = config.DoclingURL
+	fileReadConfig.DocumentReaderURL = config.DocumentReaderURL
 	fileReadConfig.DocumentConverter = config.DocumentConverter
 
-	doclingConfig := doclingTool.Config{DoclingURL: config.DoclingURL, DocumentConverter: config.DocumentConverter}
+	documentReaderConfig := documentreaderTool.Config{
+		DocumentReaderURL: config.DocumentReaderURL,
+		DocumentConverter: config.DocumentConverter,
+	}
 
 	bashConfig := bashTool.DefaultToolConfig()
 	bashConfig.WorkingDirectory = config.WorkingDir
@@ -105,8 +108,8 @@ func RegisterBuiltinToolsWithConfig(reg *tool.Registry, config *Config) error {
 		bashTool.NewJobOutputTool(),
 		bashTool.NewJobKillTool(),
 		fileReadTool.NewTool(fileReadConfig),
-		doclingTool.NewReadURLTool(doclingConfig),
-		doclingTool.NewConvertTool(doclingConfig, config.WorkingDir),
+		documentreaderTool.NewReadURLTool(documentReaderConfig),
+		documentreaderTool.NewConvertTool(documentReaderConfig, config.WorkingDir),
 		globTool.NewGlobTool(config.WorkingDir),
 		grepTool.NewGrepTool(config.WorkingDir),
 		searchsessionTool.NewTool(config.WorkingDir),

@@ -9,11 +9,21 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [1.2.53] - 2026-09-26
+
 ### Added
-- `internal/docling`/`pkg/docling`: `GenericClient` - a configurable client for any document-intelligence HTTP server that accepts a multipart file upload and returns JSON (the shape docling-serve, seshat-intelligence, and similar services all share), unlike `Client` which is hardcoded to docling-serve's own paths/JSON shape. Every protocol detail (paths, the multipart file field name, response parsing via the new `ConvertParser`/`ChunkParser` function types) is supplied by the caller through `GenericConfig`, so a concrete backend's own adapter (e.g. for a seshat-intelligence deployment) is a small amount of code in a downstream repo, not a change here. `Client`'s own HTTP mechanics (multipart streaming, retry, health-check caching) were extracted into a shared, unexported `httpTransport` that both `Client` and `GenericClient` build on - `Client`'s public API and behavior are unchanged (all existing tests pass unmodified). Validated against a real, running seshat-intelligence instance (not just a mock), including a live conversion and hybrid-chunk round trip.
+- `internal/documentreader`/`pkg/documentreader`: a neutral document-reader abstraction plus `GenericClient`, a configurable client for any document-intelligence HTTP server that accepts a multipart file upload and returns JSON (the shape docling-serve, seshat-intelligence, marker-style services, and similar backends can all share). Every protocol detail (paths, the multipart file field name, response parsing via `ConvertParser`/`ChunkParser`) is supplied by the caller through `GenericConfig`, so a concrete backend's own adapter can live downstream without renaming Seshat internals again. Validated against a real, running seshat-intelligence instance, including live conversion and hybrid-chunk round trips.
 
 ### Changed
-- `internal/docling`: `Client`'s internal fields moved onto a new embedded `*httpTransport` (see the `GenericClient` entry above) - purely internal, no public API change; existing direct field access in tests (`c.httpClient`, etc.) continues to work via Go's struct-embedding promotion.
+- Document conversion configuration moved from `DoclingURL`/`docling_url` to `DocumentReaderURL`/`document_reader_url`; callers can still inject a custom `documentreader.Converter` directly.
+- The TUI no longer starts a managed document-conversion service by default. It only starts the bundled docling-serve adapter when `DocumentReaderURL` is explicitly set to `docling:auto`, then replaces that sentinel with the managed local base URL.
+- The public RAG document-aware chunker is now `HybridDocumentChunker`/`NewHybridDocumentChunkerForProfile`, with neutral metadata (`chunker=document_hybrid`, `document_reader_*`) instead of docling-shaped names.
+- The explicit document conversion tool is now `convert_document` instead of `docling_convert`.
+- The concrete docling-serve HTTP adapter remains internal implementation detail under `internal/documentreader`; the public package now exposes only neutral document-reader interfaces, result types, and the generic HTTP client.
+
+### Removed
+- Removed the public `pkg/docling` and `pkg/python` facades, plus internal/tool packages named `docling`.
+- Removed the old exported names `DoclingURL`, `DoclingChunker`, `NewDoclingChunker*`, `DoclingChunkOptionsForProfile`, `FileTypeDocling`, and `DoclingFileResult`.
 
 ## [1.2.52] - 2026-09-25
 
@@ -245,7 +255,7 @@ a real ChatGPT-account session (documented in
 - `write_pdf` tool: create/append/delete-pages PDFs via `go-pdf/fpdf` + `pdfcpu` — no headless-browser dependency.
 - `search_start` tool: cancellable, streaming background content search (reuses `job_output`/`job_kill`) that also searches inside `.docx`/`.pptx`/`.xlsx` content, which ripgrep can't see.
 - `get_config` tool (read-only): exposes the effective security policy — denied command fragments/patterns, commands requiring approval, read/write-denied path prefixes, file-read limits, sandbox availability, default shell.
-- `internal/tools/files/docling` package: `read_document_url` (moved from `files/read_url`) plus new `docling_convert` for explicit local-file conversion (OCR, complex slide decks, audio transcription) — FileRead's own automatic docling fallback is unchanged.
+- `internal/tools/files/documentreader` package: `read_document_url` (moved from `files/read_url`) plus new `convert_document` for explicit local-file conversion (OCR, complex slide decks, audio transcription) — FileRead's own automatic document-reader fallback is unchanged.
 - `rag_delete` tool: delete an entire corpus or a single file's chunks — previously unreachable capability (`Service.DeleteNamespace`/`DeleteFileChunks` existed but no tool exposed them).
 - `rag_ingest` gains an optional `file_id` param (defaults to `filename`) for idempotent re-ingest — re-ingesting the same file now replaces its chunks instead of accumulating duplicates.
 - **Vectorless RAG**: `rag_ingest`/`rag_search` now work without any embedding provider configured, via pure BM25/keyword ranking (real BM25 through SQLite FTS5; keyword-overlap scoring on HNSW/Memory). Previously RAG was hard-disabled with no embedder at all.
@@ -296,6 +306,7 @@ a real ChatGPT-account session (documented in
 - `internal/tools/special/brief`: a "send message to the user" tool from the pre-rename codebase, never registered at any point in its history.
 - `internal/tools/special/config/configTool.go`: an arbitrary key/value settings store predating the current `contract.Tool` interface (incompatible signatures — could never have been registered as-is), replaced by the real `get_config` tool.
 
-[Unreleased]: https://github.com/KPO-Tech/seshat/compare/v1.2.52...HEAD
+[Unreleased]: https://github.com/KPO-Tech/seshat/compare/v1.2.53...HEAD
+[1.2.53]: https://github.com/KPO-Tech/seshat/compare/v1.2.52...v1.2.53
 [1.2.52]: https://github.com/KPO-Tech/seshat/compare/v1.2.51...v1.2.52
 [1.1.0]: https://github.com/KPO-Tech/seshat/compare/v1.0.4...v1.1.0

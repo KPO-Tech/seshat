@@ -1,4 +1,4 @@
-package docling
+package documentreader
 
 import (
 	"context"
@@ -8,7 +8,7 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/KPO-Tech/seshat/internal/docling"
+	reader "github.com/KPO-Tech/seshat/internal/documentreader"
 	tool "github.com/KPO-Tech/seshat/internal/tools/registry"
 	"github.com/KPO-Tech/seshat/internal/tools/schema"
 	"github.com/KPO-Tech/seshat/internal/types"
@@ -27,19 +27,19 @@ const (
 	// ReadURLDescription is the description of the read_document_url tool.
 	ReadURLDescription = "Fetch a document at a URL and convert it to readable markdown. " +
 		"Supports PDF, DOCX, PPTX, XLSX, HTML pages, and arXiv papers. " +
-		"Requires docling-serve to be configured. " +
+		"Requires a document reader to be configured. " +
 		"Optionally saves the extracted markdown to a workspace path."
 )
 
 // ReadURLTool fetches a remote document and converts it to markdown via a
 // document-conversion backend.
 type ReadURLTool struct {
-	doclingClient docling.DocumentConverterBackend
+	documentReader reader.Converter
 }
 
 // NewReadURLTool creates a new read_document_url tool.
 func NewReadURLTool(cfg Config) *ReadURLTool {
-	return &ReadURLTool{doclingClient: cfg.converter()}
+	return &ReadURLTool{documentReader: cfg.converter()}
 }
 
 func (t *ReadURLTool) Definition() tool.Definition {
@@ -88,20 +88,19 @@ func (t *ReadURLTool) Call(
 	savePath, _ := input.Parsed["save_path"].(string)
 	savePath = strings.TrimSpace(savePath)
 
-	if t.doclingClient == nil || !t.doclingClient.IsAvailable(ctx) {
+	if t.documentReader == nil || !t.documentReader.IsAvailable(ctx) {
 		return tool.NewTextResult(fmt.Sprintf(
-			"URL: %s\n\nread_document_url requires docling-serve. "+
-				"Configure the DOCLING_URL setting to enable remote document conversion.",
+			"URL: %s\n\nread_document_url requires a configured document reader.",
 			rawURL,
 		)), nil
 	}
 
-	conversion, err := t.doclingClient.ConvertURL(ctx, rawURL)
+	conversion, err := t.documentReader.ConvertURL(ctx, rawURL)
 	if err != nil {
 		if ctx.Err() != nil {
 			return tool.NewErrorResult(fmt.Errorf("read_document_url cancelled")), nil
 		}
-		return tool.NewErrorResult(fmt.Errorf("docling conversion failed for %s: %w", rawURL, err)), nil
+		return tool.NewErrorResult(fmt.Errorf("document conversion failed for %s: %w", rawURL, err)), nil
 	}
 
 	// Optionally write markdown to workspace path.
@@ -184,7 +183,7 @@ func resolveWorkspacePath(path string, toolCtx tool.ToolUseContext) string {
 	return filepath.Join(workingDir, path)
 }
 
-func formatURLResult(sourceURL string, r *docling.ConversionResult, savedAt string) string {
+func formatURLResult(sourceURL string, r *reader.ConversionResult, savedAt string) string {
 	var b strings.Builder
 	b.WriteString(fmt.Sprintf("Source: %s\n", sourceURL))
 	if r.PageCount > 0 {

@@ -1,4 +1,4 @@
-package docling
+package documentreader
 
 import (
 	"bytes"
@@ -51,13 +51,13 @@ type httpTransport struct {
 	healthCacheUntil time.Time
 }
 
-// Client calls a running docling-serve instance to convert documents to markdown.
-type Client struct {
+// DoclingClient calls a running docling-serve instance to convert documents to markdown.
+type DoclingClient struct {
 	*httpTransport
 }
 
-// Option configures a Client at construction time.
-type Option func(*Client)
+// Option configures a DoclingClient at construction time.
+type Option func(*DoclingClient)
 
 // RetryConfig controls best-effort retries for replayable docling-serve calls.
 type RetryConfig struct {
@@ -72,14 +72,14 @@ type RetryConfig struct {
 // short), or a smaller one for latency-sensitive callers that would rather
 // fail fast than wait.
 func WithTimeout(d time.Duration) Option {
-	return func(c *Client) {
+	return func(c *DoclingClient) {
 		c.httpClient.Timeout = d
 	}
 }
 
 // WithHTTPClient replaces the HTTP client used for docling-serve calls.
 func WithHTTPClient(client *http.Client) Option {
-	return func(c *Client) {
+	return func(c *DoclingClient) {
 		if client != nil {
 			c.httpClient = client
 		}
@@ -88,28 +88,28 @@ func WithHTTPClient(client *http.Client) Option {
 
 // WithAPIKey sets the X-Api-Key header sent to docling-serve.
 func WithAPIKey(key string) Option {
-	return func(c *Client) {
+	return func(c *DoclingClient) {
 		c.apiKey = strings.TrimSpace(key)
 	}
 }
 
 // WithTenantID sets the X-Tenant-Id header sent to docling-serve.
 func WithTenantID(id string) Option {
-	return func(c *Client) {
+	return func(c *DoclingClient) {
 		c.tenantID = strings.TrimSpace(id)
 	}
 }
 
 // WithUserAgent sets the User-Agent header sent to docling-serve.
 func WithUserAgent(userAgent string) Option {
-	return func(c *Client) {
+	return func(c *DoclingClient) {
 		c.userAgent = strings.TrimSpace(userAgent)
 	}
 }
 
 // WithMaxResponseBytes adjusts the response body safety limit.
 func WithMaxResponseBytes(n int64) Option {
-	return func(c *Client) {
+	return func(c *DoclingClient) {
 		if n > 0 {
 			c.maxResponseBytes = n
 		}
@@ -118,7 +118,7 @@ func WithMaxResponseBytes(n int64) Option {
 
 // WithRetry enables retries for transient failures on replayable requests.
 func WithRetry(maxAttempts int, baseDelay, maxDelay time.Duration) Option {
-	return func(c *Client) {
+	return func(c *DoclingClient) {
 		if maxAttempts < 1 {
 			maxAttempts = 1
 		}
@@ -138,18 +138,18 @@ func WithRetry(maxAttempts int, baseDelay, maxDelay time.Duration) Option {
 
 // WithHealthCacheTTL caches IsAvailable results for the given duration.
 func WithHealthCacheTTL(ttl time.Duration) Option {
-	return func(c *Client) {
+	return func(c *DoclingClient) {
 		if ttl >= 0 {
 			c.healthCacheTTL = ttl
 		}
 	}
 }
 
-// NewClient creates a client pointing at a docling-serve base URL.
+// NewDoclingClient creates a client pointing at a docling-serve base URL.
 // baseURL is typically "http://localhost:5001". Defaults to a 120s
 // per-request timeout - pass WithTimeout to override it.
-func NewClient(baseURL string, opts ...Option) *Client {
-	c := &Client{httpTransport: newDefaultTransport(baseURL, "seshat-docling-client")}
+func NewDoclingClient(baseURL string, opts ...Option) *DoclingClient {
+	c := &DoclingClient{httpTransport: newDefaultTransport(baseURL, "seshat-docling-client")}
 	for _, opt := range opts {
 		opt(c)
 	}
@@ -208,33 +208,33 @@ type HealthChecker interface {
 	IsAvailable(ctx context.Context) bool
 }
 
-// DocumentConverterBackend is anything that can convert documents to
-// markdown. *Client (this package) is the default implementation, backed by
+// Converter is anything that can convert documents to
+// markdown. *DoclingClient (this package) is the default implementation, backed by
 // docling-serve - every consumer in internal/tools and internal/pdfsmart
-// depends on this interface rather than *Client directly, so a host
+// depends on this interface rather than *DoclingClient directly, so a host
 // application can supply its own implementation (e.g. one backed by a
 // different service) via pkg/sdk.ClientConfig.DocumentConverter instead of
 // being forced onto docling-serve's wire format.
-type DocumentConverterBackend interface {
+type Converter interface {
 	HealthChecker
 	ConvertFile(ctx context.Context, filePath string) (*ConversionResult, error)
 	ConvertBytes(ctx context.Context, data []byte, filename string) (*ConversionResult, error)
 	ConvertURL(ctx context.Context, docURL string) (*ConversionResult, error)
 }
 
-// HybridChunkBackend is anything that can produce document-aware hybrid
-// chunks. *Client (this package) is the default implementation, backed by
-// docling-serve's hybrid chunk endpoint - internal/rag.DoclingChunker
-// depends on this interface rather than *Client directly, so a caller
+// HybridChunker is anything that can produce document-aware hybrid
+// chunks. *DoclingClient (this package) is the default implementation, backed by
+// docling-serve's hybrid chunk endpoint - internal/rag.HybridDocumentChunker
+// depends on this interface rather than *DoclingClient directly, so a caller
 // assembling its own rag.Service can supply a different backend.
-type HybridChunkBackend interface {
+type HybridChunker interface {
 	HealthChecker
 	ChunkHybridBytes(ctx context.Context, data []byte, filename string, opts ChunkOptions) ([]Chunk, error)
 }
 
 var (
-	_ DocumentConverterBackend = (*Client)(nil)
-	_ HybridChunkBackend       = (*Client)(nil)
+	_ Converter     = (*DoclingClient)(nil)
+	_ HybridChunker = (*DoclingClient)(nil)
 )
 
 // ConvertOptions tunes docling-serve conversion. Zero values keep server
@@ -298,12 +298,12 @@ type ExtractedImage struct {
 }
 
 // ConvertFile sends filePath to docling-serve and returns the markdown + images.
-func (c *Client) ConvertFile(ctx context.Context, filePath string) (*ConversionResult, error) {
+func (c *DoclingClient) ConvertFile(ctx context.Context, filePath string) (*ConversionResult, error) {
 	return c.ConvertFileWithOptions(ctx, filePath, ConvertOptions{})
 }
 
 // ConvertFileWithOptions sends filePath to docling-serve with conversion options.
-func (c *Client) ConvertFileWithOptions(ctx context.Context, filePath string, opts ConvertOptions) (*ConversionResult, error) {
+func (c *DoclingClient) ConvertFileWithOptions(ctx context.Context, filePath string, opts ConvertOptions) (*ConversionResult, error) {
 	rawBody, err := c.postMultipartReplayable(ctx, "/v1/convert/file", "files", filepath.Base(filePath), func() (io.ReadCloser, error) {
 		return os.Open(filePath)
 	}, convertFields(opts, ""))
@@ -315,12 +315,12 @@ func (c *Client) ConvertFileWithOptions(ctx context.Context, filePath string, op
 
 // ConvertBytes converts an in-memory document without writing it to disk first.
 // filename is used only to hint the MIME type to docling (e.g. "report.pdf").
-func (c *Client) ConvertBytes(ctx context.Context, data []byte, filename string) (*ConversionResult, error) {
+func (c *DoclingClient) ConvertBytes(ctx context.Context, data []byte, filename string) (*ConversionResult, error) {
 	return c.ConvertBytesWithOptions(ctx, data, filename, ConvertOptions{})
 }
 
 // ConvertBytesWithOptions converts an in-memory document with conversion options.
-func (c *Client) ConvertBytesWithOptions(ctx context.Context, data []byte, filename string, opts ConvertOptions) (*ConversionResult, error) {
+func (c *DoclingClient) ConvertBytesWithOptions(ctx context.Context, data []byte, filename string, opts ConvertOptions) (*ConversionResult, error) {
 	rawBody, err := c.postMultipartReplayable(ctx, "/v1/convert/file", "files", filename, func() (io.ReadCloser, error) {
 		return io.NopCloser(bytes.NewReader(data)), nil
 	}, convertFields(opts, ""))
@@ -331,7 +331,7 @@ func (c *Client) ConvertBytesWithOptions(ctx context.Context, data []byte, filen
 }
 
 // ChunkHybridFile sends filePath to docling-serve's hybrid chunk endpoint.
-func (c *Client) ChunkHybridFile(ctx context.Context, filePath string, opts ChunkOptions) ([]Chunk, error) {
+func (c *DoclingClient) ChunkHybridFile(ctx context.Context, filePath string, opts ChunkOptions) ([]Chunk, error) {
 	rawBody, err := c.postMultipartReplayable(ctx, "/v1/chunk/hybrid/file", "files", filepath.Base(filePath), func() (io.ReadCloser, error) {
 		return os.Open(filePath)
 	}, chunkFields(opts))
@@ -342,7 +342,7 @@ func (c *Client) ChunkHybridFile(ctx context.Context, filePath string, opts Chun
 }
 
 // ChunkHybridBytes chunks an in-memory document without writing it to disk.
-func (c *Client) ChunkHybridBytes(ctx context.Context, data []byte, filename string, opts ChunkOptions) ([]Chunk, error) {
+func (c *DoclingClient) ChunkHybridBytes(ctx context.Context, data []byte, filename string, opts ChunkOptions) ([]Chunk, error) {
 	rawBody, err := c.postMultipartReplayable(ctx, "/v1/chunk/hybrid/file", "files", filename, func() (io.ReadCloser, error) {
 		return io.NopCloser(bytes.NewReader(data)), nil
 	}, chunkFields(opts))
@@ -353,7 +353,7 @@ func (c *Client) ChunkHybridBytes(ctx context.Context, data []byte, filename str
 }
 
 // ChunkHybrid sends a document to docling-serve's hybrid chunk endpoint.
-func (c *Client) ChunkHybrid(ctx context.Context, filename string, r io.Reader, opts ChunkOptions) ([]Chunk, error) {
+func (c *DoclingClient) ChunkHybrid(ctx context.Context, filename string, r io.Reader, opts ChunkOptions) ([]Chunk, error) {
 	rawBody, err := c.postMultipart(ctx, "/v1/chunk/hybrid/file", "files", filename, r, chunkFields(opts))
 	if err != nil {
 		return nil, err
@@ -362,7 +362,7 @@ func (c *Client) ChunkHybrid(ctx context.Context, filename string, r io.Reader, 
 }
 
 // ConvertURL fetches and converts a remote document (e.g. an arXiv PDF URL).
-func (c *Client) ConvertURL(ctx context.Context, docURL string) (*ConversionResult, error) {
+func (c *DoclingClient) ConvertURL(ctx context.Context, docURL string) (*ConversionResult, error) {
 	payload, err := json.Marshal(map[string]any{
 		"sources": []map[string]any{
 			{"kind": "http", "url": docURL},
@@ -384,7 +384,7 @@ func (c *Client) ConvertURL(ctx context.Context, docURL string) (*ConversionResu
 }
 
 // convert is the shared multipart sender used by ConvertFile and ConvertBytes.
-func (c *Client) convert(ctx context.Context, filename string, r io.Reader, opts ConvertOptions) (*ConversionResult, error) {
+func (c *DoclingClient) convert(ctx context.Context, filename string, r io.Reader, opts ConvertOptions) (*ConversionResult, error) {
 	rawBody, err := c.postMultipart(ctx, "/v1/convert/file", "files", filename, r, convertFields(opts, ""))
 	if err != nil {
 		return nil, err
@@ -394,7 +394,7 @@ func (c *Client) convert(ctx context.Context, filename string, r io.Reader, opts
 }
 
 // IsAvailable does a cheap health check against the running service.
-func (c *Client) IsAvailable(ctx context.Context) bool {
+func (c *DoclingClient) IsAvailable(ctx context.Context) bool {
 	return c.checkHealth(ctx, "/health")
 }
 

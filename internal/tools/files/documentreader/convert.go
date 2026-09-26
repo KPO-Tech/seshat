@@ -1,4 +1,4 @@
-package docling
+package documentreader
 
 import (
 	"context"
@@ -7,7 +7,7 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/KPO-Tech/seshat/internal/docling"
+	reader "github.com/KPO-Tech/seshat/internal/documentreader"
 	"github.com/KPO-Tech/seshat/internal/sandbox"
 	fileReadTool "github.com/KPO-Tech/seshat/internal/tools/files/read"
 	"github.com/KPO-Tech/seshat/internal/tools/files/shared"
@@ -17,42 +17,42 @@ import (
 )
 
 const (
-	// ConvertToolName is the name of the docling_convert tool.
-	ConvertToolName = "docling_convert"
+	// ConvertToolName is the name of the convert_document tool.
+	ConvertToolName = "convert_document"
 
-	// ConvertDisplayName is the display name of the docling_convert tool.
-	ConvertDisplayName = "Docling Convert"
+	// ConvertDisplayName is the display name of the convert_document tool.
+	ConvertDisplayName = "Convert Document"
 
 	// ConvertSearchHint is a hint for tool search functionality.
-	ConvertSearchHint = "OCR a scanned PDF, extract a complex slide deck, or transcribe audio via docling"
+	ConvertSearchHint = "OCR a scanned PDF, extract a complex slide deck, or transcribe audio through a document reader"
 
-	// ConvertDescription is the description of the docling_convert tool.
-	ConvertDescription = "Convert a local file to markdown using docling-serve: OCR, layout analysis, table structure, and audio transcription.\n\n" +
+	// ConvertDescription is the description of the convert_document tool.
+	ConvertDescription = "Convert a local file to markdown using the configured document reader: OCR, layout analysis, table structure, and audio transcription.\n\n" +
 		"## When to use\n\n" +
 		"- A scanned/image-only PDF that FileRead reports as having little or no extractable text\n" +
-		"- A PPTX slide deck — most slide decks are mostly visual (screenshots, diagrams, charts) with only a title or two of real text, so FileRead's native extraction routinely \"succeeds\" while missing almost everything that actually matters. FileRead already auto-falls-back to docling for a PPTX whose extracted text is sparse relative to its slide count, but if you're unsure or FileRead returned something that looks thin, don't hesitate to call this directly rather than trying to work around it with other tools (terminal, ad-hoc scripts, per-slide image extraction, etc.) — none of that gets better OCR than docling does in one shot\n" +
+		"- A PPTX slide deck — most slide decks are mostly visual (screenshots, diagrams, charts) with only a title or two of real text, so FileRead's native extraction routinely \"succeeds\" while missing almost everything that actually matters. FileRead already auto-falls-back to the document reader for a PPTX whose extracted text is sparse relative to its slide count, but if you're unsure or FileRead returned something that looks thin, don't hesitate to call this directly rather than trying to work around it with other tools (terminal, ad-hoc scripts, per-slide image extraction, etc.) — none of that gets better OCR than a whole-document reader does in one shot\n" +
 		"- Audio files (WAV, MP3) that need transcription\n" +
 		"- A DOCX/PPTX/XLSX that FileRead's native extraction failed on\n\n" +
 		"## When NOT to use\n\n" +
-		"- Plain text-native PDFs, or text-heavy DOCX/XLSX — use FileRead instead, it extracts them natively without the network round-trip to docling-serve\n" +
-		"- FileRead already tries docling automatically as a last resort for unreadable or sparse files, so you usually don't need this tool for a first read. Reach for it when you want deliberate control: forcing a reconversion, or converting a file FileRead didn't route to docling.\n\n" +
+		"- Plain text-native PDFs, or text-heavy DOCX/XLSX — use FileRead instead, it extracts them natively without the network round-trip to an external document-reader service\n" +
+		"- FileRead already tries the document reader automatically as a last resort for unreadable or sparse files, so you usually don't need this tool for a first read. Reach for it when you want deliberate control: forcing a reconversion, or converting a file FileRead didn't route to documentreader.\n\n" +
 		"## Rules\n\n" +
-		"- Requires docling-serve to be configured (DOCLING_URL).\n" +
-		"- Pass the whole file in one call (`path` is the deck/document itself, e.g. \"deck.pptx\") — docling-serve converts every slide/page in a single request. Never split a deck into individual slide images and OCR them one at a time: it's slower, it's more tool calls, and it throws away the layout/reading-order/table-structure analysis docling does for a whole document at once.\n"
+		"- Requires a document reader to be configured (document_reader_url) or injected by the host.\n" +
+		"- Pass the whole file in one call (`path` is the deck/document itself, e.g. \"deck.pptx\") — the document reader converts every slide/page in a single request. Never split a deck into individual slide images and OCR them one at a time: it's slower, it's more tool calls, and it throws away the layout/reading-order/table-structure analysis a whole-document reader does for a whole document at once.\n"
 )
 
 // ConvertTool converts a local file to markdown via a document-conversion backend.
 type ConvertTool struct {
 	workingDir       string
-	doclingClient    docling.DocumentConverterBackend
+	documentReader   reader.Converter
 	filesystemPolicy *sandbox.FilesystemPolicy
 }
 
-// NewConvertTool creates a new docling_convert tool.
+// NewConvertTool creates a new convert_document tool.
 func NewConvertTool(cfg Config, workingDir string) *ConvertTool {
 	return &ConvertTool{
 		workingDir:       workingDir,
-		doclingClient:    cfg.converter(),
+		documentReader:   cfg.converter(),
 		filesystemPolicy: sandbox.NewDefaultFilesystemPolicy(),
 	}
 }
@@ -127,7 +127,7 @@ func (t *ConvertTool) Call(
 			Environment:   sandbox.EnvironmentLocal,
 			Access:        sandbox.AccessRead,
 			Paths:         []string{absolutePath},
-			Justification: "Convert document via docling-serve",
+			Justification: "Convert document via configured document reader",
 			Scope:         sandbox.ApprovalScopeToolCall,
 		}
 		permResult, err := sandbox.ResolveToolPermission(ctx, permissionCheck, req, sandbox.ToolPermissionOptions{
@@ -144,35 +144,33 @@ func (t *ConvertTool) Call(
 		if err != nil {
 			return tool.NewErrorResult(err), nil
 		}
-		if err := sandbox.ErrorForPermissionResult(permResult, "docling conversion requires approval"); err != nil {
+		if err := sandbox.ErrorForPermissionResult(permResult, "document conversion requires approval"); err != nil {
 			return tool.NewErrorResult(err), nil
 		}
 	}
 
-	if t.doclingClient == nil || !t.doclingClient.IsAvailable(ctx) {
+	if t.documentReader == nil || !t.documentReader.IsAvailable(ctx) {
 		return tool.NewTextResult(fmt.Sprintf(
-			"File: %s\n\ndocling_convert requires docling-serve. Configure the DOCLING_URL setting to enable it.",
+			"File: %s\n\nconvert_document requires a configured document reader.",
 			filePath,
 		)), nil
 	}
 
 	ext := strings.ToLower(filepath.Ext(absolutePath))
-	conversion, err := t.doclingClient.ConvertFile(ctx, absolutePath)
+	conversion, err := t.documentReader.ConvertFile(ctx, absolutePath)
 	if err != nil {
 		if ctx.Err() != nil {
-			return tool.NewErrorResult(fmt.Errorf("docling_convert cancelled")), nil
+			return tool.NewErrorResult(fmt.Errorf("convert_document cancelled")), nil
 		}
 		if ext == ".wav" || ext == ".mp3" {
-			// docling-serve's ASR pipeline needs openai-whisper, which is not
-			// part of its default install - a plain `docling-serve` install
-			// (no DOCLING_EXTRAS=asr) fails this conversion internally and
-			// surfaces an opaque error rather than "whisper is missing".
+			// The bundled docling-serve ASR pipeline needs openai-whisper,
+			// which is not part of its default install.
 			return tool.NewErrorResult(fmt.Errorf(
-				"docling conversion failed for %s: %w\n\nAudio transcription requires docling-serve's ASR extra (openai-whisper), which is not installed by default. Reinstall it with DOCLING_EXTRAS=asr, e.g.: DOCLING_EXTRAS=asr ./scripts/install-python-env.sh",
+				"document conversion failed for %s: %w\n\nAudio transcription requires docling-serve's ASR extra (openai-whisper), which is not installed by default. Reinstall it with DOCLING_EXTRAS=asr, e.g.: DOCLING_EXTRAS=asr ./scripts/install-python-env.sh",
 				filePath, err,
 			)), nil
 		}
-		return tool.NewErrorResult(fmt.Errorf("docling conversion failed for %s: %w", filePath, err)), nil
+		return tool.NewErrorResult(fmt.Errorf("document conversion failed for %s: %w", filePath, err)), nil
 	}
 
 	savedAt := ""
@@ -191,7 +189,7 @@ func (t *ConvertTool) Call(
 	return tool.NewTextResult(formatConvertResult(filePath, conversion, savedAt)), nil
 }
 
-func formatConvertResult(sourcePath string, r *docling.ConversionResult, savedAt string) string {
+func formatConvertResult(sourcePath string, r *reader.ConversionResult, savedAt string) string {
 	var b strings.Builder
 	b.WriteString(fmt.Sprintf("File: %s\n", sourcePath))
 	if r.PageCount > 0 {

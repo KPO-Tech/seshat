@@ -35,13 +35,13 @@ func TestFormatPDFMarkdownResultOmitsImageBytes(t *testing.T) {
 	}
 }
 
-func TestFormatDoclingResultOmitsImageBytes(t *testing.T) {
+func TestFormatDocumentReaderResultOmitsImageBytes(t *testing.T) {
 	t.Parallel()
 
 	reader := &Tool{}
-	out := reader.formatDoclingResult(&FileReadResult{
-		Type: FileTypeDocling,
-		Docling: &DoclingFileResult{
+	out := reader.formatDocumentReaderResult(&FileReadResult{
+		Type: FileTypeDocumentReader,
+		DocumentReader: &DocumentReaderFileResult{
 			FilePath:     "deck.pptx",
 			Format:       "pptx",
 			Markdown:     "# Deck\n\nSlide notes",

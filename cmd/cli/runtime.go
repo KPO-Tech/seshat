@@ -36,7 +36,7 @@ type runtimeOptions struct {
 	ProviderResource        string
 	BrowserRemoteControlURL string
 	BrowserExecutablePath   string
-	DoclingURL              string
+	DocumentReaderURL       string
 	StorageGCEnabled        bool
 	StorageGCInterval       time.Duration
 	StorageGCLimit          int
@@ -142,7 +142,7 @@ func loadRuntimeOptions(overrides runtimeOverrides) (runtimeOptions, error) {
 		ProviderResource:        config.ProviderResource,
 		BrowserRemoteControlURL: strings.TrimSpace(config.BrowserRemoteControlURL),
 		BrowserExecutablePath:   strings.TrimSpace(config.BrowserExecutablePath),
-		DoclingURL:              strings.TrimSpace(config.DoclingURL),
+		DocumentReaderURL:       strings.TrimSpace(config.DocumentReaderURL),
 		StorageGCEnabled:        config.StorageGCEnabled,
 		StorageGCInterval:       parseDurationOrDefault(config.StorageGCInterval, time.Hour),
 		StorageGCLimit:          config.StorageGCLimit,
@@ -223,7 +223,7 @@ func newClient(
 		WorkingDir:              options.WorkingDir,
 		BrowserRemoteControlURL: options.BrowserRemoteControlURL,
 		BrowserExecutablePath:   options.BrowserExecutablePath,
-		DoclingURL:              options.DoclingURL,
+		DocumentReaderURL:       options.DocumentReaderURL,
 		StorageGCEnabled:        options.StorageGCEnabled,
 		StorageGCInterval:       options.StorageGCInterval,
 		StorageGCLimit:          options.StorageGCLimit,
