@@ -2,6 +2,7 @@ package read
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"os"
@@ -426,19 +427,47 @@ func (t *Tool) handleBinaryFile(filePath string) (tool.CallResult, error) {
 // reconvert rather than serve outdated content.
 const markdownSidecarMaxAge = 24 * time.Hour
 
+type documentSidecarMetadata struct {
+	Engine    string                    `json:"engine,omitempty"`
+	PageCount int                       `json:"page_count,omitempty"`
+	Images    []documentSidecarImage    `json:"images,omitempty"`
+	Pages     []documentSidecarPageInfo `json:"pages,omitempty"`
+}
+
+type documentSidecarImage struct {
+	Filename string `json:"filename"`
+	MimeType string `json:"mime_type,omitempty"`
+}
+
+type documentSidecarPageInfo struct {
+	Page     int    `json:"page"`
+	Source   string `json:"source,omitempty"`
+	HasImage bool   `json:"has_image,omitempty"`
+}
+
+func (m documentSidecarMetadata) visualPages() []int {
+	pages := make([]int, 0)
+	seen := make(map[int]bool)
+	for _, page := range m.Pages {
+		if page.Page <= 0 || !page.HasImage || seen[page.Page] {
+			continue
+		}
+		seen[page.Page] = true
+		pages = append(pages, page.Page)
+	}
+	return pages
+}
+
 // sidecarMarkdown checks for a pre-converted "<name>.md" file next to filePath
 // - the exact convention seshat-ai's upload pipeline writes when it eagerly
 // DocumentReader-converts an attachment - and returns its content if present and not
 // stale. This avoids a second full the configured document reader round-trip (including OCR
 // cost for scanned PDFs/images) when the caller already paid for one.
 //
-// Images embedded in the original conversion are NOT recovered here: seshat-ai
-// writes extracted images into the same directory using DocumentReader's suggested
-// filenames with no per-document prefix, so on a cache hit there's no reliable
-// way to tell which images (if any) belong to this specific document. Callers
-// that need embedded images back get a normal fresh conversion (no sidecar
-// content is returned when Images matter) - this only shortcuts the far more
-// common "just the text" read.
+// If seshat-ai wrote the companion "<name>.document.json" metadata sidecar,
+// callers can also recover page/image hints without reconverting the source.
+// The markdown sidecar still carries only text; image bytes themselves remain
+// omitted from the read_file text result.
 func sidecarMarkdown(filePath string, sourceInfo os.FileInfo) string {
 	mdPath := strings.TrimSuffix(filePath, filepath.Ext(filePath)) + ".md"
 	mdInfo, err := os.Stat(mdPath)
@@ -456,6 +485,29 @@ func sidecarMarkdown(filePath string, sourceInfo os.FileInfo) string {
 		return ""
 	}
 	return string(data)
+}
+
+func sidecarDocumentMetadata(filePath string, sourceInfo os.FileInfo) documentSidecarMetadata {
+	metaPath := strings.TrimSuffix(filePath, filepath.Ext(filePath)) + ".document.json"
+	metaInfo, err := os.Stat(metaPath)
+	if err != nil || metaInfo.IsDir() {
+		return documentSidecarMetadata{}
+	}
+	if metaInfo.ModTime().Before(sourceInfo.ModTime()) {
+		return documentSidecarMetadata{}
+	}
+	if time.Since(metaInfo.ModTime()) > markdownSidecarMaxAge {
+		return documentSidecarMetadata{}
+	}
+	data, err := os.ReadFile(metaPath)
+	if err != nil || len(data) == 0 {
+		return documentSidecarMetadata{}
+	}
+	var meta documentSidecarMetadata
+	if err := json.Unmarshal(data, &meta); err != nil {
+		return documentSidecarMetadata{}
+	}
+	return meta
 }
 
 // readPDFFile reads a PDF file.
@@ -479,7 +531,15 @@ func (t *Tool) readPDFFile(
 	}
 
 	if cached := sidecarMarkdown(filePath, fileInfo); cached != "" {
+		meta := sidecarDocumentMetadata(filePath, fileInfo)
 		pageCount, _ := GetPDFPageCount(filePath)
+		if meta.PageCount > 0 {
+			pageCount = meta.PageCount
+		}
+		images := make([]PDFImage, 0, len(meta.Images))
+		for _, img := range meta.Images {
+			images = append(images, PDFImage{Filename: img.Filename, MimeType: img.MimeType})
+		}
 		result := &FileReadResult{
 			Type: FileTypePDFMarkdown,
 			PDFMarkdown: &PDFMarkdownFileResult{
@@ -487,6 +547,8 @@ func (t *Tool) readPDFFile(
 				Markdown:     cached,
 				OriginalSize: fileInfo.Size(),
 				PageCount:    pageCount,
+				Images:       images,
+				VisualPages:  meta.visualPages(),
 			},
 		}
 		return tool.NewTextResult(t.formatPDFMarkdownResult(result)), nil
@@ -652,6 +714,11 @@ func (t *Tool) readDocumentReaderFile(
 	format := strings.TrimPrefix(ext, ".")
 
 	if cached := sidecarMarkdown(filePath, fileInfo); cached != "" {
+		meta := sidecarDocumentMetadata(filePath, fileInfo)
+		images := make([]PDFImage, 0, len(meta.Images))
+		for _, img := range meta.Images {
+			images = append(images, PDFImage{Filename: img.Filename, MimeType: img.MimeType})
+		}
 		RecordExternalRead(filePath, fileInfo.ModTime(), cached, true)
 		result := &FileReadResult{
 			Type: FileTypeDocumentReader,
@@ -660,6 +727,9 @@ func (t *Tool) readDocumentReaderFile(
 				Format:       format,
 				Markdown:     cached,
 				OriginalSize: fileInfo.Size(),
+				PageCount:    meta.PageCount,
+				Images:       images,
+				VisualPages:  meta.visualPages(),
 			},
 		}
 		return tool.NewTextResult(t.formatDocumentReaderResult(result)), nil
@@ -874,6 +944,9 @@ func (t *Tool) formatPDFMarkdownResult(result *FileReadResult) string {
 		}
 		b.WriteString("Image bytes are intentionally omitted from this text result; use a vision-capable path only when visual inspection is required.\n")
 	}
+	if len(r.VisualPages) > 0 {
+		b.WriteString(fmt.Sprintf("Pages with detected embedded images/visual content: %s\n", formatPageNumbers(r.VisualPages)))
+	}
 	b.WriteString("\n")
 	b.WriteString(r.Markdown)
 	return b.String()
@@ -895,9 +968,22 @@ func (t *Tool) formatDocumentReaderResult(result *FileReadResult) string {
 		}
 		b.WriteString("Image bytes are intentionally omitted from this text result; use a vision-capable path only when visual inspection is required.\n")
 	}
+	if len(r.VisualPages) > 0 {
+		b.WriteString(fmt.Sprintf("Pages with detected embedded images/visual content: %s\n", formatPageNumbers(r.VisualPages)))
+	}
 	b.WriteString("\n")
 	b.WriteString(r.Markdown)
 	return b.String()
+}
+
+func formatPageNumbers(pages []int) string {
+	parts := make([]string, 0, len(pages))
+	for _, page := range pages {
+		if page > 0 {
+			parts = append(parts, fmt.Sprintf("%d", page))
+		}
+	}
+	return strings.Join(parts, ",")
 }
 
 func (t *Tool) formatPDFExtractedResult(result *FileReadResult) string {

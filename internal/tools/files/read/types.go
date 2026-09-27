@@ -106,6 +106,7 @@ type PDFMarkdownFileResult struct {
 	OriginalSize int64      `json:"original_size"`
 	PageCount    int        `json:"page_count"`
 	Images       []PDFImage `json:"images,omitempty"`
+	VisualPages  []int      `json:"visual_pages,omitempty"`
 }
 
 // PDFImage is one picture extracted from a converted PDF.
@@ -123,6 +124,7 @@ type DocumentReaderFileResult struct {
 	OriginalSize int64      `json:"original_size"`
 	PageCount    int        `json:"page_count,omitempty"` // 0 for audio
 	Images       []PDFImage `json:"images,omitempty"`
+	VisualPages  []int      `json:"visual_pages,omitempty"`
 }
 
 // FileReadResult is the union type for file read results

@@ -22,6 +22,7 @@ import (
 	coretasks "github.com/KPO-Tech/seshat/internal/runtime/tasks"
 	"github.com/KPO-Tech/seshat/internal/sandbox"
 	"github.com/KPO-Tech/seshat/internal/storage"
+	"github.com/KPO-Tech/seshat/internal/titlegen"
 	agentTool "github.com/KPO-Tech/seshat/internal/tools/agents"
 	bashTool "github.com/KPO-Tech/seshat/internal/tools/bash"
 	"github.com/KPO-Tech/seshat/internal/tools/registry"
@@ -102,6 +103,11 @@ func NewClient(config *ClientConfig) (*Client, error) {
 	} else {
 		apiClient = providers.NewClient(apiKey, config.Model.Provider)
 	}
+	titleAPIClient := buildTitleAPIClient(config, apiKey, apiClient)
+	titleGenerator, err := buildTitleGenerator(config)
+	if err != nil {
+		return nil, err
+	}
 
 	artifactStore := initArtifactStore(config)
 	browserManager, reaper := initBrowserManager(config, artifactStore)
@@ -176,6 +182,8 @@ func NewClient(config *ClientConfig) (*Client, error) {
 		apiClient, orchestrator, compactor, promptAssembler,
 		permissionIntegrator, reg, sessionStore, queryConfig, memSvc, monitoringSys,
 	)
+	queryEngine.SetTitleAPIClient(titleAPIClient)
+	queryEngine.SetTitleGenerator(titleGenerator)
 	queryEngine.SetPromptFn(config.PromptFn)
 
 	coretasks.NewDefaultManager(queryEngine, nil)
@@ -262,6 +270,7 @@ func buildEngineConfig(config *ClientConfig) *engine.Config {
 		AutoCompact:             config.AutoCompact,
 		PermissionMode:          config.PermissionMode,
 		Model:                   config.Model,
+		TitleModel:              config.TitleModel,
 		MaxTokens:               maxTokens,
 		WorkingDirectory:        config.WorkingDir,
 		SystemPromptTemplate:    config.SystemPromptTemplate,
@@ -292,6 +301,63 @@ func buildEngineConfig(config *ClientConfig) *engine.Config {
 		}
 	}
 	return qc
+}
+
+func buildTitleAPIClient(config *ClientConfig, defaultAPIKey string, mainClient *providers.Client) *providers.Client {
+	if config == nil || strings.TrimSpace(config.TitleModel.Model) == "" || config.TitleModel.Provider == "" {
+		return nil
+	}
+	titleProvider := config.TitleModel.Provider
+	if config.TitleProviderConfig == nil && titleProvider == config.Model.Provider {
+		return nil
+	}
+
+	apiKey := defaultAPIKey
+	if config.CredentialResolver != nil {
+		if resolved, err := config.CredentialResolver.ResolveAPIKey(context.Background(), string(titleProvider)); err == nil && resolved != "" {
+			apiKey = resolved
+		} else if err != nil {
+			log.Printf("[sdk] CredentialResolver failed for title provider %s: %v", titleProvider, err)
+		}
+	}
+	if config.TitleProviderConfig != nil {
+		pc := *config.TitleProviderConfig
+		if pc.Provider == "" {
+			pc.Provider = titleProvider
+		}
+		if pc.APIKey == "" {
+			pc.APIKey = apiKey
+		}
+		return providers.NewClientWithConfig(pc.APIKey, &pc)
+	}
+	return providers.NewClient(apiKey, titleProvider)
+}
+
+func buildTitleGenerator(config *ClientConfig) (TitleGenerator, error) {
+	if config == nil {
+		return nil, nil
+	}
+	if config.TitleGenerator != nil {
+		return config.TitleGenerator, nil
+	}
+	if config.LocalTitle == nil || !config.LocalTitle.Enabled {
+		return nil, nil
+	}
+	generator, err := titlegen.NewLocalGenerator(titlegen.LocalConfig{
+		Enabled:        config.LocalTitle.Enabled,
+		Runtime:        config.LocalTitle.Runtime,
+		ExecutablePath: config.LocalTitle.ExecutablePath,
+		ModelPath:      config.LocalTitle.ModelPath,
+		HFRepo:         config.LocalTitle.HFRepo,
+		HFFile:         config.LocalTitle.HFFile,
+		CacheDir:       config.LocalTitle.CacheDir,
+		Args:           config.LocalTitle.Args,
+		Timeout:        config.LocalTitle.Timeout,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("initialize local title generator: %w", err)
+	}
+	return generator, nil
 }
 
 func joinPromptParts(existing, extra string) string {

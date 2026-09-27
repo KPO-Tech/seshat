@@ -9,6 +9,7 @@ import (
 	bashTool "github.com/KPO-Tech/seshat/internal/tools/bash"
 	"github.com/KPO-Tech/seshat/pkg/companion"
 	"github.com/KPO-Tech/seshat/pkg/documentreader"
+	"github.com/KPO-Tech/seshat/pkg/pdfsmart"
 	"github.com/KPO-Tech/seshat/pkg/runtimepath"
 )
 
@@ -73,10 +74,32 @@ type SpeechToTextConfig struct {
 	BaseURL  string `json:"base_url,omitempty"`
 }
 
+// LocalTitleConfig runs a small local model for session title generation,
+// without Ollama or a long-running local server. The first runtime is
+// llama.cpp-compatible GGUF through llama-cli.
+type LocalTitleConfig struct {
+	Enabled        bool          `json:"enabled,omitempty"`
+	Runtime        string        `json:"runtime,omitempty"`
+	ExecutablePath string        `json:"executable_path,omitempty"`
+	ModelPath      string        `json:"model_path,omitempty"`
+	HFRepo         string        `json:"hf_repo,omitempty"`
+	HFFile         string        `json:"hf_file,omitempty"`
+	CacheDir       string        `json:"cache_dir,omitempty"`
+	Args           []string      `json:"args,omitempty"`
+	Timeout        time.Duration `json:"timeout,omitempty"`
+}
+
+// TitleGenerator generates a short automatic title from a session's first user
+// message. Hosts can inject a local implementation for tiny HF/GGUF models.
+type TitleGenerator interface {
+	GenerateTitle(ctx context.Context, firstUserMsg string) (string, error)
+}
+
 // ClientConfig represents the client configuration.
 type ClientConfig struct {
 	APIKey         string          `json:"api_key"`
 	Model          ModelIdentifier `json:"model"`
+	TitleModel     ModelIdentifier `json:"title_model,omitempty"`
 	PermissionMode PermissionMode  `json:"permission_mode"`
 	MaxTurns       int             `json:"max_turns"`
 	AutoCompact    bool            `json:"auto_compact"`
@@ -129,6 +152,16 @@ type ClientConfig struct {
 
 	// Provider override
 	ProviderConfig *providers.Config `json:"-"`
+	// TitleProviderConfig overrides the provider client used only for automatic
+	// session title generation. This allows a tiny local/Hugging Face-served
+	// model to title chats while the main chat model stays unchanged.
+	TitleProviderConfig *providers.Config `json:"-"`
+	// TitleGenerator takes precedence over TitleProviderConfig/TitleModel.
+	// Use this for local, no-server title models.
+	TitleGenerator TitleGenerator `json:"-"`
+	// LocalTitle configures the default local title generator. It is ignored
+	// when TitleGenerator is set.
+	LocalTitle *LocalTitleConfig `json:"local_title,omitempty"`
 
 	// Monitoring
 	Monitoring *MonitoringSystem `json:"-"`
@@ -196,6 +229,10 @@ type ClientConfig struct {
 	// to back the SDK's document-conversion tools. Takes precedence over
 	// DocumentReaderURL.
 	DocumentConverter documentreader.Converter `json:"-"`
+
+	// DocumentPageRenderer, when set, backs render_document_page so agents can
+	// inspect visual pages with a multimodal model after markdown extraction.
+	DocumentPageRenderer pdfsmart.PageRenderer `json:"-"`
 
 	// Automation daemon connection (seshat-automation).
 	// When set, the schedule_job / list_jobs / update_job / delete_job / pause_job /

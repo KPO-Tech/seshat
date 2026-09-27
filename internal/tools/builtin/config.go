@@ -17,6 +17,7 @@ import (
 	"github.com/KPO-Tech/seshat/internal/tools/system/mcp"
 	"github.com/KPO-Tech/seshat/internal/types"
 	browsercore "github.com/KPO-Tech/seshat/internal/web/browser"
+	"github.com/KPO-Tech/seshat/pkg/pdfsmart"
 )
 
 // PlanStore is the minimal interface the submit_plan tool needs to persist plan documents.
@@ -57,6 +58,10 @@ type Config struct {
 	// convert_document, and read_document_url, and takes precedence over
 	// DocumentReaderURL.
 	DocumentConverter documentreader.Converter
+
+	// DocumentPageRenderer renders a specific document page as an image for
+	// multimodal inspection tools such as render_document_page.
+	DocumentPageRenderer pdfsmart.PageRenderer
 
 	// ImageGenerator enables the generate_image tool when set.
 	// Use imageproviders.NewOpenAI(apiKey) or imageproviders.NewGemini(apiKey)
