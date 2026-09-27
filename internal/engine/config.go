@@ -13,6 +13,7 @@ type Config struct {
 	AutoCompact          bool                  `json:"auto_compact"`
 	PermissionMode       types.PermissionMode  `json:"permission_mode"`
 	Model                types.ModelIdentifier `json:"model"`
+	TitleModel           types.ModelIdentifier `json:"title_model,omitempty"`
 	MaxTokens            int                   `json:"max_tokens"`
 	WorkingDirectory     string                `json:"working_directory,omitempty"`
 	SystemPromptTemplate string                `json:"system_prompt_template"`

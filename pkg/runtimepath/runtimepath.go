@@ -82,6 +82,10 @@ func HNSWDataDir(root string) string { return Join(root, "data", "hnsw") }
 // docling-serve's own .venv provisioning convention.
 func DeepDocModelsDir(root string) string { return Join(root, "models", "deepdoc") }
 
+// TitleModelsDir stores tiny local models dedicated to cheap background tasks
+// such as automatic session-title generation.
+func TitleModelsDir(root string) string { return Join(root, "models", "title") }
+
 // RAGSQLiteDBPath is the fallback vector store used when the embedded HNSW
 // backend isn't available on the current platform (Windows - see
 // internal/vector/hnsw_store_windows.go).
