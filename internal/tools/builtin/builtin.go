@@ -92,8 +92,9 @@ func RegisterBuiltinToolsWithConfig(reg *tool.Registry, config *Config) error {
 	fileReadConfig.DocumentConverter = config.DocumentConverter
 
 	documentReaderConfig := documentreaderTool.Config{
-		DocumentReaderURL: config.DocumentReaderURL,
-		DocumentConverter: config.DocumentConverter,
+		DocumentReaderURL:    config.DocumentReaderURL,
+		DocumentConverter:    config.DocumentConverter,
+		DocumentPageRenderer: config.DocumentPageRenderer,
 	}
 
 	bashConfig := bashTool.DefaultToolConfig()
@@ -110,6 +111,7 @@ func RegisterBuiltinToolsWithConfig(reg *tool.Registry, config *Config) error {
 		fileReadTool.NewTool(fileReadConfig),
 		documentreaderTool.NewReadURLTool(documentReaderConfig),
 		documentreaderTool.NewConvertTool(documentReaderConfig, config.WorkingDir),
+		documentreaderTool.NewRenderPageTool(documentReaderConfig, config.WorkingDir),
 		globTool.NewGlobTool(config.WorkingDir),
 		grepTool.NewGrepTool(config.WorkingDir),
 		searchsessionTool.NewTool(config.WorkingDir),

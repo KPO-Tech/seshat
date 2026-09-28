@@ -8,7 +8,10 @@
 // without the agent needing to know this package exists.
 package documentreader
 
-import internalreader "github.com/KPO-Tech/seshat/internal/documentreader"
+import (
+	internalreader "github.com/KPO-Tech/seshat/internal/documentreader"
+	"github.com/KPO-Tech/seshat/pkg/pdfsmart"
+)
 
 // Config holds the shared configuration for every tool in this package.
 type Config struct {
@@ -22,6 +25,11 @@ type Config struct {
 	// service client from DocumentReaderURL. Takes precedence over
 	// DocumentReaderURL.
 	DocumentConverter internalreader.Converter
+
+	// DocumentPageRenderer, when set, renders a specific document page to an
+	// image so multimodal agents can visually inspect diagrams, charts, and
+	// scanned pages after markdown extraction.
+	DocumentPageRenderer pdfsmart.PageRenderer
 }
 
 // converter resolves the backend to use: the explicit override if set,
@@ -32,6 +40,16 @@ func (c Config) converter() internalreader.Converter {
 	}
 	if c.DocumentReaderURL != "" {
 		return internalreader.NewDoclingClient(c.DocumentReaderURL)
+	}
+	return nil
+}
+
+func (c Config) pageRenderer() pdfsmart.PageRenderer {
+	if c.DocumentPageRenderer != nil {
+		return c.DocumentPageRenderer
+	}
+	if renderer, ok := c.DocumentConverter.(pdfsmart.PageRenderer); ok {
+		return renderer
 	}
 	return nil
 }

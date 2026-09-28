@@ -118,9 +118,10 @@ func (v VisionFallback) usable(ctx context.Context) bool {
 
 // PageResult is one page's contribution to a Result.
 type PageResult struct {
-	Page   int
-	Text   string
-	Source PageSource
+	Page             int
+	Text             string
+	Source           PageSource
+	HasEmbeddedImage bool
 }
 
 // Result is the outcome of a page-aware PDF-to-markdown conversion.
@@ -187,6 +188,7 @@ func Convert(ctx context.Context, data []byte, documentReader documentreader.Con
 	}
 
 	pagesWithImages, err := pagesWithEmbeddedImages(data)
+	imageDetectionOK := err == nil
 	if err != nil {
 		// Can't tell which pages have images - conservatively treat every
 		// page as needing docling rather than silently extracting
@@ -240,7 +242,12 @@ func Convert(ctx context.Context, data []byte, documentReader documentreader.Con
 			}
 		}
 
-		result.Pages = append(result.Pages, PageResult{Page: i, Text: text, Source: source})
+		result.Pages = append(result.Pages, PageResult{
+			Page:             i,
+			Text:             text,
+			Source:           source,
+			HasEmbeddedImage: imageDetectionOK && pagesWithImages[i],
+		})
 		if text != "" {
 			if sb.Len() > 0 {
 				sb.WriteString("\n\n")

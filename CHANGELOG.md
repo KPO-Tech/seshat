@@ -9,6 +9,17 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [1.2.54] - 2026-09-28
+
+### Added
+- `render_document_page`: a new built-in document-reader tool that renders a specific PDF page to an image data URI, so multimodal-capable agents can inspect diagrams, figures, scans, or visually dense pages instead of relying only on extracted markdown.
+- Local automatic session-title generation via `TitleGenerator`/`LocalTitleConfig`, with a no-server GGUF/Hugging Face path backed by a `llama.cpp`-compatible executable. Hosts can now dedicate a tiny local model to title generation while keeping the main chat model unchanged.
+- Document-read metadata now carries per-page visual hints (`visual_pages`) when PDFs contain embedded images/visual content, and `read_file` surfaces that metadata from sidecar caches.
+
+### Changed
+- Session title generation now prefers an injected local title generator, then falls back to the configured title provider/model, then to the main chat model.
+- `pdfsmart` page results now retain embedded-image detection metadata so downstream readers can decide when visual inspection may be useful.
+
 ## [1.2.53] - 2026-09-26
 
 ### Added
@@ -306,7 +317,8 @@ a real ChatGPT-account session (documented in
 - `internal/tools/special/brief`: a "send message to the user" tool from the pre-rename codebase, never registered at any point in its history.
 - `internal/tools/special/config/configTool.go`: an arbitrary key/value settings store predating the current `contract.Tool` interface (incompatible signatures — could never have been registered as-is), replaced by the real `get_config` tool.
 
-[Unreleased]: https://github.com/KPO-Tech/seshat/compare/v1.2.53...HEAD
+[Unreleased]: https://github.com/KPO-Tech/seshat/compare/v1.2.54...HEAD
+[1.2.54]: https://github.com/KPO-Tech/seshat/compare/v1.2.53...v1.2.54
 [1.2.53]: https://github.com/KPO-Tech/seshat/compare/v1.2.52...v1.2.53
 [1.2.52]: https://github.com/KPO-Tech/seshat/compare/v1.2.51...v1.2.52
 [1.1.0]: https://github.com/KPO-Tech/seshat/compare/v1.0.4...v1.1.0
