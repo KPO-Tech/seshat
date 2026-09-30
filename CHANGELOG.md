@@ -9,6 +9,8 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [1.2.55] - 2026-09-30
+
 ### Fixed
 - `render_document_page` (added in 1.2.54) now attaches the rendered page as a genuine image content block in a follow-up message instead of inlining it as a base64 data URI inside the tool result's text. The old form was never reconstructed into a real image by any provider adapter — the model received an opaque base64 blob instead of a viewable page — and was also liable to be corrupted by `MicroCompactor`'s character-based tool-result trimming on longer sessions. Renders over 8 MiB are now reported instead of attached, rather than silently ballooning the request.
 
@@ -323,7 +325,8 @@ a real ChatGPT-account session (documented in
 - `internal/tools/special/brief`: a "send message to the user" tool from the pre-rename codebase, never registered at any point in its history.
 - `internal/tools/special/config/configTool.go`: an arbitrary key/value settings store predating the current `contract.Tool` interface (incompatible signatures — could never have been registered as-is), replaced by the real `get_config` tool.
 
-[Unreleased]: https://github.com/KPO-Tech/seshat/compare/v1.2.54...HEAD
+[Unreleased]: https://github.com/KPO-Tech/seshat/compare/v1.2.55...HEAD
+[1.2.55]: https://github.com/KPO-Tech/seshat/compare/v1.2.54...v1.2.55
 [1.2.54]: https://github.com/KPO-Tech/seshat/compare/v1.2.53...v1.2.54
 [1.2.53]: https://github.com/KPO-Tech/seshat/compare/v1.2.52...v1.2.53
 [1.2.52]: https://github.com/KPO-Tech/seshat/compare/v1.2.51...v1.2.52
