@@ -9,6 +9,12 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Fixed
+- `render_document_page` (added in 1.2.54) now attaches the rendered page as a genuine image content block in a follow-up message instead of inlining it as a base64 data URI inside the tool result's text. The old form was never reconstructed into a real image by any provider adapter — the model received an opaque base64 blob instead of a viewable page — and was also liable to be corrupted by `MicroCompactor`'s character-based tool-result trimming on longer sessions. Renders over 8 MiB are now reported instead of attached, rather than silently ballooning the request.
+
+### Documentation
+- Added the `internal/tools/files/documentreader` tools (`convert_document`, `read_document_url`, `render_document_page`) to `docs/tools.md` — missing since `convert_document`/`read_document_url` were introduced, and never added for `render_document_page` in 1.2.54.
+
 ## [1.2.54] - 2026-09-28
 
 ### Added

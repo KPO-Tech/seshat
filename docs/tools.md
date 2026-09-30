@@ -77,6 +77,18 @@ Tools marked **stub** are registered but `IsEnabled()` returns `false` — they 
 
 ---
 
+### Document reader tools (`internal/tools/files/documentreader/`)
+
+Require a document reader/renderer to be configured on `ClientConfig` (`DocumentReaderURL`/`DocumentConverter` for the first two, `DocumentPageRenderer` for the third) — each registers unconditionally but returns a "not configured" result when its dependency is nil.
+
+| Tool | Description |
+|---|---|
+| `convert_document` | Convert a local file to markdown via the configured document reader — OCR, layout analysis, table structure, audio transcription. Prefer `read_file` first; reach for this to force reconversion or for files `read_file` couldn't handle natively. |
+| `read_document_url` | Fetch a document at a URL (PDF, DOCX, PPTX, XLSX, HTML, arXiv) and convert it to markdown. Can optionally save the result to a workspace path. |
+| `render_document_page` | Render one page of a local PDF to a PNG and attach it to the conversation as a real image (delivered via a follow-up message, not inlined as text) for visual inspection of diagrams, charts, tables, or scanned content that markdown extraction would miss. Renders up to 8 MiB per page; larger renders are reported instead of attached. |
+
+---
+
 ### Bash tool (`internal/tools/bash/`)
 
 | Tool | Description |
