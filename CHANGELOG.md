@@ -9,6 +9,9 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Removed
+- `cmd/slack-bot`, `cmd/automation` and `cmd/automation-server` (with `Dockerfile.automation` and their Makefile targets): development and test programs that no embedder used. The `pkg/automation` library and the automation agent tools are unchanged.
+
 ## [1.2.56] - 2026-10-02
 
 ### Fixed

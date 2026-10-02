@@ -70,7 +70,6 @@ require (
 	github.com/robfig/cron/v3 v3.0.1
 	github.com/sahilm/fuzzy v0.1.3
 	github.com/shopspring/decimal v1.4.0
-	github.com/slack-go/slack v0.26.0
 	github.com/sourcegraph/jsonrpc2 v0.2.1
 	github.com/spf13/viper v1.21.0
 	github.com/stretchr/testify v1.12.1
