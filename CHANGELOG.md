@@ -9,6 +9,11 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [1.2.56] - 2026-10-02
+
+### Fixed
+- Session title generation no longer returns an empty title with reasoning models: the title request now has a 512-token output budget (was 50, which a model's hidden reasoning could consume entirely), and a leading `</think>` block is stripped from the result.
+
 ## [1.2.55] - 2026-09-30
 
 ### Fixed
