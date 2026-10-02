@@ -9,8 +9,8 @@ import (
 	"github.com/ledongthuc/pdf"
 )
 
-// glyph builds one drawn character 10pt wide at x on baseline y, in a 10pt font.
-func glyph(s string, x, y float64) pdf.Text {
+// drawn builds one drawn character 10pt wide at x on baseline y, in a 10pt font.
+func drawn(s string, x, y float64) pdf.Text {
 	return pdf.Text{FontSize: 10, X: x, Y: y, W: 5, S: s}
 }
 
@@ -18,7 +18,7 @@ func glyph(s string, x, y float64) pdf.Text {
 func word(w string, x, y float64) []pdf.Text {
 	var out []pdf.Text
 	for _, r := range w {
-		out = append(out, glyph(string(r), x, y))
+		out = append(out, drawn(string(r), x, y))
 		x += 5
 	}
 	return out
@@ -71,17 +71,17 @@ func TestLayoutText(t *testing.T) {
 		},
 		{
 			name:   "an explicit space is kept once",
-			glyphs: join(word("a", 0, 100), []pdf.Text{glyph(" ", 5, 100), glyph(" ", 10, 100)}, word("b", 15, 100)),
+			glyphs: join(word("a", 0, 100), []pdf.Text{drawn(" ", 5, 100), drawn(" ", 10, 100)}, word("b", 15, 100)),
 			want:   "a b",
 		},
 		{
 			name:   "the replacement character and newline markers the library adds are dropped",
-			glyphs: join(word("ab", 0, 100), []pdf.Text{glyph("�", 10, 100), glyph("\n", 10, 100)}, word("cd", 10, 100)),
+			glyphs: join(word("ab", 0, 100), []pdf.Text{drawn("�", 10, 100), drawn("\n", 10, 100)}, word("cd", 10, 100)),
 			want:   "abcd",
 		},
 		{
 			name:   "an accent drawn as its own glyph joins its letter and does not split the word",
-			glyphs: join(word("E", 0, 100), []pdf.Text{glyph("́", 0, 106)}, word("TE", 5, 100)),
+			glyphs: join(word("E", 0, 100), []pdf.Text{drawn("́", 0, 106)}, word("TE", 5, 100)),
 			want:   "ÉTE",
 		},
 		{
