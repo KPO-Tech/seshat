@@ -1,13 +1,11 @@
 CMD_CLI        := ./cmd/cli
 CMD_GRPC       := ./cmd/grpc
-CMD_SLACK_BOT  := ./cmd/slack-bot
-CMD_AUTOMATION := ./cmd/automation
 
 # Make built binaries discoverable from the repo root.
 export PATH := $(CURDIR)/bin:$(PATH)
 
-.PHONY: all build build-cli build-grpc build-slack-bot build-automation build_linux test test-race fmt vet lint tidy \
-        clean clean-runtime clean-all hooks setup install-python start-docling slack-bot install-deepdoc-models
+.PHONY: all build build-cli build-grpc build_linux test test-race fmt vet lint tidy \
+        clean clean-runtime clean-all hooks setup install-python start-docling install-deepdoc-models
 
 # ── Default ────────────────────────────────────────────────────────────────────
 
@@ -36,7 +34,7 @@ setup:
 
 # ── Build ──────────────────────────────────────────────────────────────────────
 
-build: build-cli build-grpc build-slack-bot build-automation
+build: build-cli build-grpc
 
 build-cli:
 	go build -o bin/seshat $(CMD_CLI)
@@ -44,16 +42,6 @@ build-cli:
 
 build-grpc:
 	go build -o bin/seshat-grpc $(CMD_GRPC)
-
-build-slack-bot:
-	go build -o bin/seshat-slack $(CMD_SLACK_BOT)
-
-build-automation:
-	go build -o bin/seshat-auto $(CMD_AUTOMATION)
-
-slack-bot:
-	@export $$(grep -v '^#' private/.env.slack | xargs) && \
-	go run $(CMD_SLACK_BOT)
 
 build_linux:
 	go build -o /tmp/seshat $(CMD_CLI)
@@ -94,7 +82,7 @@ clean:
 # Uses SESHAT_RUNTIME_ROOT if set, otherwise falls back to ~/.config/seshat-*.
 clean-runtime:
 	@confdir="$${SESHAT_RUNTIME_ROOT:-$${XDG_CONFIG_HOME:-$$HOME/.config}}" ; \
-	for d in seshat-cli seshat-tui seshat-slack ; do \
+	for d in seshat-cli seshat-tui ; do \
 	    target="$$confdir/$$d" ; \
 	    if [ -d "$$target" ]; then \
 	        rm -rf "$$target" && echo "  removed $$target" ; \
