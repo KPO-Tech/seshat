@@ -325,8 +325,9 @@ func (e *Engine) generateTitleAsync(sessionID types.SessionID, firstUserMsg stri
 		return
 	}
 	req := types.APIRequest{
-		Model:        titleModel,
-		MaxTokens:    50,
+		Model: titleModel,
+		// Reasoning models spend part of the budget thinking before the title.
+		MaxTokens:    512,
 		Stream:       false,
 		SystemPrompt: titleSystemPrompt,
 		Messages: []types.Message{
@@ -354,6 +355,9 @@ func (e *Engine) generateTitleAsync(sessionID types.SessionID, firstUserMsg stri
 }
 
 func cleanGeneratedTitle(title string) string {
+	if end := strings.LastIndex(title, "</think>"); end >= 0 {
+		title = title[end+len("</think>"):]
+	}
 	title = strings.TrimSpace(title)
 	title = strings.Trim(title, "\"'` \t\r\n")
 	title = strings.TrimRight(title, ".:;!?")
