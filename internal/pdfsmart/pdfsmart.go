@@ -256,7 +256,7 @@ func ReadPages(ctx context.Context, data []byte, pages []int, opts Options, docu
 			page := reader.Page(i)
 			if page.V.IsNull() {
 				needsDocling = true
-			} else if native, extractErr := pdftext.PageText(page); extractErr != nil ||
+			} else if native, extractErr := pdftext.PageMarkdown(page); extractErr != nil ||
 				len(strings.TrimSpace(native)) < pdftext.MinCharsPerPage || textquality.IsGarbledText(native) {
 				needsDocling = true
 			} else {
