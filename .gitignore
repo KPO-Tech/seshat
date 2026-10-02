@@ -12,7 +12,6 @@
 /api
 /cli
 /grpc
-/slack-bot
 /seshat
 /seshat-grpc
 /seshat-slack

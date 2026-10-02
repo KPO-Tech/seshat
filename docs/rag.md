@@ -41,6 +41,10 @@ seshat rag add https://example.com/spec.pdf --collection "specs"
 seshat rag list
 ```
 
+### Default reader
+
+`pkg/documentreading` is the engine's default reader for a host. `Convert` / `ConvertBytes` read DOCX, PPTX and XLSX natively and PDFs page by page (`pdfsmart`): a page keeps its own text layer unless it carries an image, has almost no text, or has garbled text, and only those pages go to the optional external converter. Scans, audio and images need that converter; without one they yield no result rather than an error, so a host with nothing configured still reads every native format. External output is checked for garbled text as well. A caller that cannot accept a missed borderless table or chart (invoices, financial reports) should send those documents to the converter whole instead.
+
 ### Document-aware chunking
 
 The core RAG service can now accept both extracted text and the original document bytes through `rag.IngestRequest.Data`. Plain text chunkers continue to split `IngestRequest.Text` as before. Chunkers that implement `rag.DocumentChunker` can use the original bytes to preserve document structure.
