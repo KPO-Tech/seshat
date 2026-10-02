@@ -9,6 +9,9 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added
+- `pkg/documentreading`: the engine's default document reader as a public package. `Convert` and `ConvertBytes` turn a file into markdown cheapest path first: DOCX, PPTX and XLSX natively, PDFs page by page (only pages with an image, almost no text, or garbled text go to an external converter), then an optional external converter for scans, audio and images, with garbled-output detection. A host with no converter configured still reads every native format. It was previously internal to SeshatOS's backend, which meant a server could not reuse it.
+
 ### Removed
 - `cmd/slack-bot`, `cmd/automation` and `cmd/automation-server` (with `Dockerfile.automation` and their Makefile targets): development and test programs that no embedder used. The `pkg/automation` library and the automation agent tools are unchanged.
 
