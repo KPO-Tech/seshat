@@ -1,14 +1,19 @@
 package pdfsmart
 
 import (
+	"bytes"
 	"context"
 	"fmt"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/pdfcpu/pdfcpu/pkg/api"
+	"github.com/pdfcpu/pdfcpu/pkg/pdfcpu/model"
 
 	"github.com/KPO-Tech/seshat/internal/documentreader"
 )
@@ -250,5 +255,125 @@ func TestConvert_VisionRendererErrorFailsCleanly(t *testing.T) {
 	}
 	if ok {
 		t.Fatal("expected ok=false when the page renderer errors")
+	}
+}
+
+// pdfcpu fills a package-level default configuration lazily and without a lock, so the first calls
+// must not run concurrently. Doing one here, before any parallel test starts, is what the production
+// code does with its own sync.Once.
+func init() { _ = model.NewDefaultConfiguration() }
+
+// -- Analyze and ReadPages ---------------------------------------------------------------------
+
+func threePages(t *testing.T) []byte { return readTestdata(t, "three_pages.pdf") }
+
+// textThenScan is a two-page PDF: a page with a real text layer, then a page that is only an image.
+func textThenScan(t *testing.T) []byte {
+	t.Helper()
+	var out bytes.Buffer
+	inputs := []io.ReadSeeker{bytes.NewReader(readTestdata(t, "text_layer.pdf")), bytes.NewReader(readTestdata(t, "scanned.pdf"))}
+	if err := api.MergeRaw(inputs, &out, false, nil); err != nil {
+		t.Fatalf("merge fixtures: %v", err)
+	}
+	return out.Bytes()
+}
+
+type countingConverter struct {
+	markdown string
+	calls    []string
+}
+
+func (c *countingConverter) IsAvailable(context.Context) bool { return true }
+func (c *countingConverter) ConvertFile(context.Context, string) (*documentreader.ConversionResult, error) {
+	return &documentreader.ConversionResult{Markdown: c.markdown}, nil
+}
+func (c *countingConverter) ConvertBytes(_ context.Context, _ []byte, filename string) (*documentreader.ConversionResult, error) {
+	c.calls = append(c.calls, filename)
+	return &documentreader.ConversionResult{Markdown: c.markdown}, nil
+}
+func (c *countingConverter) ConvertURL(context.Context, string) (*documentreader.ConversionResult, error) {
+	return nil, fmt.Errorf("not supported")
+}
+
+func TestPageCount(t *testing.T) {
+	t.Parallel()
+	if n, err := PageCount(threePages(t)); err != nil || n != 3 {
+		t.Fatalf("PageCount = %d, %v, want 3", n, err)
+	}
+	if _, err := PageCount([]byte("not a pdf")); err == nil {
+		t.Fatal("a file that is not a PDF should be an error")
+	}
+}
+
+func TestReadPages_PagesPastTheEngineBudgetAreDeferredNotFailed(t *testing.T) {
+	t.Parallel()
+	scan := readTestdata(t, "scanned.pdf")
+	var out bytes.Buffer
+	if err := api.MergeRaw([]io.ReadSeeker{bytes.NewReader(scan), bytes.NewReader(scan), bytes.NewReader(scan)}, &out, false, nil); err != nil {
+		t.Fatal(err)
+	}
+	engine := &countingConverter{markdown: "Engine text."}
+	result, ok, err := ReadPages(context.Background(), out.Bytes(), nil, Options{MaxEnginePages: 2}, engine, VisionFallback{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if ok || len(engine.calls) != 2 {
+		t.Fatalf("want 2 engine calls and ok=false, got %d calls ok=%v", len(engine.calls), ok)
+	}
+	if result.Pages[0].Deferred || result.Pages[1].Deferred || !result.Pages[2].Deferred {
+		t.Fatalf("only page 3 should be deferred: %+v", result.Pages)
+	}
+	if result.Pages[2].Text != "" {
+		t.Fatalf("a deferred page carries no text: %+v", result.Pages[2])
+	}
+}
+
+func TestReadPages_ReadsOnlyTheRequestedPages(t *testing.T) {
+	t.Parallel()
+	result, ok, err := ReadPages(context.Background(), threePages(t), []int{3, 1}, Options{}, nil, VisionFallback{})
+	if err != nil || !ok {
+		t.Fatalf("ReadPages: ok=%v err=%v", ok, err)
+	}
+	if len(result.Pages) != 2 || result.Pages[0].Page != 1 || result.Pages[1].Page != 3 {
+		t.Fatalf("want pages 1 and 3 in order, got %+v", result.Pages)
+	}
+	if !strings.Contains(result.Pages[0].Text, "Alpha") || !strings.Contains(result.Pages[1].Text, "Charlie") || strings.Contains(result.Markdown, "Bravo") {
+		t.Fatalf("wrong pages read:\n%s", result.Markdown)
+	}
+}
+
+func TestReadPages_RejectsAPageOutsideTheDocument(t *testing.T) {
+	t.Parallel()
+	if _, _, err := ReadPages(context.Background(), threePages(t), []int{4}, Options{}, nil, VisionFallback{}); err == nil {
+		t.Fatal("page 4 of a 3-page PDF should be an error")
+	}
+	if _, _, err := ReadPages(context.Background(), threePages(t), []int{0}, Options{}, nil, VisionFallback{}); err == nil {
+		t.Fatal("page 0 should be an error")
+	}
+}
+
+func TestReadPages_OnlyAPageWithoutTextGoesToTheEngine(t *testing.T) {
+	t.Parallel()
+	engine := &countingConverter{markdown: "Scanned page text read by the engine."}
+	result, ok, err := ReadPages(context.Background(), textThenScan(t), nil, Options{}, engine, VisionFallback{})
+	if err != nil || !ok {
+		t.Fatalf("ReadPages: ok=%v err=%v", ok, err)
+	}
+	if len(engine.calls) != 1 || engine.calls[0] != "page-2.pdf" {
+		t.Fatalf("only page 2 should reach the engine, got %v", engine.calls)
+	}
+	if result.Pages[0].Source != PageSourceNative || result.Pages[1].Source != PageSourceDocling {
+		t.Fatalf("unexpected sources: %+v", result.Pages)
+	}
+}
+
+func TestReadPages_APageWithTextIsNotSentToTheEngine(t *testing.T) {
+	t.Parallel()
+	engine := &countingConverter{markdown: "Engine text."}
+	if _, _, err := ReadPages(context.Background(), textThenScan(t), []int{1}, Options{ImagePagesNeedEngine: true}, engine, VisionFallback{}); err != nil {
+		t.Fatal(err)
+	}
+	if len(engine.calls) != 0 {
+		t.Fatalf("page 1 has text and no image, the engine must not be called, got %v", engine.calls)
 	}
 }

@@ -63,7 +63,7 @@ Tools marked **stub** are registered but `IsEnabled()` returns `false` — they 
 
 | Tool | Description |
 |---|---|
-| `file_read` | Read file content — text, image (PNG/JPG), or PDF. Supports line-range limits. |
+| `file_read` | Read file content — text, image (PNG/JPG), or PDF. Supports line-range limits. A PDF is read page by page with a `--- page N ---` marker before each page; a read stops at a size limit (120,000 characters, or 20 pages sent to the document reader) and says which page to continue from with `pages`. The result names the pages that hold images or have no readable text. |
 | `file_write` | Create or fully overwrite a file. |
 | `file_edit` | Replace an exact string in a file (string-targeted, not line-based). |
 | `file_patch` | Apply a unified diff patch to a file. |

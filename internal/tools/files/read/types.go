@@ -107,6 +107,12 @@ type PDFMarkdownFileResult struct {
 	PageCount    int        `json:"page_count"`
 	Images       []PDFImage `json:"images,omitempty"`
 	VisualPages  []int      `json:"visual_pages,omitempty"`
+
+	// ShownPages are the pages whose text is in Markdown, NoTextPages the requested pages that had no
+	// readable text, and ContinueAt the first page left out because the output limit was reached.
+	ShownPages  []int `json:"shown_pages,omitempty"`
+	NoTextPages []int `json:"no_text_pages,omitempty"`
+	ContinueAt  int   `json:"continue_at,omitempty"`
 }
 
 // PDFImage is one picture extracted from a converted PDF.
