@@ -107,6 +107,24 @@ type PDFMarkdownFileResult struct {
 	PageCount    int        `json:"page_count"`
 	Images       []PDFImage `json:"images,omitempty"`
 	VisualPages  []int      `json:"visual_pages,omitempty"`
+
+	// ShownPages are the pages whose text is in Markdown, NoTextPages the requested pages that had no
+	// readable text, and ContinueAt the first page left out because the output limit was reached.
+	ShownPages  []int `json:"shown_pages,omitempty"`
+	NoTextPages []int `json:"no_text_pages,omitempty"`
+	ContinueAt  int   `json:"continue_at,omitempty"`
+
+	// Map and TotalChars are set instead of Markdown when the PDF is too long to return at once.
+	Map        []PDFPageInfo `json:"map,omitempty"`
+	TotalChars int           `json:"total_chars,omitempty"`
+}
+
+// PDFPageInfo is one page in the map of a long PDF.
+type PDFPageInfo struct {
+	Page     int  `json:"page"`
+	Chars    int  `json:"chars"`
+	HasImage bool `json:"has_image,omitempty"`
+	NoText   bool `json:"no_text,omitempty"`
 }
 
 // PDFImage is one picture extracted from a converted PDF.

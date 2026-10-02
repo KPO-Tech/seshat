@@ -9,6 +9,16 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Changed
+- `read_file` reads a PDF page by page. A short PDF (up to 20 pages and 100,000 characters) comes back whole with `--- page N ---` markers. A longer one comes back as a map (page count, characters per page, pages with images, pages with no readable text) and is read in parts with `pages`. The result lists the pages that hold images or have no readable text. A read stops at a page boundary at 120,000 characters and says which page to continue from.
+- A page with no text layer goes to the configured document reader alone, not the whole document, and its text is remembered per file (path, size, modification time) so a later read does not pay for it again.
+
+### Fixed
+- The `pages` parameter of `read_file` was ignored on every text path (a pre-converted `.md` next to the file, native text, and the document reader), so only the raw-PDF fallback honoured it and an agent could not read a page range as text.
+
+### Removed
+- `read_file` no longer serves a pre-converted `<name>.md` next to a PDF, since that text cannot be split by page. DOCX, PPTX and XLSX still use it for now.
+
 ## [1.2.57] - 2026-10-02
 
 ### Added

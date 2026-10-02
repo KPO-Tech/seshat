@@ -31,6 +31,7 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"sort"
 	"strconv"
 	"strings"
 	"sync"
@@ -176,6 +177,60 @@ func (r Result) VisionPageCount() int {
 // through docling when ok is false, the same as if this package didn't
 // exist.
 func Convert(ctx context.Context, data []byte, documentReader documentreader.Converter, vision VisionFallback) (Result, bool, error) {
+	return ReadPages(ctx, data, nil, Options{ImagePagesNeedEngine: true}, documentReader, vision)
+}
+
+// Options tunes how ReadPages routes a page.
+type Options struct {
+	// ImagePagesNeedEngine sends a page with an embedded image to the engine even when its text layer
+	// is fine, which is what Convert does. A reader that lets the caller look at the page itself
+	// leaves it false: the text is read natively and the image is only reported.
+	ImagePagesNeedEngine bool
+}
+
+// PageInfo is the cheap, native-only view of one page: no engine is involved.
+type PageInfo struct {
+	Page             int
+	Chars            int  // characters in the native text layer
+	HasEmbeddedImage bool // an embedded raster image (see the package doc for what this does not catch)
+	NoText           bool // no usable text layer: too sparse or garbled, most likely a scan
+}
+
+// Analyze reports, for every page, how much native text it has and whether it holds an image.
+func Analyze(data []byte) ([]PageInfo, error) {
+	warmUpPDFCPUConfig()
+
+	reader, err := pdf.NewReader(bytes.NewReader(data), int64(len(data)))
+	if err != nil {
+		return nil, fmt.Errorf("pdfsmart: parse pdf: %w", err)
+	}
+	pageCount := reader.NumPage()
+	if pageCount == 0 {
+		return nil, fmt.Errorf("pdfsmart: pdf has no pages")
+	}
+	// An image detection failure leaves the flag false: the map is informational, and a page with
+	// real text is read the same either way.
+	withImages, _ := pagesWithEmbeddedImages(data, nil)
+
+	infos := make([]PageInfo, 0, pageCount)
+	for i := 1; i <= pageCount; i++ {
+		info := PageInfo{Page: i, HasEmbeddedImage: withImages[i], NoText: true}
+		if page := reader.Page(i); !page.V.IsNull() {
+			if native, extractErr := page.GetPlainText(nil); extractErr == nil {
+				info.Chars = len(strings.TrimSpace(native))
+				info.NoText = info.Chars < pdftext.MinCharsPerPage || textquality.IsGarbledText(native)
+			}
+		}
+		infos = append(infos, info)
+	}
+	return infos, nil
+}
+
+// ReadPages is Convert for a chosen set of 1-indexed pages (nil means every page), so a caller
+// that wants three pages of a long document does not pay for the rest. Result.Pages holds the
+// requested pages in order; ok is true only when every one of them produced usable text, with the
+// same contract as Convert.
+func ReadPages(ctx context.Context, data []byte, pages []int, opts Options, documentReader documentreader.Converter, vision VisionFallback) (Result, bool, error) {
 	warmUpPDFCPUConfig()
 
 	reader, err := pdf.NewReader(bytes.NewReader(data), int64(len(data)))
@@ -186,8 +241,18 @@ func Convert(ctx context.Context, data []byte, documentReader documentreader.Con
 	if pageCount == 0 {
 		return Result{}, false, fmt.Errorf("pdfsmart: pdf has no pages")
 	}
+	wanted, err := wantedPages(pages, pageCount)
+	if err != nil {
+		return Result{}, false, err
+	}
 
-	pagesWithImages, err := pagesWithEmbeddedImages(data)
+	var selection []string
+	if pages != nil {
+		for _, n := range wanted {
+			selection = append(selection, strconv.Itoa(n))
+		}
+	}
+	pagesWithImages, err := pagesWithEmbeddedImages(data, selection)
 	imageDetectionOK := err == nil
 	if err != nil {
 		// Can't tell which pages have images - conservatively treat every
@@ -196,12 +261,12 @@ func Convert(ctx context.Context, data []byte, documentReader documentreader.Con
 		pagesWithImages = allPages(pageCount)
 	}
 
-	result := Result{Pages: make([]PageResult, 0, pageCount)}
+	result := Result{Pages: make([]PageResult, 0, len(wanted))}
 	var sb strings.Builder
 	allOK := true
 
-	for i := 1; i <= pageCount; i++ {
-		needsDocling := pagesWithImages[i]
+	for _, i := range wanted {
+		needsDocling := opts.ImagePagesNeedEngine && pagesWithImages[i]
 		var text string
 
 		if !needsDocling {
@@ -260,6 +325,34 @@ func Convert(ctx context.Context, data []byte, documentReader documentreader.Con
 	return result, allOK, nil
 }
 
+// wantedPages returns the requested pages sorted and de-duplicated, or every page when none are given.
+func wantedPages(pages []int, pageCount int) ([]int, error) {
+	if pages == nil {
+		return allPageList(pageCount), nil
+	}
+	seen := make(map[int]bool, len(pages))
+	wanted := make([]int, 0, len(pages))
+	for _, n := range pages {
+		if n < 1 || n > pageCount {
+			return nil, fmt.Errorf("pdfsmart: page %d is out of range (the PDF has %d pages)", n, pageCount)
+		}
+		if !seen[n] {
+			seen[n] = true
+			wanted = append(wanted, n)
+		}
+	}
+	sort.Ints(wanted)
+	return wanted, nil
+}
+
+func allPageList(n int) []int {
+	list := make([]int, n)
+	for i := range list {
+		list[i] = i + 1
+	}
+	return list
+}
+
 func allPages(n int) map[int]bool {
 	m := make(map[int]bool, n)
 	for i := 1; i <= n; i++ {
@@ -272,8 +365,8 @@ func allPages(n int) map[int]bool {
 // embedded raster image (a PDF XObject with /Subtype /Image), via
 // pdfcpu's own resource inspection - a deterministic read of the file's
 // structure, not a heuristic or an ML classification.
-func pagesWithEmbeddedImages(data []byte) (map[int]bool, error) {
-	imageSets, err := api.ExtractImagesRaw(bytes.NewReader(data), nil, nil)
+func pagesWithEmbeddedImages(data []byte, selectedPages []string) (map[int]bool, error) {
+	imageSets, err := api.ExtractImagesRaw(bytes.NewReader(data), selectedPages, nil)
 	if err != nil {
 		return nil, err
 	}
