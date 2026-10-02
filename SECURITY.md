@@ -22,6 +22,8 @@ Use GitHub's private vulnerability reporting:
 3. Fill in the affected component, a description, and steps to reproduce.
 4. Submit — the report is private and only visible to maintainers.
 
+If you cannot use GitHub, write to **seshatsupport@seshat-ai.com** instead.
+
 We will acknowledge receipt within **72 hours** and aim to provide a patch or mitigation within **14 days** for critical issues.
 
 ---
