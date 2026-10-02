@@ -14,13 +14,18 @@ import (
 )
 
 const (
-	// PDFInlineMaxChars is how much text a PDF may hold and still be returned whole when no pages are
-	// asked for. A longer one gets a map of its pages instead, and the agent reads the parts it needs.
-	PDFInlineMaxChars = 100_000
-
-	// PDFMaxCharsPerRead bounds a single read of a page range. The read stops at a page boundary and
-	// says which page to continue from.
+	// PDFMaxCharsPerRead bounds one read. It stops at a page boundary and says which page to continue
+	// from, so a long document is read in several calls without any call being huge.
 	PDFMaxCharsPerRead = 120_000
+
+	// PDFMaxEnginePagesPerRead bounds how many pages with no text layer one read sends to the document
+	// reader, since each of those is a slow call. Pages with a text layer cost almost nothing and are
+	// not counted.
+	PDFMaxEnginePagesPerRead = 20
+
+	// pdfBatchPages is how many pages are read at a time, so a read can stop at a limit without having
+	// paid for pages it will not return.
+	pdfBatchPages = 10
 
 	// renderPageToolName is the tool that shows a page as an image. It lives in a package that imports
 	// this one, so the name is repeated here for the hints.
@@ -29,11 +34,21 @@ const (
 	pdfCacheEntries = 16
 )
 
-// pdfDocument is what is worked out about one PDF once and kept: the per-page map, and the text an
-// engine produced for pages that had no text layer, which is the expensive part to redo.
+// pdfPage is one page once read: its text (from the text layer, or from the document reader for a page
+// without one) and whether it holds an image.
+type pdfPage struct {
+	text     string
+	hasImage bool
+}
+
+// pdfDocument is what is kept about one PDF between reads. Pages are read when asked for and
+// remembered, so a page read once (above all one an engine had to read) is never paid for again, and a
+// read of pages 300 to 310 does not touch the other pages.
 type pdfDocument struct {
-	pages  []pdfsmart.PageInfo
-	engine map[int]string
+	count int
+
+	mu    sync.Mutex
+	pages map[int]pdfPage
 }
 
 type pdfCacheKey struct {
@@ -48,7 +63,7 @@ var pdfCache = struct {
 	order []pdfCacheKey
 }{docs: map[pdfCacheKey]*pdfDocument{}}
 
-// pdfDocumentFor returns the cached map of a PDF, building it when the file is new or has changed.
+// pdfDocumentFor returns the remembered state of a PDF, starting it when the file is new or changed.
 func pdfDocumentFor(path string, info os.FileInfo, data []byte) (*pdfDocument, error) {
 	key := pdfCacheKey{path: path, size: info.Size(), modTime: info.ModTime()}
 	pdfCache.Lock()
@@ -58,11 +73,11 @@ func pdfDocumentFor(path string, info os.FileInfo, data []byte) (*pdfDocument, e
 	}
 	pdfCache.Unlock()
 
-	pages, err := pdfsmart.Analyze(data)
+	count, err := pdfsmart.PageCount(data)
 	if err != nil {
 		return nil, err
 	}
-	doc := &pdfDocument{pages: pages, engine: map[int]string{}}
+	doc := &pdfDocument{count: count, pages: map[int]pdfPage{}}
 
 	pdfCache.Lock()
 	defer pdfCache.Unlock()
@@ -78,55 +93,54 @@ func pdfDocumentFor(path string, info os.FileInfo, data []byte) (*pdfDocument, e
 	return doc, nil
 }
 
-func (d *pdfDocument) engineText(page int) (string, bool) {
-	pdfCache.Lock()
-	defer pdfCache.Unlock()
-	text, ok := d.engine[page]
-	return text, ok
+func (d *pdfDocument) get(page int) (pdfPage, bool) {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	p, ok := d.pages[page]
+	return p, ok
 }
 
-func (d *pdfDocument) rememberEngineText(page int, text string) {
-	pdfCache.Lock()
-	defer pdfCache.Unlock()
-	d.engine[page] = text
+func (d *pdfDocument) put(page int, p pdfPage) {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	d.pages[page] = p
 }
 
-func (d *pdfDocument) totalChars() int {
-	total := 0
-	for _, page := range d.pages {
-		total += page.Chars
-	}
-	return total
-}
-
-// pdfTargetPages turns the pages parameter into the pages to read. With no parameter it is every page
-// when the document is short, and none (mapOnly) when it is not.
-func pdfTargetPages(pagesParam string, doc *pdfDocument) (pages []int, mapOnly bool, err error) {
-	count := len(doc.pages)
-	if strings.TrimSpace(pagesParam) == "" {
-		if count <= PDFATMentionInlineThreshold && doc.totalChars() <= PDFInlineMaxChars {
-			return allPages(count), false, nil
+// unread returns the pages of the batch that have not been read yet.
+func (d *pdfDocument) unread(batch []int) []int {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	var missing []int
+	for _, page := range batch {
+		if _, ok := d.pages[page]; !ok {
+			missing = append(missing, page)
 		}
-		return nil, true, nil
+	}
+	return missing
+}
+
+// pdfTargetPages turns the pages parameter into the pages to read: every page when there is none.
+// How much of them one read returns is decided by the limits, not by the range.
+func pdfTargetPages(pagesParam string, count int) ([]int, error) {
+	if strings.TrimSpace(pagesParam) == "" {
+		return allPages(count), nil
 	}
 	parsed, err := ParsePDFPageRange(pagesParam)
 	if err != nil {
-		return nil, false, fmt.Errorf("invalid pages parameter: %w", err)
+		return nil, fmt.Errorf("invalid pages parameter: %w", err)
 	}
 	last := parsed.LastPage
 	if last == -1 || last > count {
 		last = count
 	}
 	if parsed.FirstPage > count {
-		return nil, false, fmt.Errorf("this PDF has %d pages, page %d does not exist", count, parsed.FirstPage)
+		return nil, fmt.Errorf("this PDF has %d pages, page %d does not exist", count, parsed.FirstPage)
 	}
-	if last-parsed.FirstPage+1 > MaxPagesPerRead {
-		return nil, false, fmt.Errorf("page range %q exceeds the maximum of %d pages per request, use a smaller range", pagesParam, MaxPagesPerRead)
-	}
+	pages := make([]int, 0, last-parsed.FirstPage+1)
 	for page := parsed.FirstPage; page <= last; page++ {
 		pages = append(pages, page)
 	}
-	return pages, false, nil
+	return pages, nil
 }
 
 func allPages(count int) []int {
@@ -137,12 +151,16 @@ func allPages(count int) []int {
 	return pages
 }
 
-// readPDFFile reads a PDF page by page. The agent gets the text of the pages it asked for (all of them
-// for a short document), a note on which pages hold images or have no readable text, and for a long
-// document with no page range, a map of the pages instead of everything at once.
+// readPDFFile reads a PDF page by page. With no page range it reads from the start, as a normal read
+// would; with one, those pages. Either way a read is bounded by cost, not by page count: it stops at a
+// page boundary once it has returned PDFMaxCharsPerRead characters or has sent PDFMaxEnginePagesPerRead
+// pages to the document reader, and says which page to continue from. A long document is therefore read
+// in several calls, each with a page range, and no single call can run away.
 //
-// A page with no text layer goes to the configured document reader when there is one. When none of the
-// requested pages can be read at all, the PDF is handed over as a file so a model that can see it still can.
+// Only the pages a read returns are read, in batches, so the first read of a long document is quick.
+// The result says which pages hold images or have no readable text. A page with no text layer goes to
+// the configured document reader when there is one. When none of the pages read could be read at all,
+// the PDF is handed over as a file so a model that can see it still can.
 func (t *Tool) readPDFFile(
 	ctx context.Context,
 	filePath string,
@@ -167,49 +185,57 @@ func (t *Tool) readPDFFile(
 		// Encrypted or malformed: nothing page-aware can be done, hand the file over as before.
 		return t.readPDFAsFile(ctx, filePath, fileInfo, pagesParam)
 	}
-
-	targets, mapOnly, err := pdfTargetPages(pagesParam, doc)
+	targets, err := pdfTargetPages(pagesParam, doc.count)
 	if err != nil {
-		return tool.NewErrorResult(err), nil
-	}
-	if mapOnly {
-		return tool.NewTextResult(t.formatPDFMarkdownResult(&FileReadResult{
-			Type: FileTypePDFMarkdown,
-			PDFMarkdown: &PDFMarkdownFileResult{
-				FilePath:     filePath,
-				OriginalSize: fileInfo.Size(),
-				PageCount:    len(doc.pages),
-				TotalChars:   doc.totalChars(),
-				Map:          pdfPageMap(doc),
-			},
-		})), nil
-	}
-
-	texts, err := t.pdfPageTexts(ctx, data, doc, targets)
-	if err != nil {
-		if ctx.Err() != nil {
-			return tool.NewErrorResult(fmt.Errorf("file read cancelled")), nil
-		}
 		return tool.NewErrorResult(err), nil
 	}
 
 	var body strings.Builder
 	var shown, noText, visual []int
 	continueAt := 0
-	for _, page := range targets {
-		text := strings.TrimSpace(texts[page])
-		if text == "" {
-			noText = append(noText, page)
-			continue
+	engineBudget := t.pdfMaxEnginePages()
+
+	for next := 0; next < len(targets) && continueAt == 0; next += pdfBatchPages {
+		batch := targets[next:min(next+pdfBatchPages, len(targets))]
+		if missing := doc.unread(batch); len(missing) > 0 {
+			result, _, err := pdfsmart.ReadPages(ctx, data, missing, pdfsmart.Options{MaxEnginePages: engineBudget}, t.documentReader, pdfsmart.VisionFallback{})
+			if err != nil {
+				if ctx.Err() != nil {
+					return tool.NewErrorResult(fmt.Errorf("file read cancelled")), nil
+				}
+				return tool.NewErrorResult(fmt.Errorf("failed to read PDF: %w", err)), nil
+			}
+			for _, page := range result.Pages {
+				if page.Deferred {
+					continue
+				}
+				doc.put(page.Page, pdfPage{text: page.Text, hasImage: page.HasEmbeddedImage})
+				if page.Source != pdfsmart.PageSourceNative && t.documentReader != nil {
+					engineBudget--
+				}
+			}
 		}
-		if len(shown) > 0 && body.Len()+len(text) > t.pdfMaxCharsPerRead() {
-			continueAt = page
-			break
-		}
-		fmt.Fprintf(&body, "--- page %d ---\n%s\n\n", page, text)
-		shown = append(shown, page)
-		if doc.pages[page-1].HasEmbeddedImage {
-			visual = append(visual, page)
+
+		for _, number := range batch {
+			page, read := doc.get(number)
+			if !read {
+				continueAt = number // it needs the document reader and this read has used its share
+				break
+			}
+			text := strings.TrimSpace(page.text)
+			if text == "" {
+				noText = append(noText, number)
+				continue
+			}
+			if len(shown) > 0 && body.Len()+len(text) > t.pdfMaxCharsPerRead() {
+				continueAt = number
+				break
+			}
+			fmt.Fprintf(&body, "--- page %d ---\n%s\n\n", number, text)
+			shown = append(shown, number)
+			if page.hasImage {
+				visual = append(visual, number)
+			}
 		}
 	}
 	if len(shown) == 0 {
@@ -222,7 +248,7 @@ func (t *Tool) readPDFFile(
 			FilePath:     filePath,
 			Markdown:     strings.TrimSpace(body.String()),
 			OriginalSize: fileInfo.Size(),
-			PageCount:    len(doc.pages),
+			PageCount:    doc.count,
 			VisualPages:  visual,
 			ShownPages:   shown,
 			NoTextPages:  noText,
@@ -231,50 +257,18 @@ func (t *Tool) readPDFFile(
 	})), nil
 }
 
+func (t *Tool) pdfMaxEnginePages() int {
+	if t.config != nil && t.config.MaxPDFEnginePagesPerRead > 0 {
+		return t.config.MaxPDFEnginePagesPerRead
+	}
+	return PDFMaxEnginePagesPerRead
+}
+
 func (t *Tool) pdfMaxCharsPerRead() int {
 	if t.config != nil && t.config.MaxPDFCharsPerRead > 0 {
 		return t.config.MaxPDFCharsPerRead
 	}
 	return PDFMaxCharsPerRead
-}
-
-// pdfPageTexts returns the text of each requested page: the native text layer, or for a page without
-// one the engine's text (remembered, since an engine call is the slow part).
-func (t *Tool) pdfPageTexts(ctx context.Context, data []byte, doc *pdfDocument, targets []int) (map[int]string, error) {
-	texts := make(map[int]string, len(targets))
-	var toRead []int
-	for _, page := range targets {
-		if doc.pages[page-1].NoText {
-			if cached, ok := doc.engineText(page); ok {
-				texts[page] = cached
-				continue
-			}
-		}
-		toRead = append(toRead, page)
-	}
-	if len(toRead) == 0 {
-		return texts, nil
-	}
-	sort.Ints(toRead)
-	result, _, err := pdfsmart.ReadPages(ctx, data, toRead, pdfsmart.Options{}, t.documentReader, pdfsmart.VisionFallback{})
-	if err != nil {
-		return nil, fmt.Errorf("failed to read PDF: %w", err)
-	}
-	for _, page := range result.Pages {
-		texts[page.Page] = page.Text
-		if doc.pages[page.Page-1].NoText && strings.TrimSpace(page.Text) != "" {
-			doc.rememberEngineText(page.Page, page.Text)
-		}
-	}
-	return texts, nil
-}
-
-func pdfPageMap(doc *pdfDocument) []PDFPageInfo {
-	pages := make([]PDFPageInfo, 0, len(doc.pages))
-	for _, page := range doc.pages {
-		pages = append(pages, PDFPageInfo{Page: page.Page, Chars: page.Chars, HasImage: page.HasEmbeddedImage, NoText: page.NoText})
-	}
-	return pages
 }
 
 // formatPageRanges writes 1,2,3,5 as "1-3, 5".

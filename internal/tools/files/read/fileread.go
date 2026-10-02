@@ -42,6 +42,10 @@ type ToolConfig struct {
 	// MaxPDFCharsPerRead bounds the text of one PDF read; zero means PDFMaxCharsPerRead.
 	MaxPDFCharsPerRead int
 
+	// MaxPDFEnginePagesPerRead bounds the pages with no text layer one PDF read sends to the document
+	// reader; zero means PDFMaxEnginePagesPerRead.
+	MaxPDFEnginePagesPerRead int
+
 	// DefaultLimit is the default number of lines to read
 	DefaultLimit int
 
@@ -113,7 +117,7 @@ func (t *Tool) Definition() tool.Definition {
 				},
 				"pages": map[string]any{
 					"type":        "string",
-					"description": fmt.Sprintf("Page range for PDF files (e.g., \"1-5\", \"3\", \"10-20\"). Only applicable to PDF files. Maximum %d pages per request.", MaxPagesPerRead),
+					"description": "Page range for PDF files (e.g., \"1-5\", \"3\", \"10-20\", \"5-\" for page 5 to the end). Only applicable to PDF files. A read stops at a size limit and says which page to continue from.",
 				},
 			},
 			"required": []string{"file_path"},
@@ -192,27 +196,8 @@ func (t *Tool) Call(
 	if p, ok := input.Parsed["pages"].(string); ok && p != "" {
 		pagesParam = p
 		// Parse and validate page range
-		parsedRange, err := ParsePDFPageRange(pagesParam)
-		if err != nil {
+		if _, err := ParsePDFPageRange(pagesParam); err != nil {
 			return tool.NewErrorResult(fmt.Errorf("invalid pages parameter: %w", err)), nil
-		}
-
-		// Check page range size
-		if parsedRange.LastPage == -1 {
-			// "to end" - count pages
-			pageCount, err := GetPDFPageCount(filePath)
-			if err != nil {
-				return tool.NewErrorResult(fmt.Errorf("failed to get PDF page count: %w", err)), nil
-			}
-			rangeSize := pageCount - parsedRange.FirstPage + 1
-			if rangeSize > MaxPagesPerRead {
-				return tool.NewErrorResult(fmt.Errorf("page range \"%s\" exceeds maximum of %d pages per request. Please use a smaller range.", pagesParam, MaxPagesPerRead)), nil
-			}
-		} else {
-			rangeSize := parsedRange.LastPage - parsedRange.FirstPage + 1
-			if rangeSize > MaxPagesPerRead {
-				return tool.NewErrorResult(fmt.Errorf("page range \"%s\" exceeds maximum of %d pages per request. Please use a smaller range.", pagesParam, MaxPagesPerRead)), nil
-			}
 		}
 	}
 
@@ -851,10 +836,6 @@ func (t *Tool) formatPDFMarkdownResult(result *FileReadResult) string {
 	var b strings.Builder
 	b.WriteString(fmt.Sprintf("PDF: %s\n", r.FilePath))
 	b.WriteString(fmt.Sprintf("Pages: %d | Size: %d bytes\n", r.PageCount, r.OriginalSize))
-	if len(r.Map) > 0 {
-		writePDFMap(&b, r)
-		return b.String()
-	}
 	if len(r.ShownPages) > 0 {
 		b.WriteString(fmt.Sprintf("Showing pages: %s of %d\n", formatPageRanges(r.ShownPages), r.PageCount))
 	}
@@ -877,32 +858,6 @@ func (t *Tool) formatPDFMarkdownResult(result *FileReadResult) string {
 	b.WriteString("\n")
 	b.WriteString(r.Markdown)
 	return b.String()
-}
-
-// writePDFMap describes a PDF too long to return whole: how big it is and which pages need care, so the
-// agent can ask for the parts it needs.
-func writePDFMap(b *strings.Builder, r *PDFMarkdownFileResult) {
-	b.WriteString(fmt.Sprintf("This PDF has about %d characters of text, too much to return at once. Read it in parts with the pages parameter (for example pages=\"1-10\"; at most %d pages per request).\n", r.TotalChars, MaxPagesPerRead))
-	var images, noText []int
-	for _, page := range r.Map {
-		if page.HasImage {
-			images = append(images, page.Page)
-		}
-		if page.NoText {
-			noText = append(noText, page.Page)
-		}
-	}
-	if len(images) > 0 {
-		b.WriteString(fmt.Sprintf("Pages with images: %s\n", formatPageRanges(images)))
-	}
-	if len(noText) > 0 {
-		b.WriteString(fmt.Sprintf("Pages with no readable text (likely scanned): %s\n", formatPageRanges(noText)))
-	}
-	b.WriteString("Characters per page:")
-	for _, page := range r.Map {
-		b.WriteString(fmt.Sprintf(" %d:%d", page.Page, page.Chars))
-	}
-	b.WriteString("\n")
 }
 
 func (t *Tool) formatDocumentReaderResult(result *FileReadResult) string {
@@ -1072,7 +1027,7 @@ func (t *Tool) BackfillInput(ctx context.Context, input map[string]any) map[stri
 const ToolName = "read_file"
 
 // Description is the description of the file read tool.
-var Description = fmt.Sprintf(`Read the contents of a file. Supports text files, images, PDFs, and - when the configured document reader is configured - DOCX, PPTX, XLSX documents and audio transcription (WAV, MP3). For large text files, use offset/limit to read specific ranges. A PDF is read page by page: a short one comes back whole, a long one comes back as a map of its pages and is read in parts with the pages parameter. The result says which pages hold images or have no readable text.
+var Description = fmt.Sprintf(`Read the contents of a file. Supports text files, images, PDFs, and - when the configured document reader is configured - DOCX, PPTX, XLSX documents and audio transcription (WAV, MP3). For large text files, use offset/limit to read specific ranges. A PDF is read page by page with a marker before each page. A read stops at a size limit and says which page to continue from, so a long PDF is read in several calls with the pages parameter. The result says which pages hold images or have no readable text.
 
 Reads a file from the local filesystem. You can access any file directly by using this tool. Assume this tool is able to read all files on the machine. If the user provides a path to a file assume that path is valid. It is okay to read a file that does not exist; an error will be returned.
 

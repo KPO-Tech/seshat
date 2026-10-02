@@ -47,7 +47,7 @@ func Extract(data []byte) (*Result, error) {
 		if page.V.IsNull() {
 			continue
 		}
-		text, err := page.GetPlainText(nil)
+		text, err := PageText(page)
 		if err != nil {
 			// A single malformed page shouldn't sink extraction for the
 			// whole document - skip it and keep going.

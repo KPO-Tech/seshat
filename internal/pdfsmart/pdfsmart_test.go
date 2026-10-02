@@ -295,20 +295,36 @@ func (c *countingConverter) ConvertURL(context.Context, string) (*documentreader
 	return nil, fmt.Errorf("not supported")
 }
 
-func TestAnalyze_ReportsTextAndImagesPerPage(t *testing.T) {
+func TestPageCount(t *testing.T) {
 	t.Parallel()
-	infos, err := Analyze(textThenScan(t))
+	if n, err := PageCount(threePages(t)); err != nil || n != 3 {
+		t.Fatalf("PageCount = %d, %v, want 3", n, err)
+	}
+	if _, err := PageCount([]byte("not a pdf")); err == nil {
+		t.Fatal("a file that is not a PDF should be an error")
+	}
+}
+
+func TestReadPages_PagesPastTheEngineBudgetAreDeferredNotFailed(t *testing.T) {
+	t.Parallel()
+	scan := readTestdata(t, "scanned.pdf")
+	var out bytes.Buffer
+	if err := api.MergeRaw([]io.ReadSeeker{bytes.NewReader(scan), bytes.NewReader(scan), bytes.NewReader(scan)}, &out, false, nil); err != nil {
+		t.Fatal(err)
+	}
+	engine := &countingConverter{markdown: "Engine text."}
+	result, ok, err := ReadPages(context.Background(), out.Bytes(), nil, Options{MaxEnginePages: 2}, engine, VisionFallback{})
 	if err != nil {
-		t.Fatalf("Analyze: %v", err)
+		t.Fatal(err)
 	}
-	if len(infos) != 2 {
-		t.Fatalf("want 2 pages, got %+v", infos)
+	if ok || len(engine.calls) != 2 {
+		t.Fatalf("want 2 engine calls and ok=false, got %d calls ok=%v", len(engine.calls), ok)
 	}
-	if infos[0].NoText || infos[0].Chars == 0 {
-		t.Errorf("page 1 has a text layer: %+v", infos[0])
+	if result.Pages[0].Deferred || result.Pages[1].Deferred || !result.Pages[2].Deferred {
+		t.Fatalf("only page 3 should be deferred: %+v", result.Pages)
 	}
-	if !infos[1].NoText || !infos[1].HasEmbeddedImage {
-		t.Errorf("page 2 is a scan with an image: %+v", infos[1])
+	if result.Pages[2].Text != "" {
+		t.Fatalf("a deferred page carries no text: %+v", result.Pages[2])
 	}
 }
 

@@ -109,29 +109,62 @@ func TestReadPDF_APageBeyondTheEndIsAnErrorThatSaysHowManyPagesThereAre(t *testi
 	}
 }
 
-func TestReadPDF_ALongDocumentComesBackAsAMapThenIsReadInParts(t *testing.T) {
+func TestReadPDF_ALongDocumentIsReadWholeByDefaultWhenItFitsTheLimit(t *testing.T) {
 	t.Parallel()
 	part := fixturePDF(t, "three_pages.pdf")
-	long := mergePDFs(t, part, part, part, part, part, part, part, part) // 24 pages, over the inline limit
-	path, info := writePDF(t, long)
-	tl := &Tool{config: DefaultToolConfig()}
+	path, info := writePDF(t, mergePDFs(t, part, part, part, part, part, part, part, part)) // 24 pages
+	out := read(t, &Tool{config: DefaultToolConfig()}, path, info, "")
+	if !strings.Contains(out, "Showing pages: 1-24 of 24") || strings.Contains(out, "Continue with") {
+		t.Fatalf("a document under the limit is read whole, however many pages:\n%s", out)
+	}
+}
+
+func TestReadPDF_AReadThatReachesTheLimitCanBeContinuedWithPageRanges(t *testing.T) {
+	t.Parallel()
+	part := fixturePDF(t, "three_pages.pdf")
+	path, info := writePDF(t, mergePDFs(t, part, part, part, part, part, part, part, part))
+	tl := &Tool{config: &ToolConfig{MaxFileSize: MaxFileSize, MaxPDFCharsPerRead: 1500}}
+
+	first := read(t, tl, path, info, "")
+	hint := "Continue with pages=\""
+	at := strings.Index(first, hint)
+	if !strings.Contains(first, "Showing pages: 1-") || at < 0 {
+		t.Fatalf("a read with no range stops at the limit and says where to continue:\n%s", first)
+	}
+	var next int
+	if _, err := fmt.Sscanf(first[at+len(hint):], "%d-", &next); err != nil || next < 2 {
+		t.Fatalf("cannot find the continuation page in:\n%s", first)
+	}
+
+	second := read(t, tl, path, info, fmt.Sprintf("%d-", next))
+	if !strings.Contains(second, fmt.Sprintf("--- page %d ---", next)) || strings.Contains(second, fmt.Sprintf("--- page %d ---", next-1)) {
+		t.Fatalf("the continuation must start at page %d:\n%s", next, second)
+	}
+}
+
+func TestReadPDF_APageRangeLongerThanFiftyPagesIsNoLongerAnError(t *testing.T) {
+	t.Parallel()
+	part := fixturePDF(t, "three_pages.pdf")
+	path, info := writePDF(t, mergePDFs(t, part, part, part, part, part, part, part, part, part, part, part, part, part, part, part, part, part, part)) // 54 pages
+	out := read(t, &Tool{config: DefaultToolConfig()}, path, info, "1-54")
+	if !strings.Contains(out, "Showing pages: 1-54 of 54") {
+		t.Fatalf("limits, not page counts, bound a read:\n%s", out)
+	}
+}
+
+func TestReadPDF_APageWithoutATextLayerCountsAgainstTheEngineBudget(t *testing.T) {
+	t.Parallel()
+	scan := fixturePDF(t, "scanned.pdf")
+	path, info := writePDF(t, mergePDFs(t, scan, scan, scan, scan))
+	engine := &fakeEngine{markdown: "Text the engine read from a scan."}
+	tl := &Tool{config: &ToolConfig{MaxFileSize: MaxFileSize, MaxPDFEnginePagesPerRead: 2}, documentReader: engine}
 
 	out := read(t, tl, path, info, "")
-	if !strings.Contains(out, "Pages: 24") || !strings.Contains(out, "too much to return at once") || !strings.Contains(out, "Characters per page: 1:") {
-		t.Fatalf("want a map of the pages, got:\n%s", out)
+	if engine.calls != 2 {
+		t.Fatalf("a read may send only 2 pages to the reader, got %d calls", engine.calls)
 	}
-	if strings.Contains(out, "Alpha section") {
-		t.Fatalf("the map must not carry page text:\n%s", out)
-	}
-
-	out = read(t, tl, path, info, "4-5")
-	if !strings.Contains(out, "Showing pages: 4-5 of 24") || !strings.Contains(out, "Alpha section") {
-		t.Fatalf("pages=4-5 should return text:\n%s", out)
-	}
-
-	out = read(t, tl, path, info, "1-60")
-	if !strings.Contains(out, "exceeds the maximum") && !strings.Contains(out, "Showing pages: 1-24") {
-		t.Fatalf("a range past the limit must be rejected or clipped to the document, got:\n%s", out)
+	if !strings.Contains(out, "Showing pages: 1-2 of 4") || !strings.Contains(out, "Continue with pages=\"3-\"") {
+		t.Fatalf("want pages 1-2 and a hint to continue at 3:\n%s", out)
 	}
 }
 
