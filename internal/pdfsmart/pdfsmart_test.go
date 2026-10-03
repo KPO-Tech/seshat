@@ -16,6 +16,7 @@ import (
 	"github.com/pdfcpu/pdfcpu/pkg/pdfcpu/model"
 
 	"github.com/KPO-Tech/seshat/internal/documentreader"
+	"github.com/KPO-Tech/seshat/internal/pdftext"
 )
 
 // Fixtures are copied from internal/pdftext's own testdata (already
@@ -375,5 +376,58 @@ func TestReadPages_APageWithTextIsNotSentToTheEngine(t *testing.T) {
 	}
 	if len(engine.calls) != 0 {
 		t.Fatalf("page 1 has text and no image, the engine must not be called, got %v", engine.calls)
+	}
+}
+
+// tableReader is a document reader that also knows where the tables with no ruling lines are, as the native one
+// does with its models.
+type tableReader struct {
+	countingConverter
+	asked  []int
+	tables []pdftext.TableStructure
+	err    error
+}
+
+func (r *tableReader) FindTables(_ context.Context, _ []byte, pageIndex int) ([]pdftext.TableStructure, error) {
+	r.asked = append(r.asked, pageIndex)
+	return r.tables, r.err
+}
+
+func TestReadPages_AReaderThatFindsTablesFillsThemFromThePageText(t *testing.T) {
+	t.Parallel()
+	data := readTestdata(t, "borderless.pdf")
+	reader := &tableReader{tables: []pdftext.TableStructure{{
+		X0: 55, Top: 140, X1: 510, Bottom: 268,
+		Columns: [][4]float64{{55, 140, 230, 268}, {243, 140, 300, 268}, {312, 140, 372, 268}, {383, 140, 442, 268}, {453, 140, 510, 268}},
+		Rows:    [][4]float64{{55, 140, 510, 155}, {55, 162, 510, 177}, {55, 182, 510, 197}, {55, 202, 510, 230}, {55, 233, 510, 248}, {55, 253, 510, 268}},
+		Headers: [][4]float64{{55, 140, 510, 155}},
+	}}}
+
+	result, ok, err := ReadPages(context.Background(), data, nil, Options{}, reader, VisionFallback{})
+	if err != nil || !ok {
+		t.Fatalf("ok=%v err=%v", ok, err)
+	}
+	if !strings.Contains(result.Markdown, "| Product line | Q1 | Q2 | Q3 | Q4 |") || !strings.Contains(result.Markdown, "| Support | 30 | 31 | 33 | 34 |") {
+		t.Fatalf("the table was not read:\n%s", result.Markdown)
+	}
+	// Only the page whose text is columnar is put to the models, and the page index counts from zero.
+	if len(reader.asked) != 1 || reader.asked[0] != 0 {
+		t.Fatalf("the reader was asked about pages %v, want [0]", reader.asked)
+	}
+	if len(reader.calls) != 0 {
+		t.Errorf("a page with a text layer must not be sent to the engine: %v", reader.calls)
+	}
+}
+
+func TestReadPages_AReaderWhoseTableSearchFailsStillReadsThePage(t *testing.T) {
+	t.Parallel()
+	data := readTestdata(t, "borderless.pdf")
+	reader := &tableReader{err: fmt.Errorf("models are not installed")}
+	result, ok, err := ReadPages(context.Background(), data, []int{1}, Options{}, reader, VisionFallback{})
+	if err != nil || !ok {
+		t.Fatalf("ok=%v err=%v", ok, err)
+	}
+	if !strings.Contains(result.Markdown, "Hardware 120 135 128 141") {
+		t.Fatalf("the page text is missing:\n%s", result.Markdown)
 	}
 }
