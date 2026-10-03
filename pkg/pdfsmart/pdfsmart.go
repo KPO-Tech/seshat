@@ -25,6 +25,17 @@ type (
 	TableStructure = pdftext.TableStructure
 )
 
+// ErrPasswordRequired is returned for a PDF protected by a user password that was not given, or was given wrongly.
+var ErrPasswordRequired = internalpdfsmart.ErrPasswordRequired
+
+// Unlock returns a PDF in a form the page reader can open: unchanged when it is not encrypted or the reader already
+// opens it, a decrypted copy otherwise (AES-256 and anything with a user password). An empty password is what every
+// viewer tries first and opens a PDF whose owner password only limits printing and copying. Convert and the page
+// readers do this themselves with an empty password; call it with the user's password for a protected PDF.
+func Unlock(data []byte, password string) ([]byte, error) {
+	return internalpdfsmart.Unlock(data, password)
+}
+
 const (
 	PageSourceNative  = internalpdfsmart.PageSourceNative
 	PageSourceDocling = internalpdfsmart.PageSourceDocling

@@ -9,6 +9,13 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [1.2.63] - 2026-10-04
+
+### Added
+
+- Encrypted PDFs are read. An AES-256 PDF (what Acrobat and most banks produce) or any PDF encrypted with an empty user password (an emailed statement whose owner password only limits printing and copying) used to be refused ("malformed PDF: 256-bit encryption key"); it is now decrypted into a plain copy, once, and read like any other, by every reader (the Read tool, `documentreading`, ingestion, the layout models). A PDF protected by a user password says so (`pdfsmart.ErrPasswordRequired`), and the Read tool has an optional `password` parameter for the password the user gives. Decryption is `github.com/razvandimescu/gopdf` (MIT, no dependencies; reads RC4, AES-128 and AES-256, whatever way the producer wrote the encryption dictionary) for an empty password, and `pdfcpu` when a password is given.
+- `pdfsmart.Unlock`, `pdfsmart.ErrPasswordRequired` and `pdfsmart.Options.Password`.
+
 ## [1.2.62] - 2026-10-04
 
 ### Added

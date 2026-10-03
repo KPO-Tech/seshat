@@ -194,6 +194,9 @@ type Options struct {
 	// bound). Pages past it are returned with Deferred set. Each engine call is slow, so a caller
 	// that wants an answer in bounded time sets it and reads the rest in a later call.
 	MaxEnginePages int
+
+	// Password opens a PDF that is protected by a user password. A PDF whose user password is empty needs none.
+	Password string
 }
 
 // TableFinder is a document reader that can also say where the tables with no ruling lines are on a page, and how
@@ -206,6 +209,10 @@ type TableFinder interface {
 
 // PageCount is the number of pages of a PDF, without reading any of them.
 func PageCount(data []byte) (int, error) {
+	data, err := Unlock(data, "")
+	if err != nil {
+		return 0, err
+	}
 	reader, err := pdf.NewReader(bytes.NewReader(data), int64(len(data)))
 	if err != nil {
 		return 0, fmt.Errorf("pdfsmart: parse pdf: %w", err)
@@ -223,6 +230,12 @@ func PageCount(data []byte) (int, error) {
 func ReadPages(ctx context.Context, data []byte, pages []int, opts Options, documentReader documentreader.Converter, vision VisionFallback) (Result, bool, error) {
 	warmUpPDFCPUConfig()
 
+	// An encrypted PDF is read from a decrypted copy, so everything below (the page reader, the image check, the
+	// engine, the layout models) sees the same plain file.
+	data, err := Unlock(data, opts.Password)
+	if err != nil {
+		return Result{}, false, err
+	}
 	reader, err := pdf.NewReader(bytes.NewReader(data), int64(len(data)))
 	if err != nil {
 		return Result{}, false, fmt.Errorf("pdfsmart: parse pdf: %w", err)

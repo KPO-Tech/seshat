@@ -119,6 +119,10 @@ func (t *Tool) Definition() tool.Definition {
 					"type":        "string",
 					"description": "Page range for PDF files (e.g., \"1-5\", \"3\", \"10-20\", \"5-\" for page 5 to the end). Only applicable to PDF files. A read stops at a size limit and says which page to continue from.",
 				},
+				"password": map[string]any{
+					"type":        "string",
+					"description": "Password of a password-protected PDF. Only give it when the user has provided it; a PDF that is encrypted without a password to open it (an owner password only) is read without one.",
+				},
 			},
 			"required": []string{"file_path"},
 		}),
@@ -247,7 +251,8 @@ func (t *Tool) Call(
 	// Step 7: Read based on file type
 	switch fileType {
 	case FileTypePDF:
-		return t.readPDFFile(ctx, filePath, fileInfo, pagesParam)
+		password, _ := input.Parsed["password"].(string)
+		return t.readPDFFile(ctx, filePath, fileInfo, pagesParam, password)
 	case FileTypeNotebook:
 		return t.readNotebookFile(ctx, filePath, fileInfo)
 	case FileTypeText:
