@@ -65,6 +65,7 @@ require (
 	github.com/posthog/posthog-go v1.15.0
 	github.com/qdrant/go-client v1.18.3
 	github.com/qjebbs/go-jsons v1.0.0-alpha.5
+	github.com/razvandimescu/gopdf v0.11.2
 	github.com/redis/go-redis/v9 v9.22.0
 	github.com/rivo/uniseg v0.4.7
 	github.com/robfig/cron/v3 v3.0.1

@@ -2,6 +2,7 @@ package read
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"sort"
@@ -166,6 +167,7 @@ func (t *Tool) readPDFFile(
 	filePath string,
 	fileInfo os.FileInfo,
 	pagesParam string,
+	password string,
 ) (tool.CallResult, error) {
 	select {
 	case <-ctx.Done():
@@ -178,6 +180,20 @@ func (t *Tool) readPDFFile(
 	}
 	data, err := os.ReadFile(filePath)
 	if err != nil {
+		return tool.NewErrorResult(fmt.Errorf("failed to read PDF: %w", err)), nil
+	}
+	// An encrypted PDF is read from a decrypted copy (the last few are remembered, so a long document read in several
+	// calls is decrypted once). One that needs a password the reader was not given says so, which is more useful to
+	// the model than the encrypted file handed over as it is.
+	data, err = pdfsmart.Unlock(data, password)
+	if err != nil {
+		if errors.Is(err, pdfsmart.ErrPasswordRequired) {
+			message := "this PDF is protected by a password."
+			if password != "" {
+				message = "the password given does not open this PDF."
+			}
+			return tool.NewErrorResult(fmt.Errorf("%s Ask the user for the password and read the file again with the password parameter.", message)), nil
+		}
 		return tool.NewErrorResult(fmt.Errorf("failed to read PDF: %w", err)), nil
 	}
 	doc, err := pdfDocumentFor(filePath, fileInfo, data)

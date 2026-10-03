@@ -140,13 +140,13 @@ type line struct {
 
 // PageMarkdown returns a page as markdown: headings, code blocks, lists, paragraphs and formulas.
 func PageMarkdown(page pdf.Page) (md string, err error) {
-	return PageMarkdownWith(page, nil)
+	return PageMarkdownWith(page, PageOptions{})
 }
 
 // PageMarkdownWith is PageMarkdown for a caller that has a layout model to ask about tables that have no ruling
 // lines. The source is only asked on a page whose text looks columnar and that is not rotated, and what it returns
 // only adds tables: what the rulings found stays, and a page is never worse for a model that failed.
-func PageMarkdownWith(page pdf.Page, source TableSource) (md string, err error) {
+func PageMarkdownWith(page pdf.Page, opts PageOptions) (md string, err error) {
 	defer func() {
 		if r := recover(); r != nil {
 			md, err = "", errorFromPanic(r)
@@ -158,8 +158,8 @@ func PageMarkdownWith(page pdf.Page, source TableSource) (md string, err error) 
 	texts := page.Content().Text
 	rul, _ := pageRulings(page) // no rulings (or unreadable ones) means no tables, not a failed page
 	models := modelContext{}
-	if source != nil && inherited(page.V, "Rotate").Int64()%360 == 0 {
-		models = modelContext{source: source, box: boxOf(page)}
+	if opts.Tables != nil && inherited(page.V, "Rotate").Int64()%360 == 0 {
+		models = modelContext{opts: opts, box: boxOf(page)}
 	}
 	return layoutMarkdownPage(texts, markerIndexes(page, len(texts)), rul.merged(), models), nil
 }
@@ -239,8 +239,8 @@ func layoutMarkdownWithout(texts []pdf.Text, skip map[int]bool) string {
 // tables, in place, and their text is not repeated in the running text.
 // modelContext is what a page needs to ask a layout model about its tables.
 type modelContext struct {
-	source TableSource
-	box    pageBox
+	opts PageOptions
+	box  pageBox
 }
 
 func layoutMarkdownPage(texts []pdf.Text, skip map[int]bool, rul rulings, models modelContext) string {
@@ -256,17 +256,17 @@ func layoutMarkdownPage(texts []pdf.Text, skip map[int]bool, rul rulings, models
 	placeGlyphs(glyphs)
 	var tables []foundTable
 	var used [][]int
-	if len(rul.h) >= minRegionRules {
-		tables, used = buildTables(findRegions(rul), glyphs, pageWidth(glyphs))
+	if len(rul.h) >= 1 {
+		tables, used = buildTables(rul, glyphs, pageWidth(glyphs))
 	}
-	if models.source != nil {
+	if models.opts.Tables != nil {
 		taken := make([]bool, len(glyphs))
 		for _, idx := range used {
 			for _, i := range idx {
 				taken[i] = true
 			}
 		}
-		more, moreUsed := modelTables(models.source, models.box, glyphs, taken, tables, pageWidth(glyphs))
+		more, moreUsed := modelTables(models.opts, models.box, glyphs, taken, tables, pageWidth(glyphs))
 		tables, used = append(tables, more...), append(used, moreUsed...)
 	}
 	glyphs = standInForTables(glyphs, tables, used)
@@ -306,25 +306,41 @@ func standInForTables(glyphs []glyph, tables []foundTable, used [][]int) []glyph
 		return glyphs
 	}
 	drop := map[int]bool{}
-	firstOf := map[int]int{} // glyph index -> table index
+	before := map[int][]int{} // glyph index -> the tables written before it
+	var last []int            // tables with nowhere to go but the end
 	for t, idx := range used {
-		first := idx[0]
+		first := -1
 		for _, i := range idx {
 			drop[i] = true
-			first = min(first, i)
+			if first < 0 || i < first {
+				first = i
+			}
 		}
-		firstOf[first] = t
+		if first < 0 {
+			first = tables[t].anchor // a table with no glyphs of its own goes before the text just under it
+		}
+		if first < 0 {
+			last = append(last, t)
+			continue
+		}
+		before[first] = append(before[first], t)
 	}
-	out := make([]glyph, 0, len(glyphs))
+	standIn := func(t int) glyph {
+		stand := glyph{gx: tables[t].x0, gw: 1, table: t + 1}
+		stand.S, stand.X, stand.Y, stand.FontSize = "\uE000", tables[t].x0, tables[t].y1, 10
+		return stand
+	}
+	out := make([]glyph, 0, len(glyphs)+len(tables))
 	for i, g := range glyphs {
-		if t, ok := firstOf[i]; ok {
-			stand := glyph{gx: tables[t].x0, gw: 1, table: t + 1}
-			stand.S, stand.X, stand.Y, stand.FontSize = "", tables[t].x0, tables[t].y1, 10
-			out = append(out, stand)
+		for _, t := range before[i] {
+			out = append(out, standIn(t))
 		}
 		if !drop[i] {
 			out = append(out, g)
 		}
+	}
+	for _, t := range last {
+		out = append(out, standIn(t))
 	}
 	return out
 }
