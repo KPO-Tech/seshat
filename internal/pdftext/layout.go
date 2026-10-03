@@ -34,7 +34,7 @@ var (
 const (
 	headingRatio    = 1.12 // a line at least this much bigger than the body text is a heading
 	scriptRatio     = 0.85 // a glyph smaller than this share of its line is a sub or superscript
-	scriptShift     = 0.2  // and is moved up or down by more than this share of the line's size
+	scriptShift     = 0.08 // and is moved up or down by more than this share of the line's size (subscripts sit low by about 0.15)
 	displayIndent   = 2.5  // a display formula is indented by more than this many body sizes
 	paragraphGap    = 1.55 // a vertical gap above this many body sizes between lines is a new paragraph
 	fractionShift   = 0.45 // a normal-size glyph this far above or below the baseline is part of a fraction
@@ -144,12 +144,76 @@ func PageMarkdown(page pdf.Page) (md string, err error) {
 	if page.V.IsNull() {
 		return "", nil
 	}
-	return layoutMarkdown(page.Content().Text), nil
+	return layoutMarkdownWithout(page.Content().Text, markerRunes(page)), nil
 }
 
-func layoutMarkdown(texts []pdf.Text) string {
+// markerRunes finds, for each font of the page, what the library's newline marker decodes to. After each
+// TJ the library shows a "\n" through the font's own encoding, so it comes out as U+FFFD in one font and as
+// some other letter (an omega, say) in another. No text string holds a raw newline byte, so a glyph that is
+// exactly that decoded marker is never text.
+func markerRunes(page pdf.Page) map[string]string {
+	markers := map[string]string{}
+	defer func() { _ = recover() }() // a font that cannot be decoded just has no marker to drop
+	usesNewlineByte := fontsUsingNewlineByte(page)
+	for _, name := range page.Fonts() {
+		if usesNewlineByte[name] {
+			// A subset font may encode a real letter as code 10: its marker cannot be told from text.
+			continue
+		}
+		font := page.Font(name)
+		base := font.BaseFont()
+		if i := strings.Index(base, "+"); i >= 0 {
+			base = base[i+1:]
+		}
+		if decoded := font.Encoder().Decode("\n"); decoded != "" && decoded != "\n" {
+			markers[base] = decoded
+		}
+	}
+	return markers
+}
+
+// fontsUsingNewlineByte reads the page's content stream and reports, by font resource name, the fonts that
+// show a string holding the byte 10. For those, code 10 is a real character.
+func fontsUsingNewlineByte(page pdf.Page) map[string]bool {
+	used := map[string]bool{}
+	defer func() { _ = recover() }()
+	current := ""
+	pdf.Interpret(page.V.Key("Contents"), func(stk *pdf.Stack, op string) {
+		args := make([]pdf.Value, stk.Len())
+		for i := len(args) - 1; i >= 0; i-- {
+			args[i] = stk.Pop()
+		}
+		switch op {
+		case "Tf":
+			if len(args) == 2 {
+				current = args[0].Name()
+			}
+		case "Tj", "'", "\"":
+			if len(args) > 0 && strings.Contains(args[len(args)-1].RawString(), "\n") {
+				used[current] = true
+			}
+		case "TJ":
+			if len(args) > 0 {
+				for i := 0; i < args[0].Len(); i++ {
+					if item := args[0].Index(i); item.Kind() == pdf.String && strings.Contains(item.RawString(), "\n") {
+						used[current] = true
+					}
+				}
+			}
+		}
+	})
+	return used
+}
+
+func layoutMarkdown(texts []pdf.Text) string { return layoutMarkdownWithout(texts, nil) }
+
+// layoutMarkdownWithout is layoutMarkdown with the glyphs that are a font's newline marker removed.
+func layoutMarkdownWithout(texts []pdf.Text, markers map[string]string) string {
 	glyphs := make([]glyph, 0, len(texts))
 	for _, t := range texts {
+		if marker, ok := markers[t.Font]; ok && t.S == marker {
+			continue
+		}
 		if g := newGlyph(t); !g.isJunk() {
 			glyphs = append(glyphs, g)
 		}
@@ -314,7 +378,7 @@ func classify(lines []*line, body, margin float64) {
 		switch {
 		case isMonoLine(l):
 			l.kind = kindCode
-		case l.size >= body*headingRatio && len([]rune(l.text)) <= 120 && !hasMath(l) && hasWordChars.MatchString(l.text):
+		case l.size >= body*headingRatio && isHeadingText(l.text) && !hasMath(l):
 			l.kind = kindHeading
 			l.level = headingLevel(l.size / body)
 		}
@@ -322,7 +386,7 @@ func classify(lines []*line, body, margin float64) {
 	// A display formula: indented well past the margin, set in a math font, short.
 	seeds := make([]bool, len(lines))
 	for i, l := range lines {
-		if l.kind == kindText && hasMath(l) && l.x0 > margin+body*displayIndent && len(l.glyphs) <= maxDisplayWidth {
+		if l.kind == kindText && isFormulaLine(l) && l.x0 > margin+body*displayIndent && len(l.glyphs) <= maxDisplayWidth {
 			seeds[i] = true
 		}
 	}
@@ -340,6 +404,32 @@ func classify(lines []*line, body, margin float64) {
 			l.kind = kindMath
 		}
 	}
+}
+
+// isHeadingText: short, with words in it, and not a sentence (a long line ending in a full stop is a note).
+func isHeadingText(text string) bool {
+	n := len([]rune(text))
+	if n > 100 || !hasWordChars.MatchString(text) {
+		return false
+	}
+	return !(n > 60 && strings.HasSuffix(strings.TrimSpace(text), "."))
+}
+
+// isFormulaLine: a line that is mostly set in a math font, or holds a relation. An author line with a
+// dagger set in a math font is not a formula.
+func isFormulaLine(l *line) bool {
+	if !hasMath(l) {
+		return false
+	}
+	if share(l, func(g glyph) bool { return g.math }) >= 0.3 {
+		return true
+	}
+	for _, g := range l.glyphs {
+		if g.math && relations[g.S] {
+			return true
+		}
+	}
+	return false
 }
 
 func nearSeed(lines []*line, seeds []bool, i, step int, body float64) bool {
@@ -404,7 +494,7 @@ func assemble(lines []*line, body, margin, rightEdge float64) string {
 			j := i
 			var parts []string
 			for j < len(lines) && lines[j].kind == kindHeading && math.Abs(lines[j].size-l.size) < 0.6 &&
-				(j == i || !sectionNumber.MatchString(lines[j].text)) {
+				(j == i || !sectionNumber.MatchString(lines[j].text)) && len(parts) < 3 {
 				parts = append(parts, lines[j].text)
 				j++
 			}
@@ -489,7 +579,10 @@ func joinLine(cur *strings.Builder, next string) {
 	if strings.HasSuffix(s, "-") && len(s) >= 2 {
 		before, _ := utf8.DecodeLastRuneInString(s[:len(s)-1])
 		first, _ := utf8.DecodeRuneInString(next)
-		if unicode.IsLetter(before) && unicode.IsLower(first) {
+		// "English-" then "to-German" is a compound word split at its own hyphen: the next piece has a
+		// hyphen of its own. A syllable break ("approxima-" then "teurs") is followed by a plain fragment.
+		word, _, _ := strings.Cut(next, " ")
+		if unicode.IsLetter(before) && unicode.IsLower(first) && !strings.Contains(word, "-") {
 			cur.Reset()
 			cur.WriteString(s[:len(s)-1])
 			cur.WriteString(next)

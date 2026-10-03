@@ -1,6 +1,9 @@
 package pdftext
 
 import (
+	"bytes"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -190,5 +193,28 @@ func TestMarkdown_ATextOnlyPageStaysReadable(t *testing.T) {
 	md := layoutMarkdown(bodyLines(5, 700))
 	if strings.Contains(md, "#") || strings.Contains(md, "```") || strings.Contains(md, "$") {
 		t.Fatalf("plain prose must stay plain:\n%s", md)
+	}
+}
+
+func TestPageMarkdown_ALetterEncodedAsCode10IsKeptNotTakenForTheLibrarysMarker(t *testing.T) {
+	t.Parallel()
+	// In this subset font the byte 10 is a real letter ("r", "w" and "c" in its three fonts). Dropping what
+	// a font decodes its newline marker to would delete those letters from the text.
+	data, err := os.ReadFile(filepath.Join("testdata", "text_layer.pdf"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	reader, err := pdf.NewReader(bytes.NewReader(data), int64(len(data)))
+	if err != nil {
+		t.Fatal(err)
+	}
+	md, err := PageMarkdown(reader.Page(1))
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, want := range []string{"Sample Report", "paragraph with some plain text", "multi-paragraph extraction works", "Name Score"} {
+		if !strings.Contains(md, want) {
+			t.Errorf("missing %q in:\n%s", want, md)
+		}
 	}
 }
