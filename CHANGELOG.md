@@ -9,6 +9,12 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [1.2.64] - 2026-10-04
+
+### Fixed
+
+- Converting a whole PDF with the native reader (ingestion, and any page a caller sends to the engine) wrote a page with a text layer as the plain text of the layer, with no table at all: the tables the Read tool shows (ruled, borderless, with one rule, or a picture) were lost on that path. Such a page is now written the way the page reader writes it. A page with only a few words over a picture is still read by OCR, as before.
+
 ## [1.2.63] - 2026-10-04
 
 ### Added

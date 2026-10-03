@@ -28,6 +28,7 @@ import (
 	"github.com/KPO-Tech/seshat/internal/documentreader"
 	"github.com/KPO-Tech/seshat/internal/nativedoc"
 	"github.com/KPO-Tech/seshat/internal/nativedoc/pdfium"
+	"github.com/KPO-Tech/seshat/internal/pdfsmart"
 	"github.com/KPO-Tech/seshat/internal/pdftext"
 )
 
@@ -50,6 +51,19 @@ func (c *Converter) convertPDF(ctx context.Context, data []byte, filename string
 		return nil, fmt.Errorf("nativedoc/parser: page count for %s: %w", filename, err)
 	}
 
+	// A page with a text layer is written the way the Read tool writes it: markdown, with its ruled tables, the ones
+	// the models find, and the ones that are pictures. The reader is given finderOnly, which is not asked to convert
+	// a page the reader cannot read: that is left to the OCR below.
+	read, _, readErr := pdfsmart.ReadPages(ctx, data, nil, pdfsmart.Options{}, finderOnly{c}, pdfsmart.VisionFallback{})
+	native := map[int]string{}
+	if readErr == nil {
+		for _, p := range read.Pages {
+			if p.Source == pdfsmart.PageSourceNative && strings.TrimSpace(p.Text) != "" {
+				native[p.Page-1] = strings.TrimSpace(p.Text)
+			}
+		}
+	}
+
 	pages := make([]string, 0, count)
 	for i := 0; i < count; i++ {
 		if err := ctx.Err(); err != nil {
@@ -57,6 +71,10 @@ func (c *Converter) convertPDF(ctx context.Context, data []byte, filename string
 		}
 		text, textErr := doc.ExtractText(i)
 		if textErr == nil && len(strings.TrimSpace(text)) >= c.minCharsPerPage() {
+			// A real text layer, by the plain text's own measure (a page with a few words over a picture is not one).
+			if md, ok := native[i]; ok {
+				text = md
+			}
 			pages = append(pages, strings.TrimSpace(text))
 			continue
 		}
@@ -260,4 +278,26 @@ func cropBox(img *nativedoc.Image, box nativedoc.DetBox) *nativedoc.Image {
 		copy(pix[dstOff:dstOff+w*3], img.Pix[srcOff:srcOff+w*3])
 	}
 	return &nativedoc.Image{W: w, H: h, Pix: pix}
+}
+
+// finderOnly is the converter as the page reader sees it when it is the one calling: it can find tables but is not
+// available to convert a page, so the page reader does not call back into the conversion it is part of.
+type finderOnly struct{ c *Converter }
+
+func (f finderOnly) IsAvailable(context.Context) bool { return false }
+
+func (f finderOnly) ConvertBytes(context.Context, []byte, string) (*documentreader.ConversionResult, error) {
+	return nil, fmt.Errorf("nativedoc/parser: not a converter")
+}
+
+func (f finderOnly) ConvertFile(context.Context, string) (*documentreader.ConversionResult, error) {
+	return nil, fmt.Errorf("nativedoc/parser: not a converter")
+}
+
+func (f finderOnly) ConvertURL(context.Context, string) (*documentreader.ConversionResult, error) {
+	return nil, fmt.Errorf("nativedoc/parser: not a converter")
+}
+
+func (f finderOnly) FindTables(ctx context.Context, data []byte, page int) ([]pdftext.TableStructure, error) {
+	return f.c.FindTables(ctx, data, page)
 }
