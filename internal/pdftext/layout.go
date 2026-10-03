@@ -45,6 +45,9 @@ type glyph struct {
 	pdf.Text
 	mono, bold, math bool
 
+	// table is, for the one glyph that stands in for a table in the page's text, the table's number plus one.
+	table int
+
 	// gx and gw are the glyph's place on the page, for geometry (fractions, columns, extents). The
 	// library gives one x for a whole drawn string and no usable width for many fonts, so a glyph of a
 	// string is placed at its index along the string, at an estimated advance.
@@ -122,6 +125,7 @@ const (
 	kindHeading
 	kindCode
 	kindMath
+	kindTable
 )
 
 // line is glyphs that share a baseline, in drawing order.
@@ -145,7 +149,8 @@ func PageMarkdown(page pdf.Page) (md string, err error) {
 		return "", nil
 	}
 	texts := page.Content().Text
-	return layoutMarkdownWithout(texts, markerIndexes(page, len(texts))), nil
+	rul, _ := pageRulings(page) // no rulings (or unreadable ones) means no tables, not a failed page
+	return layoutMarkdownPage(texts, markerIndexes(page, len(texts)), rul.merged()), nil
 }
 
 // markerIndexes finds the glyphs the library invents: after every TJ it shows a "\n" through the current
@@ -216,6 +221,12 @@ func layoutMarkdown(texts []pdf.Text) string { return layoutMarkdownWithout(text
 
 // layoutMarkdownWithout is layoutMarkdown without the glyphs at the indexes in skip.
 func layoutMarkdownWithout(texts []pdf.Text, skip map[int]bool) string {
+	return layoutMarkdownPage(texts, skip, rulings{})
+}
+
+// layoutMarkdownPage is layoutMarkdownWithout for a page that has rulings: the tables they bound are written as
+// tables, in place, and their text is not repeated in the running text.
+func layoutMarkdownPage(texts []pdf.Text, skip map[int]bool, rul rulings) string {
 	glyphs := make([]glyph, 0, len(texts))
 	for i, t := range texts {
 		if skip[i] {
@@ -226,14 +237,69 @@ func layoutMarkdownWithout(texts []pdf.Text, skip map[int]bool) string {
 		}
 	}
 	placeGlyphs(glyphs)
+	var tables []foundTable
+	if len(rul.h) >= minRegionRules {
+		var used [][]int
+		tables, used = buildTables(findRegions(rul), glyphs, pageWidth(glyphs))
+		glyphs = standInForTables(glyphs, tables, used)
+	}
 	lines := buildLines(glyphs)
 	if len(lines) == 0 {
 		return ""
 	}
-	body := bodySize(lines)
-	margin, rightEdge := bodyMargins(lines, body)
-	classify(lines, body, margin)
+	var prose []*line
+	for _, l := range lines {
+		if len(l.glyphs) == 1 && l.glyphs[0].table > 0 {
+			l.kind, l.text = kindTable, tables[l.glyphs[0].table-1].markdown
+			continue
+		}
+		prose = append(prose, l)
+	}
+	if len(prose) == 0 {
+		return assemble(lines, 10, 0, 0)
+	}
+	body := bodySize(prose)
+	margin, rightEdge := bodyMargins(prose, body)
+	classify(prose, body, margin)
 	return assemble(lines, body, margin, rightEdge)
+}
+
+func pageWidth(glyphs []glyph) float64 {
+	right := 0.0
+	for _, g := range glyphs {
+		right = math.Max(right, g.gx+g.gw)
+	}
+	return right
+}
+
+// standInForTables takes the glyphs of each table out of the page's glyphs and puts one glyph in their place,
+// where the first of them was drawn, so the table keeps its place in the reading order.
+func standInForTables(glyphs []glyph, tables []foundTable, used [][]int) []glyph {
+	if len(tables) == 0 {
+		return glyphs
+	}
+	drop := map[int]bool{}
+	firstOf := map[int]int{} // glyph index -> table index
+	for t, idx := range used {
+		first := idx[0]
+		for _, i := range idx {
+			drop[i] = true
+			first = min(first, i)
+		}
+		firstOf[first] = t
+	}
+	out := make([]glyph, 0, len(glyphs))
+	for i, g := range glyphs {
+		if t, ok := firstOf[i]; ok {
+			stand := glyph{gx: tables[t].x0, gw: 1, table: t + 1}
+			stand.S, stand.X, stand.Y, stand.FontSize = "", tables[t].x0, tables[t].y1, 10
+			out = append(out, stand)
+		}
+		if !drop[i] {
+			out = append(out, g)
+		}
+	}
+	return out
 }
 
 // buildLines groups glyphs into lines in drawing order, which keeps the reading order of columns. An
@@ -250,7 +316,7 @@ func buildLines(glyphs []glyph) []*line {
 			}
 			continue
 		}
-		newLine := cur == nil
+		newLine := cur == nil || g.table > 0 || (prev != nil && prev.table > 0)
 		if !newLine && !g.isMark() {
 			size := math.Max(g.size(), prev.size()) // a script moves against the size of the text it belongs to
 			dy := math.Abs(g.Y - prev.Y)
@@ -486,6 +552,10 @@ func assemble(lines []*line, body, margin, rightEdge float64) string {
 			}
 			blocks = append(blocks, codeBlock(lines[i:j]))
 			i = j
+		case kindTable:
+			flush()
+			blocks = append(blocks, l.text)
+			i++
 		case kindMath:
 			flush()
 			j := i
