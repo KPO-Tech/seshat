@@ -12,7 +12,6 @@ import (
 
 	"github.com/KPO-Tech/seshat/internal/documentreader"
 	"github.com/KPO-Tech/seshat/internal/officetext"
-	"github.com/KPO-Tech/seshat/internal/pdftext"
 	"github.com/KPO-Tech/seshat/internal/sandbox"
 	tool "github.com/KPO-Tech/seshat/internal/tools/registry"
 	"github.com/KPO-Tech/seshat/internal/tools/schema"
@@ -39,6 +38,13 @@ type ToolConfig struct {
 
 	// MaxImageSize is the maximum image size to read
 	MaxImageSize int64
+
+	// MaxPDFCharsPerRead bounds the text of one PDF read; zero means PDFMaxCharsPerRead.
+	MaxPDFCharsPerRead int
+
+	// MaxPDFEnginePagesPerRead bounds the pages with no text layer one PDF read sends to the document
+	// reader; zero means PDFMaxEnginePagesPerRead.
+	MaxPDFEnginePagesPerRead int
 
 	// DefaultLimit is the default number of lines to read
 	DefaultLimit int
@@ -111,7 +117,7 @@ func (t *Tool) Definition() tool.Definition {
 				},
 				"pages": map[string]any{
 					"type":        "string",
-					"description": fmt.Sprintf("Page range for PDF files (e.g., \"1-5\", \"3\", \"10-20\"). Only applicable to PDF files. Maximum %d pages per request.", MaxPagesPerRead),
+					"description": "Page range for PDF files (e.g., \"1-5\", \"3\", \"10-20\", \"5-\" for page 5 to the end). Only applicable to PDF files. A read stops at a size limit and says which page to continue from.",
 				},
 			},
 			"required": []string{"file_path"},
@@ -190,27 +196,8 @@ func (t *Tool) Call(
 	if p, ok := input.Parsed["pages"].(string); ok && p != "" {
 		pagesParam = p
 		// Parse and validate page range
-		parsedRange, err := ParsePDFPageRange(pagesParam)
-		if err != nil {
+		if _, err := ParsePDFPageRange(pagesParam); err != nil {
 			return tool.NewErrorResult(fmt.Errorf("invalid pages parameter: %w", err)), nil
-		}
-
-		// Check page range size
-		if parsedRange.LastPage == -1 {
-			// "to end" - count pages
-			pageCount, err := GetPDFPageCount(filePath)
-			if err != nil {
-				return tool.NewErrorResult(fmt.Errorf("failed to get PDF page count: %w", err)), nil
-			}
-			rangeSize := pageCount - parsedRange.FirstPage + 1
-			if rangeSize > MaxPagesPerRead {
-				return tool.NewErrorResult(fmt.Errorf("page range \"%s\" exceeds maximum of %d pages per request. Please use a smaller range.", pagesParam, MaxPagesPerRead)), nil
-			}
-		} else {
-			rangeSize := parsedRange.LastPage - parsedRange.FirstPage + 1
-			if rangeSize > MaxPagesPerRead {
-				return tool.NewErrorResult(fmt.Errorf("page range \"%s\" exceeds maximum of %d pages per request. Please use a smaller range.", pagesParam, MaxPagesPerRead)), nil
-			}
 		}
 	}
 
@@ -510,103 +497,15 @@ func sidecarDocumentMetadata(filePath string, sourceInfo os.FileInfo) documentSi
 	return meta
 }
 
-// readPDFFile reads a PDF file.
-// When a DocumentReader client is configured and reachable it converts the PDF to
-// structured markdown (preserving tables, figures, headings). Otherwise it
-// falls back to base64 pass-through so the model can at least read the raw PDF.
-func (t *Tool) readPDFFile(
+// readPDFAsFile hands a PDF over as a file for a model that can read it itself (or, with a page range,
+// as the extracted pages). It is the last resort when the PDF cannot be read as text: it has no text
+// layer and no reader could supply one, or it could not be parsed at all.
+func (t *Tool) readPDFAsFile(
 	ctx context.Context,
 	filePath string,
 	fileInfo os.FileInfo,
 	pagesParam string,
 ) (tool.CallResult, error) {
-	select {
-	case <-ctx.Done():
-		return tool.NewErrorResult(fmt.Errorf("file read cancelled")), nil
-	default:
-	}
-
-	if fileInfo.Size() > t.config.MaxFileSize {
-		return tool.NewErrorResult(fmt.Errorf("PDF too large (%d bytes, max %d bytes)", fileInfo.Size(), t.config.MaxFileSize)), nil
-	}
-
-	if cached := sidecarMarkdown(filePath, fileInfo); cached != "" {
-		meta := sidecarDocumentMetadata(filePath, fileInfo)
-		pageCount, _ := GetPDFPageCount(filePath)
-		if meta.PageCount > 0 {
-			pageCount = meta.PageCount
-		}
-		images := make([]PDFImage, 0, len(meta.Images))
-		for _, img := range meta.Images {
-			images = append(images, PDFImage{Filename: img.Filename, MimeType: img.MimeType})
-		}
-		result := &FileReadResult{
-			Type: FileTypePDFMarkdown,
-			PDFMarkdown: &PDFMarkdownFileResult{
-				FilePath:     filePath,
-				Markdown:     cached,
-				OriginalSize: fileInfo.Size(),
-				PageCount:    pageCount,
-				Images:       images,
-				VisualPages:  meta.visualPages(),
-			},
-		}
-		return tool.NewTextResult(t.formatPDFMarkdownResult(result)), nil
-	}
-
-	// Native text-layer extraction: most PDFs (reports, exports, invoices)
-	// carry a real text layer and need no OCR at all. Try this before ever
-	// reaching for DocumentReader - it's free (no process/network dependency) and
-	// instant. A Sparse result (little/no text relative to page count)
-	// means this is likely a scan, so fall through to DocumentReader for OCR.
-	if data, readErr := os.ReadFile(filePath); readErr == nil {
-		if native, extractErr := pdftext.Extract(data); extractErr == nil && !native.Sparse {
-			result := &FileReadResult{
-				Type: FileTypePDFMarkdown,
-				PDFMarkdown: &PDFMarkdownFileResult{
-					FilePath:     filePath,
-					Markdown:     native.Text,
-					OriginalSize: fileInfo.Size(),
-					PageCount:    native.PageCount,
-				},
-			}
-			return tool.NewTextResult(t.formatPDFMarkdownResult(result)), nil
-		}
-	}
-
-	// DocumentReader path: convert to markdown.
-	if t.documentReader != nil && t.documentReader.IsAvailable(ctx) {
-		conversion, err := t.documentReader.ConvertFile(ctx, filePath)
-		if err != nil {
-			if ctx.Err() != nil {
-				return tool.NewErrorResult(fmt.Errorf("file read cancelled")), nil
-			}
-			// DocumentReader failed — fall through to the base64 path.
-			goto fallback
-		}
-		images := make([]PDFImage, 0, len(conversion.Images))
-		for _, img := range conversion.Images {
-			images = append(images, PDFImage{
-				Filename: img.Filename,
-				MimeType: img.MimeType,
-				Base64:   img.Base64,
-			})
-		}
-		result := &FileReadResult{
-			Type: FileTypePDFMarkdown,
-			PDFMarkdown: &PDFMarkdownFileResult{
-				FilePath:     filePath,
-				Markdown:     conversion.Markdown,
-				OriginalSize: fileInfo.Size(),
-				PageCount:    conversion.PageCount,
-				Images:       images,
-			},
-		}
-		return tool.NewTextResult(t.formatPDFMarkdownResult(result)), nil
-	}
-
-fallback:
-	// Base64 path (no DocumentReader).
 	if pagesParam != "" {
 		parsedRange, err := ParsePDFPageRange(pagesParam)
 		if err != nil {
@@ -937,6 +836,9 @@ func (t *Tool) formatPDFMarkdownResult(result *FileReadResult) string {
 	var b strings.Builder
 	b.WriteString(fmt.Sprintf("PDF: %s\n", r.FilePath))
 	b.WriteString(fmt.Sprintf("Pages: %d | Size: %d bytes\n", r.PageCount, r.OriginalSize))
+	if len(r.ShownPages) > 0 {
+		b.WriteString(fmt.Sprintf("Showing pages: %s of %d\n", formatPageRanges(r.ShownPages), r.PageCount))
+	}
 	if len(r.Images) > 0 {
 		b.WriteString(fmt.Sprintf("Extracted images/figures: %d\n", len(r.Images)))
 		for _, img := range r.Images {
@@ -945,7 +847,13 @@ func (t *Tool) formatPDFMarkdownResult(result *FileReadResult) string {
 		b.WriteString("Image bytes are intentionally omitted from this text result; use a vision-capable path only when visual inspection is required.\n")
 	}
 	if len(r.VisualPages) > 0 {
-		b.WriteString(fmt.Sprintf("Pages with detected embedded images/visual content: %s\n", formatPageNumbers(r.VisualPages)))
+		b.WriteString(fmt.Sprintf("Pages with detected embedded images/visual content: %s (the text does not include what the images show; if %s is available, use it to see them)\n", formatPageRanges(r.VisualPages), renderPageToolName))
+	}
+	if len(r.NoTextPages) > 0 {
+		b.WriteString(fmt.Sprintf("Pages with no readable text (likely scanned): %s (use %s to see them if it is available)\n", formatPageRanges(r.NoTextPages), renderPageToolName))
+	}
+	if r.ContinueAt > 0 {
+		b.WriteString(fmt.Sprintf("Stopped before page %d because this read reached its size limit. Continue with pages=\"%d-\".\n", r.ContinueAt, r.ContinueAt))
 	}
 	b.WriteString("\n")
 	b.WriteString(r.Markdown)
@@ -1119,7 +1027,7 @@ func (t *Tool) BackfillInput(ctx context.Context, input map[string]any) map[stri
 const ToolName = "read_file"
 
 // Description is the description of the file read tool.
-var Description = fmt.Sprintf(`Read the contents of a file. Supports text files, images, PDFs, and - when the configured document reader is configured - DOCX, PPTX, XLSX documents and audio transcription (WAV, MP3). For large text files, use offset/limit to read specific ranges. For PDFs, use the pages parameter to read specific page ranges.
+var Description = fmt.Sprintf(`Read the contents of a file. Supports text files, images, PDFs, and - when the configured document reader is configured - DOCX, PPTX, XLSX documents and audio transcription (WAV, MP3). For large text files, use offset/limit to read specific ranges. A PDF is read page by page with a marker before each page. A read stops at a size limit and says which page to continue from, so a long PDF is read in several calls with the pages parameter. The result says which pages hold images or have no readable text.
 
 Reads a file from the local filesystem. You can access any file directly by using this tool. Assume this tool is able to read all files on the machine. If the user provides a path to a file assume that path is valid. It is okay to read a file that does not exist; an error will be returned.
 

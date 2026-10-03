@@ -9,6 +9,22 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [1.2.58] - 2026-10-03
+
+### Changed
+- `read_file` reads a PDF page by page, with a `--- page N ---` marker before each page. With no `pages` it reads from the start; with `pages` ("3", "10-20", "5-") those pages. A read is bounded by cost, not page count: it stops at a page boundary after 120,000 characters, or after sending 20 pages with no text layer to the document reader, and says which page to continue from. The result names the pages that hold images or have no readable text.
+- Only the pages a read returns are read, in batches of ten, and each is remembered per file (path, size, modification time), so the first read of a long document is quick and a page an engine had to read is never paid for twice.
+- `internal/pdfsmart` gains `ReadPages` (`Convert` for chosen pages, with options to leave pages with an image but good text to the native reader and to bound engine calls) and `PageCount`. `Convert` behaves as before.
+- Native PDF pages are read as markdown, not flat text. Typesetting gives the structure: a line much bigger than the body is a heading (`#` to `###`), lines in a monospace font are a fenced code block with their indentation and spacing restored column by column, bullets and numbers are list items, wrapped lines are one paragraph (a hyphen added at a line end is undone), dot leaders become "…", and a table of contents keeps one entry per line. Formulas are recognised by their math font and position: inline ones become `$...$` with `^{}` and `_{}`, display ones become `$$...$$` with `rac{}{}`, `egin{cases}` and sums with their bounds, read in drawing order because the x the PDF library gives is unreliable for many fonts. Symbols stay as the PDF has them (Unicode math letters). Fraction bars, roots and matrices are not drawn as glyphs and are not recognised; a formula that needs them comes out as its parts in reading order. Tables are not detected.
+
+### Fixed
+- Native PDF text had no spaces between words on many PDFs (LaTeX output among them), which draw each word separately and leave the space as a gap: a paragraph came back as one unbroken word, and line breaks were lost. Text is now rebuilt from the position of each glyph, restoring word spaces and lines, and an accent drawn as its own glyph is joined to its letter. This affects every reader built on it (`read_file`, `pdfsmart`, `pkg/documentreading`, `pkg/pdftext`).
+- The `pages` parameter of `read_file` was ignored on every text path (a pre-converted `.md` next to the file, native text, and the document reader), so only the raw-PDF fallback honoured it and an agent could not read a page range as text.
+
+### Removed
+- `read_file` no longer serves a pre-converted `<name>.md` next to a PDF, since that text cannot be split by page. DOCX, PPTX and XLSX still use it for now.
+- The 50-pages-per-request error of `read_file` for a PDF: the size limits above bound a read instead.
+
 ## [1.2.57] - 2026-10-02
 
 ### Added
