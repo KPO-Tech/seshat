@@ -59,7 +59,7 @@ func mergePDFs(t *testing.T, parts ...[]byte) []byte {
 
 func read(t *testing.T, tl *Tool, path string, info os.FileInfo, pages string) string {
 	t.Helper()
-	result, err := tl.readPDFFile(context.Background(), path, info, pages)
+	result, err := tl.readPDFFile(context.Background(), path, info, pages, "")
 	if err != nil {
 		t.Fatalf("readPDFFile: %v", err)
 	}
@@ -251,5 +251,42 @@ func TestReadPDF_ChangingTheFileInvalidatesWhatWasRemembered(t *testing.T) {
 	}
 	if out := read(t, tl, path, info, ""); !strings.Contains(out, "Pages: 1") || !strings.Contains(out, "Sample Report") {
 		t.Fatalf("a changed file must be read again:\n%s", out)
+	}
+}
+
+func TestReadPDF_AnEncryptedPDFWithoutAUserPasswordIsRead(t *testing.T) {
+	t.Parallel()
+	for _, name := range []string{"aes256_nouser.pdf", "aes256r5_nouser.pdf"} {
+		path, info := writePDF(t, fixturePDF(t, filepath.Join("encrypted", name)))
+		out := read(t, &Tool{config: DefaultToolConfig()}, path, info, "")
+		for _, want := range []string{"Showing pages: 1-3 of 3", "Alpha section", "Charlie section"} {
+			if !strings.Contains(out, want) {
+				t.Errorf("%s: missing %q in:\n%s", name, want, out)
+			}
+		}
+	}
+}
+
+func TestReadPDF_APasswordProtectedPDFSaysSoAndTheRightPasswordOpensIt(t *testing.T) {
+	t.Parallel()
+	tl := &Tool{config: DefaultToolConfig()}
+	path, info := writePDF(t, fixturePDF(t, filepath.Join("encrypted", "aes256_user.pdf")))
+
+	result, err := tl.readPDFFile(context.Background(), path, info, "", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !result.IsError() || !strings.Contains(result.Content, "protected by a password") || !strings.Contains(result.Content, "password parameter") {
+		t.Fatalf("expected a clear message about the password, got error=%v:\n%s", result.IsError(), result.Content)
+	}
+
+	result, err = tl.readPDFFile(context.Background(), path, info, "", "wrong")
+	if err != nil || !result.IsError() || !strings.Contains(result.Content, "does not open") {
+		t.Fatalf("a wrong password: error=%v err=%v\n%s", result.IsError(), err, result.Content)
+	}
+
+	result, err = tl.readPDFFile(context.Background(), path, info, "2", "user-secret")
+	if err != nil || result.IsError() || !strings.Contains(result.Content, "Bravo section") {
+		t.Fatalf("the right password: error=%v err=%v\n%s", result.IsError(), err, result.Content)
 	}
 }

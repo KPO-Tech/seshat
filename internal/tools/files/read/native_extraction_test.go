@@ -76,7 +76,7 @@ func TestReadPDFFile_NativeTextLayerWithoutDocumentReader(t *testing.T) {
 	dir := t.TempDir()
 	path, info := copyFixture(t, "../../../pdftext/testdata/text_layer.pdf", dir, "report.pdf")
 
-	result, err := tool.readPDFFile(context.Background(), path, info, "")
+	result, err := tool.readPDFFile(context.Background(), path, info, "", "")
 	if err != nil {
 		t.Fatalf("readPDFFile: %v", err)
 	}
@@ -96,7 +96,7 @@ func TestReadPDFFile_ScannedFallsBackToBase64WithoutDocumentReader(t *testing.T)
 	dir := t.TempDir()
 	path, info := copyFixture(t, "../../../pdftext/testdata/scanned.pdf", dir, "scan.pdf")
 
-	result, err := tool.readPDFFile(context.Background(), path, info, "")
+	result, err := tool.readPDFFile(context.Background(), path, info, "", "")
 	if err != nil {
 		t.Fatalf("readPDFFile: %v", err)
 	}
