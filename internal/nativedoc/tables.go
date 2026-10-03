@@ -5,6 +5,7 @@ package nativedoc
 import (
 	"context"
 	"sort"
+	"strings"
 )
 
 // tables.go finds the tables on a page image and reads their structure, by running the layout model (which says
@@ -70,6 +71,11 @@ func FindTables(ctx context.Context, modelDir string, page *Image) ([]TableLayou
 	return out, nil
 }
 
+// CropImage cuts a box, widened by pad pixels each way, out of an image, and returns where the cut starts.
+func CropImage(img *Image, x0, y0, x1, y1, pad float32) (*Image, float32, float32) {
+	return cropPadded(img, x0, y0, x1, y1, pad)
+}
+
 // cropPadded cuts the box, widened by pad pixels each way, out of an image, and returns where the cut starts.
 func cropPadded(img *Image, x0, y0, x1, y1 float32, pad float32) (*Image, float32, float32) {
 	left, top := int(maxf(x0-pad, 0)), int(maxf(y0-pad, 0))
@@ -84,4 +90,34 @@ func cropPadded(img *Image, x0, y0, x1, y1 float32, pad float32) (*Image, float3
 		copy(pix[y*w*3:(y+1)*w*3], img.Pix[src:src+w*3])
 	}
 	return &Image{W: w, H: h, Pix: pix}, float32(left), float32(top)
+}
+
+// TextBox is a line of text read from an image, with its box in pixels of that image.
+type TextBox struct {
+	X0, Y0, X1, Y1 float32
+	Text           string
+}
+
+// ReadText finds the text in an image and reads it: the text-detection model finds where the lines are, the
+// recognition model reads each. A line that cannot be read is left out.
+func ReadText(ctx context.Context, modelDir string, img *Image) ([]TextBox, error) {
+	det, err := RunDet(ctx, modelDir, img)
+	if err != nil {
+		return nil, err
+	}
+	var out []TextBox
+	for _, box := range det.Boxes {
+		minX, minY, maxX, maxY := box.Pts[0][0], box.Pts[0][1], box.Pts[0][0], box.Pts[0][1]
+		for _, p := range box.Pts {
+			minX, maxX = minf(minX, p[0]), maxf(maxX, p[0])
+			minY, maxY = minf(minY, p[1]), maxf(maxY, p[1])
+		}
+		crop, _, _ := cropPadded(img, minX, minY, maxX, maxY, 0)
+		read, err := RunOCRRec(ctx, modelDir, crop)
+		if err != nil || strings.TrimSpace(read.Text) == "" {
+			continue
+		}
+		out = append(out, TextBox{X0: minX, Y0: minY, X1: maxX, Y1: maxY, Text: read.Text})
+	}
+	return out, nil
 }

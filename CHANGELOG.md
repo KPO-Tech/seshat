@@ -15,6 +15,11 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 - Encrypted PDFs are read. An AES-256 PDF (what Acrobat and most banks produce) or any PDF encrypted with an empty user password (an emailed statement whose owner password only limits printing and copying) used to be refused ("malformed PDF: 256-bit encryption key"); it is now decrypted into a plain copy, once, and read like any other, by every reader (the Read tool, `documentreading`, ingestion, the layout models). A PDF protected by a user password says so (`pdfsmart.ErrPasswordRequired`), and the Read tool has an optional `password` parameter for the password the user gives. Decryption is `github.com/razvandimescu/gopdf` (MIT, no dependencies; reads RC4, AES-128 and AES-256, whatever way the producer wrote the encryption dictionary) for an empty password, and `pdfcpu` when a password is given.
 - `pdfsmart.Unlock`, `pdfsmart.ErrPasswordRequired` and `pdfsmart.Options.Password`.
+- Tables that are pictures are read, when the native reader has its models. A table pasted into a text page as a screenshot (a picture at least 240 x 80 pixels) is found by the layout model, cut out of the page image, read by the OCR, and written as a markdown table where it sits in the page. A scanned page is read the same way: the table in it comes out as a table, not as lines of text. A table with text of its own on the page is still filled from that text, not from a picture of it. `pdftext.PageOptions` (`Tables`, `LargeImage`), `pdftext.TableStructure.Words`, `pdftext.TableMarkdown`.
+
+### Fixed
+
+- The size of the pictures of a page was never read (pdfcpu leaves it empty when it extracts them raw); it is now read from each picture's header.
 
 ## [1.2.62] - 2026-10-04
 

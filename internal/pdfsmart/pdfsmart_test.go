@@ -431,3 +431,23 @@ func TestReadPages_AReaderWhoseTableSearchFailsStillReadsThePage(t *testing.T) {
 		t.Fatalf("the page text is missing:\n%s", result.Markdown)
 	}
 }
+
+func TestOnlyAPictureBigEnoughForATableIsLarge(t *testing.T) {
+	data, err := os.ReadFile(filepath.Join("..", "pdftext", "testdata", "table_image.pdf"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	pages, large, err := pagesWithEmbeddedImages(data, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !pages[1] || !large[1] {
+		t.Errorf("the pasted table is a large picture: pages=%v large=%v", pages, large)
+	}
+	if largeEnough(model.Image{Width: 64, Height: 64}) {
+		t.Error("an icon is not large")
+	}
+	if !largeEnough(model.Image{Width: 800, Height: 400}) {
+		t.Error("a screenshot is large")
+	}
+}

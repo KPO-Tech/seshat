@@ -80,3 +80,26 @@ func TestWithoutOnnxRuntimeOrModelsThePageIsReadAsBefore(t *testing.T) {
 }
 
 var _ pdfsmart.TableFinder = (*Converter)(nil)
+
+// testdata/table_image.pdf has a table pasted in as a picture on a page with a text layer; scanned_table.pdf is the
+// same table on a page that is one picture as a whole. Both are read by the models' OCR.
+func TestATableThatIsAPictureIsReadByOCR(t *testing.T) {
+	c := New(modelsOrSkip(t))
+	for _, name := range []string{"table_image.pdf", "scanned_table.pdf"} {
+		t.Run(name, func(t *testing.T) {
+			data, err := os.ReadFile(filepath.Join("..", "..", "pdftext", "testdata", name))
+			if err != nil {
+				t.Fatal(err)
+			}
+			result, ok, err := pdfsmart.ReadPages(context.Background(), data, []int{1}, pdfsmart.Options{}, c, pdfsmart.VisionFallback{})
+			if err != nil || !ok {
+				t.Fatalf("ReadPages: ok=%v err=%v", ok, err)
+			}
+			for _, want := range []string{"| Product | Q1 | Q2 | Q3 |", "| Hardware | 120 | 135 | 128 |", "| Training | 12 | 9 | 14 |"} {
+				if !strings.Contains(result.Markdown, want) {
+					t.Errorf("missing %q in:\n%s", want, result.Markdown)
+				}
+			}
+		})
+	}
+}

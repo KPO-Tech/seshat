@@ -24,6 +24,26 @@ type TableStructure struct {
 	Columns             [][4]float64
 	Rows                [][4]float64
 	Headers             [][4]float64
+
+	// Words reads the text of the table from the picture, for a table that is one (a table pasted as an image has no
+	// text on the page to fill its cells with). It is called only when the page has too little text of its own
+	// under the table, because reading text from a picture is slow and less exact than the page's own. It may be nil.
+	Words func() ([]TableWord, error)
+}
+
+// TableWord is a piece of text read from a picture, with its box in points from the top left corner of the page.
+type TableWord struct {
+	X0, Top, X1, Bottom float64
+	Text                string
+}
+
+// PageOptions says what a page can ask of a layout model.
+type PageOptions struct {
+	// Tables gives the tables the models see on the page; nil means there are no models.
+	Tables TableSource
+	// LargeImage says the page holds a picture big enough to be a table. A page of text with columns is put to the
+	// models anyway; a page with such a picture is too, because the table in it has no text to look at.
+	LargeImage bool
 }
 
 // TableSource gives the tables the models see on a page. It is only asked for a page whose text looks columnar, and
@@ -95,7 +115,8 @@ func (b pageBox) convert(s TableStructure) modelTable {
 
 // modelTables finds the tables the models see on the part of the page the rulings left alone, and builds them.
 // Each returned table comes with the indexes of the glyphs it used.
-func modelTables(source TableSource, box pageBox, glyphs []glyph, taken []bool, found []foundTable, pageW float64) ([]foundTable, [][]int) {
+func modelTables(opts PageOptions, box pageBox, glyphs []glyph, taken []bool, found []foundTable, pageW float64) ([]foundTable, [][]int) {
+	source := opts.Tables
 	if source == nil || !box.ok {
 		return nil, nil
 	}
@@ -107,7 +128,7 @@ func modelTables(source TableSource, box pageBox, glyphs []glyph, taken []bool, 
 			freeIdx = append(freeIdx, i)
 		}
 	}
-	if !columnar(free) {
+	if !opts.LargeImage && !columnar(free) {
 		return nil, nil
 	}
 	structures, err := source()
@@ -131,10 +152,22 @@ func modelTables(source TableSource, box pageBox, glyphs []glyph, taken []bool, 
 				idx = append(idx, freeIdx[k])
 			}
 		}
-		if len(picked) == 0 {
+		rows := textRows(picked)
+		anchor := -1
+		if len(picked) < minNativeGlyphs && s.Words != nil {
+			// Little text of its own under the table: it is a picture. Its text is read from the picture.
+			words, err := s.Words()
+			if err != nil || len(words) == 0 {
+				continue
+			}
+			rows = rowsFromWords(words, box)
+			picked = nil
+			idx = nil
+			anchor = anchorBelow(free, freeIdx, m.y1)
+		} else if len(picked) == 0 {
 			continue
 		}
-		table, ok := buildModelTable(m, picked, pageW)
+		table, ok := buildModelTable(m, rows, picked)
 		if !ok {
 			continue
 		}
@@ -144,7 +177,7 @@ func modelTables(source TableSource, box pageBox, glyphs []glyph, taken []bool, 
 		if md == "" {
 			continue
 		}
-		tables = append(tables, foundTable{m.x0, m.y0, m.x1, m.y1, md})
+		tables = append(tables, foundTable{x0: m.x0, y0: m.y0, x1: m.x1, y1: m.y1, markdown: md, anchor: anchor})
 		used = append(used, idx)
 	}
 	return tables, used
@@ -213,8 +246,7 @@ func columnar(glyphs []glyph) bool {
 // between the model's column boxes, the rows are the model's rows (a line of text belongs to the row it lies in),
 // and the header is the rows under the model's header box. Where the model is missing something, the text fills it
 // in: no usable columns means the gaps in the text, and a line outside every row is a row of its own.
-func buildModelTable(m modelTable, glyphs []glyph, pageW float64) (mdtable.Table, bool) {
-	rows := textRows(glyphs)
+func buildModelTable(m modelTable, rows []textRow, glyphs []glyph) (mdtable.Table, bool) {
 	if len(rows) < 2 || mostlyCode(glyphs) {
 		return mdtable.Table{}, false
 	}
@@ -315,6 +347,73 @@ func unionSeparators(gaps, model []separator) []separator {
 	}
 	sort.Slice(out, func(i, j int) bool { return out[i].x < out[j].x })
 	return out
+}
+
+// minNativeGlyphs is how much text of its own a table must have on the page to be read from it and not from its picture.
+const minNativeGlyphs = 8
+
+// rowsFromWords turns text read from a picture into rows of chunks, in page space. A word's box is as high as its
+// letters and a line a little more than that; the baseline is near the bottom of the box.
+func rowsFromWords(words []TableWord, box pageBox) []textRow {
+	type word struct {
+		x0, x1, base, size float64
+		text               string
+	}
+	var ws []word
+	for _, w := range words {
+		text := strings.TrimSpace(w.Text)
+		if text == "" || w.X1 <= w.X0 || w.Bottom <= w.Top {
+			continue
+		}
+		h := w.Bottom - w.Top
+		ws = append(ws, word{x0: box.x0 + w.X0, x1: box.x0 + w.X1, base: box.y1 - w.Bottom + 0.2*h, size: 0.85 * h, text: text})
+	}
+	sort.Slice(ws, func(i, j int) bool { return ws[i].base > ws[j].base })
+	var rows []textRow
+	for i := 0; i < len(ws); {
+		j := i + 1
+		for j < len(ws) && math.Abs(ws[j].base-ws[i].base) <= 0.5*ws[i].size {
+			j++
+		}
+		line := append([]word(nil), ws[i:j]...)
+		sort.Slice(line, func(a, b int) bool { return line[a].x0 < line[b].x0 })
+		row := textRow{y: ws[i].base, size: ws[i].size}
+		for _, w := range line {
+			row.chunks = append(row.chunks, chunk{x0: w.x0, x1: w.x1, y: w.base, size: w.size, text: w.text})
+		}
+		rows = append(rows, row)
+		i = j
+	}
+	return rows
+}
+
+// anchorBelow is the glyph the table of a picture is written before: the first of the page's text that lies below
+// the top of the table, in drawing order. With none, the table goes last.
+func anchorBelow(free []glyph, freeIdx []int, top float64) int {
+	best, bestY := -1, math.Inf(-1)
+	for k, g := range free {
+		cy := g.Y + g.size()*0.3
+		if cy < top-1 && cy > bestY {
+			best, bestY = freeIdx[k], cy
+		}
+	}
+	return best
+}
+
+// TableMarkdown writes one table as markdown from the text read from its picture, for a page that is a picture as a
+// whole (a scan): it has no text of its own to take the cells from. Boxes are in points from the top left corner of
+// a page pageHeight points high. ok is false when what was read does not make a table.
+func TableMarkdown(s TableStructure, words []TableWord, pageHeight float64) (string, bool) {
+	box := pageBox{x0: 0, y0: 0, x1: s.X1 + s.X0 + 1, y1: pageHeight, ok: true}
+	m := box.convert(s)
+	table, ok := buildModelTable(m, rowsFromWords(words, box), nil)
+	if !ok {
+		return "", false
+	}
+	var sb strings.Builder
+	table.RenderMarkdown(&sb)
+	md := strings.TrimSpace(sb.String())
+	return md, md != ""
 }
 
 // dedupeSeparators drops separators closer than a few points: two column boxes that touch give one line.

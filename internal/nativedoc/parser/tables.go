@@ -59,7 +59,31 @@ func (c *Converter) FindTables(ctx context.Context, pdfData []byte, pageIndex in
 		for _, b := range l.Headers {
 			s.Headers = append(s.Headers, pts(b))
 		}
+		layout := l
+		s.Words = func() ([]pdftext.TableWord, error) { return c.readTableText(ctx, img, layout, scale) }
 		out = append(out, s)
 	}
 	return out, nil
+}
+
+// readTableText reads the text of a table from the picture of the page: the table is cut out of the page image and
+// the text in it detected and recognised. It is called only for a table that is itself a picture, with no text on
+// the page to fill its cells with.
+func (c *Converter) readTableText(ctx context.Context, page *nativedoc.Image, l nativedoc.TableLayout, scale float64) ([]pdftext.TableWord, error) {
+	crop, x0, y0 := nativedoc.CropImage(page, l.X0, l.Y0, l.X1, l.Y1, 4)
+	boxes, err := nativedoc.ReadText(ctx, c.ModelDir, crop)
+	if err != nil {
+		return nil, err
+	}
+	words := make([]pdftext.TableWord, 0, len(boxes))
+	for _, b := range boxes {
+		words = append(words, pdftext.TableWord{
+			X0:     float64(b.X0+x0) / scale,
+			Top:    float64(b.Y0+y0) / scale,
+			X1:     float64(b.X1+x0) / scale,
+			Bottom: float64(b.Y1+y0) / scale,
+			Text:   b.Text,
+		})
+	}
+	return words, nil
 }
