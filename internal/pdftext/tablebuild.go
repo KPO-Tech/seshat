@@ -53,51 +53,62 @@ type textRow struct {
 
 // buildTables turns the regions of a page into tables, using the page's glyphs for the text. Each glyph used is
 // reported so the caller can take it out of the running text.
-func buildTables(regions []tableRegion, glyphs []glyph, pageWidth float64) ([]foundTable, [][]int) {
+func buildTables(rul rulings, glyphs []glyph, pageWidth float64) ([]foundTable, [][]int) {
 	var tables []foundTable
 	var used [][]int
 	claimed := map[int]bool{}
 	var split []tableRegion
-	for _, reg := range regions {
+	for _, reg := range findRegions(rul) {
 		if reg.grid {
 			split = append(split, reg)
 		} else {
 			split = append(split, splitBlock(reg, glyphs)...)
 		}
 	}
-	for _, reg := range split {
-		var idx []int
-		for i, g := range glyphs {
-			if claimed[i] || g.isJunk() {
+	build := func(split []tableRegion) {
+		for _, reg := range split {
+			var idx []int
+			for i, g := range glyphs {
+				if claimed[i] || g.isJunk() {
+					continue
+				}
+				if inside(reg, g) {
+					idx = append(idx, i)
+				}
+			}
+			if len(idx) == 0 {
 				continue
 			}
-			if inside(reg, g) {
-				idx = append(idx, i)
+			picked := make([]glyph, len(idx))
+			for k, i := range idx {
+				picked[k] = glyphs[i]
 			}
+			table, ok := buildTable(reg, picked, pageWidth)
+			if !ok {
+				continue
+			}
+			var sb strings.Builder
+			table.RenderMarkdown(&sb)
+			md := strings.TrimSpace(sb.String())
+			if md == "" {
+				continue
+			}
+			for _, i := range idx {
+				claimed[i] = true
+			}
+			tables = append(tables, foundTable{x0: reg.x0, y0: reg.y0, x1: reg.x1, y1: reg.y1, markdown: md, anchor: -1})
+			used = append(used, idx)
 		}
-		if len(idx) == 0 {
-			continue
-		}
-		picked := make([]glyph, len(idx))
-		for k, i := range idx {
-			picked[k] = glyphs[i]
-		}
-		table, ok := buildTable(reg, picked, pageWidth)
-		if !ok {
-			continue
-		}
-		var sb strings.Builder
-		table.RenderMarkdown(&sb)
-		md := strings.TrimSpace(sb.String())
-		if md == "" {
-			continue
-		}
-		for _, i := range idx {
-			claimed[i] = true
-		}
-		tables = append(tables, foundTable{x0: reg.x0, y0: reg.y0, x1: reg.x1, y1: reg.y1, markdown: md, anchor: -1})
-		used = append(used, idx)
 	}
+	build(split)
+	// A rule under a header row, with lines under it, is a table that has no other rule to be found by.
+	var unclaimed []glyph
+	for i, g := range glyphs {
+		if !claimed[i] {
+			unclaimed = append(unclaimed, g)
+		}
+	}
+	build(headerRuleRegions(rul, unclaimed, tables))
 	return tables, used
 }
 
@@ -210,7 +221,7 @@ func buildTable(reg tableRegion, glyphs []glyph, pageWidth float64) (mdtable.Tab
 	}
 	cols := len(seps) + 1
 
-	if !reg.grid && (looksLikeProse(rows, cols, reg, pageWidth) || !rulesHugContent(rows, reg)) {
+	if !reg.grid && (looksLikeProse(rows, cols, reg, pageWidth) || (!reg.headerRule && !rulesHugContent(rows, reg))) {
 		return mdtable.Table{}, false
 	}
 

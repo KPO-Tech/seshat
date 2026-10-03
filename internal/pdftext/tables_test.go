@@ -341,3 +341,48 @@ func TestGapsBetweenColumnsAreFoundAndRunningTextHasNone(t *testing.T) {
 		t.Fatalf("running text has no column gaps: %+v", seps)
 	}
 }
+
+// testdata/header_rule.pdf: page 1 is an invoice whose lines have one rule, under the column titles, and no other;
+// page 2 is prose under an underlined heading, which has a rule too and is no table.
+func headerRulePage(t *testing.T, n int) string {
+	t.Helper()
+	data, err := os.ReadFile(filepath.Join("testdata", "header_rule.pdf"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	reader, err := pdf.NewReader(bytes.NewReader(data), int64(len(data)))
+	if err != nil {
+		t.Fatal(err)
+	}
+	md, err := PageMarkdown(reader.Page(n))
+	if err != nil {
+		t.Fatal(err)
+	}
+	return md
+}
+
+func TestARuleUnderTheColumnTitlesMakesATableOfTheLinesBelow(t *testing.T) {
+	md := headerRulePage(t, 1)
+	want := "| Item | Description | Price | VAT | Quantity | Amount |\n" +
+		"| --- | --- | --- | --- | --- | --- |\n" +
+		"| E103184 | Maintenance kit CA6707/10 | 49,99 | 21 % | 1 PCS | 49,99 |\n" +
+		"| E103560 | Flyer promotion | 0,00 | 21 % | 1 PCS | 0,00 |\n" +
+		"| E104002 | Gasket set | 12,50 | 21 % | 2 PCS | 25,00 |"
+	if !strings.Contains(md, want) {
+		t.Fatalf("got:\n%s\nwant it to contain:\n%s", md, want)
+	}
+	table, after := strings.Index(md, "| Item"), strings.Index(md, "Prices include VAT")
+	if table < 0 || after < table || strings.Index(md, "Billed to") > table {
+		t.Fatalf("the table is out of place:\n%s", md)
+	}
+	if strings.Count(md, "Gasket set") != 1 {
+		t.Fatalf("the table's text is repeated outside it:\n%s", md)
+	}
+}
+
+func TestARuleUnderAHeadingOverProseIsNoTable(t *testing.T) {
+	md := headerRulePage(t, 2)
+	if strings.Contains(md, "|") || !strings.Contains(md, "Goods remain the property of the supplier") {
+		t.Fatalf("got:\n%s", md)
+	}
+}

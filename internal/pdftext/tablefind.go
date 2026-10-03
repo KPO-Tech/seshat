@@ -22,6 +22,7 @@ type tableRegion struct {
 	vertical       []vline // vertical rules inside the region, the column separators of a grid
 	horizontal     []hline // horizontal rules inside the region, top to bottom
 	grid           bool    // the columns come from vertical rules, not from gaps in the text
+	headerRule     bool    // one rule under the header row and no other: see headerRuleRegions
 }
 
 const (
