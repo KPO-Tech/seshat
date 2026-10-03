@@ -220,6 +220,17 @@ func buildTable(reg tableRegion, glyphs []glyph, pageWidth float64) (mdtable.Tab
 		return mdtable.Table{}, false
 	}
 
+	t, ok := tableFromCells(grouped, cols)
+	if !ok {
+		return mdtable.Table{}, false
+	}
+	t.HeaderRows = headerRows(reg, rows, starts, grouped, bandMode)
+	return withTitleRow(t, cols), true
+}
+
+// tableFromCells writes grouped rows of cells as a table of cols columns: a cell that spans columns has its text
+// in each of them. A table whose cells are mostly empty is not a table.
+func tableFromCells(grouped [][]cell, cols int) (mdtable.Table, bool) {
 	t := mdtable.Table{}
 	filled, total := 0, 0
 	for _, row := range grouped {
@@ -238,12 +249,16 @@ func buildTable(reg tableRegion, glyphs []glyph, pageWidth float64) (mdtable.Tab
 	if total == 0 || float64(filled)/float64(total) < minFill {
 		return mdtable.Table{}, false
 	}
-	t.HeaderRows = headerRows(reg, rows, starts, grouped, bandMode)
+	return t, true
+}
+
+// withTitleRow takes a first row that is one cell across the whole table as the table's caption.
+func withTitleRow(t mdtable.Table, cols int) mdtable.Table {
 	if caption, rest, ok := titleRow(t.Rows, cols); ok {
 		t.Caption, t.Rows = caption, rest
 		t.HeaderRows = max(t.HeaderRows-1, 1)
 	}
-	return t, true
+	return t
 }
 
 // textRows groups glyphs into rows by baseline, top of the page first, and each row into chunks. The rows are
@@ -703,7 +718,7 @@ func rowCells(r textRow, seps []separator, cols int, header bool) []cell {
 func groupRows(rows []textRow, cells [][]cell, reg tableRegion, cols int) (grouped [][]cell, starts []int, bandMode bool) {
 	interior := interiorRules(reg)
 	if bandsAreRows(rows, interior) {
-		grouped, starts = groupByBands(rows, cells, interior)
+		grouped, starts = groupByBands(rows, cells, interior, numericColumns(cells, cols))
 		return grouped, starts, true
 	}
 
@@ -775,7 +790,7 @@ func ruleBetween(rules []float64, upper, lower float64) bool {
 	return false
 }
 
-func groupByBands(rows []textRow, cells [][]cell, interior []float64) ([][]cell, []int) {
+func groupByBands(rows []textRow, cells [][]cell, interior []float64, numeric []bool) ([][]cell, []int) {
 	bandOf := func(y float64) int {
 		b := 0
 		for _, r := range interior {
@@ -790,7 +805,7 @@ func groupByBands(rows []textRow, cells [][]cell, interior []float64) ([][]cell,
 	lastBand := -1
 	for i, r := range rows {
 		band := bandOf(r.y + r.size*0.3)
-		if band == lastBand && len(out) > 0 {
+		if band == lastBand && len(out) > 0 && (complements(out[len(out)-1], cells[i]) || carriesOn(out[len(out)-1], cells[i], numeric)) {
 			out[len(out)-1] = appendRow(out[len(out)-1], cells[i])
 		} else {
 			out = append(out, cells[i])
@@ -799,6 +814,46 @@ func groupByBands(rows []textRow, cells [][]cell, interior []float64) ([][]cell,
 		lastBand = band
 	}
 	return out, starts
+}
+
+// complements says whether a line fills columns the row above leaves empty: a heading drawn lower than its
+// neighbours in a row of headings, or a cell set at another height. Two lines that both have a value in some column
+// are two rows.
+func complements(prev, cur []cell) bool {
+	if len(cur) == 0 {
+		return false
+	}
+	for _, c := range cur {
+		for _, p := range prev {
+			if strings.TrimSpace(p.text) != "" && p.from <= c.to && c.from <= p.to {
+				return false
+			}
+		}
+	}
+	return true
+}
+
+// carriesOn says whether a line inside a band is the rest of the row above it: words only, in columns the row above
+// has text in. A line with numbers in it is a row of its own, even where a rule sits only between groups of rows.
+func carriesOn(prev, cur []cell, numeric []bool) bool {
+	if len(cur) == 0 || len(cur) > len(prev) {
+		return false
+	}
+	for _, c := range cur {
+		if (c.from < len(numeric) && numeric[c.from]) || isNumeric(c.text) {
+			return false
+		}
+		found := false
+		for _, p := range prev {
+			if p.from <= c.from && c.from <= p.to && strings.TrimSpace(p.text) != "" {
+				found = true
+			}
+		}
+		if !found {
+			return false
+		}
+	}
+	return true
 }
 
 // appendRow adds a continuation row's text to the cells of the row above it, cell by cell.
@@ -928,7 +983,20 @@ func bandHeader(grouped [][]cell) int {
 	if empty {
 		return 2
 	}
+	// Two lines of words before the first number are a header of two lines ("TEDS" over "Complex").
+	if !hasNumber(grouped[0]) && !hasNumber(grouped[1]) && hasNumber(grouped[2]) {
+		return 2
+	}
 	return 1
+}
+
+func hasNumber(row []cell) bool {
+	for _, c := range row {
+		if isNumeric(c.text) {
+			return true
+		}
+	}
+	return false
 }
 
 // titleRow takes a first row that is one cell across the whole table as the table's title.

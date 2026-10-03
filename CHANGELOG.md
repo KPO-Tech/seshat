@@ -9,6 +9,17 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [1.2.62] - 2026-10-04
+
+### Added
+
+- Tables with no ruling lines are read too, when the native reader has its models (`layout.ort` and `tsr.ort`, already part of the nativedoc models). For a page whose text looks columnar (several lines with several chunks lined up in columns; a page of prose is never sent to the models) the page is rendered, the layout model finds where the tables are, the table-structure model reads their rows, columns and header, and the cells are filled from the page's own text, which is exact where an OCR of the picture is not. The columns also come from the gaps in the text, so a column the model merged with its neighbour is found again. The reader is asked through the new optional `pdfsmart.TableFinder` interface (the native `Converter` implements it, and so a host that already passes it as its document reader gets this with no other change); without the models, or when they fail, a page reads as before. Tables that are pictures inside the PDF are not read (there is no text to fill them with).
+- `pdftext.PageMarkdownWith` and `pdftext.TableStructure` (and `pdfsmart.TableFinder` / `pdfsmart.TableStructure` in the public package), for a host with its own layout model.
+
+### Changed
+
+- In a ruled table whose rules sit between groups of rows rather than between every row, each line with numbers is a row of its own: a line is joined to the one above it only when it carries on its words (the second line of a wrapped label) or fills columns the row above leaves empty (a heading drawn lower than its neighbours). Two-line headers ("TEDS" over "Complex") are joined into one header row.
+
 ## [1.2.61] - 2026-10-03
 
 ### Added

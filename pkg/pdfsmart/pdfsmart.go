@@ -6,6 +6,7 @@ import (
 	"context"
 
 	internalpdfsmart "github.com/KPO-Tech/seshat/internal/pdfsmart"
+	"github.com/KPO-Tech/seshat/internal/pdftext"
 	"github.com/KPO-Tech/seshat/pkg/documentreader"
 )
 
@@ -16,6 +17,12 @@ type (
 	PageRenderer      = internalpdfsmart.PageRenderer
 	VisionTranscriber = internalpdfsmart.VisionTranscriber
 	VisionFallback    = internalpdfsmart.VisionFallback
+
+	// TableFinder is a document reader that can also locate and lay out the tables with no ruling lines on a PDF
+	// page, from a layout model (the native reader, with its models, is one). pdfsmart asks it for pages whose text
+	// is columnar and fills the cells it finds from the page's own text. TableStructure is what it answers with.
+	TableFinder    = internalpdfsmart.TableFinder
+	TableStructure = pdftext.TableStructure
 )
 
 const (
