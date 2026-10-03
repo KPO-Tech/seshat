@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	"github.com/KPO-Tech/seshat/pkg/documentreader"
+	"github.com/KPO-Tech/seshat/pkg/officetext"
 )
 
 type fakeConverter struct {
@@ -204,5 +205,53 @@ func TestExtensionSetsAreDisjointAndConsistent(t *testing.T) {
 	}
 	if !AllConvertibleExtensions[".pdf"] {
 		t.Error(`".pdf" must be in AllConvertibleExtensions`)
+	}
+}
+
+func TestHTMLIsConvertedToMarkdownLocally(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "report.html")
+	page := `<html><head><title>Q1</title><script>track()</script></head><body><h1>Q1 report</h1><p>Revenue grew.</p>` +
+		`<table><tr><th>Region</th><th>Sales</th></tr><tr><td>North</td><td>10</td></tr></table></body></html>`
+	if err := os.WriteFile(path, []byte(page), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	result, ok, err := Convert(context.Background(), path, nil)
+	if err != nil || !ok {
+		t.Fatalf("ok=%v err=%v", ok, err)
+	}
+	if result.Source != SourceNative {
+		t.Errorf("source = %q, want native", result.Source)
+	}
+	for _, want := range []string{"# Q1 report", "Revenue grew.", "| Region | Sales |", "| North | 10 |"} {
+		if !strings.Contains(result.Markdown, want) {
+			t.Errorf("missing %q in:\n%s", want, result.Markdown)
+		}
+	}
+	if strings.Contains(result.Markdown, "track()") {
+		t.Errorf("a script leaked into the text:\n%s", result.Markdown)
+	}
+
+	again, ok, err := ConvertBytes(context.Background(), []byte(page), "report.HTM", nil)
+	if err != nil || !ok || again.Markdown != result.Markdown {
+		t.Errorf("ConvertBytes differs: ok=%v err=%v", ok, err)
+	}
+}
+
+func TestHTMLIsConvertibleButTheReadToolKeepsItsSource(t *testing.T) {
+	for _, ext := range []string{".html", ".htm", ".xhtml"} {
+		if !NativeExtensions[ext] || !AllConvertibleExtensions[ext] {
+			t.Errorf("%s should be convertible", ext)
+		}
+		if officetext.SupportedExtensions[ext] {
+			t.Errorf("%s must not be an officetext format: the Read tool would stop showing its source", ext)
+		}
+	}
+}
+
+func TestAnEmptyHTMLPageIsNotAResult(t *testing.T) {
+	if _, ok, err := ConvertBytes(context.Background(), []byte("<html><body><script>x()</script></body></html>"), "blank.html", nil); err != nil || ok {
+		t.Fatalf("ok=%v err=%v", ok, err)
 	}
 }

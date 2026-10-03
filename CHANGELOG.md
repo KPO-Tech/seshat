@@ -9,6 +9,17 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [1.2.60] - 2026-10-03
+
+### Changed
+
+- Office files are read for what they say, not just their words. **DOCX**: headings are found from the style's outline level, so they work in every language (a French Word names its style "Titre 1"); bulleted and numbered lists keep their depth and the numbers Word writes from the list ("Article 3", "1.2", "(a)"), including numbered headings; tables resolve merged cells (a cell that spans rows or columns repeats its value, several header rows become one: "2024 / Sales"); hyperlinks, footnotes, the description of pictures, text boxes and code in a monospaced font are kept; headers and footers and tracked deletions are not. **PPTX**: nested bullets and numbered steps, tables with merges, charts as a table of the numbers behind them, SmartArt text, picture descriptions, groups, speaker notes and hidden slides; slide numbers, dates and footers are left out. **XLSX**: values as the workbook shows them, merged cells, a sheet with several blocks of data becomes several tables, a title line above a table becomes its caption, hidden sheets are skipped, and a sheet is cut at 2000 rows with a note saying how many were left.
+- Tables, whatever the file, are written the same way (`internal/mdtable`): markdown tables with empty rows and columns dropped, cells on one line (`<br>`, escaped pipes), and a table with one column written as lines.
+
+### Added
+
+- HTML pages are converted to markdown by the default reader (`.html`, `.htm`, `.xhtml`): headings, nested lists, tables with merged cells and captions, fenced code with its language, quotations, links, picture descriptions and definition lists, without scripts, styles, navigation, hidden elements and the usual site chrome (edit links, language menus, breadcrumbs). It honours the page's declared encoding. The Read tool is unchanged: it shows an HTML file as source.
+
 ### Removed
 
 - The managed docling-serve: `seshat setup`, the `DOCUMENT_READER_URL=docling:auto` selector and the installer's Python step are gone, and so is `internal/python`. Nothing installs a Python environment for you any more. The built-in reader handles DOCX, PPTX, XLSX and PDFs with a text layer; for scans and complex layouts, run a document-reader service (seshat-intelligence) yourself and point `DOCUMENT_READER_URL` at it. `seshat doctor` now reports the built-in reader when no service is configured instead of warning about a missing venv.

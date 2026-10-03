@@ -3,7 +3,7 @@
 // (the local backend, a server) that embeds the engine.
 //
 // Convert tries the SDK's native, dependency-free extractors first (DOCX,
-// PPTX, XLSX, and PDFs page by page through pdfsmart) and only reaches for an
+// PPTX, XLSX, HTML, and PDFs page by page through pdfsmart) and only reaches for an
 // external converter, which may be nil, when a format genuinely needs it:
 // scans, audio, images, or a PDF page with no usable text layer. Output from
 // an external converter is checked for garbled text too. A host that has
@@ -16,14 +16,46 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/KPO-Tech/seshat/internal/htmltext"
 	"github.com/KPO-Tech/seshat/pkg/documentreader"
 	"github.com/KPO-Tech/seshat/pkg/officetext"
 	"github.com/KPO-Tech/seshat/pkg/pdfsmart"
 	"github.com/KPO-Tech/seshat/pkg/textquality"
 )
 
-// NativeExtensions lists formats converted locally, no external service needed.
-var NativeExtensions = officetext.SupportedExtensions // .docx .pptx .xlsx
+// HTMLExtensions are the HTML formats Convert turns into markdown: a saved page, an exported report, a
+// documentation page, as a document. They are not in officetext.SupportedExtensions on purpose: the Read tool
+// shows an HTML file as source, because the tags are what someone editing a web page needs to see.
+var HTMLExtensions = map[string]bool{".html": true, ".htm": true, ".xhtml": true}
+
+// NativeExtensions lists formats converted locally, no external service needed: the Office formats and HTML.
+var NativeExtensions = nativeExtensions()
+
+func nativeExtensions() map[string]bool {
+	all := map[string]bool{}
+	for ext := range officetext.SupportedExtensions { // .docx .pptx .xlsx
+		all[ext] = true
+	}
+	for ext := range HTMLExtensions {
+		all[ext] = true
+	}
+	return all
+}
+
+// extractNative converts a native format. sparse is only ever true for a deck that is mostly pictures.
+func extractNative(filename string, data []byte) (markdown string, ok bool, sparse bool, err error) {
+	if HTMLExtensions[strings.ToLower(filepath.Ext(filename))] {
+		result, err := htmltext.Convert(data)
+		if err != nil {
+			return "", true, false, err
+		}
+		if strings.TrimSpace(result.Markdown) == "" {
+			return "", true, false, officetext.ErrEmpty
+		}
+		return result.Markdown, true, false, nil
+	}
+	return officetext.Extract(filename, data)
+}
 
 // ExternalOnlyExtensions lists formats that always need an external reader: audio
 // transcription and image OCR have no native equivalent here. PDF is
@@ -95,7 +127,7 @@ func Convert(ctx context.Context, filePath string, externalConverter documentrea
 
 	if NativeExtensions[ext] {
 		if data, err := os.ReadFile(filePath); err == nil {
-			if md, ok, sparse, extractErr := officetext.Extract(filePath, data); ok && extractErr == nil && !sparse && !textquality.IsGarbledText(md) {
+			if md, ok, sparse, extractErr := extractNative(filePath, data); ok && extractErr == nil && !sparse && !textquality.IsGarbledText(md) {
 				return Result{Markdown: md, Source: SourceNative}, true, nil
 			}
 		}
@@ -142,7 +174,7 @@ func ConvertBytes(ctx context.Context, data []byte, filename string, externalCon
 	ext := strings.ToLower(filepath.Ext(filename))
 
 	if NativeExtensions[ext] {
-		if md, ok, sparse, extractErr := officetext.Extract(filename, data); ok && extractErr == nil && !sparse && !textquality.IsGarbledText(md) {
+		if md, ok, sparse, extractErr := extractNative(filename, data); ok && extractErr == nil && !sparse && !textquality.IsGarbledText(md) {
 			return Result{Markdown: md, Source: SourceNative}, true, nil
 		}
 	}
