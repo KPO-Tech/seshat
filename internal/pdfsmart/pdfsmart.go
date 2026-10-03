@@ -196,6 +196,14 @@ type Options struct {
 	MaxEnginePages int
 }
 
+// TableFinder is a document reader that can also say where the tables with no ruling lines are on a page, and how
+// they are laid out, from a layout model. A reader that has this (the native one, with its models) is asked for a page
+// whose text looks columnar; the page's own text fills the cells the model finds. pageIndex counts from zero. An
+// error, or no tables, leaves the page as it would have been without the model.
+type TableFinder interface {
+	FindTables(ctx context.Context, pdfData []byte, pageIndex int) ([]pdftext.TableStructure, error)
+}
+
 // PageCount is the number of pages of a PDF, without reading any of them.
 func PageCount(data []byte) (int, error) {
 	reader, err := pdf.NewReader(bytes.NewReader(data), int64(len(data)))
@@ -256,7 +264,7 @@ func ReadPages(ctx context.Context, data []byte, pages []int, opts Options, docu
 			page := reader.Page(i)
 			if page.V.IsNull() {
 				needsDocling = true
-			} else if native, extractErr := pdftext.PageMarkdown(page); extractErr != nil ||
+			} else if native, extractErr := pdftext.PageMarkdownWith(page, tableSource(ctx, documentReader, data, i)); extractErr != nil ||
 				len(strings.TrimSpace(native)) < pdftext.MinCharsPerPage || textquality.IsGarbledText(native) {
 				needsDocling = true
 			} else {
@@ -314,6 +322,15 @@ func ReadPages(ctx context.Context, data []byte, pages []int, opts Options, docu
 
 	result.Markdown = sb.String()
 	return result, allOK, nil
+}
+
+// tableSource gives a page what it needs to ask the reader about its tables, or nothing when the reader cannot say.
+func tableSource(ctx context.Context, reader documentreader.Converter, data []byte, page int) pdftext.TableSource {
+	finder, ok := reader.(TableFinder)
+	if !ok || finder == nil {
+		return nil
+	}
+	return func() ([]pdftext.TableStructure, error) { return finder.FindTables(ctx, data, page-1) }
 }
 
 // wantedPages returns the requested pages sorted and de-duplicated, or every page when none are given.

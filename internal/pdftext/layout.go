@@ -140,6 +140,13 @@ type line struct {
 
 // PageMarkdown returns a page as markdown: headings, code blocks, lists, paragraphs and formulas.
 func PageMarkdown(page pdf.Page) (md string, err error) {
+	return PageMarkdownWith(page, nil)
+}
+
+// PageMarkdownWith is PageMarkdown for a caller that has a layout model to ask about tables that have no ruling
+// lines. The source is only asked on a page whose text looks columnar and that is not rotated, and what it returns
+// only adds tables: what the rulings found stays, and a page is never worse for a model that failed.
+func PageMarkdownWith(page pdf.Page, source TableSource) (md string, err error) {
 	defer func() {
 		if r := recover(); r != nil {
 			md, err = "", errorFromPanic(r)
@@ -150,7 +157,11 @@ func PageMarkdown(page pdf.Page) (md string, err error) {
 	}
 	texts := page.Content().Text
 	rul, _ := pageRulings(page) // no rulings (or unreadable ones) means no tables, not a failed page
-	return layoutMarkdownPage(texts, markerIndexes(page, len(texts)), rul.merged()), nil
+	models := modelContext{}
+	if source != nil && inherited(page.V, "Rotate").Int64()%360 == 0 {
+		models = modelContext{source: source, box: boxOf(page)}
+	}
+	return layoutMarkdownPage(texts, markerIndexes(page, len(texts)), rul.merged(), models), nil
 }
 
 // markerIndexes finds the glyphs the library invents: after every TJ it shows a "\n" through the current
@@ -221,12 +232,18 @@ func layoutMarkdown(texts []pdf.Text) string { return layoutMarkdownWithout(text
 
 // layoutMarkdownWithout is layoutMarkdown without the glyphs at the indexes in skip.
 func layoutMarkdownWithout(texts []pdf.Text, skip map[int]bool) string {
-	return layoutMarkdownPage(texts, skip, rulings{})
+	return layoutMarkdownPage(texts, skip, rulings{}, modelContext{})
 }
 
 // layoutMarkdownPage is layoutMarkdownWithout for a page that has rulings: the tables they bound are written as
 // tables, in place, and their text is not repeated in the running text.
-func layoutMarkdownPage(texts []pdf.Text, skip map[int]bool, rul rulings) string {
+// modelContext is what a page needs to ask a layout model about its tables.
+type modelContext struct {
+	source TableSource
+	box    pageBox
+}
+
+func layoutMarkdownPage(texts []pdf.Text, skip map[int]bool, rul rulings, models modelContext) string {
 	glyphs := make([]glyph, 0, len(texts))
 	for i, t := range texts {
 		if skip[i] {
@@ -238,11 +255,21 @@ func layoutMarkdownPage(texts []pdf.Text, skip map[int]bool, rul rulings) string
 	}
 	placeGlyphs(glyphs)
 	var tables []foundTable
+	var used [][]int
 	if len(rul.h) >= minRegionRules {
-		var used [][]int
 		tables, used = buildTables(findRegions(rul), glyphs, pageWidth(glyphs))
-		glyphs = standInForTables(glyphs, tables, used)
 	}
+	if models.source != nil {
+		taken := make([]bool, len(glyphs))
+		for _, idx := range used {
+			for _, i := range idx {
+				taken[i] = true
+			}
+		}
+		more, moreUsed := modelTables(models.source, models.box, glyphs, taken, tables, pageWidth(glyphs))
+		tables, used = append(tables, more...), append(used, moreUsed...)
+	}
+	glyphs = standInForTables(glyphs, tables, used)
 	lines := buildLines(glyphs)
 	if len(lines) == 0 {
 		return ""
