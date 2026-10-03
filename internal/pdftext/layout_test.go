@@ -212,7 +212,7 @@ func TestPageMarkdown_ALetterEncodedAsCode10IsKeptNotTakenForTheLibrarysMarker(t
 	if err != nil {
 		t.Fatal(err)
 	}
-	for _, want := range []string{"Sample Report", "paragraph with some plain text", "multi-paragraph extraction works", "Name Score"} {
+	for _, want := range []string{"Sample Report", "paragraph with some plain text", "multi-paragraph extraction works", "| Name | Score |", "| Alice | 90 |"} {
 		if !strings.Contains(md, want) {
 			t.Errorf("missing %q in:\n%s", want, md)
 		}
