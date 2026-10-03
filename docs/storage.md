@@ -16,8 +16,11 @@ All data lives under `~/.config/seshat-cli/` (or `$SESHAT_RUNTIME_ROOT`).
 │   └── app.log
 ├── documents/                ← user-uploaded PDFs and docs  (global, persistent)
 ├── rag/                      ← RAG-indexed documents        (global, persistent)
-└── sessions/
-    └── {session_id}/
+├── data/
+│   └── permissions/{session_id}.json  ← permissions granted to a session (kept out of its directory)
+└── workspaces/
+    └── {session_id}/         ← the one directory of a session (also the backend's workspace)
+        ├── uploads/          ← files the user attached (seshat-backend)
         ├── screenshots/      ← browser screenshots
         ├── plans/            ← plan-mode markdown files
         ├── tools/            ← browser downloads
@@ -28,7 +31,7 @@ All data lives under `~/.config/seshat-cli/` (or `$SESHAT_RUNTIME_ROOT`).
 ```
 
 **Rule of thumb:**
-- Content produced **by the agent for a session** → `sessions/{id}/…`
+- Content produced **by the agent for a session** → `workspaces/{id}/…`
 - Content **uploaded intentionally by the user** as a knowledge base → `documents/` or `rag/`
 
 ---
@@ -45,11 +48,11 @@ Each key builder returns a deterministic path string that encodes the session, t
 
 | Function | Output path | Use for |
 |---|---|---|
-| `ScreenshotKey(sessionID, pageID, now)` | `sessions/{id}/screenshots/{page}/{date}/{ts}-screenshot.png` | Browser screenshots |
-| `DownloadKey(sessionID, pageID, filename, now)` | `sessions/{id}/tools/{page}/{date}/{ts}-{file}` | Browser downloads |
-| `WebArtifactKey(sessionID, filename, now)` | `sessions/{id}/artifacts/web/{date}/{ts}-{file}` | Web-fetched content |
-| `GeneratedImageKey(sessionID, filename, now)` | `sessions/{id}/artifacts/images/{date}/{ts}-{file}` | AI-generated images |
-| `AudioKey(sessionID, filename, now)` | `sessions/{id}/artifacts/audio/{date}/{ts}-{file}` | TTS / STT audio |
+| `ScreenshotKey(sessionID, pageID, now)` | `workspaces/{id}/screenshots/{page}/{date}/{ts}-screenshot.png` | Browser screenshots |
+| `DownloadKey(sessionID, pageID, filename, now)` | `workspaces/{id}/tools/{page}/{date}/{ts}-{file}` | Browser downloads |
+| `WebArtifactKey(sessionID, filename, now)` | `workspaces/{id}/artifacts/web/{date}/{ts}-{file}` | Web-fetched content |
+| `GeneratedImageKey(sessionID, filename, now)` | `workspaces/{id}/artifacts/images/{date}/{ts}-{file}` | AI-generated images |
+| `AudioKey(sessionID, filename, now)` | `workspaces/{id}/artifacts/audio/{date}/{ts}-{file}` | TTS / STT audio |
 | `PDFKey(title, now)` | `documents/{date}/{ts}-{title}.pdf` | Global PDF documents |
 | `DocumentKey(filename, now)` | `documents/{date}/{ts}-{file}` | Global user documents |
 
@@ -112,7 +115,7 @@ ref, err := storage.StoreAudioRef(ctx, store, audioBytes, sessionID, "speech.mp3
 1. Add a key builder in `internal/storage/keys.go`:
    ```go
    func MyTypeKey(sessionID, filename string, now time.Time) string {
-       // Layout: sessions/{sessionID}/artifacts/mytype/{date}/{ts}-{file}
+       // Layout: workspaces/{sessionID}/artifacts/mytype/{date}/{ts}-{file}
        parts := []string{"sessions", sanitizePathSegment(sessionID), "artifacts", "mytype", ...}
        ...
    }
@@ -130,7 +133,7 @@ ref, err := storage.StoreAudioRef(ctx, store, audioBytes, sessionID, "speech.mp3
 
 4. Add the new directory to `appdir.EnsureSessionDir` so it's created when a session opens.
 
-No changes to the deletion logic — `appdir.DeleteSessionDir` removes the entire `sessions/{id}/` tree.
+No changes to the deletion logic — `appdir.DeleteSessionDir` removes the entire `workspaces/{id}/` tree.
 
 ---
 
@@ -145,11 +148,11 @@ Agent runs
 
 Session deleted (user presses 'd' in session browser)
   ├── store.DeleteSession(id)              ← removes DB rows (cascade)
-  └── appdir.DeleteSessionDir(id)          ← os.RemoveAll(sessions/{id}/)
+  └── appdir.DeleteSessionDir(id)          ← os.RemoveAll(workspaces/{id}/)
       covers: screenshots, plans, tools, artifacts/web, artifacts/images, artifacts/audio
 ```
 
-For S3 storage, `client.DeleteSession` additionally calls `store.List("sessions/{id}") + store.Delete` for each key, since `os.RemoveAll` only works on the local filesystem.
+For S3 storage, `client.DeleteSession` additionally calls `store.List("workspaces/{id}") + store.Delete` for each key, since `os.RemoveAll` only works on the local filesystem.
 
 ---
 
@@ -159,15 +162,15 @@ Access paths from application code via `cmd/cli/appdir`:
 
 ```go
 appdir.Root()                          // ~/.config/seshat-cli/
-appdir.SessionDir(id)                  // sessions/{id}/
-appdir.SessionScreenshotsDir(id)       // sessions/{id}/screenshots/
-appdir.SessionPlansDir(id)             // sessions/{id}/plans/
-appdir.SessionToolsDir(id)             // sessions/{id}/tools/
-appdir.SessionArtifactsDir(id)         // sessions/{id}/artifacts/
-appdir.SessionArtifactsWebDir(id)      // sessions/{id}/artifacts/web/
-appdir.SessionArtifactsImagesDir(id)   // sessions/{id}/artifacts/images/
-appdir.SessionArtifactsAudioDir(id)    // sessions/{id}/artifacts/audio/
-appdir.SessionLogPath(id)              // sessions/{id}/session.log
+appdir.SessionDir(id)                  // workspaces/{id}/
+appdir.SessionScreenshotsDir(id)       // workspaces/{id}/screenshots/
+appdir.SessionPlansDir(id)             // workspaces/{id}/plans/
+appdir.SessionToolsDir(id)             // workspaces/{id}/tools/
+appdir.SessionArtifactsDir(id)         // workspaces/{id}/artifacts/
+appdir.SessionArtifactsWebDir(id)      // workspaces/{id}/artifacts/web/
+appdir.SessionArtifactsImagesDir(id)   // workspaces/{id}/artifacts/images/
+appdir.SessionArtifactsAudioDir(id)    // workspaces/{id}/artifacts/audio/
+appdir.SessionLogPath(id)              // workspaces/{id}/session.log
 ```
 
 Internal packages use `pkg/runtimepath` directly (same functions, with an explicit `root` param).

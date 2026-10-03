@@ -468,9 +468,9 @@ func TestResolverSessionAutoApprovalPersistence(t *testing.T) {
 	integrator := NewIntegrator(engine)
 
 	sessionID := types.SessionID("session-persistent")
-	sessionDir := runtimepath.SessionDir(tempRoot, string(sessionID))
-	if err := os.MkdirAll(sessionDir, 0700); err != nil {
-		t.Fatalf("failed to create session dir: %v", err)
+	grantsPath := runtimepath.SessionPermissionsPath(tempRoot, string(sessionID))
+	if err := os.MkdirAll(filepath.Dir(grantsPath), 0700); err != nil {
+		t.Fatalf("failed to create permissions dir: %v", err)
 	}
 
 	mockPerms := map[string]bool{"bash": true}
@@ -478,7 +478,7 @@ func TestResolverSessionAutoApprovalPersistence(t *testing.T) {
 	if err != nil {
 		t.Fatalf("failed to marshal mock perms: %v", err)
 	}
-	if err := os.WriteFile(filepath.Join(sessionDir, "permissions.json"), data, 0600); err != nil {
+	if err := os.WriteFile(grantsPath, data, 0600); err != nil {
 		t.Fatalf("failed to write permissions.json: %v", err)
 	}
 
