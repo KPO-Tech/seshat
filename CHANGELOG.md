@@ -9,6 +9,10 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Removed
+
+- The managed docling-serve: `seshat setup`, the `DOCUMENT_READER_URL=docling:auto` selector and the installer's Python step are gone, and so is `internal/python`. Nothing installs a Python environment for you any more. The built-in reader handles DOCX, PPTX, XLSX and PDFs with a text layer; for scans and complex layouts, run a document-reader service (seshat-intelligence) yourself and point `DOCUMENT_READER_URL` at it. `seshat doctor` now reports the built-in reader when no service is configured instead of warning about a missing venv.
+
 ## [1.2.59] - 2026-10-03
 
 ### Changed

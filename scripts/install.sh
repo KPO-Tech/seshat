@@ -7,9 +7,6 @@
 # Options (env vars):
 #   VERSION=v0.1.0       Install a specific version (default: latest)
 #   INSTALL_DIR=...      Binary destination (default: ~/.local/bin)
-#   NO_PYTHON=1          Skip uv + docling-serve setup
-#   DOCLING_EXTRAS=gpu   Install docling-serve[gpu] instead of the base package
-#   PYTHON_VERSION=3.12  Python version for the docling venv (default: 3.11)
 #
 # Developer / SDK usage (no installer needed):
 #   go install github.com/KPO-Tech/seshat/cmd/cli@latest
@@ -31,9 +28,6 @@ _sha256check() {
 REPO="KPO-Tech/seshat"
 BINARY="seshat"
 INSTALL_DIR="${INSTALL_DIR:-$HOME/.local/bin}"
-NO_PYTHON="${NO_PYTHON:-0}"
-PYTHON_VERSION="${PYTHON_VERSION:-3.11}"
-DOCLING_EXTRAS="${DOCLING_EXTRAS:-}"
 
 # ── Colors ────────────────────────────────────────────────────────────────────
 if [ -t 1 ]; then
@@ -177,25 +171,6 @@ case ":$PATH:" in
         fi
         ;;
 esac
-
-# ── Python / docling setup via seshat setup ──────────────────────────────────
-# Use the freshly installed binary so the logic lives in one place.
-SESHAT_BIN="$INSTALL_DIR/seshat"
-export PATH="$INSTALL_DIR:$HOME/.local/bin:$HOME/.cargo/bin:$PATH"
-
-if [ "$NO_PYTHON" = "1" ]; then
-    warn "Skipping Python setup (NO_PYTHON=1)"
-    warn "Run 'seshat setup' later to enable document processing."
-else
-    step "Setting up Python environment (uv + docling-serve)"
-
-    SETUP_ARGS=""
-    [ -n "$PYTHON_VERSION" ] && SETUP_ARGS="$SETUP_ARGS --python $PYTHON_VERSION"
-    [ -n "$DOCLING_EXTRAS" ] && SETUP_ARGS="$SETUP_ARGS --extras $DOCLING_EXTRAS"
-
-    # shellcheck disable=SC2086
-    SESHAT_RUNTIME_ROOT="$RUNTIME_ROOT" "$SESHAT_BIN" setup $SETUP_ARGS
-fi
 
 # ── Done ──────────────────────────────────────────────────────────────────────
 echo ""
