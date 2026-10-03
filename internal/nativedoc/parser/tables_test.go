@@ -103,3 +103,26 @@ func TestATableThatIsAPictureIsReadByOCR(t *testing.T) {
 		})
 	}
 }
+
+// Converting a whole document (what ingestion does, and what a page sent to the engine gets) writes a page that has a
+// text layer as the page reader does: with its tables, a picture's included, not as the plain text of the layer.
+func TestConvertingADocumentWritesItsTablesToo(t *testing.T) {
+	c := New(modelsOrSkip(t))
+	for name, want := range map[string]string{
+		"table_image.pdf": "| Hardware | 120 | 135 | 128 |",
+		"header_rule.pdf": "| E103184 | Maintenance kit CA6707/10 | 49,99 | 21 % | 1 PCS | 49,99 |",
+		"borderless.pdf":  "| Hardware | 120 | 135 | 128 | 141 |",
+	} {
+		data, err := os.ReadFile(filepath.Join("..", "..", "pdftext", "testdata", name))
+		if err != nil {
+			t.Fatal(err)
+		}
+		result, err := c.ConvertBytes(context.Background(), data, name)
+		if err != nil {
+			t.Fatalf("%s: %v", name, err)
+		}
+		if !strings.Contains(result.Markdown, want) {
+			t.Errorf("%s: missing %q in:\n%s", name, want, result.Markdown)
+		}
+	}
+}
