@@ -9,6 +9,13 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [1.2.61] - 2026-10-03
+
+### Added
+
+- Tables in PDFs are read as tables, in pure Go, from the lines the page draws. The page's rulings (stroked lines and rectangle edges, and filled bars thin enough to be rules) are read from the content stream and two kinds of table are recognised: a grid (horizontal and vertical rules that cross; merged cells are resolved, and a header that spans columns or rows is joined into one header row) and a ruled block (a top rule, a header rule and a bottom rule, with no vertical lines, as in most papers; its columns are the white gaps in the text, taken from the body so a header wider than its column cannot hide them). A table stays where it was in the reading order, its text is not repeated outside it, and its cells come out as markdown. On the documents tried (arXiv papers, a technical report, an IBM Redbook) it finds the same tables as Docling's TableFormer page by page. A table with no rules at all is not found: it is left as text, because a borderless table and two columns of prose cannot be told apart reliably from the text alone.
+- What is not a table is rejected: the header and footer rules of a page, a cover page of headlines and captions (mixed sizes, paragraph cells), a boxed listing (monospaced font, brackets and operators as cells), and two rules with a caption or a sentence between them (a caption splits one set of equal rules into the tables above and below it).
+
 ## [1.2.60] - 2026-10-03
 
 ### Changed
