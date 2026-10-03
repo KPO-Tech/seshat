@@ -24,7 +24,7 @@ func borderlessPage(t *testing.T, n int, source TableSource) string {
 	if err != nil {
 		t.Fatal(err)
 	}
-	md, err := PageMarkdownWith(reader.Page(n), source)
+	md, err := PageMarkdownWith(reader.Page(n), PageOptions{Tables: source})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -132,7 +132,7 @@ func TestAModelTableOnATableTheRulingsFoundIsIgnored(t *testing.T) {
 	source := func() ([]TableStructure, error) {
 		return []TableStructure{{X0: 60, Top: 120, X1: 450, Bottom: 220, Columns: [][4]float64{{60, 120, 170, 220}, {170, 120, 450, 220}}}}, nil
 	}
-	with, err := PageMarkdownWith(reader.Page(1), source)
+	with, err := PageMarkdownWith(reader.Page(1), PageOptions{Tables: source})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -156,5 +156,119 @@ func TestModelBoxesAreConvertedToUserSpace(t *testing.T) {
 	}
 	if len(m.rows) != 2 || m.rows[0][0] != 762 || m.rows[0][1] != 732 {
 		t.Fatalf("rows = %+v", m.rows)
+	}
+}
+
+// testdata/table_image.pdf is a page of text with a table pasted in as a picture (page 1, A4). The text read from
+// the picture by OCR, with its boxes in points from the top left corner of the page, is what the models' reader
+// would give.
+func pictureTable(reads *int) TableStructure {
+	grid := [][]string{
+		{"Product", "Q1", "Q2", "Q3"},
+		{"Hardware", "120", "135", "128"},
+		{"Software", "88", "91", "97"},
+		{"Services", "45", "52", "61"},
+		{"Support", "30", "31", "33"},
+		{"Training", "12", "9", "14"},
+	}
+	columnX := []float64{70, 200, 280, 360}
+	return TableStructure{
+		X0: 63, Top: 124, X1: 437, Bottom: 278, Score: 0.9,
+		Columns: [][4]float64{{63, 124, 190, 278}, {190, 124, 270, 278}, {270, 124, 350, 278}, {350, 124, 437, 278}},
+		Rows: [][4]float64{
+			{63, 128, 437, 152}, {63, 153, 437, 177}, {63, 178, 437, 202}, {63, 203, 437, 227}, {63, 228, 437, 252}, {63, 253, 437, 278},
+		},
+		Headers: [][4]float64{{63, 128, 437, 152}},
+		Words: func() ([]TableWord, error) {
+			*reads++
+			var words []TableWord
+			for r, row := range grid {
+				top := 131 + 25*float64(r)
+				for c, cell := range row {
+					words = append(words, TableWord{X0: columnX[c], Top: top, X1: columnX[c] + 8*float64(len(cell)), Bottom: top + 18, Text: cell})
+				}
+			}
+			return words, nil
+		},
+	}
+}
+
+func pictureTablePage(t *testing.T, opts PageOptions) string {
+	t.Helper()
+	data, err := os.ReadFile(filepath.Join("testdata", "table_image.pdf"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	reader, err := pdf.NewReader(bytes.NewReader(data), int64(len(data)))
+	if err != nil {
+		t.Fatal(err)
+	}
+	md, err := PageMarkdownWith(reader.Page(1), opts)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return md
+}
+
+func TestATableThatIsAPictureIsReadFromItsOwnText(t *testing.T) {
+	reads := 0
+	source := func() ([]TableStructure, error) { return []TableStructure{pictureTable(&reads)}, nil }
+	md := pictureTablePage(t, PageOptions{Tables: source, LargeImage: true})
+
+	want := "| Product | Q1 | Q2 | Q3 |\n" +
+		"| --- | --- | --- | --- |\n" +
+		"| Hardware | 120 | 135 | 128 |\n" +
+		"| Software | 88 | 91 | 97 |\n" +
+		"| Services | 45 | 52 | 61 |\n" +
+		"| Support | 30 | 31 | 33 |\n" +
+		"| Training | 12 | 9 | 14 |"
+	if !strings.Contains(md, want) {
+		t.Fatalf("got:\n%s\nwant it to contain:\n%s", md, want)
+	}
+	if reads != 1 {
+		t.Errorf("the picture was read %d times", reads)
+	}
+	intro, table, after := strings.Index(md, "pasted into the document"), strings.Index(md, "| Product"), strings.Index(md, "Totals are audited")
+	if !(intro >= 0 && intro < table && table < after) {
+		t.Fatalf("the table is out of place (%d, %d, %d):\n%s", intro, table, after, md)
+	}
+}
+
+func TestAPageWithoutALargePictureDoesNotLookForOne(t *testing.T) {
+	reads := 0
+	asked := false
+	source := func() ([]TableStructure, error) {
+		asked = true
+		return []TableStructure{pictureTable(&reads)}, nil
+	}
+	md := pictureTablePage(t, PageOptions{Tables: source})
+	if asked || reads != 0 || strings.Contains(md, "|") {
+		t.Fatalf("asked=%v reads=%d\n%s", asked, reads, md)
+	}
+}
+
+func TestAPictureThatCannotBeReadLeavesThePageAsItWas(t *testing.T) {
+	reads := 0
+	broken := pictureTable(&reads)
+	broken.Words = func() ([]TableWord, error) { return nil, errors.New("no models") }
+	md := pictureTablePage(t, PageOptions{
+		Tables:     func() ([]TableStructure, error) { return []TableStructure{broken}, nil },
+		LargeImage: true,
+	})
+	if strings.Contains(md, "|") || !strings.Contains(md, "Totals are audited") {
+		t.Fatalf("got:\n%s", md)
+	}
+}
+
+func TestTableMarkdownWritesAScannedTableFromItsReadText(t *testing.T) {
+	reads := 0
+	s := pictureTable(&reads)
+	words, _ := s.Words()
+	md, ok := TableMarkdown(s, words, 842)
+	if !ok || !strings.HasPrefix(md, "| Product | Q1 | Q2 | Q3 |\n| --- | --- | --- | --- |\n| Hardware | 120 | 135 | 128 |") {
+		t.Fatalf("ok=%v\n%s", ok, md)
+	}
+	if _, ok := TableMarkdown(s, words[:3], 842); ok {
+		t.Error("one line of text is not a table")
 	}
 }

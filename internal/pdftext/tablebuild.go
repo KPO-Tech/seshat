@@ -17,6 +17,9 @@ import (
 type foundTable struct {
 	x0, y0, x1, y1 float64
 	markdown       string
+	// anchor is the index of the glyph the table is written before, for a table with no glyphs of its own on the
+	// page (one that is a picture): without it the table goes where its first glyph was. -1 means not needed.
+	anchor int
 }
 
 const (
@@ -92,7 +95,7 @@ func buildTables(regions []tableRegion, glyphs []glyph, pageWidth float64) ([]fo
 		for _, i := range idx {
 			claimed[i] = true
 		}
-		tables = append(tables, foundTable{reg.x0, reg.y0, reg.x1, reg.y1, md})
+		tables = append(tables, foundTable{x0: reg.x0, y0: reg.y0, x1: reg.x1, y1: reg.y1, markdown: md, anchor: -1})
 		used = append(used, idx)
 	}
 	return tables, used

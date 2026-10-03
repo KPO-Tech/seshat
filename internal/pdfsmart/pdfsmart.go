@@ -31,6 +31,9 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"image"
+	_ "image/jpeg"
+	_ "image/png"
 	"sort"
 	"strconv"
 	"strings"
@@ -255,13 +258,13 @@ func ReadPages(ctx context.Context, data []byte, pages []int, opts Options, docu
 			selection = append(selection, strconv.Itoa(n))
 		}
 	}
-	pagesWithImages, err := pagesWithEmbeddedImages(data, selection)
+	pagesWithImages, largeImages, err := pagesWithEmbeddedImages(data, selection)
 	imageDetectionOK := err == nil
 	if err != nil {
 		// Can't tell which pages have images - conservatively treat every
 		// page as needing docling rather than silently extracting
 		// natively past an image detection failed to find.
-		pagesWithImages = allPages(pageCount)
+		pagesWithImages, largeImages = allPages(pageCount), map[int]bool{}
 	}
 
 	result := Result{Pages: make([]PageResult, 0, len(wanted))}
@@ -277,7 +280,7 @@ func ReadPages(ctx context.Context, data []byte, pages []int, opts Options, docu
 			page := reader.Page(i)
 			if page.V.IsNull() {
 				needsDocling = true
-			} else if native, extractErr := pdftext.PageMarkdownWith(page, tableSource(ctx, documentReader, data, i)); extractErr != nil ||
+			} else if native, extractErr := pdftext.PageMarkdownWith(page, pdftext.PageOptions{Tables: tableSource(ctx, documentReader, data, i), LargeImage: largeImages[i]}); extractErr != nil ||
 				len(strings.TrimSpace(native)) < pdftext.MinCharsPerPage || textquality.IsGarbledText(native) {
 				needsDocling = true
 			} else {
@@ -386,21 +389,50 @@ func allPages(n int) map[int]bool {
 // embedded raster image (a PDF XObject with /Subtype /Image), via
 // pdfcpu's own resource inspection - a deterministic read of the file's
 // structure, not a heuristic or an ML classification.
-func pagesWithEmbeddedImages(data []byte, selectedPages []string) (map[int]bool, error) {
+func pagesWithEmbeddedImages(data []byte, selectedPages []string) (pages, large map[int]bool, err error) {
 	imageSets, err := api.ExtractImagesRaw(bytes.NewReader(data), selectedPages, nil)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
-	pages := make(map[int]bool)
+	pages, large = make(map[int]bool), make(map[int]bool)
 	for _, set := range imageSets {
 		for _, img := range set {
-			if img.PageNr > 0 {
-				pages[img.PageNr] = true
+			if img.PageNr <= 0 {
+				continue
+			}
+			pages[img.PageNr] = true
+			if largeEnough(img) {
+				large[img.PageNr] = true
 			}
 		}
 	}
-	return pages, nil
+	return pages, large, nil
 }
+
+// largeEnough says whether a picture is big enough to hold a table. pdfcpu does not fill in the size of the pictures it
+// extracts raw, so it is read from the picture's own header; one whose format cannot be read (a scan's CCITT or JBIG2
+// image) counts as large, because the cost of a wrong yes is only a look by the models.
+func largeEnough(img pdfcpumodel.Image) bool {
+	width, height := img.Width, img.Height
+	if width == 0 || height == 0 {
+		if img.Reader == nil {
+			return true
+		}
+		config, _, err := image.DecodeConfig(img.Reader)
+		if err != nil {
+			return true
+		}
+		width, height = config.Width, config.Height
+	}
+	return width >= tableImageMinWidth && height >= tableImageMinHeight
+}
+
+// Pictures smaller than this, in pixels, are a logo, an icon or a rule; a table in a picture is bigger. The second
+// result of pagesWithEmbeddedImages says which pages hold one at least this big.
+const (
+	tableImageMinWidth  = 240
+	tableImageMinHeight = 80
+)
 
 // extractSinglePage produces a standalone one-page PDF containing just
 // page n, so documentReader only has to process that one page instead of

@@ -86,7 +86,7 @@ func TestAFileThatIsNotEncryptedComesBackAsItWas(t *testing.T) {
 }
 
 func TestADecryptedCopyIsRememberedForTheNextCall(t *testing.T) {
-	t.Parallel()
+	// Not parallel: the cache is shared and small, and other tests pushing their own files in would evict this one.
 	data := encryptedFixture(t, "aes256_nouser.pdf")
 	first, err := Unlock(data, "")
 	if err != nil {
