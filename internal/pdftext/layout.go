@@ -144,74 +144,81 @@ func PageMarkdown(page pdf.Page) (md string, err error) {
 	if page.V.IsNull() {
 		return "", nil
 	}
-	return layoutMarkdownWithout(page.Content().Text, markerRunes(page)), nil
+	texts := page.Content().Text
+	return layoutMarkdownWithout(texts, markerIndexes(page, len(texts))), nil
 }
 
-// markerRunes finds, for each font of the page, what the library's newline marker decodes to. After each
-// TJ the library shows a "\n" through the font's own encoding, so it comes out as U+FFFD in one font and as
-// some other letter (an omega, say) in another. No text string holds a raw newline byte, so a glyph that is
-// exactly that decoded marker is never text.
-func markerRunes(page pdf.Page) map[string]string {
-	markers := map[string]string{}
-	defer func() { _ = recover() }() // a font that cannot be decoded just has no marker to drop
-	usesNewlineByte := fontsUsingNewlineByte(page)
-	for _, name := range page.Fonts() {
-		if usesNewlineByte[name] {
-			// A subset font may encode a real letter as code 10: its marker cannot be told from text.
-			continue
-		}
-		font := page.Font(name)
-		base := font.BaseFont()
-		if i := strings.Index(base, "+"); i >= 0 {
-			base = base[i+1:]
-		}
-		if decoded := font.Encoder().Decode("\n"); decoded != "" && decoded != "\n" {
-			markers[base] = decoded
-		}
-	}
-	return markers
-}
-
-// fontsUsingNewlineByte reads the page's content stream and reports, by font resource name, the fonts that
-// show a string holding the byte 10. For those, code 10 is a real character.
-func fontsUsingNewlineByte(page pdf.Page) map[string]bool {
-	used := map[string]bool{}
-	defer func() { _ = recover() }()
-	current := ""
-	pdf.Interpret(page.V.Key("Contents"), func(stk *pdf.Stack, op string) {
-		args := make([]pdf.Value, stk.Len())
-		for i := len(args) - 1; i >= 0; i-- {
-			args[i] = stk.Pop()
-		}
-		switch op {
-		case "Tf":
-			if len(args) == 2 {
-				current = args[0].Name()
+// markerIndexes finds the glyphs the library invents: after every TJ it shows a "\n" through the current
+// font's encoding, which comes out as U+FFFD in one font and as a real letter or an omega in another, and
+// in a subset font it cannot be told from text by its value. Its place can be told: the library produces
+// one glyph per decoded character, so replaying its count over the content stream gives the index of each
+// marker. If the replay does not add up to the glyphs it returned, nothing is dropped.
+func markerIndexes(page pdf.Page, total int) map[int]bool {
+	skip := map[int]bool{}
+	ok := true
+	func() {
+		defer func() {
+			if recover() != nil {
+				ok = false
 			}
-		case "Tj", "'", "\"":
-			if len(args) > 0 && strings.Contains(args[len(args)-1].RawString(), "\n") {
-				used[current] = true
+		}()
+		var encode func(string) string
+		index := 0
+		count := func(raw string) int {
+			if encode == nil {
+				return utf8.RuneCountInString(raw)
 			}
-		case "TJ":
-			if len(args) > 0 {
-				for i := 0; i < args[0].Len(); i++ {
-					if item := args[0].Index(i); item.Kind() == pdf.String && strings.Contains(item.RawString(), "\n") {
-						used[current] = true
+			return utf8.RuneCountInString(encode(raw))
+		}
+		pdf.Interpret(page.V.Key("Contents"), func(stk *pdf.Stack, op string) {
+			args := make([]pdf.Value, stk.Len())
+			for i := len(args) - 1; i >= 0; i-- {
+				args[i] = stk.Pop()
+			}
+			switch op {
+			case "Tf":
+				if len(args) == 2 {
+					if enc := page.Font(args[0].Name()).Encoder(); enc != nil {
+						encode = func(raw string) string { return enc.Decode(raw) }
+					} else {
+						encode = nil
+					}
+				}
+			case "Tj", "'", "\"":
+				if len(args) > 0 {
+					index += count(args[len(args)-1].RawString())
+				}
+			case "TJ":
+				if len(args) > 0 {
+					for i := 0; i < args[0].Len(); i++ {
+						if item := args[0].Index(i); item.Kind() == pdf.String {
+							index += count(item.RawString())
+						}
+					}
+					for m := count("\n"); m > 0; m-- {
+						skip[index] = true
+						index++
 					}
 				}
 			}
+		})
+		if index != total {
+			ok = false
 		}
-	})
-	return used
+	}()
+	if !ok {
+		return nil
+	}
+	return skip
 }
 
 func layoutMarkdown(texts []pdf.Text) string { return layoutMarkdownWithout(texts, nil) }
 
-// layoutMarkdownWithout is layoutMarkdown with the glyphs that are a font's newline marker removed.
-func layoutMarkdownWithout(texts []pdf.Text, markers map[string]string) string {
+// layoutMarkdownWithout is layoutMarkdown without the glyphs at the indexes in skip.
+func layoutMarkdownWithout(texts []pdf.Text, skip map[int]bool) string {
 	glyphs := make([]glyph, 0, len(texts))
-	for _, t := range texts {
-		if marker, ok := markers[t.Font]; ok && t.S == marker {
+	for i, t := range texts {
+		if skip[i] {
 			continue
 		}
 		if g := newGlyph(t); !g.isJunk() {
