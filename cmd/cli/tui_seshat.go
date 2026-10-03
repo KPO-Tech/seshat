@@ -12,7 +12,6 @@ import (
 	tea "charm.land/bubbletea/v2"
 	"github.com/KPO-Tech/seshat/cmd/cli/appdir"
 	"github.com/KPO-Tech/seshat/internal/monitoring"
-	"github.com/KPO-Tech/seshat/internal/python"
 	mcptools "github.com/KPO-Tech/seshat/internal/seshattui/agent/tools/mcp"
 	tuiconfig "github.com/KPO-Tech/seshat/internal/seshattui/config"
 	tuicommon "github.com/KPO-Tech/seshat/internal/seshattui/ui/common"
@@ -32,19 +31,6 @@ func runSeshatTUI(ctx context.Context, options runtimeOptions, initialSessionID 
 	_ = appdir.EnsureAppDirs()
 	if err := validateProviderSetup(options); err != nil {
 		return err
-	}
-
-	// Docling serve is an explicit developer choice, not the default document
-	// reader. Keep the old managed process available only behind an explicit
-	// adapter selector.
-	var documentReaderManager *python.DoclingManager
-	if strings.EqualFold(options.DocumentReaderURL, "docling:auto") {
-		if mgr := python.DefaultDoclingManager(); mgr != nil {
-			if err := mgr.Start(ctx); err == nil {
-				documentReaderManager = mgr
-				options.DocumentReaderURL = mgr.BaseURL()
-			}
-		}
 	}
 
 	options.Monitoring = buildTUIMonitoring()
@@ -104,9 +90,6 @@ func runSeshatTUI(ctx context.Context, options runtimeOptions, initialSessionID 
 	_, runErr := p.Run()
 
 	ws.Shutdown()
-	if documentReaderManager != nil {
-		documentReaderManager.Stop()
-	}
 	return runErr
 }
 

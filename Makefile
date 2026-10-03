@@ -5,14 +5,14 @@ CMD_GRPC       := ./cmd/grpc
 export PATH := $(CURDIR)/bin:$(PATH)
 
 .PHONY: all build build-cli build-grpc build_linux test test-race fmt vet lint tidy \
-        clean clean-runtime clean-all hooks setup install-python start-docling install-deepdoc-models
+        clean clean-runtime clean-all hooks setup install-deepdoc-models
 
 # ── Default ────────────────────────────────────────────────────────────────────
 
 all: build
 
 # ── First-time setup ──────────────────────────────────────────────────────────
-# Installs all dependencies (ripgrep, uv, Python venv + docling-serve),
+# Installs all dependencies (ripgrep),
 # builds the binaries, and wires git hooks.
 #
 # Linux / macOS:
@@ -76,7 +76,7 @@ tidy:
 clean:
 	rm -rf bin/
 
-# Erase all seshat runtime data (DB, credentials, sessions, logs, venv).
+# Erase all seshat runtime data (DB, credentials, sessions, logs).
 # WARNING: credentials and session history cannot be recovered — you will need
 # to re-run `seshat login` and `seshat config` afterwards.
 # Uses SESHAT_RUNTIME_ROOT if set, otherwise falls back to ~/.config/seshat-*.
@@ -97,24 +97,6 @@ clean-all: clean clean-runtime
 hooks:
 	git config core.hooksPath .githooks
 	@echo "Git hooks installed from .githooks/"
-
-# ── Python / docling (optional feature) ───────────────────────────────────────
-# install-python creates the managed venv and installs docling-serve.
-# It is called automatically by `make setup`; use it to update or reinstall.
-#
-# Options (env vars):
-#   DOCLING_EXTRAS=gpu      → GPU-accelerated conversion
-#   PYTHON_VERSION=3.12     → specific Python version
-
-install-python:
-	@./scripts/install-python-env.sh
-
-# Start docling-serve manually.
-# Seshat auto-starts it at launch when the venv is installed — this is only
-# needed if you want to run it as a standalone process.
-
-start-docling:
-	@./scripts/start-docling.sh
 
 # ── pkg/nativedoc (optional, opt-in) ──────────────────────────────────────────
 # Fully native PDF/DOCX/XLSX conversion (including OCR/layout for scanned

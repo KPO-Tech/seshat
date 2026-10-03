@@ -4,20 +4,14 @@
 # What it does:
 #   1. Verifies Go 1.21+
 #   2. Installs ripgrep (required for glob/grep tools)
-#   3. Installs uv (Rust-based Python manager — no system Python needed)
-#   4. Creates Python venv + installs docling-serve for document conversion
-#   5. Builds seshat and seshat-grpc binaries to bin/
-#   6. Installs git pre-commit hooks
+#   3. Builds seshat and seshat-grpc binaries to bin/
+#   4. Installs git pre-commit hooks
 #
 # Usage:
 #   ./scripts/setup.sh
-#   DOCLING_EXTRAS=gpu ./scripts/setup.sh    # GPU-accelerated docling
 #
 # Environment variables:
 #   SESHAT_RUNTIME_ROOT   Override data dir (default: ~/.config/seshat-cli)
-#   DOCLING_EXTRAS        pip extras for docling-serve (e.g. "gpu")
-#   PYTHON_VERSION        Python version for the venv (default: 3.11)
-#   SKIP_PYTHON           Set to 1 to skip the Python/docling setup step
 
 set -euo pipefail
 
@@ -118,38 +112,7 @@ else
     fi
 fi
 
-# ── 3. uv ─────────────────────────────────────────────────────────────────────
-step "Checking uv (Python manager)..."
-
-if command -v uv &>/dev/null; then
-    ok "uv $(uv --version)"
-else
-    info "Installing uv..."
-    if command -v curl &>/dev/null; then
-        curl -LsSf https://astral.sh/uv/install.sh | sh
-    elif command -v wget &>/dev/null; then
-        wget -qO- https://astral.sh/uv/install.sh | sh
-    else
-        fail "curl or wget required to install uv."
-    fi
-    # Add uv to PATH for the rest of this session
-    export PATH="$HOME/.local/bin:$HOME/.cargo/bin:$PATH"
-    if ! command -v uv &>/dev/null; then
-        fail "uv installed but not on PATH.\nAdd \$HOME/.local/bin to your PATH then re-run setup."
-    fi
-    ok "uv $(uv --version)"
-fi
-
-# ── 4. Python venv + docling-serve ────────────────────────────────────────────
-if [ "${SKIP_PYTHON:-0}" = "1" ]; then
-    warn "Skipping Python/docling setup (SKIP_PYTHON=1)"
-else
-    step "Setting up Python environment..."
-    SESHAT_CONFIG_DIR="$SESHAT_RUNTIME_ROOT" \
-        bash "$REPO_ROOT/scripts/install-python-env.sh"
-fi
-
-# ── 5. Build ──────────────────────────────────────────────────────────────────
+# ── 3. Build ──────────────────────────────────────────────────────────────────
 step "Building Seshat..."
 
 cd "$REPO_ROOT"
@@ -159,7 +122,7 @@ go build -o bin/seshat-grpc ./cmd/grpc
 ok "bin/seshat"
 ok "bin/seshat-grpc"
 
-# ── 6. Git hooks ──────────────────────────────────────────────────────────────
+# ── 4. Git hooks ──────────────────────────────────────────────────────────────
 step "Installing git hooks..."
 
 if [ -d "$REPO_ROOT/.githooks" ] && git -C "$REPO_ROOT" rev-parse --git-dir &>/dev/null; then

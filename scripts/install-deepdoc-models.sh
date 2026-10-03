@@ -5,9 +5,9 @@
 # repository (Apache-2.0 — see docs/issues/document-intelligence-roadmap.md
 # Phase 0 for the full license audit).
 #
-# This mirrors install-python-env.sh's docling-serve provisioning: same
+# This follows the same pattern as the other setup scripts: same
 # runtime-root resolution, same idempotent/re-runnable shape. Unlike
-# docling-serve, nativedoc is opt-in (see pkg/nativedoc's own doc comment) -
+# the Python services, nativedoc is opt-in (see pkg/nativedoc's own doc comment) -
 # running this script does nothing on its own; a caller still has to pass
 # the resulting directory to nativedoc.New(...).
 #

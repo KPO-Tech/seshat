@@ -171,11 +171,10 @@ The engine is intentionally kept minimal and fast. If you need something from th
 curl -fsSL https://raw.githubusercontent.com/KPO-Tech/seshat/main/scripts/install.sh | bash
 ```
 
-Downloads the right binary for your platform, adds it to your PATH, installs `uv` and `docling-serve` for document processing, and leaves the runtime directory (`~/.config/seshat-cli/`) ready. The DB and sessions are created on first run.
+Downloads the right binary for your platform, adds it to your PATH, and leaves the runtime directory (`~/.config/seshat-cli/`) ready. The DB and sessions are created on first run.
 
 Options:
 ```bash
-NO_PYTHON=1    bash <(curl -fsSL ...)   # skip uv + docling (minimal install)
 VERSION=v0.1.0 bash <(curl -fsSL ...)   # pin a specific version
 ```
 
@@ -184,12 +183,6 @@ VERSION=v0.1.0 bash <(curl -fsSL ...)   # pin a specific version
 ```bash
 # Install the CLI binary
 go install github.com/KPO-Tech/seshat/cmd/cli@latest
-
-# Then set up document processing if needed
-seshat setup
-
-# Or check what is already installed
-seshat setup --check
 ```
 
 **SDK — embed in your Go application:**
@@ -214,8 +207,6 @@ curl -fsSL https://raw.githubusercontent.com/KPO-Tech/seshat/main/scripts/instal
 
 # Developers — binary only via Go toolchain:
 go install github.com/KPO-Tech/seshat/cmd/cli@latest
-seshat setup          # install uv + docling-serve afterwards if needed
-seshat setup --check  # check what is already configured
 ```
 
 **Configure a provider**
@@ -234,7 +225,6 @@ seshat chat --resume <session-id>                      # resume a specific sessi
 seshat chat --continue                                 # resume the most recent session
 seshat run "list all TODO comments in this codebase"   # one-shot task
 seshat sessions list                                   # browse past sessions
-seshat setup --check                                   # show uv / docling status
 seshat version                                         # print installed version
 seshat help                                            # full command reference
 ```
@@ -356,7 +346,6 @@ seshat/
 │   ├── auth/             ← provider auth abstraction, OAuth device flow
 │   ├── workspace/        ← sandbox path resolution, workspace layout
 │   ├── monitoring/       ← Prometheus metrics, OTel spans
-│   ├── docling/          ← PDF/DOCX/audio conversion via docling-serve
 │   ├── grpc/             ← proto definitions and generated code
 │   └── config/           ← app-level config from env
 └── internal/             ← private implementation (do not import directly)
@@ -492,7 +481,7 @@ make setup
 powershell -ExecutionPolicy Bypass -File scripts\setup.ps1
 ```
 
-`make setup` handles everything: Go version check, ripgrep, uv, Python venv with docling-serve, and the final build. Binaries land in `bin/`.
+`make setup` handles everything: Go version check, ripgrep, and the final build. Binaries land in `bin/`.
 
 ### Daily commands
 
@@ -503,27 +492,14 @@ make test-race       # run tests with race detector
 make lint            # golangci-lint
 make fmt             # gofmt
 make hooks           # (re-)install git pre-commit hooks
-make install-python  # install/update the Python venv + docling-serve only
-make start-docling   # start docling-serve manually (auto-started by seshat chat)
 make clean           # remove bin/
 make clean-runtime   # erase runtime data (~/.config/seshat-cli)
 make clean-all       # both
 ```
 
-### seshat setup (runtime, not source)
-
-When the CLI is installed via `curl | bash` or `go install`, use the built-in setup command to manage the Python environment:
-
-```bash
-seshat setup                      # install uv + docling-serve
-seshat setup --check              # show status without installing
-seshat setup --python 3.12        # use a specific Python version
-seshat setup --extras gpu         # GPU-accelerated docling
-```
-
 ### Runtime data directory
 
-Seshat stores sessions, config, and the Python venv under a platform-appropriate directory:
+Seshat stores sessions and config under a platform-appropriate directory:
 
 | OS | Default path |
 |---|---|
@@ -537,7 +513,7 @@ Override with `SESHAT_RUNTIME_ROOT=/your/path seshat chat`.
 
 > **ripgrep** — the `glob` and `grep` tools require [`ripgrep`](https://github.com/BurntSushi/ripgrep) (`rg`). Included in `make setup`; install separately with `make install-deps`.
 
-> **docling-serve** (optional) — enables the `read_document_url` tool for PDF/DOCX conversion. Included in `make setup` via `uv` (no system Python required). Seshat auto-starts it on launch when installed.
+> **A document-reader service** (optional) — for scans and complex layouts, run seshat-intelligence (or any compatible service) yourself and set `DOCUMENT_READER_URL`. The built-in reader needs nothing installed.
 
 ### OS compatibility
 

@@ -3,10 +3,8 @@
 # What it does:
 #   1. Verifies Go 1.21+
 #   2. Installs ripgrep (winget / scoop / choco)
-#   3. Installs uv (Python manager — no system Python needed)
-#   4. Creates Python venv + installs docling-serve
-#   5. Builds seshat.exe and seshat-grpc.exe to bin\
-#   6. Installs git pre-commit hooks
+#   3. Builds seshat.exe and seshat-grpc.exe to bin\
+#   4. Installs git pre-commit hooks
 #
 # Usage:
 #   powershell -ExecutionPolicy Bypass -File scripts\setup.ps1
@@ -72,48 +70,7 @@ if (Get-Command rg -ErrorAction SilentlyContinue) {
     }
 }
 
-# ── 3. uv ─────────────────────────────────────────────────────────────────────
-Write-Step "Checking uv (Python manager)..."
-
-if (Get-Command uv -ErrorAction SilentlyContinue) {
-    Write-Ok "uv $(uv --version)"
-} else {
-    Write-Info "Installing uv..."
-    try {
-        Invoke-RestMethod https://astral.sh/uv/install.ps1 | Invoke-Expression
-        # Refresh PATH for this session
-        $env:PATH = [System.Environment]::GetEnvironmentVariable("PATH", "User") + ";" + $env:PATH
-        Write-Ok "uv $(uv --version)"
-    } catch {
-        Write-Fail "Failed to install uv: $_`nInstall manually: https://docs.astral.sh/uv/getting-started/installation/"
-    }
-}
-
-# ── 4. Python venv + docling-serve ────────────────────────────────────────────
-if ($env:SKIP_PYTHON -eq "1") {
-    Write-Warn "Skipping Python/docling setup (SKIP_PYTHON=1)"
-} else {
-    Write-Step "Setting up Python environment..."
-
-    $venvDir = Join-Path $env:SESHAT_RUNTIME_ROOT ".venv"
-    $doclingBin = Join-Path $venvDir "Scripts\docling-serve.exe"
-
-    if (-not (Test-Path $doclingBin)) {
-        Write-Info "Creating venv at $venvDir..."
-        New-Item -ItemType Directory -Force -Path $env:SESHAT_RUNTIME_ROOT | Out-Null
-        uv venv $venvDir --python 3.11 --seed
-
-        $pyBin = Join-Path $venvDir "Scripts\python.exe"
-        $pkg = if ($env:DOCLING_EXTRAS) { "docling-serve[$env:DOCLING_EXTRAS]" } else { "docling-serve" }
-        Write-Info "Installing $pkg..."
-        uv pip install --python $pyBin $pkg
-        Write-Ok "docling-serve installed"
-    } else {
-        Write-Ok "docling-serve (already installed)"
-    }
-}
-
-# ── 5. Build ──────────────────────────────────────────────────────────────────
+# ── 3. Build ──────────────────────────────────────────────────────────────────
 Write-Step "Building Seshat..."
 
 Set-Location $RepoRoot
@@ -123,7 +80,7 @@ Write-Ok "bin\seshat.exe"
 go build -o "bin\seshat-grpc.exe" ".\cmd\grpc"
 Write-Ok "bin\seshat-grpc.exe"
 
-# ── 6. Git hooks ──────────────────────────────────────────────────────────────
+# ── 4. Git hooks ──────────────────────────────────────────────────────────────
 Write-Step "Installing git hooks..."
 
 $hooksDir = Join-Path $RepoRoot ".githooks"
