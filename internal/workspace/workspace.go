@@ -5,6 +5,8 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+
+	"github.com/KPO-Tech/seshat/pkg/runtimepath"
 )
 
 const (
@@ -192,9 +194,5 @@ func Resolve(path, workspaceRoot string) (string, error) {
 }
 
 func baseDir() (string, error) {
-	home, err := os.UserHomeDir()
-	if err != nil {
-		return "", fmt.Errorf("resolve home dir: %w", err)
-	}
-	return filepath.Join(home, ".config", "seshat", "workspaces"), nil
+	return runtimepath.WorkspacesDir(""), nil
 }

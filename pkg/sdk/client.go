@@ -31,6 +31,7 @@ import (
 	"github.com/KPO-Tech/seshat/internal/types"
 	browsercore "github.com/KPO-Tech/seshat/internal/web/browser"
 	"github.com/KPO-Tech/seshat/pkg/companion"
+	"github.com/KPO-Tech/seshat/pkg/runtimepath"
 )
 
 // Client provides a high-level SDK for headless AI operations.
@@ -512,6 +513,9 @@ func (c *Client) DeleteSession(sessionID SessionID) error {
 	if err := c.store.DeleteSession(sessionID); err != nil {
 		return err
 	}
+	// The session's directory (plans, pastes, screenshots, tool output) and its permission grants are
+	// not artifacts in the store, so they are removed here. Best effort, like the artifact cleanup.
+	_ = runtimepath.RemoveSessionData("", string(sessionID))
 	if c.artifacts != nil {
 		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 		defer cancel()
@@ -520,16 +524,18 @@ func (c *Client) DeleteSession(sessionID SessionID) error {
 	return nil
 }
 
-// deleteSessionArtifacts removes all artifacts stored under sessions/{id}/.
-// This handles S3 storage where os.RemoveAll is not available.
-// Errors are intentionally ignored — artifact cleanup is best-effort.
+// deleteSessionArtifacts removes all artifacts stored under workspaces/{id}/, and under the sessions/{id}/
+// prefix older versions used. This handles S3 storage where os.RemoveAll is not available.
+// Errors are intentionally ignored - artifact cleanup is best-effort.
 func deleteSessionArtifacts(ctx context.Context, store ArtifactStore, sessionID string) {
-	refs, err := store.List(ctx, ArtifactListOptions{Prefix: "sessions/" + sessionID})
-	if err != nil {
-		return
-	}
-	for _, ref := range refs {
-		_ = store.Delete(ctx, ref.Key)
+	for _, prefix := range []string{storage.SessionKeyPrefix, storage.LegacySessionKeyPrefix} {
+		refs, err := store.List(ctx, ArtifactListOptions{Prefix: prefix + "/" + sessionID})
+		if err != nil {
+			continue
+		}
+		for _, ref := range refs {
+			_ = store.Delete(ctx, ref.Key)
+		}
 	}
 }
 

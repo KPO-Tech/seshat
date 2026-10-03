@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -15,6 +16,7 @@ import (
 	"github.com/KPO-Tech/seshat/internal/sandbox"
 	tool "github.com/KPO-Tech/seshat/internal/tools/contract"
 	"github.com/KPO-Tech/seshat/internal/types"
+	"github.com/KPO-Tech/seshat/pkg/runtimepath"
 )
 
 type fakeTitleGenerator struct {
@@ -2495,5 +2497,46 @@ func TestSessionAutoTitleGenerationUsesLocalGenerator(t *testing.T) {
 	case <-requestsChan:
 		t.Fatal("unexpected second provider request; title should be local")
 	default:
+	}
+}
+
+func TestDeleteSessionRemovesItsDirectoryAndGrants(t *testing.T) {
+	root := t.TempDir()
+	t.Setenv("SESHAT_RUNTIME_ROOT", root)
+
+	client, err := NewClient(&ClientConfig{
+		PersistSessions:        true,
+		SessionStorageDir:      filepath.Join(root, "data", "sessions"),
+		DisableTitleGeneration: true,
+	})
+	if err != nil {
+		t.Fatalf("NewClient failed: %v", err)
+	}
+	defer client.Close()
+
+	session, err := client.CreateSession(context.Background())
+	if err != nil {
+		t.Fatalf("CreateSession failed: %v", err)
+	}
+	id := string(session.GetID())
+
+	plan := filepath.Join(runtimepath.SessionPlansDir("", id), "plan.md")
+	grants := runtimepath.SessionPermissionsPath("", id)
+	for _, path := range []string{plan, grants} {
+		if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(path, []byte("x"), 0o600); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	if err := client.DeleteSession(session.GetID()); err != nil {
+		t.Fatalf("DeleteSession failed: %v", err)
+	}
+	for _, path := range []string{filepath.Dir(plan), grants} {
+		if _, err := os.Stat(path); !os.IsNotExist(err) {
+			t.Errorf("%s should have been removed with the session (err=%v)", path, err)
+		}
 	}
 }

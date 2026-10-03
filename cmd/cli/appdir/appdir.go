@@ -2,7 +2,7 @@
 //
 // All persistent data lives under Root() (~/.config/seshat-tui/ by default, or
 // the value of SESHAT_RUNTIME_ROOT). Session-scoped data is isolated under
-// sessions/{session_id}/ so deleting a session is a single os.RemoveAll call.
+// workspaces/{session_id}/ so deleting a session is a single os.RemoveAll call.
 //
 // Directory layout:
 //
@@ -10,7 +10,7 @@
 //	├── logs/
 //	├── documents/          ← user-uploaded PDFs and docs (global, persistent)
 //	├── rag/                ← RAG-indexed documents (global, persistent)
-//	└── sessions/
+//	└── workspaces/
 //	    └── {session_id}/
 //	        ├── artifacts/
 //	        │   ├── screenshots/    ← browser screenshots
@@ -80,16 +80,12 @@ func SessionArtifactsAudioDir(sessionID string) string {
 // GlobalConfigPath returns the path to the global TUI config file (seshat.json).
 func GlobalConfigPath() string { return filepath.Join(Root(), "seshat.json") }
 
-// EnsureAppDirs creates the top-level directories required at startup and
-// seeds seshat.json with an empty object if the file does not yet exist.
-// Safe to call multiple times (os.MkdirAll and the existence check are both idempotent).
+// EnsureAppDirs creates the top-level directories required at startup, moves what older versions wrote
+// under sessions/{id}/ to workspaces/{id}/ (see runtimepath.MigrateLegacySessionDirs), and seeds
+// seshat.json with an empty object if the file does not yet exist.
+// Safe to call multiple times (os.MkdirAll, the migration and the existence check are all idempotent).
 //
-// SessionsDir() is deliberately not created here: it belongs to the
-// sessions/{id}/... on-disk layout proposed in
-// docs/issues/session-directory-layout.md, which was never wired up
-// (EnsureSessionDir is unused) - real session data goes through the
-// storage.StorageProvider "sessions" key prefix instead (see internal/storage/keys.go).
-// Creating an always-empty dir here just looks like silent data loss.
+// The per-session directory itself is not created here: it is created when a session needs it.
 func EnsureAppDirs() error {
 	dirs := []string{
 		LogsDir(),
@@ -99,6 +95,7 @@ func EnsureAppDirs() error {
 			return err
 		}
 	}
+	_, _ = runtimepath.MigrateLegacySessionDirs("") // best effort: what could not move stays where it was
 	cfgPath := GlobalConfigPath()
 	if _, err := os.Stat(cfgPath); os.IsNotExist(err) {
 		if err := os.WriteFile(cfgPath, []byte("{}\n"), 0o600); err != nil {
@@ -108,7 +105,7 @@ func EnsureAppDirs() error {
 	return nil
 }
 
-// EnsureSessionDir creates sessions/{id}/ and all standard subdirectories.
+// EnsureSessionDir creates workspaces/{id}/ and all standard subdirectories.
 // Call this when a session starts, before any tools run. Safe to call multiple times.
 func EnsureSessionDir(sessionID string) error {
 	dirs := []string{
@@ -130,9 +127,9 @@ func EnsureSessionDir(sessionID string) error {
 	return nil
 }
 
-// DeleteSessionDir removes sessions/{id}/ and all its contents in one call.
+// DeleteSessionDir removes workspaces/{id}/ with all its contents, and the session's permission grants.
 // Covers screenshots, plans, tools, artifacts, logs — everything.
 // Errors are intentionally ignored; DB cleanup is the authoritative deletion.
 func DeleteSessionDir(sessionID string) {
-	_ = os.RemoveAll(filepath.Join(SessionsDir(), sessionID))
+	_ = runtimepath.RemoveSessionData("", sessionID)
 }

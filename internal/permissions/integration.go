@@ -151,8 +151,7 @@ func (i *Integrator) ResolverWithContext(
 					i.sessionTools = make(map[types.SessionID]map[string]bool)
 				}
 				if i.sessionTools[requestSessionID] == nil {
-					sessionDir := runtimepath.SessionDir("", string(requestSessionID))
-					filePath := filepath.Join(sessionDir, "permissions.json")
+					filePath := runtimepath.SessionPermissionsPath("", string(requestSessionID))
 					loadedMap := make(map[string]bool)
 					if data, err := os.ReadFile(filePath); err == nil {
 						_ = json.Unmarshal(data, &loadedMap)
@@ -432,7 +431,7 @@ func (i *Integrator) CheckToolUse(
 }
 
 // persistSessionApproval records key as granted for sessionID, both in memory
-// and on disk (~/.../sessions/<id>/permissions.json), reusing the same file
+// and on disk (~/.../data/permissions/<id>.json), reusing the same file
 // the "always approve this tool" flow already writes to. key is either a bare
 // tool name (whole-tool grant) or a requestPermissionsSessionKey signature
 // (content-scoped grant).
@@ -447,9 +446,8 @@ func (i *Integrator) persistSessionApproval(sessionID types.SessionID, key strin
 	}
 	i.sessionTools[sessionID][key] = true
 
-	sessionDir := runtimepath.SessionDir("", string(sessionID))
-	filePath := filepath.Join(sessionDir, "permissions.json")
-	if err := os.MkdirAll(sessionDir, 0700); err == nil {
+	filePath := runtimepath.SessionPermissionsPath("", string(sessionID))
+	if err := os.MkdirAll(filepath.Dir(filePath), 0700); err == nil {
 		if data, err := json.Marshal(i.sessionTools[sessionID]); err == nil {
 			_ = os.WriteFile(filePath, data, 0600)
 		}

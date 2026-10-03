@@ -32,7 +32,7 @@ const DefaultS3Region = "us-east-1"
 
 // DefaultLocalPath returns the root directory for the local artifact store.
 // Using the runtime root directly (not a storage/ subdirectory) so that
-// session-scoped keys (sessions/{id}/images/, sessions/{id}/tools/, …) land
+// session-scoped keys (workspaces/{id}/artifacts/, workspaces/{id}/tools/, …) land
 // at the same level as plans and logs — all under ~/.config/seshat-cli/.
 // Non-session namespaces (documents/, rag/, artifacts/web/) are unaffected.
 func DefaultLocalPath() string {

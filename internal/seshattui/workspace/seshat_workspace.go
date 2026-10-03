@@ -391,7 +391,7 @@ func (w *SeshatWorkspace) DeleteSession(_ context.Context, sessionID string) err
 	w.msgMu.Unlock()
 
 	w.sessBroker.Publish(pubsub.DeletedEvent, s)
-	// Remove sessions/{id}/ from disk; DB cascade already cleaned up all records.
+	// Remove workspaces/{id}/ from disk; DB cascade already cleaned up all records.
 	appdir.DeleteSessionDir(sessionID)
 	return nil
 }

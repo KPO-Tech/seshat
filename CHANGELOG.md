@@ -9,6 +9,18 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [1.2.59] - 2026-10-03
+
+### Changed
+
+- A session has one directory, `workspaces/{id}/`, instead of two. Plans, pastes, screenshots, tool output and the session log used to live in `sessions/{id}/` next to the `workspaces/{id}/` that hosts such as seshat-backend use for the files of a session; they are now in the same place, so the files a user attaches and the files the agent writes are together and deleting a session removes them all. `runtimepath.SessionDir` and `SessionsDir` now point there, and the artifact store keys use the `workspaces/` prefix.
+- The permissions a session has been granted ("always allow this tool") moved from `sessions/{id}/permissions.json` to `data/permissions/{id}.json`. They stay outside the session directory on purpose: the agent can write inside it, and a grant it could edit is a grant it could give itself.
+
+### Added
+
+- `runtimepath.MigrateLegacySessionDirs` moves what older versions wrote under `sessions/{id}/` to the new places, never overwriting. The CLI runs it at start; hosts that embed the SDK call it once at start.
+- `runtimepath.RemoveSessionData` removes a session's directory and its grants. `Client.DeleteSession` calls it, so deleting a session no longer leaves its plans and grants behind: the old layout left a `sessions/{id}/` folder for every session that had ever used plan mode or asked for a permission.
+
 ## [1.2.58] - 2026-10-03
 
 ### Changed
