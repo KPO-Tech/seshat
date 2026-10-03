@@ -9,6 +9,8 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [1.2.58] - 2026-10-03
+
 ### Changed
 - `read_file` reads a PDF page by page, with a `--- page N ---` marker before each page. With no `pages` it reads from the start; with `pages` ("3", "10-20", "5-") those pages. A read is bounded by cost, not page count: it stops at a page boundary after 120,000 characters, or after sending 20 pages with no text layer to the document reader, and says which page to continue from. The result names the pages that hold images or have no readable text.
 - Only the pages a read returns are read, in batches of ten, and each is remembered per file (path, size, modification time), so the first read of a long document is quick and a page an engine had to read is never paid for twice.
