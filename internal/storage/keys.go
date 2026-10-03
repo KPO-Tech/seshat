@@ -9,6 +9,13 @@ import (
 	"time"
 )
 
+// SessionKeyPrefix is where the artifacts of a session are stored. It is the session's directory
+// (runtimepath.SessionDir) when the store is local, so a session has one directory, not two.
+const SessionKeyPrefix = "workspaces"
+
+// LegacySessionKeyPrefix is where they were stored before v1.2.59.
+const LegacySessionKeyPrefix = "sessions"
+
 func BuildArtifactKey(request ArtifactPutRequest) string {
 	now := request.Timestamp.UTC()
 	if now.IsZero() {
@@ -41,21 +48,21 @@ func sessionScopedArtifactPrefix(request ArtifactPutRequest, namespace string, d
 	sessionID := sanitizePathSegment(request.SessionID)
 	switch namespace {
 	case string(NamespaceBrowserScreenshots):
-		parts := []string{"sessions", sessionID, "artifacts", "screenshots"}
+		parts := []string{SessionKeyPrefix, sessionID, "artifacts", "screenshots"}
 		if request.PageID != "" {
 			parts = append(parts, sanitizePathSegment(request.PageID))
 		}
 		parts = append(parts, datePrefix)
 		return path.Join(parts...), true
 	case string(NamespaceBrowserDownloads):
-		parts := []string{"sessions", sessionID, "tools"}
+		parts := []string{SessionKeyPrefix, sessionID, "tools"}
 		if request.PageID != "" {
 			parts = append(parts, sanitizePathSegment(request.PageID))
 		}
 		parts = append(parts, datePrefix)
 		return path.Join(parts...), true
 	case string(NamespaceWebArtifacts):
-		return path.Join("sessions", sessionID, "artifacts", "web", datePrefix), true
+		return path.Join(SessionKeyPrefix, sessionID, "artifacts", "web", datePrefix), true
 	default:
 		return "", false
 	}
@@ -71,7 +78,7 @@ func PDFKey(title string, now time.Time) string {
 }
 
 // ScreenshotKey builds a session-scoped storage key for a browser screenshot.
-// Layout: sessions/{sessionID}/artifacts/screenshots/{pageID}/{date}/{timestamp}-screenshot.png
+// Layout: workspaces/{sessionID}/artifacts/screenshots/{pageID}/{date}/{timestamp}-screenshot.png
 // Must match the path produced by BuildArtifactKey(NamespaceBrowserScreenshots).
 func ScreenshotKey(sessionID, pageID string, now time.Time) string {
 	now = now.UTC()
@@ -79,7 +86,7 @@ func ScreenshotKey(sessionID, pageID string, now time.Time) string {
 		now = time.Now().UTC()
 	}
 	datePrefix := fmt.Sprintf("%04d/%02d/%02d", now.Year(), now.Month(), now.Day())
-	parts := []string{"sessions", sanitizePathSegment(sessionID), "artifacts", "screenshots"}
+	parts := []string{SessionKeyPrefix, sanitizePathSegment(sessionID), "artifacts", "screenshots"}
 	if pageID != "" {
 		parts = append(parts, sanitizePathSegment(pageID))
 	}
@@ -88,7 +95,7 @@ func ScreenshotKey(sessionID, pageID string, now time.Time) string {
 }
 
 // DownloadKey builds a session-scoped storage key for a browser download.
-// Layout: sessions/{sessionID}/tools/{pageID}/{date}/{timestamp}-{filename}
+// Layout: workspaces/{sessionID}/tools/{pageID}/{date}/{timestamp}-{filename}
 func DownloadKey(sessionID, pageID, filename string, now time.Time) string {
 	now = now.UTC()
 	if now.IsZero() {
@@ -96,7 +103,7 @@ func DownloadKey(sessionID, pageID, filename string, now time.Time) string {
 	}
 	datePrefix := fmt.Sprintf("%04d/%02d/%02d", now.Year(), now.Month(), now.Day())
 	filename = normalizeArtifactFilename(filename, DetectContentType(filename), "download")
-	parts := []string{"sessions", sanitizePathSegment(sessionID), "tools"}
+	parts := []string{SessionKeyPrefix, sanitizePathSegment(sessionID), "tools"}
 	if pageID != "" {
 		parts = append(parts, sanitizePathSegment(pageID))
 	}
@@ -105,7 +112,7 @@ func DownloadKey(sessionID, pageID, filename string, now time.Time) string {
 }
 
 // WebArtifactKey builds a session-scoped key for web-fetched content.
-// Layout: sessions/{sessionID}/artifacts/web/{date}/{timestamp}-{filename}
+// Layout: workspaces/{sessionID}/artifacts/web/{date}/{timestamp}-{filename}
 func WebArtifactKey(sessionID, filename string, now time.Time) string {
 	now = now.UTC()
 	if now.IsZero() {
@@ -113,12 +120,12 @@ func WebArtifactKey(sessionID, filename string, now time.Time) string {
 	}
 	datePrefix := fmt.Sprintf("%04d/%02d/%02d", now.Year(), now.Month(), now.Day())
 	filename = normalizeArtifactFilename(filename, DetectContentType(filename), "fetched")
-	parts := []string{"sessions", sanitizePathSegment(sessionID), "artifacts", "web", datePrefix}
+	parts := []string{SessionKeyPrefix, sanitizePathSegment(sessionID), "artifacts", "web", datePrefix}
 	return path.Join(append(parts, fmt.Sprintf("%d-%s", now.UnixNano(), filename))...)
 }
 
 // GeneratedImageKey builds a session-scoped key for an AI-generated image.
-// Layout: sessions/{sessionID}/artifacts/images/{date}/{timestamp}-{filename}
+// Layout: workspaces/{sessionID}/artifacts/images/{date}/{timestamp}-{filename}
 func GeneratedImageKey(sessionID, filename string, now time.Time) string {
 	now = now.UTC()
 	if now.IsZero() {
@@ -126,12 +133,12 @@ func GeneratedImageKey(sessionID, filename string, now time.Time) string {
 	}
 	datePrefix := fmt.Sprintf("%04d/%02d/%02d", now.Year(), now.Month(), now.Day())
 	filename = normalizeArtifactFilename(filename, DetectContentType(filename), "image")
-	parts := []string{"sessions", sanitizePathSegment(sessionID), "artifacts", "images", datePrefix}
+	parts := []string{SessionKeyPrefix, sanitizePathSegment(sessionID), "artifacts", "images", datePrefix}
 	return path.Join(append(parts, fmt.Sprintf("%d-%s", now.UnixNano(), filename))...)
 }
 
 // AudioKey builds a session-scoped key for a TTS/STT audio file.
-// Layout: sessions/{sessionID}/artifacts/audio/{date}/{timestamp}-{filename}
+// Layout: workspaces/{sessionID}/artifacts/audio/{date}/{timestamp}-{filename}
 func AudioKey(sessionID, filename string, now time.Time) string {
 	now = now.UTC()
 	if now.IsZero() {
@@ -139,7 +146,7 @@ func AudioKey(sessionID, filename string, now time.Time) string {
 	}
 	datePrefix := fmt.Sprintf("%04d/%02d/%02d", now.Year(), now.Month(), now.Day())
 	filename = normalizeArtifactFilename(filename, DetectContentType(filename), "audio")
-	parts := []string{"sessions", sanitizePathSegment(sessionID), "artifacts", "audio", datePrefix}
+	parts := []string{SessionKeyPrefix, sanitizePathSegment(sessionID), "artifacts", "audio", datePrefix}
 	return path.Join(append(parts, fmt.Sprintf("%d-%s", now.UnixNano(), filename))...)
 }
 

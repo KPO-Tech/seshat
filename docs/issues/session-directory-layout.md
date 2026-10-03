@@ -1,5 +1,7 @@
 # Session-Scoped Directory Layout
 
+> **Mis à jour en v1.2.59.** Le répertoire d'une session est `workspaces/{id}/` et non plus `sessions/{id}/`, de sorte qu'une session n'a qu'un seul répertoire (celui que le backend utilise aussi comme espace de travail). Les permissions accordées sont dans `data/permissions/{id}.json`, hors de ce répertoire. Les chemins `sessions/{id}/` ci-dessous sont ceux de la proposition d'origine ; voir `docs/storage.md` pour la disposition actuelle.
+
 ## Problème actuel
 
 Le répertoire de travail `~/.config/seshat-cli/` est un patchwork de conventions disparates :

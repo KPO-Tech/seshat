@@ -523,7 +523,7 @@ State is saved after each turn to the configured backend:
 | Backend | Path | Notes |
 |---|---|---|
 | SQLite | `~/.seshat/sessions.db` | Default; supports `session_metadata`, `session_transcript_entries`, `session_checkpoints` |
-| Filesystem | `.seshat/sessions/` | JSON files per session |
+| Filesystem | `workspaces/{id}/` | JSON files per session |
 | Memory | — | Testing only |
 
 ### Compaction
