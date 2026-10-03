@@ -256,8 +256,8 @@ func layoutMarkdownPage(texts []pdf.Text, skip map[int]bool, rul rulings, models
 	placeGlyphs(glyphs)
 	var tables []foundTable
 	var used [][]int
-	if len(rul.h) >= minRegionRules {
-		tables, used = buildTables(findRegions(rul), glyphs, pageWidth(glyphs))
+	if len(rul.h) >= 1 {
+		tables, used = buildTables(rul, glyphs, pageWidth(glyphs))
 	}
 	if models.opts.Tables != nil {
 		taken := make([]bool, len(glyphs))
