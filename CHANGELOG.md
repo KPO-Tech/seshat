@@ -9,6 +9,10 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Fixed
+
+- A PDF page with no text at all (a cover, a blank page, a full-page picture) no longer makes the whole document unreadable when no engine and no vision model is configured: one such page failed 3 of the 13 PDFs of the chunking benchmark corpus (a book of 60 pages, a deck of 25, a report of 18). The page is kept as it is, with a marker for each picture it holds (`[Image 1 on page 7]`), or empty when it holds none. A PDF none of whose pages has text (a scan) is still "nothing extracted", and so is any document when an engine is configured and does not answer: that must not leave a hole nobody sees.
+
 ## [1.2.68] - 2026-10-04
 
 ### Added

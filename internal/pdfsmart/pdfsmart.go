@@ -272,6 +272,12 @@ func ReadPages(ctx context.Context, data []byte, pages []int, opts Options, docu
 	var sb strings.Builder
 	allOK := true
 	enginePages := 0
+	// Nothing is configured that could read a page the text layer does not give: no engine and no vision model. A
+	// page that holds no text is then kept as it is, with a marker for each of its pictures, instead of failing the
+	// document (a cover, a blank page, a full-page picture). An engine that is configured but does not answer is not
+	// this case: the document stays unread, to be read again once the engine is back.
+	noReader := documentReader == nil && (vision.Renderer == nil || vision.Transcriber == nil)
+	pagesRead, pagesLeftToPictures := 0, 0
 
 	for _, i := range wanted {
 		needsDocling := opts.ImagePagesNeedEngine && pagesWithImages[i]
@@ -336,12 +342,20 @@ func ReadPages(ctx context.Context, data []byte, pages []int, opts Options, docu
 					text, native, source = md, md, PageSourceNative
 				}
 			}
-			if strings.TrimSpace(text) == "" {
+			if strings.TrimSpace(text) == "" && noReader {
+				pagesLeftToPictures++
+				source = PageSourceNative
+				text, pictures = withImageMarkers("", i, pagePictures[i])
+				text = strings.TrimSpace(text)
+			} else if strings.TrimSpace(text) == "" {
 				allOK = false
 			}
 		}
 		if source == PageSourceNative && native != "" {
 			text, pictures = withImageMarkers(native, i, pagePictures[i])
+		}
+		if native != "" || (strings.TrimSpace(text) != "" && source != PageSourceNative) {
+			pagesRead++
 		}
 
 		result.Pages = append(result.Pages, PageResult{
@@ -357,6 +371,11 @@ func ReadPages(ctx context.Context, data []byte, pages []int, opts Options, docu
 			}
 			sb.WriteString(text)
 		}
+	}
+
+	// Pages left to their pictures are not a document: when no page gave any text it is a scan, which needs an engine.
+	if pagesLeftToPictures > 0 && pagesRead == 0 {
+		allOK = false
 	}
 
 	result.Markdown = sb.String()

@@ -81,3 +81,17 @@ func captionsIn(text string) []string {
 	}
 	return captions
 }
+
+var markerLine = regexp.MustCompile(`^\[Image \d+ on page \d+(: .*)?\]$`)
+
+// HasText says whether the page gave any text besides the markers of its pictures: a page that is only its markers has
+// not been read, and a host that tells the pages it could not read from the others must not count it as read.
+func (p PageResult) HasText() bool {
+	for _, line := range strings.Split(p.Text, "\n") {
+		line = strings.TrimSpace(line)
+		if line != "" && !markerLine.MatchString(line) {
+			return true
+		}
+	}
+	return false
+}
