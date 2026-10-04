@@ -1,8 +1,6 @@
 package pdftext
 
 import (
-	"os"
-	"path/filepath"
 	"strings"
 	"testing"
 )
@@ -13,15 +11,6 @@ import (
 // rendered to PNG, then wrapped with no text layer) - it exercises the
 // "looks like a scan" detection path with an actual scanned-style PDF, not a
 // synthetic empty one.
-
-func readTestdata(t *testing.T, name string) []byte {
-	t.Helper()
-	data, err := os.ReadFile(filepath.Join("testdata", name))
-	if err != nil {
-		t.Fatalf("failed to read testdata/%s: %v", name, err)
-	}
-	return data
-}
 
 func TestExtract_TextLayerPDF(t *testing.T) {
 	res, err := Extract(readTestdata(t, "text_layer.pdf"))

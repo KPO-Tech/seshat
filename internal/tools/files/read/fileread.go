@@ -109,11 +109,11 @@ func (t *Tool) Definition() tool.Definition {
 				},
 				"offset": map[string]any{
 					"type":        "number",
-					"description": "The line number to start reading from (1-indexed). A negative value counts from the end of the file instead - e.g. offset=-50 starts 50 lines before EOF, useful for tailing logs or large outputs without knowing the total line count. Only provide if the file is too large to read at once.",
+					"description": "The line number to start reading from (1-indexed). A negative value counts from the end of the file instead - e.g. offset=-50 starts 50 lines before EOF, useful for tailing logs or large outputs without knowing the total line count. Also applies to a converted document (DOCX, PPTX, XLSX), whose markdown is read in pieces of about 120,000 characters: the result says which offset to continue from. Only provide if the file is too large to read at once.",
 				},
 				"limit": map[string]any{
 					"type":        "number",
-					"description": "The number of lines to read. Only provide if the file is too large to read at once.",
+					"description": "The number of lines to read (lines of the markdown, for a converted document). Only provide if the file is too large to read at once.",
 				},
 				"pages": map[string]any{
 					"type":        "string",
@@ -260,7 +260,7 @@ func (t *Tool) Call(
 	case FileTypeImage:
 		return t.readImageFile(ctx, filePath, fileInfo)
 	case FileTypeDocumentReader:
-		return t.readDocumentReaderFile(ctx, filePath, fileInfo)
+		return t.readDocumentReaderFile(ctx, filePath, fileInfo, input.Parsed)
 	default:
 		return t.handleBinaryFile(filePath)
 	}
@@ -603,6 +603,7 @@ func (t *Tool) readDocumentReaderFile(
 	ctx context.Context,
 	filePath string,
 	fileInfo os.FileInfo,
+	parsed map[string]any,
 ) (tool.CallResult, error) {
 	select {
 	case <-ctx.Done():
@@ -616,6 +617,23 @@ func (t *Tool) readDocumentReaderFile(
 
 	ext := strings.ToLower(filepath.Ext(filePath))
 	format := strings.TrimPrefix(ext, ".")
+	offset, limit := documentRange(parsed)
+
+	finish := func(result *DocumentReaderFileResult, thin bool) (tool.CallResult, error) {
+		RecordExternalRead(filePath, fileInfo.ModTime(), result.Markdown, true)
+		window := windowDocument(result.Markdown, offset, limit, DocumentMaxCharsPerRead)
+		if window.First > window.Total {
+			return tool.NewErrorResult(fmt.Errorf("offset %d is past the end of the document, which has %d lines", offset, window.Total)), nil
+		}
+		result.Markdown = window.Text
+		if note := window.continuation(); note != "" {
+			result.Notes = append(result.Notes, note)
+		}
+		if thin {
+			result.Notes = append(result.Notes, "This document has little text of its own (it is mostly pictures); what is shown is all that could be read.")
+		}
+		return tool.NewTextResult(t.formatDocumentReaderResult(&FileReadResult{Type: FileTypeDocumentReader, DocumentReader: result})), nil
+	}
 
 	if cached := sidecarMarkdown(filePath, fileInfo); cached != "" {
 		meta := sidecarDocumentMetadata(filePath, fileInfo)
@@ -623,56 +641,52 @@ func (t *Tool) readDocumentReaderFile(
 		for _, img := range meta.Images {
 			images = append(images, PDFImage{Filename: img.Filename, MimeType: img.MimeType})
 		}
-		RecordExternalRead(filePath, fileInfo.ModTime(), cached, true)
-		result := &FileReadResult{
-			Type: FileTypeDocumentReader,
-			DocumentReader: &DocumentReaderFileResult{
-				FilePath:     filePath,
-				Format:       format,
-				Markdown:     cached,
-				OriginalSize: fileInfo.Size(),
-				PageCount:    meta.PageCount,
-				Images:       images,
-				VisualPages:  meta.visualPages(),
-			},
-		}
-		return tool.NewTextResult(t.formatDocumentReaderResult(result)), nil
+		return finish(&DocumentReaderFileResult{
+			FilePath:     filePath,
+			Format:       format,
+			Markdown:     cached,
+			OriginalSize: fileInfo.Size(),
+			PageCount:    meta.PageCount,
+			Images:       images,
+			VisualPages:  meta.visualPages(),
+		}, false)
 	}
 
 	// DOCX/PPTX/XLSX are zipped XML, not scanned documents - no ML/OCR is
 	// needed to read them, so try the native, dependency-free extractor
 	// before ever reaching for the configured document reader. WAV/MP3 (officetext.Extract
-	// returns ok=false for those) still need DocumentReader for transcription.
+	// returns ok=false for those) still need a document reader for transcription.
+	thin := ""
 	if officetext.SupportedExtensions[ext] {
 		data, readErr := os.ReadFile(filePath)
 		if readErr != nil {
 			return tool.NewErrorResult(fmt.Errorf("failed to read %s: %w", strings.ToUpper(format), readErr)), nil
 		}
-		if markdown, ok, sparse, extractErr := officetext.Extract(filePath, data); ok && extractErr == nil && !sparse {
-			RecordExternalRead(filePath, fileInfo.ModTime(), markdown, true)
-			result := &FileReadResult{
-				Type: FileTypeDocumentReader,
-				DocumentReader: &DocumentReaderFileResult{
-					FilePath:     filePath,
-					Format:       format,
-					Markdown:     markdown,
-					OriginalSize: fileInfo.Size(),
-				},
-			}
-			return tool.NewTextResult(t.formatDocumentReaderResult(result)), nil
+		markdown, ok, sparse, extractErr := officetext.Extract(filePath, data)
+		switch {
+		case ok && extractErr == nil && !sparse:
+			return finish(&DocumentReaderFileResult{FilePath: filePath, Format: format, Markdown: markdown, OriginalSize: fileInfo.Size()}, false)
+		case ok && extractErr == nil:
+			// A deck that is mostly pictures, with a title or two of real text: a document reader may get more out
+			// of it (OCR of the pictures), and if none does, what was read is still worth giving.
+			thin = markdown
 		}
-		// Fell through: parse failure, no extractable text, or a sparse
-		// result (e.g. a slide deck that's mostly screenshots/diagrams with
-		// only a title or two of real text - see officetext.MinCharsPerSlide).
-		// Try DocumentReader next since it may still get something out of it (OCR
-		// on embedded images, etc.); if DocumentReader isn't available either, the
-		// message below reports both attempts.
+	}
+	thinResult := func() (tool.CallResult, bool) {
+		if thin == "" {
+			return tool.CallResult{}, false
+		}
+		result, _ := finish(&DocumentReaderFileResult{FilePath: filePath, Format: format, Markdown: thin, OriginalSize: fileInfo.Size()}, true)
+		return result, true
 	}
 
 	if t.documentReader == nil || !t.documentReader.IsAvailable(ctx) {
+		if result, ok := thinResult(); ok {
+			return result, nil
+		}
 		return tool.NewTextResult(fmt.Sprintf(
-			"File: %s\nFormat: %s | Size: %d bytes\n\nThis file format requires the configured document reader for text extraction. Configure the document_reader_url setting to enable automatic conversion of DOCX, PPTX, XLSX, and audio transcription.",
-			filePath, strings.ToUpper(format), fileInfo.Size(),
+			"File: %s\nFormat: %s | Size: %d bytes\n\nNo text could be read from this file, and no document reader is configured to read it any other way.%s",
+			filePath, strings.ToUpper(format), fileInfo.Size(), unreadableFormatHint(ext),
 		)), nil
 	}
 
@@ -681,18 +695,15 @@ func (t *Tool) readDocumentReaderFile(
 		if ctx.Err() != nil {
 			return tool.NewErrorResult(fmt.Errorf("file read cancelled")), nil
 		}
-		if ext == ".wav" || ext == ".mp3" {
-			// the configured document reader's ASR pipeline needs openai-whisper, which is not
-			// part of its default install - a the configured document reader instance set up
-			// via the plain `the configured document reader` package (no DOCLING_EXTRAS=asr)
-			// fails this conversion internally and surfaces it as an opaque
-			// "task result not found" style error, not "whisper is missing".
-			return tool.NewErrorResult(fmt.Errorf(
-				"document-reader conversion failed for %s: %w\n\nAudio transcription requires the configured document reader's ASR extra (openai-whisper), which is not installed by default. Reinstall it with DOCLING_EXTRAS=asr, e.g.: DOCLING_EXTRAS=asr ./scripts/install-python-env.sh",
-				strings.ToUpper(format), err,
-			)), nil
+		if result, ok := thinResult(); ok {
+			return result, nil
 		}
-		return tool.NewErrorResult(fmt.Errorf("document-reader conversion failed for %s: %w", strings.ToUpper(format), err)), nil
+		return tool.NewErrorResult(fmt.Errorf("document-reader conversion failed for %s: %w%s", strings.ToUpper(format), err, unreadableFormatHint(ext))), nil
+	}
+	if strings.TrimSpace(conversion.Markdown) == "" {
+		if result, ok := thinResult(); ok {
+			return result, nil
+		}
 	}
 
 	images := make([]PDFImage, 0, len(conversion.Images))
@@ -703,20 +714,34 @@ func (t *Tool) readDocumentReaderFile(
 			Base64:   img.Base64,
 		})
 	}
+	return finish(&DocumentReaderFileResult{
+		FilePath:     filePath,
+		Format:       format,
+		Markdown:     conversion.Markdown,
+		OriginalSize: fileInfo.Size(),
+		PageCount:    conversion.PageCount,
+		Images:       images,
+	}, false)
+}
 
-	RecordExternalRead(filePath, fileInfo.ModTime(), conversion.Markdown, true)
-	result := &FileReadResult{
-		Type: FileTypeDocumentReader,
-		DocumentReader: &DocumentReaderFileResult{
-			FilePath:     filePath,
-			Format:       format,
-			Markdown:     conversion.Markdown,
-			OriginalSize: fileInfo.Size(),
-			PageCount:    conversion.PageCount,
-			Images:       images,
-		},
+// documentRange reads the offset and limit of a read of a converted document. Both are lines of its markdown.
+func documentRange(parsed map[string]any) (offset, limit int) {
+	if v, ok := parsed["offset"].(float64); ok {
+		offset = int(v)
 	}
-	return tool.NewTextResult(t.formatDocumentReaderResult(result)), nil
+	if v, ok := parsed["limit"].(float64); ok && v > 0 {
+		limit = int(v)
+	}
+	return offset, limit
+}
+
+// unreadableFormatHint says why a format could not be read when the reader that was asked has no way to.
+func unreadableFormatHint(ext string) string {
+	switch ext {
+	case ".wav", ".mp3":
+		return "\n\nAudio can only be read by a document reader with speech recognition enabled (for docling-serve, its ASR extra: DOCLING_EXTRAS=asr)."
+	}
+	return ""
 }
 
 // readNotebookFile reads a Jupyter notebook file
@@ -860,6 +885,9 @@ func (t *Tool) formatPDFMarkdownResult(result *FileReadResult) string {
 	if r.ContinueAt > 0 {
 		b.WriteString(fmt.Sprintf("Stopped before page %d because this read reached its size limit. Continue with pages=\"%d-\".\n", r.ContinueAt, r.ContinueAt))
 	}
+	if r.ModelSkipped > 0 {
+		b.WriteString(fmt.Sprintf("Tables with no ruling lines were not looked for on %d pages (the time given to the layout models ran out); the text of those pages is complete. Read fewer pages at a time to have them looked at.\n", r.ModelSkipped))
+	}
 	b.WriteString("\n")
 	b.WriteString(r.Markdown)
 	return b.String()
@@ -883,6 +911,10 @@ func (t *Tool) formatDocumentReaderResult(result *FileReadResult) string {
 	}
 	if len(r.VisualPages) > 0 {
 		b.WriteString(fmt.Sprintf("Pages with detected embedded images/visual content: %s\n", formatPageNumbers(r.VisualPages)))
+	}
+	for _, note := range r.Notes {
+		b.WriteString(note)
+		b.WriteString("\n")
 	}
 	b.WriteString("\n")
 	b.WriteString(r.Markdown)

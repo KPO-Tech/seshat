@@ -40,7 +40,7 @@ func TestReadDocumentReaderFile_NativeDOCXWithoutDocumentReader(t *testing.T) {
 	dir := t.TempDir()
 	path, info := copyFixture(t, "../../../officetext/testdata/sample.docx", dir, "report.docx")
 
-	result, err := tool.readDocumentReaderFile(context.Background(), path, info)
+	result, err := tool.readDocumentReaderFile(context.Background(), path, info, nil)
 	if err != nil {
 		t.Fatalf("readDocumentReaderFile: %v", err)
 	}
@@ -58,7 +58,7 @@ func TestReadDocumentReaderFile_NativeXLSXWithoutDocumentReader(t *testing.T) {
 	dir := t.TempDir()
 	path, info := copyFixture(t, "../../../officetext/testdata/sample.xlsx", dir, "data.xlsx")
 
-	result, err := tool.readDocumentReaderFile(context.Background(), path, info)
+	result, err := tool.readDocumentReaderFile(context.Background(), path, info, nil)
 	if err != nil {
 		t.Fatalf("readDocumentReaderFile: %v", err)
 	}

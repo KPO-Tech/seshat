@@ -211,6 +211,7 @@ func (t *Tool) readPDFFile(
 	continueAt := 0
 	engineBudget := t.pdfMaxEnginePages()
 
+	modelSkipped := 0 // pages whose tables the layout models were not asked about (time budget)
 	for next := 0; next < len(targets) && continueAt == 0; next += pdfBatchPages {
 		batch := targets[next:min(next+pdfBatchPages, len(targets))]
 		if missing := doc.unread(batch); len(missing) > 0 {
@@ -221,6 +222,7 @@ func (t *Tool) readPDFFile(
 				}
 				return tool.NewErrorResult(fmt.Errorf("failed to read PDF: %w", err)), nil
 			}
+			modelSkipped += result.ModelPagesSkipped
 			for _, page := range result.Pages {
 				if page.Deferred {
 					continue
@@ -269,6 +271,7 @@ func (t *Tool) readPDFFile(
 			ShownPages:   shown,
 			NoTextPages:  noText,
 			ContinueAt:   continueAt,
+			ModelSkipped: modelSkipped,
 		},
 	})), nil
 }

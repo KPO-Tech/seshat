@@ -23,12 +23,12 @@ var SupportedExtensions = map[string]bool{
 // screenshots/diagrams with only a slide title or two of real text will
 // parse "successfully" (ok=true, err=nil) but still be nearly useless as a
 // text extraction - callers should treat Sparse the same way they already
-// treat pdftext's Sparse: prefer OCR (docling) instead of trusting it.
+// treat pdftext's Sparse: prefer OCR (a document reader) instead of trusting it.
 const MinCharsPerSlide = 40
 
 // Extract dispatches to the format-specific extractor based on filename
 // extension. ok is false when the extension isn't one this package handles;
-// callers should fall back to another conversion path (e.g. docling) in that
+// callers should fall back to another conversion path (a document reader) in that
 // case rather than treating it as an error. sparse is only ever true for
 // PPTX (see MinCharsPerSlide) - DOCX/XLSX have no page/slide-count concept
 // to measure sparseness against, and are essentially never image-only.

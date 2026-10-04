@@ -124,30 +124,6 @@ func (c *FileReadCache) SetState(filePath string, state *FileReadState) {
 	c.cache[filePath] = &stateCopy
 }
 
-// Invalidate removes a file from the cache
-func (c *FileReadCache) Invalidate(filePath string) {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-
-	delete(c.cache, filePath)
-}
-
-// Clear removes all entries from the cache
-func (c *FileReadCache) Clear() {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-
-	c.cache = make(map[string]*FileReadState)
-}
-
-// Size returns the number of entries in the cache
-func (c *FileReadCache) Size() int {
-	c.mu.RLock()
-	defer c.mu.RUnlock()
-
-	return len(c.cache)
-}
-
 // evictOldest removes the oldest entry from the cache
 func (c *FileReadCache) evictOldest() {
 	var oldestPath string
@@ -162,19 +138,6 @@ func (c *FileReadCache) evictOldest() {
 
 	if oldestPath != "" {
 		delete(c.cache, oldestPath)
-	}
-}
-
-// Cleanup removes expired entries from the cache
-func (c *FileReadCache) Cleanup() {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-
-	now := time.Now()
-	for path, state := range c.cache {
-		if now.Sub(state.CachedAt) > c.MaxAge {
-			delete(c.cache, path)
-		}
 	}
 }
 
@@ -219,10 +182,4 @@ func RecordExternalRead(filePath string, modTime time.Time, content string, isFu
 		IsPartialView: !isFullRead,
 		CachedAt:      time.Now(),
 	})
-}
-
-// InvalidateFileCache removes a file from the cache
-func InvalidateFileCache(filePath string) {
-	cache := GetGlobalCache()
-	cache.Invalidate(filePath)
 }

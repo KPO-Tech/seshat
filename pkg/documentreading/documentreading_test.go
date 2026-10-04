@@ -1,7 +1,10 @@
 package documentreading
 
 import (
+	"archive/zip"
+	"bytes"
 	"context"
+	"errors"
 	"os"
 	"path/filepath"
 	"strings"
@@ -253,5 +256,75 @@ func TestHTMLIsConvertibleButTheReadToolKeepsItsSource(t *testing.T) {
 func TestAnEmptyHTMLPageIsNotAResult(t *testing.T) {
 	if _, ok, err := ConvertBytes(context.Background(), []byte("<html><body><script>x()</script></body></html>"), "blank.html", nil); err != nil || ok {
 		t.Fatalf("ok=%v err=%v", ok, err)
+	}
+}
+
+// slideDeck builds a one-slide PPTX whose slide holds the given title, or no text at all when it is empty.
+func slideDeck(t *testing.T, title string) []byte {
+	t.Helper()
+	body := ""
+	if title != "" {
+		body = `<p:sp><p:nvSpPr><p:nvPr><p:ph type="title"/></p:nvPr></p:nvSpPr><p:txBody><a:p><a:r><a:t>` + title + `</a:t></a:r></a:p></p:txBody></p:sp>`
+	}
+	files := map[string]string{
+		"[Content_Types].xml":             `<?xml version="1.0" encoding="UTF-8"?><Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/><Override PartName="/ppt/presentation.xml" ContentType="application/vnd.openxmlformats-officedocument.presentationml.presentation.main+xml"/><Override PartName="/ppt/slides/slide1.xml" ContentType="application/vnd.openxmlformats-officedocument.presentationml.slide+xml"/></Types>`,
+		"_rels/.rels":                     `<?xml version="1.0" encoding="UTF-8"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="ppt/presentation.xml"/></Relationships>`,
+		"ppt/presentation.xml":            `<?xml version="1.0" encoding="UTF-8"?><p:presentation xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><p:sldIdLst><p:sldId id="256" r:id="rId1"/></p:sldIdLst></p:presentation>`,
+		"ppt/_rels/presentation.xml.rels": `<?xml version="1.0" encoding="UTF-8"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/slide" Target="slides/slide1.xml"/></Relationships>`,
+		"ppt/slides/slide1.xml":           `<?xml version="1.0" encoding="UTF-8"?><p:sld xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main"><p:cSld><p:spTree>` + body + `</p:spTree></p:cSld></p:sld>`,
+	}
+	var buf bytes.Buffer
+	zw := zip.NewWriter(&buf)
+	for name, content := range files {
+		w, err := zw.Create(name)
+		if err != nil {
+			t.Fatal(err)
+		}
+		_, _ = w.Write([]byte(content))
+	}
+	if err := zw.Close(); err != nil {
+		t.Fatal(err)
+	}
+	return buf.Bytes()
+}
+
+type failingConverter struct{ fakeConverter }
+
+func (failingConverter) ConvertBytes(context.Context, []byte, string) (*documentreader.ConversionResult, error) {
+	return nil, errors.New("unsupported format")
+}
+
+func TestADeckWithLittleTextIsReadWhenNothingCanDoBetter(t *testing.T) {
+	deck := slideDeck(t, "Quarterly review")
+	for name, converter := range map[string]documentreader.Converter{
+		"no reader":       nil,
+		"reader fails":    failingConverter{},
+		"reader is empty": fakeConverter{markdown: ""},
+	} {
+		result, ok, err := ConvertBytes(context.Background(), deck, "deck.pptx", converter)
+		if err != nil || !ok || !strings.Contains(result.Markdown, "Quarterly review") || result.Source != SourceNative {
+			t.Errorf("%s: ok=%v err=%v source=%q markdown=%q", name, ok, err, result.Source, result.Markdown)
+		}
+	}
+}
+
+func TestAReaderThatDoesBetterThanThinNativeTextWins(t *testing.T) {
+	result, ok, err := ConvertBytes(context.Background(), slideDeck(t, "Quarterly review"), "deck.pptx", fakeConverter{markdown: "# Quarterly review\n\nRevenue grew 12% (read from the slide pictures)."})
+	if err != nil || !ok || result.Source != SourceExternal || !strings.Contains(result.Markdown, "Revenue grew") {
+		t.Fatalf("ok=%v err=%v %+v", ok, err, result)
+	}
+}
+
+func TestADeckWithNoTextIsNothingNotAnError(t *testing.T) {
+	_, ok, err := ConvertBytes(context.Background(), slideDeck(t, ""), "deck.pptx", failingConverter{})
+	if err != nil || ok {
+		t.Fatalf("a deck of pictures that nothing can read is no result, not an error: ok=%v err=%v", ok, err)
+	}
+}
+
+func TestACorruptOfficeFileStillReportsTheReadersError(t *testing.T) {
+	_, ok, err := ConvertBytes(context.Background(), []byte("not a zip"), "deck.pptx", failingConverter{})
+	if err == nil || ok {
+		t.Fatalf("a corrupt file whose reader fails is an error: ok=%v err=%v", ok, err)
 	}
 }

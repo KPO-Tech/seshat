@@ -12,6 +12,7 @@ package documentreading
 
 import (
 	"context"
+	"errors"
 	"os"
 	"path/filepath"
 	"strings"
@@ -115,25 +116,77 @@ type Result struct {
 	Source    Source
 }
 
+// nativeRead is what the native extractor made of a file: the markdown when it is enough, the thin markdown when it is
+// too little to trust on its own (a deck of pictures with a title or two), and whether the file parsed but held no text.
+type nativeRead struct {
+	markdown string
+	thin     string
+	empty    bool
+}
+
+func readNative(filename string, data []byte) nativeRead {
+	md, ok, sparse, err := extractNative(filename, data)
+	switch {
+	case !ok:
+		return nativeRead{}
+	case err != nil:
+		return nativeRead{empty: errors.Is(err, officetext.ErrEmpty)}
+	case textquality.IsGarbledText(md):
+		return nativeRead{}
+	case sparse:
+		return nativeRead{thin: md}
+	}
+	return nativeRead{markdown: md}
+}
+
+// external converts with the external reader, and falls back on the thin native text when the reader cannot do better:
+// a few titles are worth more than nothing. A file the native extractor parsed and found empty is not an error when
+// the external reader fails on it: there is nothing to extract.
+func external(ctx context.Context, native nativeRead, converter documentreader.Converter, convert func(documentreader.Converter) (*documentreader.ConversionResult, error)) (Result, bool, error) {
+	thin := func() (Result, bool, error) {
+		if native.thin != "" {
+			return Result{Markdown: native.thin, Source: SourceNative}, true, nil
+		}
+		return Result{}, false, nil
+	}
+	if converter == nil || !converter.IsAvailable(ctx) {
+		return thin()
+	}
+	conversion, err := convert(converter)
+	if err != nil {
+		if native.thin != "" || native.empty {
+			return thin()
+		}
+		return Result{}, false, err
+	}
+	// Rare, but a real failure mode worth guarding: an external converter producing garbled output (e.g. a broken
+	// embedded font it couldn't OCR around). Treat it the same as empty - "nothing usable came out of this" - rather
+	// than silently returning bad text as if it succeeded.
+	if strings.TrimSpace(conversion.Markdown) == "" || textquality.IsGarbledText(conversion.Markdown) {
+		return thin()
+	}
+	return Result{Markdown: conversion.Markdown, Images: conversion.Images, PageCount: conversion.PageCount, Source: SourceExternal}, true, nil
+}
+
 // Convert turns filePath's content into markdown. It tries native extraction
-// first for DOCX/PPTX/XLSX (always) and PDF (only when *every* page has a
-// real text layer - see pdfEveryPageHasText), then falls back to
-// externalConverter (which may be nil) for everything else: scans, audio,
-// images, a PDF where even one page looks like it needs OCR, and any
-// native-extraction failure. ok is false when no path could produce text -
-// callers should not treat that as an error, just "nothing extracted".
+// first for DOCX/PPTX/XLSX/HTML (always) and PDF (page by page, see pdfsmart),
+// then falls back to externalConverter (which may be nil) for everything else:
+// scans, audio, images, a PDF page that needs OCR, and any native-extraction
+// failure. A document whose native text is thin (a deck that is mostly
+// pictures) is returned as it is when the external reader cannot improve on it.
+// ok is false when no path could produce text - callers should not treat that
+// as an error, just "nothing extracted".
 func Convert(ctx context.Context, filePath string, externalConverter documentreader.Converter) (Result, bool, error) {
 	ext := strings.ToLower(filepath.Ext(filePath))
 
+	var native nativeRead
 	if NativeExtensions[ext] {
 		if data, err := os.ReadFile(filePath); err == nil {
-			if md, ok, sparse, extractErr := extractNative(filePath, data); ok && extractErr == nil && !sparse && !textquality.IsGarbledText(md) {
-				return Result{Markdown: md, Source: SourceNative}, true, nil
+			native = readNative(filePath, data)
+			if native.markdown != "" {
+				return Result{Markdown: native.markdown, Source: SourceNative}, true, nil
 			}
 		}
-		// Read failure, a corrupt file, or an office document extraction
-		// deemed too thin to trust (e.g. a PPTX that's mostly images) -
-		// fall through to the external converter below, which may still salvage something.
 	}
 
 	if ext == ".pdf" {
@@ -146,25 +199,9 @@ func Convert(ctx context.Context, filePath string, externalConverter documentrea
 		}
 	}
 
-	if externalConverter == nil || !externalConverter.IsAvailable(ctx) {
-		return Result{}, false, nil
-	}
-
-	conversion, err := externalConverter.ConvertFile(ctx, filePath)
-	if err != nil {
-		return Result{}, false, err
-	}
-	if strings.TrimSpace(conversion.Markdown) == "" {
-		return Result{}, false, nil
-	}
-	// Rare, but a real failure mode worth guarding: an external converter
-	// producing garbled output (e.g. a broken embedded font it couldn't
-	// OCR around). Treat it the same as empty - "nothing usable came out
-	// of this" - rather than silently returning bad text as if it succeeded.
-	if textquality.IsGarbledText(conversion.Markdown) {
-		return Result{}, false, nil
-	}
-	return Result{Markdown: conversion.Markdown, Images: conversion.Images, PageCount: conversion.PageCount, Source: SourceExternal}, true, nil
+	return external(ctx, native, externalConverter, func(c documentreader.Converter) (*documentreader.ConversionResult, error) {
+		return c.ConvertFile(ctx, filePath)
+	})
 }
 
 // ConvertBytes is Convert's counterpart for callers that only have the raw
@@ -173,9 +210,11 @@ func Convert(ctx context.Context, filePath string, externalConverter documentrea
 func ConvertBytes(ctx context.Context, data []byte, filename string, externalConverter documentreader.Converter) (Result, bool, error) {
 	ext := strings.ToLower(filepath.Ext(filename))
 
+	var native nativeRead
 	if NativeExtensions[ext] {
-		if md, ok, sparse, extractErr := extractNative(filename, data); ok && extractErr == nil && !sparse && !textquality.IsGarbledText(md) {
-			return Result{Markdown: md, Source: SourceNative}, true, nil
+		native = readNative(filename, data)
+		if native.markdown != "" {
+			return Result{Markdown: native.markdown, Source: SourceNative}, true, nil
 		}
 	}
 
@@ -187,25 +226,9 @@ func ConvertBytes(ctx context.Context, data []byte, filename string, externalCon
 		}
 	}
 
-	if externalConverter == nil || !externalConverter.IsAvailable(ctx) {
-		return Result{}, false, nil
-	}
-
-	conversion, err := externalConverter.ConvertBytes(ctx, data, filename)
-	if err != nil {
-		return Result{}, false, err
-	}
-	if strings.TrimSpace(conversion.Markdown) == "" {
-		return Result{}, false, nil
-	}
-	// Rare, but a real failure mode worth guarding: an external converter
-	// producing garbled output (e.g. a broken embedded font it couldn't
-	// OCR around). Treat it the same as empty - "nothing usable came out
-	// of this" - rather than silently returning bad text as if it succeeded.
-	if textquality.IsGarbledText(conversion.Markdown) {
-		return Result{}, false, nil
-	}
-	return Result{Markdown: conversion.Markdown, Images: conversion.Images, PageCount: conversion.PageCount, Source: SourceExternal}, true, nil
+	return external(ctx, native, externalConverter, func(c documentreader.Converter) (*documentreader.ConversionResult, error) {
+		return c.ConvertBytes(ctx, data, filename)
+	})
 }
 
 func convertPDFSmart(ctx context.Context, data []byte, externalConverter documentreader.Converter) (Result, bool, error) {
