@@ -9,6 +9,8 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [1.2.70] - 2026-10-04
+
 ### Fixed
 
 - A page of a PDF that is shown rotated (`/Rotate 90`, `180` or `270`, a landscape table in a portrait document) is read in the orientation it is shown in. Its text, drawn through a rotated matrix, came out with a size and an advance of zero and one glyph per line ("F", "o", "r", ...: 782 lines of one letter in the FOMC projections, 1286 paragraphs for 59 once read properly); the rulings are turned too, so a rotated table is found as a table. The size and the advance of each glyph are restored from the font's width table, or from the proportions of Helvetica when the file has none.
