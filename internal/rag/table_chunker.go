@@ -108,50 +108,8 @@ func splitIntoBlocks(lines []string) []tableBlock {
 	return blocks
 }
 
-func (c *TableChunker) Split(ctx context.Context, text string) ([]Chunk, error) {
-	lines := strings.Split(strings.ReplaceAll(text, "\r\n", "\n"), "\n")
-	blocks := splitIntoBlocks(lines)
-
-	hasTable := false
-	for _, b := range blocks {
-		if b.isTable {
-			hasTable = true
-			break
-		}
-	}
-	if !hasTable {
-		return c.fallback().Split(ctx, text)
-	}
-
-	var chunks []Chunk
-	position := 0
-	for _, b := range blocks {
-		if !b.isTable {
-			span := strings.TrimSpace(strings.Join(b.lines, "\n"))
-			if span == "" {
-				continue
-			}
-			sub, err := c.fallback().Split(ctx, span)
-			if err != nil {
-				return nil, err
-			}
-			for _, ch := range sub {
-				ch.Position = position
-				chunks = append(chunks, ch)
-				position++
-			}
-			continue
-		}
-		for _, piece := range splitTableByRowBudget(b.lines, c.maxTokens()) {
-			chunks = append(chunks, Chunk{
-				Text:     piece,
-				Position: position,
-				Metadata: map[string]string{"chunk_type": "table"},
-			})
-			position++
-		}
-	}
-	return chunks, nil
+func (c *TableChunker) Split(_ context.Context, text string) ([]Chunk, error) {
+	return newMarkdownChunker(c.Profile, true).split(text), nil
 }
 
 // SplitDocument satisfies DocumentChunker by ignoring the original bytes -

@@ -55,10 +55,13 @@ var recommendedChunkProfiles = map[ChunkProfileName]ChunkProfile{
 		MaxTokens:     1536,
 		OverlapTokens: 200,
 	},
+	// Structured is the profile for documents read as markdown (headings, tables, code): chunks follow the
+	// document's structure and stay small enough to embed and retrieve precisely, 512 tokens at most, with an overlap
+	// of 64 tokens where a paragraph has to be cut. (It was 1024: such chunks hold several topics.)
 	ChunkProfileStructured: {
 		Name:          ChunkProfileStructured,
-		MaxTokens:     1024,
-		OverlapTokens: 120,
+		MaxTokens:     512,
+		OverlapTokens: 64,
 	},
 	ChunkProfileTable: {
 		Name:      ChunkProfileTable,
