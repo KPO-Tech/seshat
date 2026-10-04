@@ -6,6 +6,7 @@ import (
 	"image"
 	"image/color"
 	"image/png"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -160,5 +161,82 @@ func TestAMarkerHasNoClosingBracketInItsTitle(t *testing.T) {
 	captions := captionsIn("Figure 1. Results [see appendix]")
 	if len(captions) != 1 || strings.Count(ImageMarker(1, Picture{Number: 1, Title: captions[0]}), "]") != 1 {
 		t.Errorf("captions = %q", captions)
+	}
+}
+
+// merged joins PDFs one after the other.
+func merged(t *testing.T, parts ...[]byte) []byte {
+	t.Helper()
+	readers := make([]io.ReadSeeker, len(parts))
+	for i, part := range parts {
+		readers[i] = bytes.NewReader(part)
+	}
+	var out bytes.Buffer
+	if err := api.MergeRaw(readers, &out, false, nil); err != nil {
+		t.Fatal(err)
+	}
+	return out.Bytes()
+}
+
+func TestAPageThatIsOnlyAPictureDoesNotFailADocumentWithTextWhenNothingCanReadIt(t *testing.T) {
+	t.Parallel()
+	data := merged(t, readTestdata(t, "text_layer.pdf"), readTestdata(t, "scanned.pdf"))
+	result, ok, err := Convert(context.Background(), data, nil, VisionFallback{})
+	if err != nil || !ok {
+		t.Fatalf("ok=%v err=%v: one page that is a picture must not sink the document", ok, err)
+	}
+	last := result.Pages[len(result.Pages)-1]
+	if last.Text != ImageMarker(last.Page, Picture{Number: 1}) || len(last.Pictures) != 1 {
+		t.Errorf("the page of the picture should be its marker alone, got %+v", last)
+	}
+	if !strings.Contains(result.Markdown, "Sample Report") {
+		t.Errorf("the text pages are missing:\n%s", result.Markdown)
+	}
+}
+
+func TestABlankPageDoesNotFailADocumentWithTextWhenNothingCanReadIt(t *testing.T) {
+	t.Parallel()
+	var out bytes.Buffer
+	if err := api.InsertPages(bytes.NewReader(readTestdata(t, "text_layer.pdf")), &out, []string{"1"}, false, nil, nil); err != nil {
+		t.Fatal(err)
+	}
+	result, ok, err := Convert(context.Background(), out.Bytes(), nil, VisionFallback{})
+	if err != nil || !ok {
+		t.Fatalf("ok=%v err=%v: a blank page must not sink the document", ok, err)
+	}
+	if len(result.Pages) < 2 || strings.TrimSpace(result.Pages[1].Text) != "" {
+		t.Errorf("the second page should be blank, got %+v", result.Pages)
+	}
+}
+
+func TestAPageNothingCouldReadStillFailsTheDocumentWhenAnEngineIsConfigured(t *testing.T) {
+	t.Parallel()
+	down := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusServiceUnavailable)
+	}))
+	defer down.Close()
+	data := merged(t, readTestdata(t, "text_layer.pdf"), readTestdata(t, "scanned.pdf"))
+	_, ok, err := Convert(context.Background(), data, documentreader.NewDoclingClient(down.URL), VisionFallback{})
+	if err != nil || ok {
+		t.Fatalf("ok=%v err=%v: an engine that is configured and does not answer must not leave a silent hole", ok, err)
+	}
+}
+
+func TestAPageIsReadWhenItHasTextBesidesItsMarkers(t *testing.T) {
+	t.Parallel()
+	cases := []struct {
+		text string
+		want bool
+	}{
+		{"", false},
+		{"[Image 1 on page 3]", false},
+		{"[Image 1 on page 3: Figure 1. A caption]\n\n[Image 2 on page 3]", false},
+		{"Some text\n\n[Image 1 on page 3]", true},
+		{"[Image of a cat]", true},
+	}
+	for _, tc := range cases {
+		if got := (PageResult{Text: tc.text}).HasText(); got != tc.want {
+			t.Errorf("HasText(%q) = %v, want %v", tc.text, got, tc.want)
+		}
 	}
 }
