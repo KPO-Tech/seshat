@@ -12,6 +12,7 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 ### Added
 
 - `rag.HeadingChunker` and `rag.NewHeadingChunker` in the public SDK (`pkg/rag`): the markdown chunker hosts use for documents they read natively (headings, paragraphs, lists, tables and code cut along their structure, `heading_path` and `page_numbers` metadata) can be used directly, without going through `NewHybridDocumentChunkerForProfile` and its fallback.
+- `TestDumpChunksForEvaluation` (`internal/rag`, does nothing unless `MD_DIR`, `DOCS` and `OUT` are set): writes the chunks of markdown documents for the retrieval benchmark of seshat-intelligence (`benchmarks/chunk_bench` in SeshatOS), which asks whether the chunk that answers a question is among the first results.
 
 ## [1.2.67] - 2026-10-04
 
