@@ -89,3 +89,32 @@ func TestService_PublicAPIEndToEnd(t *testing.T) {
 		t.Fatalf("DeleteNamespace: %v", err)
 	}
 }
+
+func TestNewHeadingChunker_PublicWrapper(t *testing.T) {
+	profile, ok := RecommendedChunkProfile(ChunkProfileStructured)
+	if !ok {
+		t.Fatal("no structured profile")
+	}
+	var chunker DocumentChunker = NewHeadingChunker(profile) // it is a DocumentChunker too, for NewCachedDocumentChunker
+
+	text := "<!-- page 1 -->\n\n# Report\n\nIntro.\n\n## Results\n\n- first item\n- second item\n\n| a | b |\n| --- | --- |\n| 1 | 2 |\n\n<!-- page 2 -->\n\nMore text on the second page.\n"
+	chunks, err := chunker.Split(context.Background(), text)
+	if err != nil {
+		t.Fatalf("Split: %v", err)
+	}
+	if len(chunks) != 1 {
+		t.Fatalf("a short document is one chunk, got %d: %+v", len(chunks), chunks)
+	}
+	got := chunks[0]
+	for _, want := range []string{"Intro.", "## Results", "- second item", "| 1 | 2 |", "More text on the second page."} {
+		if !strings.Contains(got.Text, want) {
+			t.Errorf("missing %q in:\n%s", want, got.Text)
+		}
+	}
+	if strings.Contains(got.Text, "<!--") {
+		t.Errorf("page markers must not be in the text:\n%s", got.Text)
+	}
+	if got.Metadata["heading_path"] != "Report" || got.Metadata["page_numbers"] != "[1,2]" {
+		t.Errorf("metadata = %v", got.Metadata)
+	}
+}

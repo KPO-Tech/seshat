@@ -46,6 +46,13 @@ type (
 	// ingest. Falls back to ParagraphChunker behavior if the embedder errors.
 	SemanticChunker = internalrag.SemanticChunker
 
+	// HeadingChunker cuts a markdown document (what the document readers write) along its own structure: headings,
+	// paragraphs, lists, tables and fenced code. A block is never cut in the middle of what it is, small sections
+	// are joined to their neighbours, and each chunk carries the path of headings it sits under in its text and in
+	// Metadata["heading_path"] (and the pages it covers in Metadata["page_numbers"] when the text has page
+	// markers). It is the chunker the hosts use for documents they have read natively.
+	HeadingChunker = internalrag.HeadingChunker
+
 	// TableChunker keeps GFM/Markdown table rows intact as their own
 	// chunk(s), splitting an oversized table by data row while repeating
 	// the header row on every piece, instead of a generic splitter cutting
@@ -148,6 +155,13 @@ func ChunkEnrichmentCacheKey(chunkText, enricherKey string) string {
 // default (0.3) - see SemanticChunker's doc for the tradeoff it makes.
 func NewSemanticChunker(embedder Embedder, threshold float32) *SemanticChunker {
 	return internalrag.NewSemanticChunker(embedder, threshold)
+}
+
+// NewHeadingChunker creates a structure-aware chunker for markdown, cutting chunks of at most profile.MaxTokens
+// tokens with profile.OverlapTokens of overlap where a paragraph has to be cut. Use
+// RecommendedChunkProfile(ChunkProfileStructured) for the profile hosts use.
+func NewHeadingChunker(profile ChunkProfile) *HeadingChunker {
+	return internalrag.NewHeadingChunker(profile)
 }
 
 // NewTableChunker creates a table-aware chunker using one of Seshat's

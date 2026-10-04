@@ -9,6 +9,17 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [1.2.68] - 2026-10-04
+
+### Added
+
+- `rag.HeadingChunker` and `rag.NewHeadingChunker` in the public SDK (`pkg/rag`): the markdown chunker hosts use for documents they read natively (headings, paragraphs, lists, tables and code cut along their structure, `heading_path` and `page_numbers` metadata) can be used directly, without going through `NewHybridDocumentChunkerForProfile` and its fallback.
+- `TestDumpChunksForEvaluation` (`internal/rag`, does nothing unless `MD_DIR`, `DOCS`, `STRATS` and `OUT` are set): writes the chunks of markdown documents for the retrieval benchmark of seshat-intelligence (`benchmarks/chunk_bench` in SeshatOS), which asks whether the chunk that answers a question is among the first results. `STRATS` names the chunkers (`profile` for the default structured profile, `paragraph`, `heading<N>` for chunks of N tokens); `LABEL` is put before each name to tell the chunks of an older checkout from these.
+
+### Fixed
+
+- A PDF page that has text and a picture is read when no engine or OCR is there to read the picture, instead of failing the whole document. `pdfsmart.Convert` sent every page with a raster image to the engine, so with none configured a paper with a single figure was "nothing extracted" (11 of 13 PDFs of the chunking benchmark corpus). The page keeps its text, and ends with a marker for each picture worth one: `[Image 2 on page 4: Figure 2. Residual learning]`, or `[Image 2 on page 4]` when no caption could be attached (a caption is attached only when the page has as many "Figure N" lines as pictures). Icons under 100 pixels and a picture used on three pages or more (a logo, a letterhead) get no marker. The number counts the pictures of the page, so with the page number it names the picture whatever pages were read, for a host that later gives a multimodal model a way to look at the page itself. `pdfsmart.PageResult.Pictures`, `pdfsmart.Picture`, `pdfsmart.ImageMarker`. A page with no text at all (a scan) is still a failure without an engine, and a page an engine reads has no marker.
+
 ## [1.2.67] - 2026-10-04
 
 ### Added
