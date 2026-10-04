@@ -16,6 +16,7 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- Chunks say which pages they come from. A PDF read page by page has, in the text that is indexed, a marker line (`<!-- page 3 -->`, an HTML comment that rendering hides) before each page: `documentreading.Result.PagedMarkdown` (and `Result.TextForIndexing()`, which gives it for a PDF and `Markdown` for every other format; `Markdown` itself stays clean for anyone who shows the text). `HeadingChunker` and `TableChunker` take the markers out of the text and put the pages a chunk covers in `Metadata["page_numbers"]` (`[3,4]`, as document readers give them); the other chunkers drop the markers. `documentreading.StripPageMarkers` for a host that needs the text clean.
 - `testdata/chunking` and `TestChunkQuality`: the chunkers are held to measures (no lost word, no table piece without its header, no unbalanced fence, no chunk over the limit, few tiny chunks) on real reader output; `RAG_CHUNK_CORPUS` runs them on a bigger corpus.
 
 ## [1.2.65] - 2026-10-04

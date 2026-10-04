@@ -18,6 +18,7 @@ import (
 	"strings"
 
 	"github.com/KPO-Tech/seshat/internal/htmltext"
+	"github.com/KPO-Tech/seshat/internal/pagemark"
 	"github.com/KPO-Tech/seshat/pkg/documentreader"
 	"github.com/KPO-Tech/seshat/pkg/officetext"
 	"github.com/KPO-Tech/seshat/pkg/pdfsmart"
@@ -109,11 +110,15 @@ const (
 
 // Result is the outcome of a successful conversion.
 type Result struct {
-	Markdown  string
-	Images    []documentreader.ExtractedImage
-	PageCount int
-	Pages     []PageReadResult
-	Source    Source
+	Markdown string
+	// PagedMarkdown is the same text with a marker line before each page (see internal/pagemark), for a PDF read
+	// page by page; empty for every other format. It is what goes to the chunkers, so that a chunk can say which
+	// pages it comes from. Markdown stays clean for anyone who shows the text.
+	PagedMarkdown string
+	Images        []documentreader.ExtractedImage
+	PageCount     int
+	Pages         []PageReadResult
+	Source        Source
 }
 
 // nativeRead is what the native extractor made of a file: the markdown when it is enough, the thin markdown when it is
@@ -253,8 +258,37 @@ func convertPDFSmart(ctx context.Context, data []byte, externalConverter documen
 			HasImage: page.HasEmbeddedImage,
 		})
 	}
-	return Result{Markdown: smart.Markdown, PageCount: len(smart.Pages), Pages: pages, Source: source}, true, nil
+	return Result{Markdown: smart.Markdown, PagedMarkdown: pagedMarkdown(smart), PageCount: len(smart.Pages), Pages: pages, Source: source}, true, nil
 }
+
+// pagedMarkdown writes the pages of a PDF one after the other, each after its marker line.
+func pagedMarkdown(result pdfsmart.Result) string {
+	var sb strings.Builder
+	for _, page := range result.Pages {
+		if strings.TrimSpace(page.Text) == "" {
+			continue
+		}
+		if sb.Len() > 0 {
+			sb.WriteString("\n\n")
+		}
+		sb.WriteString(pagemark.Marker(page.Page))
+		sb.WriteString("\n\n")
+		sb.WriteString(strings.TrimSpace(page.Text))
+	}
+	return sb.String()
+}
+
+// TextForIndexing is the text a chunker should read: the page-marked markdown when the document has pages, the
+// markdown otherwise.
+func (r Result) TextForIndexing() string {
+	if r.PagedMarkdown != "" {
+		return r.PagedMarkdown
+	}
+	return r.Markdown
+}
+
+// StripPageMarkers takes the page markers out of a text that has them.
+func StripPageMarkers(markdown string) string { return pagemark.Strip(markdown) }
 
 func onlyPDFSmartSource(result pdfsmart.Result, source pdfsmart.PageSource) bool {
 	if len(result.Pages) == 0 {

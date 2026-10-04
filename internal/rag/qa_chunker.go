@@ -2,6 +2,7 @@ package rag
 
 import (
 	"context"
+	"github.com/KPO-Tech/seshat/internal/pagemark"
 	"regexp"
 	"strings"
 )
@@ -62,6 +63,7 @@ func (c *QAChunker) maxTokens() int {
 }
 
 func (c *QAChunker) Split(ctx context.Context, text string) ([]Chunk, error) {
+	text = pagemark.Strip(text)
 	if chunks, ok := c.splitLabeledPairs(ctx, text); ok {
 		return chunks, nil
 	}
