@@ -328,3 +328,30 @@ func TestACorruptOfficeFileStillReportsTheReadersError(t *testing.T) {
 		t.Fatalf("a corrupt file whose reader fails is an error: ok=%v err=%v", ok, err)
 	}
 }
+
+func TestAPDFReadPageByPageHasAPagedMarkdownForTheChunkers(t *testing.T) {
+	data := readTestdata(t, "text_layer.pdf")
+	result, ok, err := ConvertBytes(context.Background(), data, "report.pdf", nil)
+	if err != nil || !ok {
+		t.Fatalf("ok=%v err=%v", ok, err)
+	}
+	if strings.Contains(result.Markdown, "<!--") {
+		t.Errorf("Markdown is for people and must carry no marker:\n%s", result.Markdown)
+	}
+	if !strings.HasPrefix(result.PagedMarkdown, "<!-- page 1 -->\n\n") {
+		t.Fatalf("PagedMarkdown does not start with the marker of page 1:\n%.200s", result.PagedMarkdown)
+	}
+	if got := StripPageMarkers(result.PagedMarkdown); strings.TrimSpace(got) != strings.TrimSpace(result.Markdown) {
+		t.Errorf("without its markers the paged text is the markdown:\n%q\nvs\n%q", got, result.Markdown)
+	}
+	if result.TextForIndexing() != result.PagedMarkdown {
+		t.Error("the chunkers read the paged text")
+	}
+}
+
+func TestADocumentWithoutPagesIndexesItsMarkdown(t *testing.T) {
+	result, ok, err := ConvertBytes(context.Background(), readTestdata(t, "sample.docx"), "sample.docx", nil)
+	if err != nil || !ok || result.PagedMarkdown != "" || result.TextForIndexing() != result.Markdown {
+		t.Fatalf("ok=%v err=%v paged=%q", ok, err, result.PagedMarkdown)
+	}
+}

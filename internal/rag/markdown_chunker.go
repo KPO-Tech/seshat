@@ -1,10 +1,13 @@
 package rag
 
 import (
+	"encoding/json"
 	"regexp"
+	"sort"
 	"strings"
 	"unicode"
 
+	"github.com/KPO-Tech/seshat/internal/pagemark"
 	"github.com/KPO-Tech/seshat/internal/utils"
 )
 
@@ -60,6 +63,7 @@ const (
 )
 
 type mdBlock struct {
+	page  int // the page of the PDF it is on, from the page markers; 0 when the text has none
 	kind  blockKind
 	text  string
 	lines []string
@@ -157,15 +161,16 @@ func parseBlocks(text string) []mdBlock {
 	lines := strings.Split(strings.ReplaceAll(text, "\r\n", "\n"), "\n")
 	var blocks []mdBlock
 	var para, list []string
+	page := 0
 	flushPara := func() {
 		if len(para) > 0 {
-			blocks = append(blocks, mdBlock{kind: blockParagraph, text: strings.Join(para, "\n"), lines: para})
+			blocks = append(blocks, mdBlock{page: page, kind: blockParagraph, text: strings.Join(para, "\n"), lines: para})
 			para = nil
 		}
 	}
 	flushList := func() {
 		if len(list) > 0 {
-			blocks = append(blocks, mdBlock{kind: blockList, text: strings.Join(list, "\n"), lines: list})
+			blocks = append(blocks, mdBlock{page: page, kind: blockList, text: strings.Join(list, "\n"), lines: list})
 			list = nil
 		}
 	}
@@ -178,6 +183,10 @@ func parseBlocks(text string) []mdBlock {
 		case trimmed == "":
 			flushPara()
 			flushList()
+		case isPageMarker(trimmed):
+			flushPara()
+			flushList()
+			page, _ = pagemark.Parse(trimmed)
 		case fenceOpen.MatchString(line):
 			flushPara()
 			flushList()
@@ -190,7 +199,7 @@ func parseBlocks(text string) []mdBlock {
 					break
 				}
 			}
-			blocks = append(blocks, mdBlock{kind: blockCode, text: strings.Join(code, "\n"), lines: code})
+			blocks = append(blocks, mdBlock{page: page, kind: blockCode, text: strings.Join(code, "\n"), lines: code})
 		case atxHeading.MatchString(trimmed):
 			flushPara()
 			flushList()
@@ -199,12 +208,12 @@ func parseBlocks(text string) []mdBlock {
 			if title == "" {
 				title = m[2]
 			}
-			blocks = append(blocks, mdBlock{kind: blockHeading, text: trimmed, level: len(m[1]), title: title})
+			blocks = append(blocks, mdBlock{page: page, kind: blockHeading, text: trimmed, level: len(m[1]), title: title})
 		case blank(i-1) && blank(i+1) && isLineHeading(lines, i):
 			flushPara()
 			flushList()
 			level, _ := lineHeading(trimmed)
-			blocks = append(blocks, mdBlock{kind: blockHeading, text: trimmed, level: level, title: trimmed})
+			blocks = append(blocks, mdBlock{page: page, kind: blockHeading, text: trimmed, level: level, title: trimmed})
 		case isTableRow(line) && i+1 < len(lines) && isTableSeparatorRow(lines[i+1]):
 			flushPara()
 			flushList()
@@ -213,7 +222,7 @@ func parseBlocks(text string) []mdBlock {
 			}
 			rows := lines[start:i]
 			i--
-			blocks = append(blocks, mdBlock{kind: blockTable, text: strings.Join(rows, "\n"), lines: rows})
+			blocks = append(blocks, mdBlock{page: page, kind: blockTable, text: strings.Join(rows, "\n"), lines: rows})
 		case listItem.MatchString(line):
 			flushPara()
 			list = append(list, line)
@@ -227,6 +236,11 @@ func parseBlocks(text string) []mdBlock {
 	flushPara()
 	flushList()
 	return blocks
+}
+
+func isPageMarker(line string) bool {
+	_, ok := pagemark.Parse(line)
+	return ok
 }
 
 // isLineHeading is lineHeading for the line at index i, with the numbered-list exception.
@@ -444,6 +458,7 @@ func cutWords(s string, limit int) []string {
 // ---- packing blocks into chunks ----
 
 type section struct {
+	page    int
 	path    []string // titles from the top, this section's own last
 	heading string   // the heading as written, for a chunk that holds several sections
 	chain   []string // the headings of the path as written, from the top: what a chunk that holds several sections writes
@@ -452,6 +467,7 @@ type section struct {
 }
 
 type part struct {
+	page    int
 	text    string
 	section int
 	heading bool
@@ -471,7 +487,7 @@ func (m markdownChunker) split(text string) []Chunk {
 	var out []Chunk
 	cur := &pending{}
 
-	emit := func(paths [][]string, body, kind string) {
+	emit := func(paths [][]string, body, kind string, pages []int) {
 		path := commonPrefix(paths)
 		prefix := strings.Join(path, " > ")
 		chunkText := body
@@ -484,6 +500,9 @@ func (m markdownChunker) split(text string) []Chunk {
 		}
 		if kind != "" {
 			meta["chunk_type"] = kind
+		}
+		if encoded := encodePages(pages); encoded != "" {
+			meta["page_numbers"] = encoded
 		}
 		out = append(out, Chunk{Text: chunkText, Position: len(out), Metadata: meta})
 	}
@@ -498,10 +517,12 @@ func (m markdownChunker) split(text string) []Chunk {
 		common := len(commonPrefix(paths))
 		var bodies []string
 		kinds := map[blockKind]bool{}
+		var pages []int
 		for _, p := range cur.parts {
 			if p.heading && len(secs[p.section].path) <= common {
 				continue // the heading is already in the path
 			}
+			pages = append(pages, p.page)
 			if p.heading {
 				// The headings above this section's own that the other sections of the chunk do not share are written
 				// too: an ancestor with nothing of its own under it is in no other part.
@@ -520,7 +541,7 @@ func (m markdownChunker) split(text string) []Chunk {
 			}
 		}
 		if body := strings.TrimSpace(strings.Join(bodies, "\n\n")); body != "" {
-			emit(paths, body, kind)
+			emit(paths, body, kind, pages)
 		}
 		*cur = pending{}
 	}
@@ -561,7 +582,7 @@ func (m markdownChunker) split(text string) []Chunk {
 		}
 		if len(sec.chain) > 0 {
 			join()
-			cur.parts = append(cur.parts, part{text: sec.heading, section: si, heading: true})
+			cur.parts = append(cur.parts, part{text: sec.heading, section: si, heading: true, page: sec.page})
 			cur.tokens += headTok
 		}
 		reserve := tokens(strings.Join(sec.path, " > ")) + 4
@@ -572,13 +593,13 @@ func (m markdownChunker) split(text string) []Chunk {
 			if b.kind == blockTable && m.isolateTables {
 				flushForBlock(si)
 				for _, piece := range splitTableByRowBudget(b.lines, limit) {
-					emit([][]string{sec.path}, piece, "table")
+					emit([][]string{sec.path}, piece, "table", []int{b.page})
 				}
 				continue
 			}
 			if cur.tokens+bt+reserve <= m.max {
 				join()
-				cur.parts = append(cur.parts, part{text: b.text, section: si, kind: b.kind})
+				cur.parts = append(cur.parts, part{text: b.text, section: si, kind: b.kind, page: b.page})
 				cur.tokens += bt
 				continue
 			}
@@ -586,18 +607,18 @@ func (m markdownChunker) split(text string) []Chunk {
 			flushForBlock(si)
 			if bt+reserve <= m.max {
 				join()
-				cur.parts = append(cur.parts, part{text: b.text, section: si, kind: b.kind})
+				cur.parts = append(cur.parts, part{text: b.text, section: si, kind: b.kind, page: b.page})
 				cur.tokens += bt
 				continue
 			}
 			pieces := m.splitBlock(b, limit)
 			for i, piece := range pieces {
 				if i < len(pieces)-1 {
-					emit([][]string{sec.path}, piece, pieceKind(b.kind))
+					emit([][]string{sec.path}, piece, pieceKind(b.kind), []int{b.page})
 					continue
 				}
 				join()
-				cur.parts = append(cur.parts, part{text: piece, section: si, kind: b.kind})
+				cur.parts = append(cur.parts, part{text: piece, section: si, kind: b.kind, page: b.page})
 				cur.tokens += tokens(piece)
 			}
 		}
@@ -637,6 +658,9 @@ func (m markdownChunker) joinTrailing(chunks []Chunk) []Chunk {
 		prev.Metadata["heading_path"] = common
 	} else {
 		delete(prev.Metadata, "heading_path")
+	}
+	if pages := encodePages(append(decodePages(prev.Metadata["page_numbers"]), decodePages(last.Metadata["page_numbers"])...)); pages != "" {
+		prev.Metadata["page_numbers"] = pages
 	}
 	chunks[n-2] = prev
 	return chunks[:n-1]
@@ -692,7 +716,7 @@ func (m markdownChunker) sections(blocks []mdBlock) []section {
 			path[i] = e.title
 			chain[i] = e.text
 		}
-		secs = append(secs, section{path: path, heading: b.text, chain: chain})
+		secs = append(secs, section{page: b.page, path: path, heading: b.text, chain: chain})
 	}
 	if len(secs[0].blocks) == 0 {
 		secs = secs[1:]
@@ -707,7 +731,7 @@ func (m markdownChunker) sections(blocks []mdBlock) []section {
 		if i+1 < len(secs) && hasPrefix(secs[i+1].path, secs[i].path) {
 			continue
 		}
-		secs[i].blocks = []mdBlock{{kind: blockParagraph, text: secs[i].heading, lines: []string{secs[i].heading}}}
+		secs[i].blocks = []mdBlock{{page: secs[i].page, kind: blockParagraph, text: secs[i].heading, lines: []string{secs[i].heading}}}
 		secs[i].tokens = tokens(secs[i].heading)
 		secs[i].path = secs[i].path[:len(secs[i].path)-1]
 		secs[i].chain = secs[i].chain[:len(secs[i].chain)-1]
@@ -726,4 +750,32 @@ func hasPrefix(path, prefix []string) bool {
 		}
 	}
 	return true
+}
+
+// encodePages writes the pages a chunk covers as a JSON array, the way document readers give them
+// (Metadata["page_numbers"] = "[3,4]"), or "" when the text had no page markers.
+func encodePages(pages []int) string {
+	seen := map[int]bool{}
+	var list []int
+	for _, p := range pages {
+		if p > 0 && !seen[p] {
+			seen[p] = true
+			list = append(list, p)
+		}
+	}
+	if len(list) == 0 {
+		return ""
+	}
+	sort.Ints(list)
+	b, err := json.Marshal(list)
+	if err != nil {
+		return ""
+	}
+	return string(b)
+}
+
+func decodePages(encoded string) []int {
+	var list []int
+	_ = json.Unmarshal([]byte(encoded), &list)
+	return list
 }
