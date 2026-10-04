@@ -38,6 +38,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/ledongthuc/pdf"
 	"github.com/pdfcpu/pdfcpu/pkg/api"
@@ -135,33 +136,9 @@ type PageResult struct {
 type Result struct {
 	Markdown string
 	Pages    []PageResult
-}
-
-// DoclingPageCount reports how many pages were actually routed to
-// docling - a direct measure of how much of the document needed the
-// expensive path, useful for logging/tuning.
-func (r Result) DoclingPageCount() int {
-	n := 0
-	for _, p := range r.Pages {
-		if p.Source == PageSourceDocling {
-			n++
-		}
-	}
-	return n
-}
-
-// VisionPageCount reports how many pages needed the vision-LLM fallback -
-// pages where neither native extraction nor docling produced usable text.
-// Like DoclingPageCount, a direct measure of how much of the document
-// needed the most expensive path, useful for logging/tuning.
-func (r Result) VisionPageCount() int {
-	n := 0
-	for _, p := range r.Pages {
-		if p.Source == PageSourceVision {
-			n++
-		}
-	}
-	return n
+	// ModelPagesSkipped counts the pages whose tables the layout models were not asked about because the time
+	// budget (Options.ModelBudget) was spent. Their text is read as usual, and so are the tables the rulings show.
+	ModelPagesSkipped int
 }
 
 // Convert extracts data's text page by page (see package doc for the
@@ -200,7 +177,16 @@ type Options struct {
 
 	// Password opens a PDF that is protected by a user password. A PDF whose user password is empty needs none.
 	Password string
+
+	// ModelBudget bounds the time one call spends asking the layout models about tables. A model looks at one page
+	// in seconds on a CPU, and many pages of a long document look as if they might hold a table, so without a bound
+	// a book takes minutes for the sake of the few pages that have one. Zero means DefaultModelBudget; a negative
+	// value means no bound. Once it is spent the remaining pages are read without the models.
+	ModelBudget time.Duration
 }
+
+// DefaultModelBudget is the time a call may spend on the layout models when Options.ModelBudget is zero.
+const DefaultModelBudget = 20 * time.Second
 
 // TableFinder is a document reader that can also say where the tables with no ruling lines are on a page, and how
 // they are laid out, from a layout model. A reader that has this (the native one, with its models) is asked for a page
@@ -268,6 +254,17 @@ func ReadPages(ctx context.Context, data []byte, pages []int, opts Options, docu
 	}
 
 	result := Result{Pages: make([]PageResult, 0, len(wanted))}
+	// The budget travels with the context: a page sent to the engine is read again by the engine, which may come
+	// back here, and the time is one document's.
+	budget, inherited := ctx.Value(modelBudgetKey{}).(*modelBudget)
+	if !inherited {
+		budget = &modelBudget{limit: opts.ModelBudget}
+		if budget.limit == 0 {
+			budget.limit = DefaultModelBudget
+		}
+		ctx = context.WithValue(ctx, modelBudgetKey{}, budget)
+	}
+	skippedBefore := budget.skipped
 	var sb strings.Builder
 	allOK := true
 	enginePages := 0
@@ -280,7 +277,7 @@ func ReadPages(ctx context.Context, data []byte, pages []int, opts Options, docu
 			page := reader.Page(i)
 			if page.V.IsNull() {
 				needsDocling = true
-			} else if native, extractErr := pdftext.PageMarkdownWith(page, pdftext.PageOptions{Tables: tableSource(ctx, documentReader, data, i), LargeImage: largeImages[i]}); extractErr != nil ||
+			} else if native, extractErr := pdftext.PageMarkdownWith(page, pdftext.PageOptions{Tables: budget.wrap(tableSource(ctx, documentReader, data, i)), LargeImage: largeImages[i]}); extractErr != nil ||
 				len(strings.TrimSpace(native)) < pdftext.MinCharsPerPage || textquality.IsGarbledText(native) {
 				needsDocling = true
 			} else {
@@ -337,7 +334,34 @@ func ReadPages(ctx context.Context, data []byte, pages []int, opts Options, docu
 	}
 
 	result.Markdown = sb.String()
+	result.ModelPagesSkipped = budget.skipped - skippedBefore
 	return result, allOK, nil
+}
+
+type modelBudgetKey struct{}
+
+// modelBudget spends the time a call may give to the layout models. Pages are read one after the other, so it needs
+// no lock.
+type modelBudget struct {
+	limit   time.Duration
+	spent   time.Duration
+	skipped int
+}
+
+// wrap makes a table source stop answering once the budget is spent.
+func (b *modelBudget) wrap(source pdftext.TableSource) pdftext.TableSource {
+	if source == nil || b.limit < 0 {
+		return source
+	}
+	return func() ([]pdftext.TableStructure, error) {
+		if b.spent >= b.limit {
+			b.skipped++
+			return nil, nil
+		}
+		start := time.Now()
+		defer func() { b.spent += time.Since(start) }()
+		return source()
+	}
 }
 
 // tableSource gives a page what it needs to ask the reader about its tables, or nothing when the reader cannot say.

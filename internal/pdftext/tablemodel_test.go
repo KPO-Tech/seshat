@@ -272,3 +272,23 @@ func TestTableMarkdownWritesAScannedTableFromItsReadText(t *testing.T) {
 		t.Error("one line of text is not a table")
 	}
 }
+
+func TestTwoColumnsOfProseAreNotTakenForATable(t *testing.T) {
+	long := "the committee met on tuesday to review the budget"
+	prose := []textRow{{chunks: []chunk{{text: long}, {text: long}}}, {chunks: []chunk{{text: long}, {text: long}}}, {chunks: []chunk{{text: long}, {text: long}}}}
+	if !proseColumns(prose) {
+		t.Error("two columns of long lines are prose")
+	}
+	cells := []textRow{{chunks: []chunk{{text: "Hardware"}, {text: "120"}, {text: "135"}}}, {chunks: []chunk{{text: "Software"}, {text: "88"}, {text: "91"}}}}
+	if proseColumns(cells) {
+		t.Error("short cells are a table's")
+	}
+}
+
+func TestCodeAndFormulasDoNotMakeAPageLookColumnar(t *testing.T) {
+	glyphs := []glyph{{mono: true}, {math: true}, {}}
+	got := proseAndFigures(glyphs)
+	if len(got) != 1 || got[0].mono || got[0].math {
+		t.Fatalf("got %+v", got)
+	}
+}

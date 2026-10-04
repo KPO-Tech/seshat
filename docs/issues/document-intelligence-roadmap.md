@@ -30,6 +30,7 @@ roadmap is about closing that gap.
 | 2 | Chunk-level LLM enrichment (synthetic questions) | **Done (2026-09-25)** — opt-in, cached, bounded-concurrency. See log below. |
 | 3 | Vision-LLM fallback for pages native parsing can't handle | **Done (2026-09-25)** — opt-in, CGO-independent interface, real pdfium render test. See log below. |
 | 4 | Specialized chunkers (QA-formatted docs, table-heavy docs) | **Done (2026-09-25)** — TableChunker + QAChunker, wired as new ChunkProfiles. See log below. |
+| 5 | Reading hardening, and what is left before chunking | **Audit done (2026-10-04)**, first round done (v1.2.65); formats still unread and chunk prerequisites are listed in Phase 5 below. |
 
 **Phase 1 progress log**:
 - Validated in Docker (`golang:1.26-bookworm`, CGO): `pdf_oxide` opens a PDF,
@@ -758,6 +759,83 @@ chunking *strategies* worth having:
 
 ---
 
+## Phase 5 — Reading: what was done, and what is left (audit of 2026-10-04)
+
+Audit of the whole reading chain (Read tool, `pkg/documentreading`, the SeshatOS backend's processor/policy, the
+native converter with its models), run with the real models on a 221-document corpus (Apache POI office files, PDFs
+of papers, a 60-page French book, scans) and through the backend end to end. The reading of PDF, DOCX, PPTX, XLSX,
+text, CSV and notebooks is connected from end to end; PDFs have ruled, borderless, single-rule, picture and scanned
+tables, and encrypted PDFs are decrypted. This section keeps what the audit found, so it is not forgotten.
+
+### Done in the hardening round (v1.2.65)
+
+- The layout models were asked about almost every page of a book (160 s instead of 4.6 s, same text). The test
+  that decides a page may hold a table now ignores code and formulas and refuses columns of running text, and a time
+  budget (`pdfsmart.Options.ModelBudget`, 20 s by default, shared by every page of a document through the context)
+  bounds what is left. `Result.ModelPagesSkipped` and a note in the Read result say when pages were left out.
+- A deck that is mostly pictures gave an error, or "nothing could be read", although its titles had been extracted.
+  The thin text is now returned (with a note) when no reader can do better, in `documentreading.Convert*` and in the
+  Read tool. A file that parsed and has no text at all is "nothing extracted", not an error.
+- The Read tool had no size limit for converted documents (DOCX, PPTX, XLSX): they went into the context whole. They
+  are now read in pieces of about 120,000 characters with `offset`/`limit` (lines of the markdown) and a note saying
+  where to continue.
+- Dead code removed: `read/cancellation.go` (all but the two functions used), unused image/detector/cache helpers,
+  `pdftext.PageText` and its duplicate plain-text layout (`Extract` now goes through the markdown path),
+  `Result.DoclingPageCount`/`VisionPageCount`, two helpers of `officetext`. Stale docling wording in messages.
+
+### To do: formats that are accepted but cannot be read
+
+The upload gate (`seshat-backend/internal/files/service.go`) puts these in the "documents" category, and no path reads
+them: the file ends up as "no extractable text".
+
+- **Legacy Office: `.doc`, `.xls`, `.ppt`.** Binary OLE containers. Options: an external converter (LibreOffice
+  headless, if installed, as an optional reader), or a native OLE reader. Neither docling nor the Go readers do it.
+- **OpenDocument: `.odt`, `.ods`, `.odp`.** Zipped XML like OOXML: a native extractor next to `internal/officetext`
+  (same node tree, other element names), sharing `mdtable`.
+- **`.rtf`.** Plain text with control words: a small native reader.
+- **`.epub`** (and `.mobi`) if they are to be accepted: zipped XHTML, `internal/htmltext` already reads the chapters.
+- **Audio (`.wav`, `.mp3`, `.m4a`, ...).** No engine reads it: `seshat-intelligence` has no transcription, and the
+  Read tool's old hint pointed to docling's ASR extra and a script that no longer exists. Decide the engine (the ADR
+  "Python also owns media and voice capabilities" says Python); until then the error should say plainly that no
+  transcription is configured.
+- **Password-protected DOCX/PPTX/XLSX** (an OLE-encrypted package, not a zip): the error is an opaque "extract ..."
+  failure. Detect the encrypted package and say so, and take a `password` as the Read tool already does for PDFs
+  (Agile/Standard encryption decryption is a known algorithm; `msoffcrypto-tool` is the reference).
+- **DOCX headers, footers and footnotes** are not extracted (`word/header*.xml`, `footer*.xml`): "Section 1" and a
+  footer's text are lost. Add them (once per distinct text, not once per section) with a marker.
+- **Image files (`.png`, `.jpg`, `.tiff`) with no external service.** The native converter has the OCR and layout
+  models but only reads PDF, DOCX and XLSX, so ingesting an image fails without `seshat-intelligence`. Wire
+  `nativedoc/parser` to OCR a raster image with the same page logic (`withTables` included).
+- **Pictures inside DOCX/PPTX** are not read (the alt text is). Extract the media and OCR the big ones, as is done
+  for a picture in a PDF page.
+
+### To do: before chunking
+
+- **Page markers in the native text.** `pdfsmart.Result.Markdown` has no page boundaries (the Read tool adds its own
+  `--- page N ---`), so a chunk cannot say which page it comes from. `documentreading.Result.Pages` carries source
+  per page but not the text. Citations need page numbers on the native path.
+- **Two chunking paths give different content.** With `seshat-intelligence`, the hybrid chunker reads the raw file
+  with its own parser and ignores everything the native reader does (tables of every kind, decryption, HTML);
+  without it, `HeadingChunker` splits the native markdown and chunk metadata has no headings or pages.
+  Decide the rule (chunk our markdown in both cases, and keep the external chunker only where it is better) and test
+  it on the corpus: tables kept whole (`TableChunker`), a table spanning pages, code, lists, very long paragraphs.
+- **`toConversionResult` drops `PageCount`** (`seshat-backend/internal/documentreading/policy.go`).
+
+### To do: other findings of the audit
+
+- Reading order follows drawing order, and a spanning header cell is repeated in each of its columns: GitHub issue
+  `feat(pdftext): reading order of out-of-order pages, and headers that span two columns`.
+- `seshat-intelligence` has its own reading router (`reading/`, `POST /v1/documents/read`, used by the connectors)
+  that repeats the Go routing without the Go improvements (tables, HTML, decryption). Decide whether the connectors
+  call the Go reader, or whether the Python one is brought up to date.
+- The tests that use the models (`SESHAT_NATIVEDOC_TEST_MODELS_DIR`) are skipped in CI, so the OCR, table-model and
+  picture-table paths are only tested by hand. Provision the models in a CI job (they are 90 MB) or keep a manual
+  checklist.
+- `pdfsmart.PageSourceDocling` and the docling wording of the package doc: the second engine is "the document
+  reader", whatever it is. Rename when the public API is next broken.
+- A page the layout models cannot afford (budget spent) is read without them. If that matters for a document type
+  (financial statements), make the budget a setting of the host.
+
 ## Explicitly out of scope
 
 - RAGFlow's DSL/canvas workflow engine for chunking configuration —
@@ -770,7 +848,7 @@ chunking *strategies* worth having:
   background job system; Phase 2's chunk/enrichment caching already gets
   the practical benefit (idempotent re-runs) without needing the job
   infrastructure.
-- **Wiring DLA (layout detection) / TSR (table structure recognition) into
+- **(Done since: DLA and TSR are wired, for the tables of text PDFs and of scans - see Phase 5 and the changelog of v1.2.62 and v1.2.63.)** **Wiring DLA (layout detection) / TSR (table structure recognition) into
   `internal/nativedoc/parser.Converter`** — both models were ported from
   RAGFlow into `internal/nativedoc` (`dla.go`/`dla_preprocess.go`,
   `tsr.go`/`tsr_decode.go`) but never actually wired into `convertPDF`

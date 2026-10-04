@@ -113,6 +113,10 @@ type PDFMarkdownFileResult struct {
 	ShownPages  []int `json:"shown_pages,omitempty"`
 	NoTextPages []int `json:"no_text_pages,omitempty"`
 	ContinueAt  int   `json:"continue_at,omitempty"`
+
+	// ModelSkipped counts the pages whose tables with no ruling lines were not looked for with the layout models,
+	// because the time given to them was spent. The text of those pages is complete.
+	ModelSkipped int `json:"model_skipped,omitempty"`
 }
 
 // PDFImage is one picture extracted from a converted PDF.
@@ -131,6 +135,8 @@ type DocumentReaderFileResult struct {
 	PageCount    int        `json:"page_count,omitempty"` // 0 for audio
 	Images       []PDFImage `json:"images,omitempty"`
 	VisualPages  []int      `json:"visual_pages,omitempty"`
+	// Notes are lines shown before the text: where a partial read stopped, or that the document has little text.
+	Notes []string `json:"notes,omitempty"`
 }
 
 // FileReadResult is the union type for file read results

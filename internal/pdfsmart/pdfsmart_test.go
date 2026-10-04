@@ -11,6 +11,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/pdfcpu/pdfcpu/pkg/api"
 	"github.com/pdfcpu/pdfcpu/pkg/pdfcpu/model"
@@ -50,8 +51,8 @@ func TestConvert_TextOnlyPDFExtractsNativelyWithNilDoclingClient(t *testing.T) {
 			t.Errorf("expected every page to be extracted natively, page %d got source %q", p.Page, p.Source)
 		}
 	}
-	if result.DoclingPageCount() != 0 {
-		t.Errorf("expected 0 pages routed to docling, got %d", result.DoclingPageCount())
+	if pagesBy(result, PageSourceDocling) != 0 {
+		t.Errorf("expected 0 pages routed to docling, got %d", pagesBy(result, PageSourceDocling))
 	}
 }
 
@@ -95,7 +96,7 @@ func TestConvert_ImagePDFUsesDoclingWhenAvailable(t *testing.T) {
 	if !strings.Contains(result.Markdown, "This came from docling for this page") {
 		t.Fatalf("expected docling's markdown in the result, got:\n%s", result.Markdown)
 	}
-	if result.DoclingPageCount() == 0 {
+	if pagesBy(result, PageSourceDocling) == 0 {
 		t.Error("expected at least one page to be routed to docling for an image-only PDF")
 	}
 }
@@ -173,7 +174,7 @@ func TestConvert_VisionFallbackUsedWhenDoclingUnavailable(t *testing.T) {
 	if !strings.Contains(result.Markdown, "Transcribed by vision") {
 		t.Fatalf("expected vision's transcription in the result, got:\n%s", result.Markdown)
 	}
-	if result.VisionPageCount() == 0 {
+	if pagesBy(result, PageSourceVision) == 0 {
 		t.Error("expected at least one page to be routed to vision for an image-only PDF with no docling client")
 	}
 	for _, p := range result.Pages {
@@ -449,5 +450,78 @@ func TestOnlyAPictureBigEnoughForATableIsLarge(t *testing.T) {
 	}
 	if !largeEnough(model.Image{Width: 800, Height: 400}) {
 		t.Error("a screenshot is large")
+	}
+}
+
+func TestTheModelsStopBeingAskedOnceTheBudgetIsSpent(t *testing.T) {
+	t.Parallel()
+	asked := 0
+	slow := func() ([]pdftext.TableStructure, error) {
+		asked++
+		time.Sleep(15 * time.Millisecond)
+		return nil, nil
+	}
+	budget := &modelBudget{limit: 10 * time.Millisecond}
+	source := budget.wrap(slow)
+	for i := 0; i < 4; i++ {
+		if _, err := source(); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if asked != 1 || budget.skipped != 3 {
+		t.Fatalf("asked=%d skipped=%d, want the first page asked and the next three skipped", asked, budget.skipped)
+	}
+
+	unbounded := &modelBudget{limit: -1}
+	asked = 0
+	source = unbounded.wrap(slow)
+	for i := 0; i < 3; i++ {
+		_, _ = source()
+	}
+	if asked != 3 || unbounded.skipped != 0 {
+		t.Fatalf("a negative budget is no bound: asked=%d skipped=%d", asked, unbounded.skipped)
+	}
+	if (&modelBudget{limit: time.Second}).wrap(nil) != nil {
+		t.Error("no source stays no source")
+	}
+}
+
+func TestReadPagesReportsNothingSkippedWhenTheBudgetIsEnough(t *testing.T) {
+	t.Parallel()
+	data := readTestdata(t, "borderless.pdf")
+	reader := &tableReader{}
+	result, ok, err := ReadPages(context.Background(), data, nil, Options{}, reader, VisionFallback{})
+	if err != nil || !ok || result.ModelPagesSkipped != 0 {
+		t.Fatalf("ok=%v err=%v skipped=%d", ok, err, result.ModelPagesSkipped)
+	}
+}
+
+// pagesBy counts the pages of a result that were read by one source.
+func pagesBy(result Result, source PageSource) int {
+	n := 0
+	for _, p := range result.Pages {
+		if p.Source == source {
+			n++
+		}
+	}
+	return n
+}
+
+// A document read through the engine comes back into ReadPages for each page it hands over; the time spent on the
+// layout models is one budget for the whole document, carried by the context.
+func TestAnExhaustedModelBudgetInTheContextIsRespected(t *testing.T) {
+	t.Parallel()
+	data := readTestdata(t, "borderless.pdf")
+	reader := &tableReader{}
+	ctx := context.WithValue(context.Background(), modelBudgetKey{}, &modelBudget{limit: time.Millisecond, spent: time.Second})
+	result, ok, err := ReadPages(ctx, data, []int{1}, Options{}, reader, VisionFallback{})
+	if err != nil || !ok {
+		t.Fatalf("ok=%v err=%v", ok, err)
+	}
+	if len(reader.asked) != 0 || result.ModelPagesSkipped != 1 {
+		t.Fatalf("asked=%v skipped=%d, want no question to the models and one page skipped", reader.asked, result.ModelPagesSkipped)
+	}
+	if !strings.Contains(result.Markdown, "Hardware 120 135 128 141") {
+		t.Fatalf("the page is still read:\n%s", result.Markdown)
 	}
 }

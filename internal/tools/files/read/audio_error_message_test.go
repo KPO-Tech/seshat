@@ -50,7 +50,7 @@ func TestReadDocumentReaderFile_AudioConversionFailureHintsASRExtra(t *testing.T
 		t.Fatalf("stat fixture: %v", err)
 	}
 
-	result, err := tool.readDocumentReaderFile(context.Background(), path, info)
+	result, err := tool.readDocumentReaderFile(context.Background(), path, info, nil)
 	if err != nil {
 		t.Fatalf("readDocumentReaderFile: %v", err)
 	}

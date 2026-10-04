@@ -24,10 +24,10 @@ const (
 	FileTypeDocumentReader FileType = "document_reader"
 )
 
-// DoclingExtensions lists binary formats that require the configured document reader for extraction.
+// DocumentReaderExtensions lists the binary formats that go through the document reader (native extraction first, where there is one).
 // PDF has its own dedicated path (FileTypePDF); images go through the multimodal path.
 // Text-based formats (.tex, .html) remain in TextExtensions and are read directly.
-var DoclingExtensions = map[string]bool{
+var DocumentReaderExtensions = map[string]bool{
 	".docx": true,
 	".pptx": true,
 	".xlsx": true,
@@ -118,7 +118,7 @@ func DetectFileType(filePath string) (FileType, error) {
 	}
 
 	// DocumentReader-convertible binary formats (DOCX, PPTX, XLSX, audio)
-	if DoclingExtensions[ext] {
+	if DocumentReaderExtensions[ext] {
 		return FileTypeDocumentReader, nil
 	}
 
@@ -201,16 +201,4 @@ func isTextChar(b byte) bool {
 func GetImageMimeType(filePath string) string {
 	ext := strings.ToLower(filepath.Ext(filePath))
 	return ImageMimeTypes[ext]
-}
-
-// IsTextByExtension checks if a file is likely text based on extension
-func IsTextByExtension(filePath string) bool {
-	ext := strings.ToLower(filepath.Ext(filePath))
-	return TextExtensions[ext]
-}
-
-// IsImageByExtension checks if a file is likely an image based on extension
-func IsImageByExtension(filePath string) bool {
-	ext := strings.ToLower(filepath.Ext(filePath))
-	return ImageMimeTypes[ext] != ""
 }

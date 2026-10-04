@@ -4,10 +4,8 @@ import (
 	"bufio"
 	"context"
 	"fmt"
-	"io"
 	"os"
 	"strings"
-	"sync"
 )
 
 // ReadFileInRange reads a file with offset/limit support and cancellation
@@ -131,110 +129,4 @@ func CountFileLines(ctx context.Context, filePath string) (int, error) {
 		return 0, fmt.Errorf("error counting lines: %w", err)
 	}
 	return count, nil
-}
-
-// ReadFileWithCancellation reads entire file content with cancellation support
-func ReadFileWithCancellation(ctx context.Context, filePath string) ([]byte, error) {
-	// Check for cancellation at start
-	select {
-	case <-ctx.Done():
-		return nil, fmt.Errorf("file read cancelled: %w", ctx.Err())
-	default:
-	}
-
-	file, err := os.Open(filePath)
-	if err != nil {
-		return nil, fmt.Errorf("failed to open file: %w", err)
-	}
-	defer file.Close()
-
-	// Get file size for progress tracking
-	_, err = file.Stat()
-	if err != nil {
-		return nil, fmt.Errorf("failed to stat file: %w", err)
-	}
-
-	// Read in chunks with cancellation checks
-	const chunkSize = 32 * 1024 // 32KB chunks
-	var result []byte
-	buffer := make([]byte, chunkSize)
-	totalRead := 0
-
-	for {
-		// Check for cancellation before each read
-		select {
-		case <-ctx.Done():
-			return nil, fmt.Errorf("file read cancelled: %w", ctx.Err())
-		default:
-		}
-
-		n, err := file.Read(buffer)
-		if n > 0 {
-			result = append(result, buffer[:n]...)
-			totalRead += n
-		}
-
-		if err == io.EOF {
-			break
-		}
-
-		if err != nil {
-			return nil, fmt.Errorf("error reading file: %w", err)
-		}
-	}
-
-	return result, nil
-}
-
-// CancellationGroup allows waiting for multiple operations with cancellation
-type CancellationGroup struct {
-	ctx    context.Context
-	cancel context.CancelFunc
-	wg     sync.WaitGroup
-	errs   []error
-	errMu  sync.Mutex
-}
-
-// NewCancellationGroup creates a new cancellation group
-func NewCancellationGroup(ctx context.Context) *CancellationGroup {
-	childCtx, cancel := context.WithCancel(ctx)
-	return &CancellationGroup{
-		ctx:    childCtx,
-		cancel: cancel,
-	}
-}
-
-// Go starts a goroutine with cancellation support
-func (g *CancellationGroup) Go(fn func(context.Context) error) {
-	g.wg.Add(1)
-	go func() {
-		defer g.wg.Done()
-		if err := fn(g.ctx); err != nil {
-			g.errMu.Lock()
-			g.errs = append(g.errs, err)
-			g.errMu.Unlock()
-			// Cancel other operations on error
-			g.cancel()
-		}
-	}()
-}
-
-// Wait waits for all operations to complete
-func (g *CancellationGroup) Wait() error {
-	g.wg.Wait()
-	g.cancel()
-
-	g.errMu.Lock()
-	defer g.errMu.Unlock()
-
-	if len(g.errs) > 0 {
-		return g.errs[0]
-	}
-
-	return nil
-}
-
-// Cancel cancels all operations in the group
-func (g *CancellationGroup) Cancel() {
-	g.cancel()
 }
