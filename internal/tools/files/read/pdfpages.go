@@ -227,7 +227,11 @@ func (t *Tool) readPDFFile(
 				if page.Deferred {
 					continue
 				}
-				doc.put(page.Page, pdfPage{text: page.Text, hasImage: page.HasEmbeddedImage})
+				text := page.Text
+				if !page.HasText() {
+					text = "" // only the markers of its pictures: the page was not read, and is reported as such below
+				}
+				doc.put(page.Page, pdfPage{text: text, hasImage: page.HasEmbeddedImage})
 				if page.Source != pdfsmart.PageSourceNative && t.documentReader != nil {
 					engineBudget--
 				}
