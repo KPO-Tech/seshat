@@ -71,6 +71,8 @@ What the readers write is markdown, and `rag.HeadingChunker` (the fallback of th
 - a PDF's text has a marker line before each page (`documentreading.Result.PagedMarkdown`, `<!-- page 3 -->`); the chunker removes the markers from the text and gives the pages a chunk covers in `Metadata["page_numbers"]`, as a JSON array (`[3,4]`). Slides and sheets are already in the heading path (`Slide 3 > Title`, `Sheet1`);
 - a heading with nothing under it is not lost: its title is in the path of what follows, or, when nothing follows it, it is written as text.
 
+Both are public: `rag.NewHeadingChunker(profile)` and `rag.NewTableChunker(profile)`, with `rag.RecommendedChunkProfile(rag.ChunkProfileStructured)` for the profile hosts use; they are `DocumentChunker`s, so `rag.NewCachedDocumentChunker` wraps them.
+
 `rag.TableChunker` is the same engine with every table kept apart, as its own chunk or chunks. `chunk_quality_test.go` holds both to measures on real reader output (`testdata/chunking`): no word of the source missing from the chunks, no table piece without its header, no unbalanced code fence, no chunk over the limit, and few chunks under 40 tokens; `RAG_CHUNK_CORPUS=<dir of .md files>` runs the same checks on a bigger corpus.
 
 For repeated ingestion of the same document, wrap a document-aware chunker with `rag.NewCachedDocumentChunker`. The cache key includes the document content, filename, cache schema version, and chunker options when the chunker exposes a cache fingerprint. `rag.NewArtifactChunkCache` persists cached chunks through the runtime artifact store, while `rag.NewMemoryChunkCache` is useful for tests and short-lived local runs.
