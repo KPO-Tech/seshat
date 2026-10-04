@@ -9,6 +9,10 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added
+
+- `rag.HeadingChunker` and `rag.NewHeadingChunker` in the public SDK (`pkg/rag`): the markdown chunker hosts use for documents they read natively (headings, paragraphs, lists, tables and code cut along their structure, `heading_path` and `page_numbers` metadata) can be used directly, without going through `NewHybridDocumentChunkerForProfile` and its fallback.
+
 ## [1.2.67] - 2026-10-04
 
 ### Added
