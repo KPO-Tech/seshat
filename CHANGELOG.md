@@ -9,6 +9,22 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [1.2.65] - 2026-10-04
+
+### Fixed
+
+- Reading a long document with the layout models took minutes for nothing: on a 60-page book almost every page "looked like it might hold a table" and was put to the models, 160 s instead of 4.6 s with the same text. A page with code, formulas or two columns of running text no longer looks columnar, and the time one document may spend on the models is bounded (`pdfsmart.Options.ModelBudget`, 20 s by default, shared by every page of a document, also the pages read through the engine). `pdfsmart.Result.ModelPagesSkipped` and a note in the Read result say when pages were left without the models (their text is complete; the tables found from the rulings stay).
+- A deck that is mostly pictures (a title or two of real text) gave an error, or "nothing could be read", when no reader could do better than the native extractor: its text was extracted and thrown away. `documentreading.Convert`/`ConvertBytes` and the Read tool now return that thin text (the Read tool says it is thin). A file that parsed and has no text at all is "nothing extracted", not the error of a reader that does not know the format.
+- The Read tool had no size limit for converted documents (DOCX, PPTX, XLSX): a big one went into the context whole. They are now read in pieces of about 120,000 characters, with `offset`/`limit` counting lines of the markdown and a note saying where to continue.
+
+### Removed
+
+- Code that nothing called: `read/cancellation.go` (all but `ReadFileInRange` and `CountFileLines`), `EstimateImageTokens`, `GetImageDimensions`, `IsTextByExtension`, `IsImageByExtension`, `GetCanonicalName`, `InvalidateFileCache` and three cache methods, `pdfsmart.Result.DoclingPageCount`/`VisionPageCount`, two helpers of `officetext`, and the second plain-text layout of `pdftext` (`pdftext.Extract`, still public, now returns the markdown of the pages, as the Read tool does). The audio error no longer sends to a script that does not exist.
+
+### Changed
+
+- `read.DoclingExtensions` is now `read.DocumentReaderExtensions`.
+
 ## [1.2.64] - 2026-10-04
 
 ### Fixed

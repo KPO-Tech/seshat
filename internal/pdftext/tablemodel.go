@@ -128,7 +128,7 @@ func modelTables(opts PageOptions, box pageBox, glyphs []glyph, taken []bool, fo
 			freeIdx = append(freeIdx, i)
 		}
 	}
-	if !opts.LargeImage && !columnar(free) {
+	if !opts.LargeImage && !columnar(proseAndFigures(free)) {
 		return nil, nil
 	}
 	structures, err := source()
@@ -210,6 +210,18 @@ func overlapsFound(m modelTable, found []foundTable) bool {
 	return false
 }
 
+// proseAndFigures is the text without code and formulas. A listing and a line of mathematics are broken into many
+// small chunks by their spacing, and look columnar to the test below on pages that have no table at all.
+func proseAndFigures(glyphs []glyph) []glyph {
+	out := make([]glyph, 0, len(glyphs))
+	for _, g := range glyphs {
+		if !g.mono && !g.math {
+			out = append(out, g)
+		}
+	}
+	return out
+}
+
 // columnar says whether some run of consecutive text rows has several chunks on each row, lined up in columns: the
 // cheap look that decides whether the page is worth the models' time. A page of prose has one chunk per line.
 func columnar(glyphs []glyph) bool {
@@ -227,7 +239,7 @@ func columnar(glyphs []glyph) bool {
 				x0, x1 = math.Min(x0, c.x0), math.Max(x1, c.x1)
 			}
 		}
-		return len(gapSeparators(runRows, tableRegion{x0: x0, x1: x1})) > 0
+		return !proseColumns(runRows) && len(gapSeparators(runRows, tableRegion{x0: x0, x1: x1})) > 0
 	}
 	for _, r := range rows {
 		if len(r.chunks) >= 2 {
@@ -241,6 +253,24 @@ func columnar(glyphs []glyph) bool {
 	}
 	return flush()
 }
+
+// proseColumns says whether the chunks of a run of rows are long, as the lines of two columns of running text are:
+// the cells of a table are short.
+func proseColumns(rows []textRow) bool {
+	long, total := 0, 0
+	for _, r := range rows {
+		for _, c := range r.chunks {
+			total++
+			if len([]rune(c.text)) > longCellRunes {
+				long++
+			}
+		}
+	}
+	return total > 0 && float64(long) > 0.25*float64(total)
+}
+
+// longCellRunes is the length above which a chunk is a line of text rather than a cell.
+const longCellRunes = 45
 
 // buildModelTable reads one table from the models' structure and the text on the page. The columns are the gaps
 // between the model's column boxes, the rows are the model's rows (a line of text belongs to the row it lies in),

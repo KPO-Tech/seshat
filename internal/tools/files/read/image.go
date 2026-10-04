@@ -265,22 +265,3 @@ func encodeImage(img image.Image, format string) ([]byte, error) {
 
 	return buf.Bytes(), nil
 }
-
-// EstimateImageTokens estimates token count from image data
-func EstimateImageTokens(imageData []byte) int {
-	base64Len := base64.StdEncoding.EncodedLen(len(imageData))
-	return int(float64(base64Len) * TokenEstimationFactor)
-}
-
-// GetImageDimensions extracts dimensions from image data
-func GetImageDimensions(imageData []byte) (*ImageDimensions, error) {
-	img, _, err := image.Decode(bytes.NewReader(imageData))
-	if err != nil {
-		return nil, err
-	}
-
-	return &ImageDimensions{
-		Width:  img.Bounds().Dx(),
-		Height: img.Bounds().Dy(),
-	}, nil
-}
