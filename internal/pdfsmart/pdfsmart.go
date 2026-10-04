@@ -127,6 +127,10 @@ type PageResult struct {
 	Text             string
 	Source           PageSource
 	HasEmbeddedImage bool
+	// Pictures are the pictures of the page the text does not say anything about, numbered from 1 on the page. A page read
+	// natively has one marker in Text for each of them (see ImageMarker); a page read by an engine has none, since the
+	// engine read the pictures.
+	Pictures []Picture
 	// Deferred is set on a page that needed the engine but was left unread because Options.MaxEnginePages
 	// had been used up. It is not a failure: reading the page again later will read it.
 	Deferred bool
@@ -244,13 +248,13 @@ func ReadPages(ctx context.Context, data []byte, pages []int, opts Options, docu
 			selection = append(selection, strconv.Itoa(n))
 		}
 	}
-	pagesWithImages, largeImages, err := pagesWithEmbeddedImages(data, selection)
+	pagesWithImages, largeImages, pagePictures, err := pagesWithEmbeddedImages(data, selection)
 	imageDetectionOK := err == nil
 	if err != nil {
 		// Can't tell which pages have images - conservatively treat every
 		// page as needing docling rather than silently extracting
 		// natively past an image detection failed to find.
-		pagesWithImages, largeImages = allPages(pageCount), map[int]bool{}
+		pagesWithImages, largeImages, pagePictures = allPages(pageCount), map[int]bool{}, map[int]int{}
 	}
 
 	result := Result{Pages: make([]PageResult, 0, len(wanted))}
@@ -271,17 +275,27 @@ func ReadPages(ctx context.Context, data []byte, pages []int, opts Options, docu
 
 	for _, i := range wanted {
 		needsDocling := opts.ImagePagesNeedEngine && pagesWithImages[i]
-		var text string
+		var text, native string
+		var pictures []Picture
 
-		if !needsDocling {
+		// nativeText is what the page's own text layer gives, and whether it is good enough to be the page.
+		nativeText := func() (string, bool) {
 			page := reader.Page(i)
 			if page.V.IsNull() {
-				needsDocling = true
-			} else if native, extractErr := pdftext.PageMarkdownWith(page, pdftext.PageOptions{Tables: budget.wrap(tableSource(ctx, documentReader, data, i)), LargeImage: largeImages[i]}); extractErr != nil ||
-				len(strings.TrimSpace(native)) < pdftext.MinCharsPerPage || textquality.IsGarbledText(native) {
-				needsDocling = true
+				return "", false
+			}
+			md, extractErr := pdftext.PageMarkdownWith(page, pdftext.PageOptions{Tables: budget.wrap(tableSource(ctx, documentReader, data, i)), LargeImage: largeImages[i]})
+			if extractErr != nil || len(strings.TrimSpace(md)) < pdftext.MinCharsPerPage || textquality.IsGarbledText(md) {
+				return "", false
+			}
+			return md, true
+		}
+
+		if !needsDocling {
+			if md, ok := nativeText(); ok {
+				text, native = md, md
 			} else {
-				text = native
+				needsDocling = true
 			}
 		}
 
@@ -314,9 +328,20 @@ func ReadPages(ctx context.Context, data []byte, pages []int, opts Options, docu
 					}
 				}
 			}
+			// Nothing read the pictures of this page (no engine, or it could not), but the page has text of its own: keep
+			// the text and say where the pictures are, rather than lose the page for the sake of them. A page with no
+			// text at all (a scan) is still a failure below.
+			if strings.TrimSpace(text) == "" && pagesWithImages[i] {
+				if md, ok := nativeText(); ok {
+					text, native, source = md, md, PageSourceNative
+				}
+			}
 			if strings.TrimSpace(text) == "" {
 				allOK = false
 			}
+		}
+		if source == PageSourceNative && native != "" {
+			text, pictures = withImageMarkers(native, i, pagePictures[i])
 		}
 
 		result.Pages = append(result.Pages, PageResult{
@@ -324,6 +349,7 @@ func ReadPages(ctx context.Context, data []byte, pages []int, opts Options, docu
 			Text:             text,
 			Source:           source,
 			HasEmbeddedImage: imageDetectionOK && pagesWithImages[i],
+			Pictures:         pictures,
 		})
 		if text != "" {
 			if sb.Len() > 0 {
@@ -412,43 +438,68 @@ func allPages(n int) map[int]bool {
 // pagesWithEmbeddedImages reports which 1-indexed pages have at least one
 // embedded raster image (a PDF XObject with /Subtype /Image), via
 // pdfcpu's own resource inspection - a deterministic read of the file's
-// structure, not a heuristic or an ML classification.
-func pagesWithEmbeddedImages(data []byte, selectedPages []string) (pages, large map[int]bool, err error) {
+// structure, not a heuristic or an ML classification. large says which of them hold one big enough to be a table, and
+// pictures counts, for each page, the pictures worth a marker in its text (see withImageMarkers).
+func pagesWithEmbeddedImages(data []byte, selectedPages []string) (pages, large map[int]bool, pictures map[int]int, err error) {
 	imageSets, err := api.ExtractImagesRaw(bytes.NewReader(data), selectedPages, nil)
 	if err != nil {
-		return nil, nil, err
+		return nil, nil, nil, err
 	}
-	pages, large = make(map[int]bool), make(map[int]bool)
+	pages, large, pictures = make(map[int]bool), make(map[int]bool), make(map[int]int)
+	objects := make(map[int]map[int]int) // object number -> page -> how many times the page uses it
 	for _, set := range imageSets {
 		for _, img := range set {
 			if img.PageNr <= 0 {
 				continue
 			}
+			width, height, known := pictureSize(img)
 			pages[img.PageNr] = true
-			if largeEnough(img) {
+			if !known || (width >= tableImageMinWidth && height >= tableImageMinHeight) {
 				large[img.PageNr] = true
 			}
+			if known && (width < markerImageMinSide || height < markerImageMinSide) {
+				continue
+			}
+			if objects[img.ObjNr] == nil {
+				objects[img.ObjNr] = make(map[int]int)
+			}
+			objects[img.ObjNr][img.PageNr]++
 		}
 	}
-	return pages, large, nil
+	for _, onPages := range objects {
+		// The same picture on three pages or more is a logo, a letterhead or a background, not a figure.
+		if len(onPages) >= repeatedPictureMinPages {
+			continue
+		}
+		for page, n := range onPages {
+			pictures[page] += n
+		}
+	}
+	return pages, large, pictures, nil
 }
 
 // largeEnough says whether a picture is big enough to hold a table. pdfcpu does not fill in the size of the pictures it
 // extracts raw, so it is read from the picture's own header; one whose format cannot be read (a scan's CCITT or JBIG2
 // image) counts as large, because the cost of a wrong yes is only a look by the models.
 func largeEnough(img pdfcpumodel.Image) bool {
-	width, height := img.Width, img.Height
-	if width == 0 || height == 0 {
-		if img.Reader == nil {
-			return true
-		}
-		config, _, err := image.DecodeConfig(img.Reader)
-		if err != nil {
-			return true
-		}
-		width, height = config.Width, config.Height
+	width, height, known := pictureSize(img)
+	return !known || (width >= tableImageMinWidth && height >= tableImageMinHeight)
+}
+
+// pictureSize is the size of a picture in pixels, and false when it cannot be read.
+func pictureSize(img pdfcpumodel.Image) (width, height int, known bool) {
+	width, height = img.Width, img.Height
+	if width != 0 && height != 0 {
+		return width, height, true
 	}
-	return width >= tableImageMinWidth && height >= tableImageMinHeight
+	if img.Reader == nil {
+		return 0, 0, false
+	}
+	config, _, err := image.DecodeConfig(img.Reader)
+	if err != nil {
+		return 0, 0, false
+	}
+	return config.Width, config.Height, true
 }
 
 // Pictures smaller than this, in pixels, are a logo, an icon or a rule; a table in a picture is bigger. The second
