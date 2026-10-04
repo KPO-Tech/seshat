@@ -9,6 +9,12 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [1.2.67] - 2026-10-04
+
+### Added
+
+- `documentreader.GenericConfig.ChunkFields`: a host maps the `ChunkOptions` of a chunk call (the size the chunks should have) onto the form fields its server's chunk endpoint takes. `GenericClient.ChunkHybridBytes` and `ChunkHybridFile` used to ignore the options (a server that is not docling-serve has no common names for them); without the mapping nothing changes.
+
 ## [1.2.66] - 2026-10-04
 
 ### Changed
