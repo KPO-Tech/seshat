@@ -323,3 +323,50 @@ func TestGenericClient_ConvertBytes_SurfacesAPIErrorForNon2xx(t *testing.T) {
 		t.Errorf("expected status 422, got %d", apiErr.Status)
 	}
 }
+
+// The options of a chunk call reach the server as the form fields the host's mapping gives them.
+func TestGenericClient_ChunkHybridBytes_SendsTheMappedOptions(t *testing.T) {
+	var got map[string]string
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if err := r.ParseMultipartForm(10 << 20); err != nil {
+			t.Fatalf("ParseMultipartForm: %v", err)
+		}
+		got = map[string]string{}
+		for name, values := range r.MultipartForm.Value {
+			got[name] = values[0]
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(siChunkDocumentResponse{Filename: "report.pdf", Chunks: []siDocumentChunk{{Index: 0, Text: "x"}}})
+	}))
+	defer server.Close()
+
+	c, err := NewGenericClient(GenericConfig{
+		BaseURL:   server.URL,
+		FileField: "file",
+		ChunkPath: "/v1/documents/chunks",
+		ParseChunk: func(raw []byte) ([]Chunk, error) {
+			return []Chunk{{Text: "x"}}, nil
+		},
+		ChunkFields: func(o ChunkOptions) map[string]string {
+			if o.MaxTokens > 0 {
+				return map[string]string{"max_tokens": fmt.Sprint(o.MaxTokens)}
+			}
+			return nil
+		},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := c.ChunkHybridBytes(context.Background(), []byte("x"), "report.pdf", ChunkOptions{MaxTokens: 512}); err != nil {
+		t.Fatal(err)
+	}
+	if got["max_tokens"] != "512" {
+		t.Fatalf("form fields = %v, want max_tokens=512", got)
+	}
+	if _, err := c.ChunkHybridBytes(context.Background(), []byte("x"), "report.pdf", ChunkOptions{}); err != nil {
+		t.Fatal(err)
+	}
+	if _, ok := got["max_tokens"]; ok {
+		t.Fatalf("no size was asked for, none must be sent: %v", got)
+	}
+}

@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 	"time"
 )
@@ -55,6 +56,7 @@ type GenericClient struct {
 	healthPath   string
 	parseConvert ConvertParser
 	parseChunk   ChunkParser
+	chunkFields  func(ChunkOptions) map[string]string
 }
 
 // GenericConfig configures a GenericClient. BaseURL and FileField are
@@ -87,6 +89,11 @@ type GenericConfig struct {
 	// ParseChunk nil) to leave chunking unsupported.
 	ChunkPath  string
 	ParseChunk ChunkParser
+
+	// ChunkFields maps the ChunkOptions of a call (the size the chunks should have, for one) onto the form fields the
+	// server's chunk endpoint takes, by name. docling-serve has its own mapping (see ChunkOptions); an arbitrary
+	// server has its own names, or none. Leave nil to send the file alone.
+	ChunkFields func(ChunkOptions) map[string]string
 
 	// HealthPath is the endpoint IsAvailable GETs. Defaults to "/health" -
 	// true for both docling-serve and seshat-intelligence today, but
@@ -174,6 +181,7 @@ func NewGenericClient(cfg GenericConfig) (*GenericClient, error) {
 		healthPath:   healthPath,
 		parseConvert: cfg.ParseConvert,
 		parseChunk:   cfg.ParseChunk,
+		chunkFields:  cfg.ChunkFields,
 	}, nil
 }
 
@@ -215,33 +223,28 @@ func (g *GenericClient) ConvertURL(context.Context, string) (*ConversionResult, 
 
 // ChunkHybridFile mirrors Client's own convenience method of the same name
 // (see ChunkHybridBytes's doc comment for why opts is unused here).
-func (g *GenericClient) ChunkHybridFile(ctx context.Context, filePath string, _ ChunkOptions) ([]Chunk, error) {
+func (g *GenericClient) ChunkHybridFile(ctx context.Context, filePath string, opts ChunkOptions) ([]Chunk, error) {
 	if g.chunkPath == "" {
 		return nil, fmt.Errorf("documentreader: this GenericClient has no ChunkPath configured")
 	}
 	rawBody, err := g.transport.postMultipartReplayable(ctx, g.chunkPath, g.fileField, filepath.Base(filePath), func() (io.ReadCloser, error) {
 		return os.Open(filePath)
-	}, nil)
+	}, g.fields(opts))
 	if err != nil {
 		return nil, err
 	}
 	return g.parseChunk(rawBody)
 }
 
-// ChunkHybridBytes satisfies HybridChunker. opts is accepted for
-// interface compatibility but currently unused: unlike docling-serve,
-// there is no generic way to map ChunkOptions onto an arbitrary server's
-// own tuning knobs (or lack thereof - seshat-intelligence's own chunk
-// endpoint takes none today). A backend whose server does support tuning
-// can build its own field mapping ahead of NewGenericClient, or wrap
-// GenericClient with that translation, once a real need for it shows up.
-func (g *GenericClient) ChunkHybridBytes(ctx context.Context, data []byte, filename string, _ ChunkOptions) ([]Chunk, error) {
+// ChunkHybridBytes satisfies HybridChunker. The options go to the server as the form fields GenericConfig.ChunkFields
+// gives them; without that mapping the file is sent alone, and the server chunks as it likes.
+func (g *GenericClient) ChunkHybridBytes(ctx context.Context, data []byte, filename string, opts ChunkOptions) ([]Chunk, error) {
 	if g.chunkPath == "" {
 		return nil, fmt.Errorf("documentreader: this GenericClient has no ChunkPath configured")
 	}
 	rawBody, err := g.transport.postMultipartReplayable(ctx, g.chunkPath, g.fileField, filename, func() (io.ReadCloser, error) {
 		return io.NopCloser(bytes.NewReader(data)), nil
-	}, nil)
+	}, g.fields(opts))
 	if err != nil {
 		return nil, err
 	}
@@ -256,3 +259,21 @@ var (
 	_ Converter     = (*GenericClient)(nil)
 	_ HybridChunker = (*GenericClient)(nil)
 )
+
+// fields turns the options of a chunk call into form fields, in a fixed order, through GenericConfig.ChunkFields.
+func (g *GenericClient) fields(opts ChunkOptions) []multipartField {
+	if g.chunkFields == nil {
+		return nil
+	}
+	values := g.chunkFields(opts)
+	names := make([]string, 0, len(values))
+	for name := range values {
+		names = append(names, name)
+	}
+	sort.Strings(names)
+	out := make([]multipartField, 0, len(names))
+	for _, name := range names {
+		out = append(out, multipartField{name: name, value: values[name]})
+	}
+	return out
+}
