@@ -156,12 +156,16 @@ func PageMarkdownWith(page pdf.Page, opts PageOptions) (md string, err error) {
 		return "", nil
 	}
 	texts := page.Content().Text
-	rul, _ := pageRulings(page) // no rulings (or unreadable ones) means no tables, not a failed page
+	texts = restoreLigatures(texts, ligatureNames(page))
+	skip := markerIndexes(page, len(texts)) // by index: the order of the glyphs must not change before this
+	rul, _ := pageRulings(page)             // no rulings (or unreadable ones) means no tables, not a failed page
+	rotation := pageRotation(page)
 	models := modelContext{}
-	if opts.Tables != nil && inherited(page.V, "Rotate").Int64()%360 == 0 {
+	if opts.Tables != nil && rotation == 0 {
 		models = modelContext{opts: opts, box: boxOf(page)}
 	}
-	return layoutMarkdownPage(texts, markerIndexes(page, len(texts)), rul.merged(), models), nil
+	md = layoutMarkdownPage(turnTexts(page, texts, rotation), skip, turnRulings(rul.merged(), rotation), models)
+	return withoutControls(ligatureLetters.Replace(md)), nil
 }
 
 // markerIndexes finds the glyphs the library invents: after every TJ it shows a "\n" through the current
@@ -283,12 +287,12 @@ func layoutMarkdownPage(texts []pdf.Text, skip map[int]bool, rul rulings, models
 		prose = append(prose, l)
 	}
 	if len(prose) == 0 {
-		return assemble(lines, 10, 0, 0)
+		return assemble(lines, 10, columns{})
 	}
 	body := bodySize(prose)
-	margin, rightEdge := bodyMargins(prose, body)
-	classify(prose, body, margin)
-	return assemble(lines, body, margin, rightEdge)
+	cols := pageColumns(prose, body)
+	classify(prose, body, cols)
+	return assemble(lines, body, cols)
 }
 
 func pageWidth(glyphs []glyph) float64 {
@@ -488,7 +492,7 @@ func hasMath(l *line) bool {
 }
 
 // classify decides what each line is.
-func classify(lines []*line, body, margin float64) {
+func classify(lines []*line, body float64, cols columns) {
 	for _, l := range lines {
 		l.text = plainLine(l)
 		switch {
@@ -502,7 +506,7 @@ func classify(lines []*line, body, margin float64) {
 	// A display formula: indented well past the margin, set in a math font, short.
 	seeds := make([]bool, len(lines))
 	for i, l := range lines {
-		if l.kind == kindText && isFormulaLine(l) && l.x0 > margin+body*displayIndent && len(l.glyphs) <= maxDisplayWidth {
+		if l.kind == kindText && isFormulaLine(l) && l.x0 > cols.margin(l)+body*displayIndent && len(l.glyphs) <= maxDisplayWidth {
 			seeds[i] = true
 		}
 	}
@@ -511,7 +515,7 @@ func classify(lines []*line, body, margin float64) {
 			continue
 		}
 		// Fragments of a formula (a numerator, a denominator, a limit) are short lines beside a seed.
-		if len(l.glyphs) <= 12 && l.x0 > margin+body*displayIndent && (nearSeed(lines, seeds, i, -1, body) || nearSeed(lines, seeds, i, 1, body)) {
+		if len(l.glyphs) <= 12 && l.x0 > cols.margin(l)+body*displayIndent && (nearSeed(lines, seeds, i, -1, body) || nearSeed(lines, seeds, i, 1, body)) {
 			seeds[i] = true
 		}
 	}
@@ -575,12 +579,12 @@ func headingLevel(ratio float64) int {
 }
 
 // assemble writes the blocks of a page in order.
-func assemble(lines []*line, body, margin, rightEdge float64) string {
+func assemble(lines []*line, body float64, cols columns) string {
 	var blocks []string
 	var para []*line
 	flush := func() {
 		if len(para) > 0 {
-			blocks = append(blocks, paragraphs(para, body, margin, rightEdge)...)
+			blocks = append(blocks, paragraphs(para, body, cols)...)
 			para = nil
 		}
 	}
@@ -630,10 +634,11 @@ func assemble(lines []*line, body, margin, rightEdge float64) string {
 }
 
 // paragraphs turns consecutive text lines into paragraphs and list items.
-func paragraphs(lines []*line, body, margin, rightEdge float64) []string {
+func paragraphs(lines []*line, body float64, cols columns) []string {
 	var out []string
 	var cur strings.Builder
 	var prev *line
+	known := compoundsIn(lines)
 	listIndent := math.Inf(1)
 	flush := func() {
 		if cur.Len() > 0 {
@@ -651,6 +656,7 @@ func paragraphs(lines []*line, body, margin, rightEdge float64) []string {
 		newBlock := prev == nil || item
 		if !newBlock {
 			gap := prev.y - l.y
+			margin, rightEdge := cols.margin(l), cols.rightEdge(prev)
 			ended := endsSentence(prev.text) && prev.x1 < rightEdge-body*4
 			switch {
 			case gap > body*paragraphGap || gap < 0:
@@ -680,7 +686,7 @@ func paragraphs(lines []*line, body, margin, rightEdge float64) []string {
 			}
 			cur.WriteString(text)
 		} else {
-			joinLine(&cur, text)
+			joinLine(&cur, text, known)
 		}
 		prev = l
 	}
@@ -693,16 +699,59 @@ func endsSentence(s string) bool {
 	return strings.HasSuffix(s, ".") || strings.HasSuffix(s, "!") || strings.HasSuffix(s, "?") || strings.HasSuffix(s, ":") || strings.HasSuffix(s, "»")
 }
 
+// compounds is the evidence a page gives about words broken at the end of a line: the words it writes with a hyphen
+// in the middle of a line, lower case. "task-" at the end of a line followed by "specific" is a syllable break when the page
+// never writes "task-specific" and a compound when it does.
+type compounds map[string]bool
+
+func compoundsIn(lines []*line) compounds {
+	found := compounds{}
+	for _, l := range lines {
+		for _, word := range strings.Fields(l.text) {
+			word = strings.ToLower(strings.TrimFunc(word, func(r rune) bool { return !unicode.IsLetter(r) && !unicode.IsDigit(r) }))
+			if strings.Contains(word, "-") {
+				found[word] = true
+			}
+		}
+	}
+	return found
+}
+
+// writes says whether the page has a compound that is, or begins with, the word: "pre-train" is written by a page that has
+// "pre-trained".
+func (c compounds) writes(word string) bool {
+	for compound := range c {
+		if strings.HasPrefix(compound, word) {
+			return true
+		}
+	}
+	return false
+}
+
 // joinLine continues a paragraph with the next line, undoing a hyphen the typesetter added at a line end.
-func joinLine(cur *strings.Builder, next string) {
+func joinLine(cur *strings.Builder, next string, known compounds) {
 	s := cur.String()
 	if strings.HasSuffix(s, "-") && len(s) >= 2 {
 		before, _ := utf8.DecodeLastRuneInString(s[:len(s)-1])
 		first, _ := utf8.DecodeRuneInString(next)
-		// "English-" then "to-German" is a compound word split at its own hyphen: the next piece has a
-		// hyphen of its own. A syllable break ("approxima-" then "teurs") is followed by a plain fragment.
-		word, _, _ := strings.Cut(next, " ")
-		if unicode.IsLetter(before) && unicode.IsLower(first) && !strings.Contains(word, "-") {
+		if unicode.IsLetter(before) && unicode.IsLower(first) {
+			word, _, _ := strings.Cut(next, " ")
+			if strings.Contains(word, "-") {
+				// "English-" then "to-German" is a compound word split at its own hyphen: the hyphen stays and no
+				// space is added.
+				cur.WriteString(next)
+				return
+			}
+			left := s
+			if i := strings.LastIndexAny(s, " \n"); i >= 0 {
+				left = s[i+1:]
+			}
+			piece := strings.TrimFunc(word, func(r rune) bool { return !unicode.IsLetter(r) && !unicode.IsDigit(r) })
+			if known.writes(strings.ToLower(left + piece)) {
+				cur.WriteString(next) // the page writes this compound with its hyphen elsewhere
+				return
+			}
+			// A syllable break ("approxima-" then "teurs") is followed by a plain fragment.
 			cur.Reset()
 			cur.WriteString(s[:len(s)-1])
 			cur.WriteString(next)
