@@ -9,6 +9,8 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [1.2.66] - 2026-10-04
+
 ### Changed
 
 - `HeadingChunker` and `TableChunker` read markdown as blocks (headings, paragraphs, lists, tables, fenced code) and cut it along them. Measured on 172 documents read by the native readers: chunks under 40 tokens fall from 48% to 8%, tables cut without their header from 75 of 295 to none, chunks over the limit from 123 to none, and the 2.6% of the text that was in no chunk (the items of a numbered list, taken for headings) is no longer lost. A paragraph is cut between sentences with an overlap, a table between rows with its header repeated, code between lines with each piece fenced again; small sections are joined with their headings written in the text; the heading path is clean (no `#` marks). Code comments are not headings and a numbered list is not a series of headings; Portuguese, Spanish, German, Italian and Dutch structural words are recognised. A heading with nothing under it is kept as text when no sub-heading follows it.
