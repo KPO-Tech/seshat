@@ -2,6 +2,7 @@ package rag
 
 import (
 	"context"
+	"github.com/KPO-Tech/seshat/internal/pagemark"
 	"strings"
 )
 
@@ -27,6 +28,7 @@ func DefaultChunker() Chunker {
 }
 
 func (c ParagraphChunker) Split(_ context.Context, text string) ([]Chunk, error) {
+	text = pagemark.Strip(text)
 	maxChars := c.MaxChunkChars
 	if maxChars <= 0 {
 		maxChars = defaultMaxChunkChars

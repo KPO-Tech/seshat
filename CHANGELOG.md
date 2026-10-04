@@ -9,6 +9,18 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [1.2.66] - 2026-10-04
+
+### Changed
+
+- `HeadingChunker` and `TableChunker` read markdown as blocks (headings, paragraphs, lists, tables, fenced code) and cut it along them. Measured on 172 documents read by the native readers: chunks under 40 tokens fall from 48% to 8%, tables cut without their header from 75 of 295 to none, chunks over the limit from 123 to none, and the 2.6% of the text that was in no chunk (the items of a numbered list, taken for headings) is no longer lost. A paragraph is cut between sentences with an overlap, a table between rows with its header repeated, code between lines with each piece fenced again; small sections are joined with their headings written in the text; the heading path is clean (no `#` marks). Code comments are not headings and a numbered list is not a series of headings; Portuguese, Spanish, German, Italian and Dutch structural words are recognised. A heading with nothing under it is kept as text when no sub-heading follows it.
+- The `structured` chunk profile is 512 tokens with an overlap of 64 (it was 1024 with 120): chunks of 1024 tokens held several topics.
+
+### Added
+
+- Chunks say which pages they come from. A PDF read page by page has, in the text that is indexed, a marker line (`<!-- page 3 -->`, an HTML comment that rendering hides) before each page: `documentreading.Result.PagedMarkdown` (and `Result.TextForIndexing()`, which gives it for a PDF and `Markdown` for every other format; `Markdown` itself stays clean for anyone who shows the text). `HeadingChunker` and `TableChunker` take the markers out of the text and put the pages a chunk covers in `Metadata["page_numbers"]` (`[3,4]`, as document readers give them); the other chunkers drop the markers. `documentreading.StripPageMarkers` for a host that needs the text clean.
+- `testdata/chunking` and `TestChunkQuality`: the chunkers are held to measures (no lost word, no table piece without its header, no unbalanced fence, no chunk over the limit, few tiny chunks) on real reader output; `RAG_CHUNK_CORPUS` runs them on a bigger corpus.
+
 ## [1.2.65] - 2026-10-04
 
 ### Fixed

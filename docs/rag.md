@@ -60,6 +60,19 @@ The core RAG service can now accept both extracted text and the original documen
 
 This path is intended for rich Knowledge ingestion, especially PDF, DOCX, PPTX, XLSX, and other structured enterprise documents. The existing paragraph and semantic chunkers remain useful fallbacks for local/simple text ingestion.
 
+### Chunking markdown (`HeadingChunker`, `TableChunker`)
+
+What the readers write is markdown, and `rag.HeadingChunker` (the fallback of the `structured` profile, 512 tokens at most with 64 of overlap) cuts it along its structure instead of at a fixed length:
+
+- it reads blocks: headings (`#`, numbered outlines such as `1.2 Title`, and structural words such as Chapter/Chapitre/Capítulo/Kapitel, Article/Artigo/Artikel), paragraphs, lists, tables and fenced code. A numbered list is a list, not a series of headings, and the lines of a code block are never headings;
+- a block is never cut in the middle of what it is: a paragraph is cut between sentences (the next piece starts with the last sentences of the one before, up to the profile's overlap), a list between items, a table between rows (each piece repeats the header row) and code between lines (each piece is fenced again);
+- small sections are joined to their neighbours up to the size limit, their headings written in the text, so no chunk is a title and one line;
+- each chunk starts with the path of headings it sits under, and carries it in `Metadata["heading_path"]` (titles only, joined with ` > `); a chunk that is only a table or only code has `chunk_type` `table` or `code`;
+- a PDF's text has a marker line before each page (`documentreading.Result.PagedMarkdown`, `<!-- page 3 -->`); the chunker removes the markers from the text and gives the pages a chunk covers in `Metadata["page_numbers"]`, as a JSON array (`[3,4]`). Slides and sheets are already in the heading path (`Slide 3 > Title`, `Sheet1`);
+- a heading with nothing under it is not lost: its title is in the path of what follows, or, when nothing follows it, it is written as text.
+
+`rag.TableChunker` is the same engine with every table kept apart, as its own chunk or chunks. `chunk_quality_test.go` holds both to measures on real reader output (`testdata/chunking`): no word of the source missing from the chunks, no table piece without its header, no unbalanced code fence, no chunk over the limit, and few chunks under 40 tokens; `RAG_CHUNK_CORPUS=<dir of .md files>` runs the same checks on a bigger corpus.
+
 For repeated ingestion of the same document, wrap a document-aware chunker with `rag.NewCachedDocumentChunker`. The cache key includes the document content, filename, cache schema version, and chunker options when the chunker exposes a cache fingerprint. `rag.NewArtifactChunkCache` persists cached chunks through the runtime artifact store, while `rag.NewMemoryChunkCache` is useful for tests and short-lived local runs.
 
 ---
