@@ -438,7 +438,7 @@ func TestOnlyAPictureBigEnoughForATableIsLarge(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	pages, large, err := pagesWithEmbeddedImages(data, nil)
+	pages, large, _, err := pagesWithEmbeddedImages(data, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
