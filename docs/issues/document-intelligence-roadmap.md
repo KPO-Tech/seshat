@@ -833,6 +833,18 @@ them: the file ends up as "no extractable text".
   checklist.
 - `pdfsmart.PageSourceDocling` and the docling wording of the package doc: the second engine is "the document
   reader", whatever it is. Rename when the public API is next broken.
+- **Speed of the layout model (to work on in depth).** Profiled on a 12-core CPU, GTX 1650 Ti present, on 150 dpi
+  pages of the 60-page book: rendering a page 0.03 s, converting it 0.01 s, the layout model (`layout.ort`, DLA)
+  3.6 s. Everything is the model run. Every ONNX session is opened with ONE intra-op thread (`intraOpThreads = 1` in
+  `internal/nativedoc/session.go`, inherited from RAGFlow's server design, where many parses run at once and the CPU
+  and memory ceiling matter), so a page uses one core of twelve. Leads, most promising first: (1) make the thread
+  count a setting of the host (a desktop reading one document at a time can give a model 4 to 6 threads); (2) run
+  the pages of a document in parallel on the existing session pool (pages are independent); (3) a cheaper test
+  than "looks columnar" before a page is sent to the model (aligned numeric rows, a header-like row), so far fewer
+  pages are sent; (4) a smaller input size for the layout model, if the tables are still found; (5) the CUDA
+  execution provider on a machine with a GPU. The 20 s budget (`ModelBudget`) is a stop-gap, not the answer. Aim:
+  the classic path stays near 4 s for a book, the models only run on the few pages that need them, and OCR is for
+  the pages that have no text.
 - A page the layout models cannot afford (budget spent) is read without them. If that matters for a document type
   (financial statements), make the budget a setting of the host.
 
