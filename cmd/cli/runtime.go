@@ -308,11 +308,11 @@ func parsePermissionMode(raw string) (sdk.PermissionMode, error) {
 // Returns nil only when no vector store backend could be constructed at all.
 //
 // Vector storage prefers the embedded HNSW backend, falling back to the
-// SQLite backend at sqliteFallbackPath when HNSW isn't available - notably
-// on Windows, where github.com/coder/hnsw's atomic-write dependency
-// (google/renameio) doesn't build (see internal/vector/hnsw_store_windows.go).
-// Without this fallback, RAG was silently disabled on every Windows install
-// regardless of embedding configuration.
+// SQLite backend at sqliteFallbackPath when HNSW isn't available (its
+// directory cannot be created). Before 1.2.73 HNSW did not build on Windows,
+// so every Windows install kept its corpus in the SQLite file: such an
+// install stays on it until it is emptied (see hasSQLiteCorpusOnly), instead
+// of starting an empty HNSW store beside a corpus it would no longer read.
 func buildRAGService(config engineconfig.Config, hnswDir, sqliteFallbackPath string) *sdk.RAGService {
 	emb := embedder.NewFromEnv() // nil is fine - vectorless mode covers it
 
@@ -367,6 +367,17 @@ func buildRAGService(config engineconfig.Config, hnswDir, sqliteFallbackPath str
 	return svc
 }
 
+// hasSQLiteCorpusOnly reports whether a corpus is already in the SQLite file and none in the HNSW directory: the case of an
+// install that ran when HNSW was not available (Windows before 1.2.73).
+func hasSQLiteCorpusOnly(hnswDir, sqlitePath string) bool {
+	info, err := os.Stat(sqlitePath)
+	if err != nil || info.IsDir() || info.Size() == 0 {
+		return false
+	}
+	files, _ := filepath.Glob(filepath.Join(hnswDir, "*.hnsw"))
+	return len(files) == 0
+}
+
 func buildVectorStore(config engineconfig.Config, hnswDir, sqliteFallbackPath string) vector.Store {
 	if strings.EqualFold(strings.TrimSpace(config.VectorStore), string(vector.StoreOpenSearch)) {
 		createIndex := config.OpenSearchCreateIndex
@@ -390,7 +401,12 @@ func buildVectorStore(config engineconfig.Config, hnswDir, sqliteFallbackPath st
 		return nil
 	}
 
-	if hnswStore, err := vector.NewHNSWStore(hnswDir); err == nil { //nolint:staticcheck // SA4023: only dead on the Windows build (hnsw_store_windows.go's stub always errors); live on every other platform's real implementation
+	if hasSQLiteCorpusOnly(hnswDir, sqliteFallbackPath) {
+		if sqliteStore, err := vector.OpenSQLiteStore(sqliteFallbackPath); err == nil {
+			return sqliteStore
+		}
+	}
+	if hnswStore, err := vector.NewHNSWStore(hnswDir); err == nil {
 		return hnswStore
 	} else {
 		log.Printf("[cli] hnsw vector store unavailable (%v), falling back to sqlite", err)
