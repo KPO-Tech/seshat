@@ -9,6 +9,10 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added
+
+- `TestDumpChunksForEvaluation` accepts `heading<N>o<M>` as a strategy name: chunks of N tokens with an overlap of M (`heading512o0`: none), to measure what an overlap is worth.
+
 ## [1.2.71] - 2026-10-05
 
 ### Fixed
