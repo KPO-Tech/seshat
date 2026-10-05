@@ -35,8 +35,10 @@ type Query struct {
 	// HybridWeight blends BM25 keyword search with vector similarity.
 	//   0   (default) → pure vector
 	//   1             → pure BM25
-	//   0 < w < 1    → linear blend: (1-w)*vector + w*bm25
-	// Only vector stores with keyword support implement BM25/keyword blending.
+	//   0 < w < 1    → blend of the best candidates of both rankings, each divided by
+	//                  its best score: (1-w)*vector + w*keyword (see hybrid.go)
+	// SQLite, HNSW, memory, pgvector and OpenSearch implement it, and blend the same way;
+	// Chroma and Qdrant ignore HybridWeight and rank by vector similarity alone.
 	// Meaningless when Vector is empty - see the Vector field doc.
 	HybridWeight float32
 
