@@ -654,6 +654,7 @@ func rowCells(r textRow, seps []separator, cols int, header bool) []cell {
 			active[k] = y >= s.rule.y0-edgeSlack && y <= s.rule.y1+edgeSlack
 		}
 	}
+	splitMergedByText(r, seps, active)
 	colOf := func(x float64) int {
 		k := 0
 		for k < len(seps) && x > seps[k].x {
@@ -737,10 +738,15 @@ func groupRows(rows []textRow, cells [][]cell, reg tableRegion, cols int) (group
 	}
 
 	numeric := numericColumns(cells, cols)
+	heading := headerEnd(cells)
 	var prevY float64
 	for i, r := range rows {
 		cur := cells[i]
-		if len(grouped) > 0 && !ruleBetween(interior, prevY, r.y) && continues(grouped[len(grouped)-1], cur, numeric) {
+		columns := numeric
+		if i < heading {
+			columns = nil
+		}
+		if len(grouped) > 0 && !ruleBetween(interior, prevY, r.y) && continues(grouped[len(grouped)-1], cur, columns) {
 			grouped[len(grouped)-1] = appendRow(grouped[len(grouped)-1], cur)
 		} else {
 			grouped = append(grouped, cur)
@@ -909,6 +915,34 @@ func continues(prev, cur []cell, numeric []bool) bool {
 			}
 		}
 		if !found {
+			return false
+		}
+	}
+	return true
+}
+
+// headerEnd is the index of the first row with a figure in it (a number that is not a year). The rows before it are the heading of
+// the table: no column is "a column of numbers" there, and a second line of words ("Longer" over "run", above the figures)
+// carries on the first. Only for a table whose rows are not bounded by rules: where every band is a row, the lines of a heading
+// stay rows of their own and are written "Average / Accuracy", which is what the rest of the table builder expects.
+func headerEnd(cells [][]cell) int {
+	for i, row := range cells {
+		for _, c := range row {
+			if isNumeric(c.text) && !isYear(c.text) {
+				return i
+			}
+		}
+	}
+	return len(cells)
+}
+
+func isYear(s string) bool {
+	s = strings.TrimSpace(s)
+	if len(s) != 4 || (s[0] != '1' && s[0] != '2') {
+		return false
+	}
+	for _, r := range s {
+		if !unicode.IsDigit(r) {
 			return false
 		}
 	}
@@ -1161,4 +1195,50 @@ func looksLikeProse(rows []textRow, cols int, reg tableRegion, pageWidth float64
 	}
 	wide := pageWidth > 0 && reg.x1-reg.x0 > 0.6*pageWidth
 	return total > 0 && float64(long)/float64(total) > 0.5 && wide
+}
+
+// splitMergedByText sets active a ruling that does not cover the row when the cell the row merges around it holds text on
+// both sides of it and none of the text crosses it. A table that draws the rules between its year columns only in the header
+// (2024 | 2025 | 2026 above, one wide cell under) has three numbers in that cell, side by side; read as one cell they were
+// written three times over, in each of its columns. A single chunk of text in a merged cell, or one that runs over the
+// ruling, is a cell that really spans the columns, and is left merged.
+func splitMergedByText(r textRow, seps []separator, active []bool) {
+	const slack = 0.5
+	was := append([]bool(nil), active...)
+	for k, s := range seps {
+		if s.rule == nil || was[k] {
+			continue
+		}
+		// The merged cell is bounded by the nearest rulings that do cover the row.
+		lo, hi := math.Inf(-1), math.Inf(1)
+		for j := k - 1; j >= 0; j-- {
+			if was[j] {
+				lo = seps[j].x
+				break
+			}
+		}
+		for j := k + 1; j < len(seps); j++ {
+			if was[j] {
+				hi = seps[j].x
+				break
+			}
+		}
+		left, right, crossing := false, false, false
+		for _, c := range r.chunks {
+			if c.x1 <= lo || c.x0 >= hi {
+				continue
+			}
+			switch {
+			case c.x0 < s.x-slack && c.x1 > s.x+slack:
+				crossing = true
+			case c.x1 <= s.x+slack:
+				left = true
+			case c.x0 >= s.x-slack:
+				right = true
+			}
+		}
+		if left && right && !crossing {
+			active[k] = true
+		}
+	}
 }
