@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"fmt"
 	"io"
 	"os"
 	"path/filepath"
@@ -9,6 +10,7 @@ import (
 	"testing"
 
 	internalrag "github.com/KPO-Tech/seshat/internal/rag"
+	"github.com/KPO-Tech/seshat/internal/vector"
 	engineconfig "github.com/KPO-Tech/seshat/pkg/config"
 	"github.com/KPO-Tech/seshat/pkg/sdk"
 )
@@ -34,12 +36,9 @@ func TestResolveModelInfersOllamaFromRawModelID(t *testing.T) {
 }
 
 // TestBuildRAGService_FallsBackToSQLiteWhenHNSWUnavailable forces the HNSW
-// store to fail regardless of platform (by pointing it at a directory whose
-// parent is a file, so os.MkdirAll can't create it) rather than relying on
-// actually running on Windows - github.com/coder/hnsw's atomic-write
-// dependency (google/renameio) doesn't support Windows, so this same
-// fallback path is what makes RAG work at all on Windows; forcing the
-// failure here exercises it deterministically in CI too.
+// store to fail (by pointing it at a directory whose parent is a file, so
+// os.MkdirAll can't create it): an unwritable data directory is the case where
+// RAG has to fall back to SQLite.
 func TestBuildRAGService_FallsBackToSQLiteWhenHNSWUnavailable(t *testing.T) {
 	t.Setenv("RAG_EMBEDDING_URL", "http://127.0.0.1:1/v1")
 	t.Setenv("RAG_EMBEDDING_MODEL", "test-model")
@@ -92,6 +91,52 @@ func TestBuildRAGService_VectorlessWhenEmbeddingNotConfigured(t *testing.T) {
 	}
 	if len(resp.Results) == 0 {
 		t.Error("expected a BM25 match for 'fox' in the ingested text")
+	}
+}
+
+// An install that ran when HNSW did not build on Windows has its corpus in the SQLite file: it keeps using it, and a fresh
+// install (or one that already has HNSW files) uses HNSW.
+func TestBuildVectorStore_KeepsAnExistingSQLiteCorpus(t *testing.T) {
+	t.Setenv("RAG_EMBEDDING_URL", "")
+	t.Setenv("RAG_EMBEDDING_MODEL", "")
+
+	pick := func(t *testing.T, prepare func(hnswDir, sqlitePath string)) string {
+		t.Helper()
+		dir := t.TempDir()
+		hnswDir, sqlitePath := filepath.Join(dir, "hnsw"), filepath.Join(dir, "rag.sqlite3")
+		prepare(hnswDir, sqlitePath)
+		store := buildVectorStore(engineconfig.Config{}, hnswDir, sqlitePath)
+		if store == nil {
+			t.Fatal("no store")
+		}
+		if closer, ok := store.(io.Closer); ok {
+			t.Cleanup(func() { _ = closer.Close() })
+		}
+		return fmt.Sprintf("%T", store)
+	}
+	seedSQLite := func(_, sqlitePath string) {
+		s, err := vector.OpenSQLiteStore(sqlitePath)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if err := s.Upsert(context.Background(), []vector.Record{{Namespace: "kb", Key: "a", Text: "old corpus"}}); err != nil {
+			t.Fatal(err)
+		}
+		_ = s.Close()
+	}
+
+	if got := pick(t, func(string, string) {}); !strings.Contains(got, "HNSW") {
+		t.Errorf("a fresh install should use HNSW, got %s", got)
+	}
+	if got := pick(t, seedSQLite); !strings.Contains(got, "SQLite") {
+		t.Errorf("an install with a corpus in SQLite and none in HNSW should keep SQLite, got %s", got)
+	}
+	if got := pick(t, func(hnswDir, sqlitePath string) {
+		seedSQLite(hnswDir, sqlitePath)
+		_ = os.MkdirAll(hnswDir, 0o755)
+		_ = os.WriteFile(filepath.Join(hnswDir, "kb.hnsw"), []byte("x"), 0o600)
+	}); !strings.Contains(got, "HNSW") {
+		t.Errorf("an install with HNSW files should use HNSW, got %s", got)
 	}
 }
 

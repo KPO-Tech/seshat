@@ -383,10 +383,19 @@ func TestDockerExecutorCloseRemovesContainers(t *testing.T) {
 		t.Fatalf("Close: %v", err)
 	}
 
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-	defer cancel()
-	if err := exec.CommandContext(ctx, "docker", "inspect", containerID).Run(); err == nil {
-		t.Fatalf("expected container %s to be removed after Close, but docker inspect succeeded", containerID)
+	// stop returns when the container has exited; --rm removes it a moment later, longer on a busy machine.
+	deadline := time.Now().Add(30 * time.Second)
+	for {
+		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		err := exec.CommandContext(ctx, "docker", "inspect", containerID).Run()
+		cancel()
+		if err != nil {
+			return
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("expected container %s to be removed after Close, but docker inspect still succeeds after 30s", containerID)
+		}
+		time.Sleep(250 * time.Millisecond)
 	}
 }
 

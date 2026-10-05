@@ -172,10 +172,11 @@ func (s *PgVectorStore) searchVector(ctx context.Context, query Query, topK int)
 		ORDER  BY embedding <=> $2::vector
 		LIMIT  $3`, where)
 
-	rows, err := s.db.QueryContext(ctx, q, args...)
+	rows, done, err := s.queryNearest(ctx, topK, q, args)
 	if err != nil {
 		return nil, fmt.Errorf("pgvector search: %w", err)
 	}
+	defer done()
 	defer rows.Close()
 
 	var results []SearchResult
@@ -197,6 +198,35 @@ func (s *PgVectorStore) searchVector(ctx context.Context, query Query, topK int)
 	}
 	sort.Slice(results, func(i, j int) bool { return results[i].Score > results[j].Score })
 	return results, nil
+}
+
+// pgHNSWDefaultEfSearch is the pgvector default of hnsw.ef_search: a search of an HNSW index returns at most that many rows,
+// whatever its LIMIT says.
+const pgHNSWDefaultEfSearch = 40
+
+// queryNearest runs a nearest neighbour query. A hybrid search asks for more than 40 candidates (see hybridCandidates), and an
+// HNSW index would stop at 40 and miss more of the true neighbours, so for a larger limit the query runs in a transaction with
+// hnsw.ef_search raised to it (1000 at most, the maximum of pgvector). The returned function ends the transaction, after the
+// rows have been read.
+func (s *PgVectorStore) queryNearest(ctx context.Context, limit int, q string, args []any) (*sql.Rows, func(), error) {
+	if s.options.IndexMethod != "hnsw" || limit <= pgHNSWDefaultEfSearch {
+		rows, err := s.db.QueryContext(ctx, q, args...)
+		return rows, func() {}, err
+	}
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return nil, func() {}, err
+	}
+	if _, err := tx.ExecContext(ctx, fmt.Sprintf("SET LOCAL hnsw.ef_search = %d", min(limit, 1000))); err != nil {
+		_ = tx.Rollback()
+		return nil, func() {}, err
+	}
+	rows, err := tx.QueryContext(ctx, q, args...)
+	if err != nil {
+		_ = tx.Rollback()
+		return nil, func() {}, err
+	}
+	return rows, func() { _ = tx.Rollback() }, nil
 }
 
 // searchHybrid blends the best vector hits (the vector index) and the best keyword hits (the full text index): see blendHybrid.
@@ -267,17 +297,9 @@ const maxQueryWords = 32
 // reach the database, each word quoted, so that nothing a user types is read as the syntax of a tsquery. A word of one
 // or two characters is dropped: it is in every chunk and says nothing (PostgreSQL has no IDF to tell it, as BM25 has).
 func pgTextSearchQuery(text string) string {
-	seen := map[string]bool{}
-	var words []string
-	for _, word := range pgWordRe.FindAllString(strings.ToLower(text), -1) {
-		if len([]rune(word)) < 3 || seen[word] {
-			continue
-		}
-		seen[word] = true
-		words = append(words, "'"+word+"'")
-		if len(words) == maxQueryWords {
-			break
-		}
+	words := queryWords(text, maxQueryWords)
+	for i, word := range words {
+		words[i] = "'" + word + "'"
 	}
 	return strings.Join(words, " | ")
 }
@@ -401,7 +423,7 @@ func pgFilterClause(filter map[string]any, args *[]any) string {
 		return ""
 	}
 	var sb strings.Builder
-	idx := len(*args) + 1
+	idx := len(*args)
 	for k, v := range filter {
 		switch t := v.(type) {
 		case string:

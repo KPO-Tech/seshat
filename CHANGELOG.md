@@ -9,6 +9,25 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [1.2.73] - 2026-10-05
+
+### Changed
+
+- **The HNSW store has its own graph** (`internal/vector/hnsw_index.go`), in place of `github.com/coder/hnsw`. That library stops its search as soon as a step finds nothing closer, so `efSearch` only bounded a queue and the search was greedy: measured against an exact search it found 8% of the true ten nearest neighbours of 2,000 random vectors and 2% of 20,000, whatever `efSearch` (20 to 200) and `M` (16 or 32), and 35% / 17% on clustered vectors. The new graph is the algorithm of the paper (search until no candidate is closer than the worst of the `efSearch` best, neighbours chosen for their spread): 1.00 on clustered vectors and 0.99 on random ones at 3,000 vectors, 0.998 on 20,000 clustered ones (0.63 on 20,000 random ones with `efSearch` 64, 0.91 with 512, the hardest case: random vectors have no structure to follow). A removed or replaced vector is a tombstone until more than half the graph is tombstones, then the graph is rebuilt. A metadata filter on a search now asks the graph for five times more hits, so that some are left after the filter.
+- **The HNSW store works on Windows** (the old library did not build there): `vector.StoreHNSW` and the CLI use it. An install that ran before, with its corpus in the SQLite fallback file and no HNSW file, keeps using SQLite until that file is emptied, so its corpus is still read.
+- A graph file written by an older version (the `coder/hnsw` format) is read once, rebuilt from its vectors in the new format, and kept as `<namespace>.hnsw.legacy` (Linux and macOS; on Windows no such file exists).
+- **Qdrant and Chroma honour `HybridWeight`** (they ignored it). Neither can rank by words, so the keyword side is one lookup per word of the query (16 at most, run together): a document scores the sum of the weights of the query words it holds, a rarer word weighing more, and the result is blended with the vector hits as in every other store. Qdrant creates a full text index on `_text` for the collection on the first hybrid search; Chroma matches each word with a case-insensitive whole-word regular expression, which it evaluates on every document of the collection, so its keyword side costs a scan per word.
+- **pgvector**: a query for more than 40 vector candidates (every hybrid search) runs with `hnsw.ef_search` raised to the number asked, up to 1000: an HNSW index returned at most 40 rows whatever the `LIMIT`. On 20,000 random vectors this took the hybrid hit rate of the store from 0.21 to 0.42.
+
+### Added
+
+- `TestStoreSpeed` (`internal/vector/speed_test.go`, runs only with `VECTOR_SPEED=1`): ingestion time, median and 95th percentile latency of a vector and of a hybrid search, and hit rate, for every store on the same synthetic collection. Integration tests of the hybrid search for Qdrant (`QDRANT_INTEGRATION_ADDR`) and Chroma (`CHROMA_INTEGRATION_URL`).
+
+### Fixed
+
+- **pgvector**: a search with a metadata filter failed (`could not determine data type of parameter`): the placeholders of the filter were numbered one too high. The pgvector tests had never run in CI (they skip without a database); the Test job now starts a `pgvector/pgvector:pg17` service, and a new test covers the hybrid search on a real database (words only the keyword side matches, the filter on both sides, the `text_search` index, a table created before the column existed).
+- `TestDockerExecutorCloseRemovesContainers` waits for the removal (up to 30 s) instead of checking at once: `docker stop` returns before `--rm` has removed the container, and on a busy machine the test failed.
+
 ## [1.2.72] - 2026-10-05
 
 ### Changed
