@@ -2,6 +2,7 @@ package rag
 
 import (
 	"context"
+	"errors"
 	"testing"
 
 	"github.com/KPO-Tech/seshat/internal/storage"
@@ -106,7 +107,7 @@ func TestServiceSearch_DefaultWeightAppliesRealBlendNotVectorOrder(t *testing.T)
 	svc.SetReranker(scriptedReranker{indices: []int{2, 1, 0}, scores: []float32{0.9, 0.6, 0.2}})
 
 	// RerankWeight left unset (0) - must fall back to the service default
-	// (0.7), not silently skip blending and return pure vector order
+	// (0.5), not silently skip blending and return pure vector order
 	// (a > b > c).
 	resp, err := svc.Search(context.Background(), SearchRequest{CorpusID: "kb", Query: "search-query", TopK: 3})
 	if err != nil {
@@ -114,11 +115,11 @@ func TestServiceSearch_DefaultWeightAppliesRealBlendNotVectorOrder(t *testing.T)
 	}
 	got := keyOrder(t, resp.Results)
 	if got[0] == "doc-a" {
-		t.Fatalf("expected the default rerank weight to move doc-c/doc-b ahead of the top vector match, got order %v", got)
+		t.Fatalf("expected the default rerank weight to move doc-c ahead of the top vector match, got order %v", got)
 	}
-	// At weight 0.7 the reranker's own order dominates for this fixture:
-	// blended(a)=0.3*0.9+0.7*0.2=0.41, blended(b)=0.3*0.4+0.7*0.6=0.54, blended(c)=0.3*0.3+0.7*0.9=0.72
-	want := []string{"doc-c", "doc-b", "doc-a"}
+	// At weight 0.5: blended(a)=0.5*0.9+0.5*0.2=0.55, blended(b)=0.5*0.4+0.5*0.6=0.50,
+	// blended(c)=0.5*0.3+0.5*0.9=0.60 -> c, a, b.
+	want := []string{"doc-c", "doc-a", "doc-b"}
 	if got[0] != want[0] || got[1] != want[1] || got[2] != want[2] {
 		t.Fatalf("got %v want %v", got, want)
 	}
@@ -149,5 +150,44 @@ func TestServiceSearch_BlendProducesOrderDistinctFromBothPureExtremes(t *testing
 	}
 	if got[0] == pureRerankOrder[0] && got[1] == pureRerankOrder[1] && got[2] == pureRerankOrder[2] {
 		t.Fatal("blended order should not equal the pure rerank order")
+	}
+}
+
+// The whole pool is reranked and blended, then cut to TopK: the best chunk of the pool comes first even when TopK is 1.
+func TestServiceSearch_RerankReadsTheWholePoolThenCutsToTopK(t *testing.T) {
+	svc := newBlendFixtureService(t)
+	svc.SetReranker(scriptedReranker{indices: []int{2, 1, 0}, scores: []float32{0.9, 0.6, 0.2}})
+
+	resp, err := svc.Search(context.Background(), SearchRequest{CorpusID: "kb", Query: "search-query", TopK: 1, RerankWeight: 1})
+	if err != nil {
+		t.Fatalf("Search: %v", err)
+	}
+	got := keyOrder(t, resp.Results)
+	if len(got) != 1 || got[0] != "doc-c" {
+		t.Fatalf("TopK=1 with the reranker alone should give doc-c, got %v", got)
+	}
+}
+
+type failingReranker struct{}
+
+func (failingReranker) IsConfigured() bool { return true }
+
+func (failingReranker) Rerank(context.Context, string, []string, int) ([]int, []float32, error) {
+	return nil, nil, errors.New("rerank server down")
+}
+
+// A reranker that fails must not fail the search: the retrieval order stands.
+func TestServiceSearch_FailingRerankerKeepsTheRetrievalOrder(t *testing.T) {
+	svc := newBlendFixtureService(t)
+	svc.SetReranker(failingReranker{})
+
+	resp, err := svc.Search(context.Background(), SearchRequest{CorpusID: "kb", Query: "search-query", TopK: 3})
+	if err != nil {
+		t.Fatalf("Search: %v", err)
+	}
+	got := keyOrder(t, resp.Results)
+	want := []string{"doc-a", "doc-b", "doc-c"}
+	if len(got) != 3 || got[0] != want[0] || got[1] != want[1] || got[2] != want[2] {
+		t.Fatalf("got %v want the vector order %v", got, want)
 	}
 }

@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"log"
 	"sort"
 	"strconv"
 	"strings"
@@ -13,10 +14,21 @@ import (
 	"github.com/KPO-Tech/seshat/internal/vector"
 )
 
-// defaultRerankWeight is used whenever a SearchRequest doesn't specify its
-// own RerankWeight - see SetRerankWeight's doc comment for why 0.7 (weighted
-// toward the reranker, but not a full override) is the chosen default.
-const defaultRerankWeight float32 = 0.7
+// Reranking defaults, from the retrieval benchmark of SeshatCloud (seshat-intelligence/benchmarks/chunk_bench, rerank.py: 192
+// questions on 19 documents, hybrid bge-m3 + BM25 as the first stage, three cross-encoders from 118M to 568M parameters):
+//
+//   - Weight 0.5. For a small reranker (mMARCO MiniLM, bge-reranker-base) 0.5 was the best of 0.5, 0.7 and 1.0, and the
+//     reranker alone gained nothing; for bge-reranker-v2-m3 the three were equal within 0.006 of MRR. 0.5 is never worse.
+//   - A pool of max(topK, 10) chunks. Reading 20 chunks was not better than 10 for any of the three models, and costs twice
+//     the time (a cross-encoder reads every pair). The first stage already puts the answer in its first ten.
+//   - The score of the whole pool is normalised and blended, then the list is cut to topK: normalising only the few the
+//     reranker returned changes the blend with the server in use.
+//
+// bge-reranker-v2-m3 moved the answering chunk up by 0.09 of MRR (hit@1 +0.15, both with a 95% interval above 0); the small
+// ones by 0.03 to 0.04.
+const defaultRerankWeight float32 = 0.5
+
+const rerankMinPool = 10
 
 type Service struct {
 	artifacts    storage.ArtifactStore // optional — nil = skip rag-doc blob storage
@@ -62,12 +74,10 @@ func (s *Service) SetEnricher(e Enricher) {
 	s.enricher = e
 }
 
-// SetRerankWeight overrides the default blend weight (0.7) applied between
-// the reranker's normalized score and each result's original retrieval
-// score, for any SearchRequest that doesn't set its own RerankWeight. 0.7
-// was chosen to stay close to the previous behavior (which fully trusted
-// the reranker) while still being a genuine blend rather than a wholesale
-// override. w is clamped to [0,1].
+// SetRerankWeight overrides the default blend weight (0.5, see the measures at
+// defaultRerankWeight) applied between the reranker's normalized score and
+// each result's original retrieval score, for any SearchRequest that doesn't
+// set its own RerankWeight. w is clamped to [0,1].
 func (s *Service) SetRerankWeight(w float32) {
 	if s == nil {
 		return
@@ -355,10 +365,7 @@ func (s *Service) Search(ctx context.Context, request SearchRequest) (SearchResp
 	fetchK := topK
 	useReranker := s.reranker != nil && s.reranker.IsConfigured()
 	if useReranker {
-		fetchK = topK * 3
-		if fetchK < 20 {
-			fetchK = 20
-		}
+		fetchK = max(topK, rerankMinPool)
 	}
 
 	// Vectorless (pure keyword/BM25) when no embedder is configured, or the
@@ -395,7 +402,7 @@ func (s *Service) Search(ctx context.Context, request SearchRequest) (SearchResp
 		for _, r := range results {
 			texts = append(texts, r.Record.Text)
 		}
-		indices, scores, rerankErr := s.reranker.Rerank(ctx, request.Query, texts, topK)
+		indices, scores, rerankErr := s.reranker.Rerank(ctx, request.Query, texts, 0)
 		if rerankErr == nil && len(indices) > 0 {
 			normScores := reranker.NormalizeScores(scores)
 			weight := request.RerankWeight
@@ -427,7 +434,13 @@ func (s *Service) Search(ctx context.Context, request SearchRequest) (SearchResp
 			// order once blended with the retrieval score - re-sort by the
 			// blended score itself.
 			sort.Slice(reranked, func(i, j int) bool { return reranked[i].Score > reranked[j].Score })
+			if len(reranked) > topK {
+				reranked = reranked[:topK]
+			}
 			return SearchResponse{CorpusID: request.CorpusID, Results: reranked}, nil
+		}
+		if rerankErr != nil {
+			log.Printf("[rag] reranker failed, keeping the retrieval order: %v", rerankErr)
 		}
 		// reranker failed — fall through to vector order below
 	}
