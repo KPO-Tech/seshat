@@ -9,6 +9,12 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [1.2.71] - 2026-10-05
+
+### Fixed
+
+- A table whose rules between columns are drawn only in its heading no longer writes the same text in each of the columns of a merged cell. The FOMC projections draw the rules between 2024, 2025 and 2026 in the band of the years and none in the body, so the three figures of a row ("2.1 2.0 2.0") were one wide cell, written three times. A ruling that does not cover a row now still separates two cells of it when the cell it would merge holds text on both sides of it and none runs across; a single block of text over the ruling stays a merged cell. In a table whose rows are not bounded by rules, the second line of a heading over a column of figures ("Longer" over "run") carries on the first, since no column is a column of figures above the first row that has one (a year is not a figure).
+
 ## [1.2.70] - 2026-10-04
 
 ### Fixed
