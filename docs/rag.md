@@ -88,7 +88,15 @@ Seshat combines two retrieval strategies for better results than pure vector sea
 | **BM25** | Keyword-based, exact term matching | Named entities, code identifiers, precise terms |
 | **Vector (semantic)** | Embedding similarity | Conceptual queries, paraphrase matching |
 
-Results from both are fused and re-ranked before being presented to the agent.
+Results from both are blended, then optionally re-ranked by a reranker, before being presented to the agent. Every vector store (SQLite, HNSW, memory, pgvector, OpenSearch) blends the same way, so a hybrid search ranks alike whichever one holds the corpus:
+
+- **Candidates.** Each ranking is read to `max(100, 10 x topK)` hits (at most 500), not to `topK`. A chunk that is only fifteenth in each list is still a good answer; with 20 candidates it is lost.
+- **Scores, not ranks.** Each list is divided by its best score, the vector list is weighted `1 - HybridWeight` and the keyword list `HybridWeight`, and a chunk found by both gets both. Reciprocal rank fusion was measured and gave nothing more than the keyword ranking alone at 512 and 768 token chunks.
+- **A keyword hit the vectors rank low is found.** The blend does not only reorder the vector hits.
+
+These choices come from the retrieval benchmark of SeshatOS (`seshat-intelligence/benchmarks/chunk_bench`, 192 questions on 19 documents): reading 100 candidates instead of 20 finds the answer among the first five results 3 to 4 points more often at 512 and 768 token chunks, and blending scores instead of ranks adds about 4 to 5 points of MRR there. At 256 token chunks, and on questions whose answer needs several passages, it made no difference.
+
+**pgvector.** The keyword side reads a `text_search` column (a `tsvector` PostgreSQL keeps from `text`, with a GIN index; PostgreSQL 12 or later) and joins the words of the query by OR, ranked by `ts_rank_cd`. `PgVectorOptions.TextSearchConfig` is the text search configuration (`simple` by default: every word as it is, any language; `english`, `french`... stem and drop stop words of one language). PostgreSQL has no IDF, so on a large corpus OpenSearch (real BM25) ranks keywords better. A failing keyword query is an error, not a silent fallback to vector search.
 
 ---
 
@@ -119,7 +127,7 @@ OpenSearch uses one index per Seshat namespace. Text search uses OpenSearch BM25
 To run the optional integration test against a local or remote OpenSearch cluster:
 
 ```bash
-OPENSEARCH_INTEGRATION_URL=http://localhost:9200 go test ./internal/vector -run TestOpenSearchStoreIntegration -count=1
+OPENSEARCH_INTEGRATION_URL=http://localhost:9200 go test ./internal/vector -run TestOpenSearchStore -count=1
 ```
 
 ---

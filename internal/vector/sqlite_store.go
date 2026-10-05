@@ -121,8 +121,8 @@ func (s *SQLiteStore) Upsert(ctx context.Context, records []Record) error {
 }
 
 // Search performs cosine similarity search over the given namespace.
-// When query.HybridWeight > 0 and query.QueryText is set, BM25 scores from the
-// FTS5 index are blended with vector scores using linear interpolation.
+// When query.HybridWeight > 0 and query.QueryText is set, the best BM25 hits of the
+// FTS5 index and the best vector hits are blended (see blendHybrid).
 // When query.Vector is empty, this is a vectorless query: it skips the
 // vector scan entirely and ranks purely by FTS5 BM25 (see searchTextOnly) -
 // cheaper than the vector path too, since it lets the FTS5 index do the
@@ -183,73 +183,22 @@ func (s *SQLiteStore) Search(ctx context.Context, query Query) ([]SearchResult, 
 		return nil, fmt.Errorf("iterate vector_records: %w", err)
 	}
 
-	// Hybrid: blend with BM25 from FTS5 when requested.
-	hw := query.HybridWeight
-	if hw > 0 && strings.TrimSpace(query.QueryText) != "" && len(results) > 0 {
-		results = s.blendBM25(ctx, query.Namespace, query.QueryText, hw, results)
+	sort.Slice(results, func(i, j int) bool { return results[i].Score > results[j].Score })
+
+	// Hybrid: the best vector hits and the best FTS5 BM25 hits are blended (see hybrid.go). A chunk the vectors rank low but
+	// the words match is found by the second list; the vector list is cut to the candidates of the search, not to topK.
+	// Without an FTS5 index (an old database) the search stays a vector search.
+	if hw := query.HybridWeight; hw > 0 && strings.TrimSpace(query.QueryText) != "" && len(results) > 0 {
+		candidates := hybridCandidates(topK)
+		if keywordResults, err := s.searchTextOnly(ctx, query, candidates); err == nil && len(keywordResults) > 0 {
+			return blendHybrid(results[:min(len(results), candidates)], keywordResults, hw, topK), nil
+		}
 	}
 
-	sort.Slice(results, func(i, j int) bool { return results[i].Score > results[j].Score })
 	if len(results) > topK {
 		results = results[:topK]
 	}
 	return results, nil
-}
-
-// blendBM25 retrieves FTS5 BM25 scores and blends them with the vector scores.
-// bm25 raw scores from SQLite are negative (more negative = better match).
-// We normalize them to [0,1] then blend: final = (1-hw)*vector + hw*bm25_norm.
-func (s *SQLiteStore) blendBM25(ctx context.Context, namespace, queryText string, hw float32, results []SearchResult) []SearchResult {
-	ftsQuery := sanitizeFTSQuery(queryText)
-	if ftsQuery == "" {
-		return results
-	}
-
-	ftsRows, err := s.db.SQL().QueryContext(ctx,
-		`SELECT key, bm25(vector_records_fts) FROM vector_records_fts
-		 WHERE namespace = ? AND vector_records_fts MATCH ?`,
-		namespace, ftsQuery)
-	if err != nil {
-		// FTS5 unavailable or query error — fall back to pure vector scores.
-		return results
-	}
-	defer ftsRows.Close()
-
-	bm25Raw := make(map[string]float64)
-	for ftsRows.Next() {
-		var key string
-		var score float64
-		if err := ftsRows.Scan(&key, &score); err == nil {
-			bm25Raw[key] = score
-		}
-	}
-	_ = ftsRows.Err()
-
-	if len(bm25Raw) == 0 {
-		return results
-	}
-
-	// Normalize BM25 scores: most-negative → 1.0, least-negative (0) → 0.0.
-	minRaw := 0.0
-	for _, v := range bm25Raw {
-		if v < minRaw {
-			minRaw = v
-		}
-	}
-	span := -minRaw // span > 0 if there are any matches
-	if span == 0 {
-		return results
-	}
-
-	for i := range results {
-		raw, hit := bm25Raw[results[i].Record.Key]
-		var bm25Norm float32
-		if hit {
-			bm25Norm = float32(-raw / span) // normalize to [0,1]
-		}
-		results[i].Score = (1-hw)*results[i].Score + hw*bm25Norm
-	}
-	return results
 }
 
 // searchTextOnly ranks purely by FTS5 BM25, with no vector involved at all -

@@ -163,8 +163,8 @@ func (s *HNSWStore) Upsert(ctx context.Context, records []Record) error {
 }
 
 // Search performs HNSW ANN search (O(log n)) over the namespace.
-// When query.HybridWeight > 0 and query.QueryText is set, keyword scores
-// are blended with vector scores using linear interpolation.
+// When query.HybridWeight > 0 and query.QueryText is set, the best keyword hits and the
+// best vector hits are blended (see blendHybrid).
 func (s *HNSWStore) Search(ctx context.Context, query Query) ([]SearchResult, error) {
 	if query.Namespace == "" {
 		return nil, fmt.Errorf("vector query namespace is required")
@@ -193,7 +193,13 @@ func (s *HNSWStore) Search(ctx context.Context, query Query) ([]SearchResult, er
 		return nil, nil
 	}
 
-	nodes := n.graph.Search(query.Vector, topK)
+	// A hybrid search reads more vector hits than it returns: the keyword hits are blended with them (see hybrid.go).
+	hybrid := query.HybridWeight > 0 && strings.TrimSpace(query.QueryText) != ""
+	limit := topK
+	if hybrid {
+		limit = hybridCandidates(topK)
+	}
+	nodes := n.graph.Search(query.Vector, limit)
 	results := make([]SearchResult, 0, len(nodes))
 	for _, node := range nodes {
 		m := n.meta[node.Key]
@@ -213,12 +219,10 @@ func (s *HNSWStore) Search(ctx context.Context, query Query) ([]SearchResult, er
 		results = append(results, SearchResult{Record: r, Score: 1 - dist})
 	}
 
-	if query.HybridWeight > 0 && strings.TrimSpace(query.QueryText) != "" && len(results) > 0 {
-		results = hnswBlendKeyword(results, query.QueryText, query.HybridWeight)
-		// Re-sort after blending: keyword scores change the ranking.
-		sort.Slice(results, func(i, j int) bool {
-			return results[i].Score > results[j].Score
-		})
+	if hybrid {
+		// The keyword list is a scan of the namespace (the graph cannot be searched by words), which is what this backend is
+		// for: a corpus of a command line tool, not a server's.
+		return blendHybrid(results, searchKeywordOnly(n, query, limit), query.HybridWeight, topK), nil
 	}
 
 	return results, nil
@@ -308,17 +312,6 @@ func (s *HNSWStore) DeleteKeys(ctx context.Context, namespace string, keys []str
 		return fmt.Errorf("persist hnsw namespace %q after delete: %w", namespace, err)
 	}
 	return nil
-}
-
-// hnswBlendKeyword blends HNSW cosine scores with keywordScore.
-// This replaces FTS5 BM25 (unavailable in the standalone HNSW backend).
-// Score per result = (1-hw)*vector_score + hw*keyword_score
-func hnswBlendKeyword(results []SearchResult, queryText string, hw float32) []SearchResult {
-	for i := range results {
-		kwScore := keywordScore(results[i].Record.Text, queryText)
-		results[i].Score = (1-hw)*results[i].Score + hw*kwScore
-	}
-	return results
 }
 
 // searchKeywordOnly ranks every record in the namespace by keywordScore
