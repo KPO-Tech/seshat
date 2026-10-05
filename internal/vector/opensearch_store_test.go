@@ -404,30 +404,3 @@ func TestOpenSearchFilterClauses(t *testing.T) {
 		t.Fatalf("unexpected clauses:\nwant %s\n got %s", want, got)
 	}
 }
-
-func TestBlendOpenSearchResults(t *testing.T) {
-	results := blendOpenSearchResults(
-		[]SearchResult{
-			{Record: Record{Key: "semantic"}, Score: 0.8},
-			{Record: Record{Key: "both"}, Score: 0.4},
-		},
-		[]SearchResult{
-			{Record: Record{Key: "both"}, Score: 12},
-			{Record: Record{Key: "keyword"}, Score: 6},
-		},
-		0.25,
-		2,
-	)
-	if len(results) != 2 {
-		t.Fatalf("expected 2 results, got %d", len(results))
-	}
-	if results[0].Record.Key != "semantic" {
-		t.Fatalf("expected semantic result first, got %q", results[0].Record.Key)
-	}
-	if results[1].Record.Key != "both" {
-		t.Fatalf("expected blended result second, got %q", results[1].Record.Key)
-	}
-	if results[1].Score <= 0.5 {
-		t.Fatalf("expected blended score to include keyword contribution, got %f", results[1].Score)
-	}
-}

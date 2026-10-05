@@ -19,7 +19,8 @@ type evaluationChunk struct {
 
 // evaluationChunker builds the chunker a strategy name stands for: "profile" is the structured profile hosts get by
 // default, "headingN" is the heading chunker with chunks of N tokens and an overlap of an eighth of that (the ratio of
-// the structured profile), and "paragraph" is the default chunker.
+// the structured profile), "headingNoM" is the same with an overlap of M tokens (heading512o0: none), and "paragraph" is the
+// default chunker.
 func evaluationChunker(name string) (Chunker, bool) {
 	switch {
 	case name == "profile":
@@ -28,11 +29,18 @@ func evaluationChunker(name string) (Chunker, bool) {
 	case name == "paragraph":
 		return DefaultChunker(), true
 	case strings.HasPrefix(name, "heading"):
-		size, err := strconv.Atoi(strings.TrimPrefix(name, "heading"))
+		sizeText, overlapText, hasOverlap := strings.Cut(strings.TrimPrefix(name, "heading"), "o")
+		size, err := strconv.Atoi(sizeText)
 		if err != nil {
 			return nil, false
 		}
-		profile, err := NewCustomChunkProfile(size, size/8)
+		overlap := size / 8
+		if hasOverlap {
+			if overlap, err = strconv.Atoi(overlapText); err != nil {
+				return nil, false
+			}
+		}
+		profile, err := NewCustomChunkProfile(size, overlap)
 		if err != nil {
 			return nil, false
 		}
