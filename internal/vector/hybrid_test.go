@@ -181,3 +181,95 @@ func containsKey(results []SearchResult, key string) bool {
 	}
 	return false
 }
+
+// A hybrid search on a real pgvector database: the vector side and the keyword side (the text_search column and its
+// index) are both SQL, which the unit tests above cannot reach.
+func TestPgVectorStore_HybridSearch(t *testing.T) {
+	database := openPgVectorTestDB(t)
+	ctx := context.Background()
+	store, err := NewPgVectorStore(ctx, database, PgVectorOptions{Dim: 1536, CreateExtension: true, IndexMethod: "hnsw", TextSearchConfig: "simple"})
+	if err != nil {
+		t.Fatalf("NewPgVectorStore: %v", err)
+	}
+	namespace := "itest_pgvector_hybrid"
+	_ = store.DeleteNamespace(ctx, namespace)
+	t.Cleanup(func() { _ = store.DeleteNamespace(ctx, namespace) })
+
+	// "needle" is far from the query vector (a different axis) but is the only chunk that holds the word.
+	var records []Record
+	for i := 0; i < 30; i++ {
+		records = append(records, Record{
+			Namespace: namespace, Key: fmt.Sprintf("filler-%02d", i), Text: "ordinary text about the weather",
+			Vector: sparseVector1536(i % 5), Metadata: map[string]string{"scope": "a"},
+		})
+	}
+	records = append(records,
+		Record{Namespace: namespace, Key: "needle", Text: "the clause says the Supplier owes a quarterly zebracode", Vector: sparseVector1536(100), Metadata: map[string]string{"scope": "a"}},
+		Record{Namespace: namespace, Key: "hidden", Text: "another zebracode in a scope that is not allowed", Vector: sparseVector1536(101), Metadata: map[string]string{"scope": "b"}},
+	)
+	if err := store.Upsert(ctx, records); err != nil {
+		t.Fatalf("Upsert: %v", err)
+	}
+
+	vectorOnly, err := store.Search(ctx, Query{Namespace: namespace, Vector: sparseVector1536(0), TopK: 3})
+	if err != nil {
+		t.Fatalf("vector search: %v", err)
+	}
+	for _, r := range vectorOnly {
+		if r.Record.Key == "needle" {
+			t.Fatalf("the needle should not be among the nearest vectors: %+v", vectorOnly)
+		}
+	}
+
+	query := Query{Namespace: namespace, Vector: sparseVector1536(0), QueryText: "zebracode", TopK: 3, HybridWeight: 0.7}
+	results, err := store.Search(ctx, query)
+	if err != nil {
+		t.Fatalf("hybrid search: %v", err)
+	}
+	found := map[string]bool{}
+	for _, r := range results {
+		found[r.Record.Key] = true
+	}
+	if !found["needle"] || !found["hidden"] {
+		t.Fatalf("hybrid search should find the chunks only the word matches, got %+v", results)
+	}
+
+	query.Filter = map[string]any{"scope": "a"}
+	results, err = store.Search(ctx, query)
+	if err != nil {
+		t.Fatalf("hybrid search with a filter: %v", err)
+	}
+	for _, r := range results {
+		if r.Record.Key == "hidden" {
+			t.Fatalf("the filter must apply to the keyword side too: %+v", results)
+		}
+	}
+	if len(results) == 0 || results[0].Record.Key != "needle" && results[0].Record.Key != "filler-00" {
+		t.Fatalf("unexpected hybrid result with a filter: %+v", results)
+	}
+
+	// The column is stored and indexed: the planner can answer the word match from the GIN index (on a table this small it
+	// would rather scan, so the scan is switched off), and no to_tsvector is evaluated at query time.
+	var plan string
+	tx, err := store.db.BeginTx(ctx, nil)
+	if err != nil {
+		t.Fatalf("begin: %v", err)
+	}
+	defer func() { _ = tx.Rollback() }()
+	if _, err := tx.ExecContext(ctx, `SET LOCAL enable_seqscan = off`); err != nil {
+		t.Fatalf("set: %v", err)
+	}
+	explain, err := tx.QueryContext(ctx, `EXPLAIN SELECT id FROM vector_chunks WHERE text_search @@ to_tsquery('simple', $1)`, "'zebracode'")
+	if err != nil {
+		t.Fatalf("explain: %v", err)
+	}
+	defer explain.Close()
+	for explain.Next() {
+		var line string
+		_ = explain.Scan(&line)
+		plan += line + "\n"
+	}
+	if !strings.Contains(plan, "idx_vector_chunks_text_search") {
+		t.Fatalf("the keyword query does not use the text search index:\n%s", plan)
+	}
+}

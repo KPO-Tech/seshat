@@ -401,7 +401,7 @@ func pgFilterClause(filter map[string]any, args *[]any) string {
 		return ""
 	}
 	var sb strings.Builder
-	idx := len(*args) + 1
+	idx := len(*args)
 	for k, v := range filter {
 		switch t := v.(type) {
 		case string:
