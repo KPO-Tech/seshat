@@ -8,9 +8,10 @@ import "sort"
 //
 //   - Candidates. Each ranking is read to hybridCandidates(topK) hits, not to topK or twice topK: a chunk that is only 15th in
 //     each list is still a good answer, and with 20 candidates it is lost. From 20 to 100 candidates the answer is found
-//     among the first five results 3 to 4 points more often (512 and 768 tokens chunks); past 100 nothing changes.
+//     among the first five results 3 to 4 points more often (512 and 768 tokens chunks, none at 256); past 100 nothing changes.
 //   - Scores, not ranks. Reciprocal rank fusion keeps nothing of how far apart two hits are, and at 512 and 768 tokens it did
-//     no better than the keyword ranking alone. Blending scores is better (MRR +0.04 at 512 tokens, +0.05 at 768).
+//     no better than the keyword ranking alone. Blending scores is better (MRR +0.04 at 512 tokens, +0.05 at 768; no
+//     difference at 256 tokens, nor on questions whose answer needs several passages).
 //   - How the scores are normalised (by the best score, min-max, z-score) made no difference beyond the noise of the
 //     benchmark, so the simplest is kept: each list is divided by its best score.
 const (
