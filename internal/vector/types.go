@@ -37,8 +37,8 @@ type Query struct {
 	//   1             → pure BM25
 	//   0 < w < 1    → blend of the best candidates of both rankings, each divided by
 	//                  its best score: (1-w)*vector + w*keyword (see hybrid.go)
-	// SQLite, HNSW, memory, pgvector and OpenSearch implement it, and blend the same way;
-	// Chroma and Qdrant ignore HybridWeight and rank by vector similarity alone.
+	// Every store implements it and blends the same way. Qdrant and Chroma have no ranked keyword search, so their keyword
+	// side is one lookup per word of the query (see term_keyword.go): rarer words weigh more, there is no term frequency.
 	// Meaningless when Vector is empty - see the Vector field doc.
 	HybridWeight float32
 

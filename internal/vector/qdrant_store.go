@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"strings"
+	"sync"
 
 	"github.com/qdrant/go-client/qdrant"
 )
@@ -38,6 +39,9 @@ type QdrantConfig struct {
 type QdrantStore struct {
 	client *qdrant.Client
 	cfg    QdrantConfig
+
+	mu          sync.Mutex
+	textIndexed map[string]bool // collections whose _text payload has the full text index
 }
 
 // NewQdrantStore dials Qdrant and returns a ready QdrantStore.
@@ -53,7 +57,7 @@ func NewQdrantStore(_ context.Context, cfg QdrantConfig) (*QdrantStore, error) {
 	if err != nil {
 		return nil, fmt.Errorf("qdrant connect: %w", err)
 	}
-	return &QdrantStore{client: client, cfg: cfg}, nil
+	return &QdrantStore{client: client, cfg: cfg, textIndexed: map[string]bool{}}, nil
 }
 
 // Close releases the underlying gRPC connection.
@@ -138,13 +142,35 @@ func (s *QdrantStore) Search(ctx context.Context, query Query) ([]SearchResult, 
 		topK = 5
 	}
 
-	filter := buildQdrantFilter(query.Filter)
+	if hw := query.HybridWeight; hw > 0 && strings.TrimSpace(query.QueryText) != "" {
+		candidates := hybridCandidates(topK)
+		vectorResults, err := s.searchVector(ctx, query, candidates)
+		if err != nil {
+			return nil, err
+		}
+		if len(vectorResults) == 0 {
+			// An empty collection, or a namespace that does not exist: no keyword lookup to make.
+			exists, err := s.HasNamespace(ctx, query.Namespace)
+			if err != nil || !exists {
+				return nil, err
+			}
+		}
+		keywordResults, err := s.searchKeywords(ctx, query, candidates)
+		if err != nil {
+			return nil, err
+		}
+		return blendHybrid(vectorResults, keywordResults, hw, topK), nil
+	}
+	return s.searchVector(ctx, query, topK)
+}
+
+func (s *QdrantStore) searchVector(ctx context.Context, query Query, limit int) ([]SearchResult, error) {
 	req := &qdrant.QueryPoints{
 		CollectionName: s.collName(query.Namespace),
 		Query:          qdrant.NewQueryDense(query.Vector),
-		Limit:          qdrant.PtrOf(uint64(topK)),
+		Limit:          qdrant.PtrOf(uint64(limit)),
 		WithPayload:    qdrant.NewWithPayload(true),
-		Filter:         filter,
+		Filter:         buildQdrantFilter(query.Filter),
 	}
 
 	scored, err := s.client.Query(ctx, req)
@@ -157,23 +183,85 @@ func (s *QdrantStore) Search(ctx context.Context, query Query) ([]SearchResult, 
 
 	results := make([]SearchResult, 0, len(scored))
 	for _, pt := range scored {
-		r := Record{
-			Namespace: query.Namespace,
-			Key:       stringPayload(pt.Payload, qdrantPayloadKeySeshatID),
-			Text:      stringPayload(pt.Payload, qdrantPayloadKeyText),
-			Metadata:  make(map[string]string),
-		}
-		for k, v := range pt.Payload {
-			if k == qdrantPayloadKeyText || k == qdrantPayloadKeySeshatID || k == qdrantPayloadKeySeshatNS {
-				continue
-			}
-			if sv := v.GetStringValue(); sv != "" {
-				r.Metadata[k] = sv
-			}
-		}
-		results = append(results, SearchResult{Record: r, Score: pt.Score})
+		results = append(results, SearchResult{Record: qdrantRecord(query.Namespace, pt.Payload), Score: pt.Score})
 	}
 	return results, nil
+}
+
+// searchKeywords ranks the points that hold a word of the query (see termKeywordSearch), on the full text index of _text.
+func (s *QdrantStore) searchKeywords(ctx context.Context, query Query, limit int) ([]SearchResult, error) {
+	if err := s.ensureTextIndex(ctx, query.Namespace); err != nil {
+		return nil, err
+	}
+	return termKeywordSearch(ctx, query.QueryText, limit, func(ctx context.Context, word string, cap int) ([]Record, error) {
+		filter := buildQdrantFilter(query.Filter)
+		if filter == nil {
+			filter = &qdrant.Filter{}
+		}
+		filter.Must = append(filter.Must, qdrant.NewMatchText(qdrantPayloadKeyText, word))
+		points, err := s.client.Scroll(ctx, &qdrant.ScrollPoints{
+			CollectionName: s.collName(query.Namespace),
+			Filter:         filter,
+			Limit:          qdrant.PtrOf(uint32(cap)),
+			WithPayload:    qdrant.NewWithPayload(true),
+		})
+		if err != nil {
+			return nil, fmt.Errorf("qdrant keyword lookup: %w", err)
+		}
+		records := make([]Record, 0, len(points))
+		for _, pt := range points {
+			records = append(records, qdrantRecord(query.Namespace, pt.Payload))
+		}
+		return records, nil
+	})
+}
+
+// ensureTextIndex gives the _text payload of a collection a full text index (words, lowercase), once per process: without it a
+// word lookup reads every point of the collection. Creating an index that exists is not an error.
+func (s *QdrantStore) ensureTextIndex(ctx context.Context, namespace string) error {
+	name := s.collName(namespace)
+	s.mu.Lock()
+	done := s.textIndexed[name]
+	s.mu.Unlock()
+	if done {
+		return nil
+	}
+	_, err := s.client.CreateFieldIndex(ctx, &qdrant.CreateFieldIndexCollection{
+		CollectionName: name,
+		FieldName:      qdrantPayloadKeyText,
+		FieldType:      qdrant.FieldType_FieldTypeText.Enum(),
+		FieldIndexParams: qdrant.NewPayloadIndexParamsText(&qdrant.TextIndexParams{
+			Tokenizer: qdrant.TokenizerType_Word,
+			Lowercase: qdrant.PtrOf(true),
+		}),
+		Wait: qdrant.PtrOf(true),
+	})
+	if err != nil {
+		return fmt.Errorf("qdrant text index on %q: %w", name, err)
+	}
+	s.mu.Lock()
+	s.textIndexed[name] = true
+	s.mu.Unlock()
+	return nil
+}
+
+// qdrantRecord rebuilds a Record from the payload of a point.
+func qdrantRecord(namespace string, payload map[string]*qdrant.Value) Record {
+	r := Record{
+		Namespace: namespace,
+		Key:       stringPayload(payload, qdrantPayloadKeySeshatID),
+		Text:      stringPayload(payload, qdrantPayloadKeyText),
+		Metadata:  make(map[string]string),
+	}
+	for k, v := range payload {
+		if k == qdrantPayloadKeyText || k == qdrantPayloadKeySeshatID || k == qdrantPayloadKeySeshatNS {
+			continue
+		}
+		if sv := v.GetStringValue(); sv != "" {
+			r.Metadata[k] = sv
+		}
+	}
+	return r
 }
 
 func (s *QdrantStore) Get(ctx context.Context, namespace string, keys []string) ([]Record, error) {

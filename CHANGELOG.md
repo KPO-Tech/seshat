@@ -9,6 +9,15 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Changed
+
+- **Qdrant and Chroma honour `HybridWeight`** (they ignored it). Neither can rank by words, so the keyword side is one lookup per word of the query (16 at most, run together): a document scores the sum of the weights of the query words it holds, a rarer word weighing more, and the result is blended with the vector hits as in every other store. Qdrant creates a full text index on `_text` for the collection on the first hybrid search; Chroma matches each word with a case-insensitive whole-word regular expression, which it evaluates on every document of the collection, so its keyword side costs a scan per word.
+- **pgvector**: a query for more than 40 vector candidates (every hybrid search) runs with `hnsw.ef_search` raised to the number asked, up to 1000: an HNSW index returned at most 40 rows whatever the `LIMIT`. On 20,000 random vectors this took the hybrid hit rate of the store from 0.21 to 0.42.
+
+### Added
+
+- `TestStoreSpeed` (`internal/vector/speed_test.go`, runs only with `VECTOR_SPEED=1`): ingestion time, median and 95th percentile latency of a vector and of a hybrid search, and hit rate, for every store on the same synthetic collection. Integration tests of the hybrid search for Qdrant (`QDRANT_INTEGRATION_ADDR`) and Chroma (`CHROMA_INTEGRATION_URL`).
+
 ### Fixed
 
 - **pgvector**: a search with a metadata filter failed (`could not determine data type of parameter`): the placeholders of the filter were numbered one too high. The pgvector tests had never run in CI (they skip without a database); the Test job now starts a `pgvector/pgvector:pg17` service, and a new test covers the hybrid search on a real database (words only the keyword side matches, the filter on both sides, the `text_search` index, a table created before the column existed).

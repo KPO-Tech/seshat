@@ -119,9 +119,25 @@ func (s *ChromaStore) Search(ctx context.Context, query Query) ([]SearchResult, 
 		return nil, err
 	}
 
+	if hw := query.HybridWeight; hw > 0 && strings.TrimSpace(query.QueryText) != "" {
+		candidates := hybridCandidates(topK)
+		vectorResults, err := s.searchVector(ctx, collID, query, candidates)
+		if err != nil {
+			return nil, err
+		}
+		keywordResults, err := s.searchKeywords(ctx, collID, query, candidates)
+		if err != nil {
+			return nil, err
+		}
+		return blendHybrid(vectorResults, keywordResults, hw, topK), nil
+	}
+	return s.searchVector(ctx, collID, query, topK)
+}
+
+func (s *ChromaStore) searchVector(ctx context.Context, collID string, query Query, limit int) ([]SearchResult, error) {
 	body := map[string]any{
 		"query_embeddings": [][]float32{query.Vector},
-		"n_results":        topK,
+		"n_results":        limit,
 		"include":          []string{"documents", "metadatas", "distances"},
 	}
 	if where := buildChromaWhere(query.Filter); where != nil {
@@ -134,6 +150,27 @@ func (s *ChromaStore) Search(ctx context.Context, query Query) ([]SearchResult, 
 	}
 
 	return parseChromaQueryResponse(query.Namespace, resp)
+}
+
+// searchKeywords ranks the documents that hold a word of the query (see termKeywordSearch). Chroma has no word index: a lookup
+// is a regular expression on the documents, whole word and without regard to case, which it evaluates on each document of
+// the collection (or of the filter), so a keyword search costs a scan of the collection per word.
+func (s *ChromaStore) searchKeywords(ctx context.Context, collID string, query Query, limit int) ([]SearchResult, error) {
+	return termKeywordSearch(ctx, query.QueryText, limit, func(ctx context.Context, word string, cap int) ([]Record, error) {
+		body := map[string]any{
+			"where_document": map[string]any{"$regex": `(?i)\b` + word + `\b`},
+			"limit":          cap,
+			"include":        []string{"documents", "metadatas"},
+		}
+		if where := buildChromaWhere(query.Filter); where != nil {
+			body["where"] = where
+		}
+		resp, err := s.doJSON(ctx, http.MethodPost, s.collPath(collID)+"/get", body)
+		if err != nil {
+			return nil, fmt.Errorf("chroma keyword lookup %q: %w", query.Namespace, err)
+		}
+		return parseChromaGetResponse(query.Namespace, resp)
+	})
 }
 
 func (s *ChromaStore) Get(ctx context.Context, namespace string, keys []string) ([]Record, error) {
