@@ -9,6 +9,10 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Fixed
+
+- **pgvector**: a search with a metadata filter failed (`could not determine data type of parameter`): the placeholders of the filter were numbered one too high. The pgvector tests had never run in CI (they skip without a database); the Test job now starts a `pgvector/pgvector:pg17` service, and a new test covers the hybrid search on a real database (words only the keyword side matches, the filter on both sides, the `text_search` index, a table created before the column existed).
+
 ## [1.2.72] - 2026-10-05
 
 ### Changed
