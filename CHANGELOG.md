@@ -15,6 +15,10 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - **pgvector**: the keyword side reads a `text_search` column, a `tsvector` the database keeps from `text` (PostgreSQL 12 or later, added to an existing table on startup), with a GIN index, instead of parsing the text of every row of the collection at each query, and joins the words of the query by OR. `PgVectorOptions.TextSearchConfig` chooses the text search configuration (`simple` by default). A failing keyword query is an error: it fell back to a pure vector search without a word.
 - The memory store honours `HybridWeight` (it ignored it). Chroma and Qdrant still ignore it; `vector.Query` says so.
 
+### Added
+
+- `TestDumpChunksForEvaluation` accepts `heading<N>o<M>` as a strategy name: chunks of N tokens with an overlap of M (`heading512o0`: none), to measure what an overlap is worth.
+
 ## [1.2.71] - 2026-10-05
 
 ### Fixed
