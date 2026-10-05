@@ -55,11 +55,14 @@ func (s *MemoryStore) Search(_ context.Context, query Query) ([]SearchResult, er
 		return nil, fmt.Errorf("vector query values or query text are required")
 	}
 	namespaceRecords := s.records[query.Namespace]
+	hybrid := !vectorless && query.HybridWeight > 0 && strings.TrimSpace(query.QueryText) != ""
 	results := make([]SearchResult, 0, len(namespaceRecords))
+	var keywordResults []SearchResult // hybrid search only: the records whose words match
 	for _, record := range namespaceRecords {
 		if len(query.Filter) > 0 && !matchesFilter(record, query.Filter) {
 			continue
 		}
+		cloned := cloneRecord(record)
 		var score float32
 		if vectorless {
 			score = keywordScore(record.Text, query.QueryText)
@@ -71,13 +74,21 @@ func (s *MemoryStore) Search(_ context.Context, query Query) ([]SearchResult, er
 			}
 		} else {
 			score = cosineSimilarity(query.Vector, record.Vector)
+			if hybrid {
+				if keyword := keywordScore(record.Text, query.QueryText); keyword > 0 {
+					keywordResults = append(keywordResults, SearchResult{Record: cloned, Score: keyword})
+				}
+			}
 		}
-		results = append(results, SearchResult{
-			Record: cloneRecord(record),
-			Score:  score,
-		})
+		results = append(results, SearchResult{Record: cloned, Score: score})
 	}
 	sort.Slice(results, func(i, j int) bool { return results[i].Score > results[j].Score })
+	if hybrid {
+		// The best vector hits and the best keyword hits are blended (see hybrid.go).
+		candidates := hybridCandidates(topK)
+		sort.Slice(keywordResults, func(i, j int) bool { return keywordResults[i].Score > keywordResults[j].Score })
+		return blendHybrid(results[:min(len(results), candidates)], keywordResults[:min(len(keywordResults), candidates)], query.HybridWeight, topK), nil
+	}
 	if len(results) > topK {
 		results = results[:topK]
 	}
