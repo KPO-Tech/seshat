@@ -9,6 +9,8 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [1.2.73] - 2026-10-05
+
 ### Changed
 
 - **The HNSW store has its own graph** (`internal/vector/hnsw_index.go`), in place of `github.com/coder/hnsw`. That library stops its search as soon as a step finds nothing closer, so `efSearch` only bounded a queue and the search was greedy: measured against an exact search it found 8% of the true ten nearest neighbours of 2,000 random vectors and 2% of 20,000, whatever `efSearch` (20 to 200) and `M` (16 or 32), and 35% / 17% on clustered vectors. The new graph is the algorithm of the paper (search until no candidate is closer than the worst of the `efSearch` best, neighbours chosen for their spread): 1.00 on clustered vectors and 0.99 on random ones at 3,000 vectors, 0.998 on 20,000 clustered ones (0.63 on 20,000 random ones with `efSearch` 64, 0.91 with 512, the hardest case: random vectors have no structure to follow). A removed or replaced vector is a tombstone until more than half the graph is tombstones, then the graph is rebuilt. A metadata filter on a search now asks the graph for five times more hits, so that some are left after the filter.
