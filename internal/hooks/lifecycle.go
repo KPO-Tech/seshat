@@ -3,6 +3,7 @@ package hooks
 import (
 	"context"
 	"fmt"
+	"log/slog"
 	"sync"
 	"time"
 
@@ -403,8 +404,7 @@ func (m *HookLifecycleManager) publishLifecycleEvent(event HookLifecycleEvent) {
 	select {
 	case m.lifecycleEvents <- event:
 	default:
-		fmt.Printf("[hook-lifecycle] Warning: lifecycle events channel full, dropping event %s for hook %s\n",
-			event.EventType, event.HookID)
+		slog.Warn("hook lifecycle: events channel full, dropping event", "event", event.EventType, "hook", event.HookID)
 	}
 }
 
