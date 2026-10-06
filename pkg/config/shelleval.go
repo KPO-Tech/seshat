@@ -62,7 +62,7 @@ func runShell(cmd string) (string, error) {
 		shell = "sh"
 	}
 	var out bytes.Buffer
-	c := exec.Command(shell, "-c", cmd)
+	c := exec.Command(shell, "-c", cmd) // #nosec G702 -- cmd is a $(...) of the user's own configuration; the .env of the working directory cannot carry one (dotenv_guard.go)
 	c.Stdout = &out
 	c.Stderr = os.Stderr
 	if err := c.Run(); err != nil {

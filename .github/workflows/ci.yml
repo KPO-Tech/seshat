@@ -107,19 +107,24 @@ jobs:
           cache: true
 
       - name: gosec
-        # Report-only for now: this is the first SAST pass on an existing
-        # ~176k line codebase and surfaced 446 pre-existing findings (57
-        # HIGH, 228 MEDIUM, 161 LOW) that need triage before this can gate
-        # merges. Tracked separately; flip continue-on-error off once the
-        # backlog is triaged (fixed or explicitly accepted with #nosec).
-        continue-on-error: true
-        uses: securego/gosec@master
+        # Blocks on a new finding of high severity (medium confidence or better). The 75 high-severity findings of the first scan
+        # were triaged: 10 were fixed or accepted one by one with a "#nosec <rule> -- reason" on the line; four classes were judged
+        # false positives for this code base and are excluded here, with the reason:
+        #   G101  hard-coded credentials: constants that are the NAME of an environment variable or an OAuth endpoint URL;
+        #   G404  weak random numbers: retry jitter, animations, load spreading, level draws of the HNSW graph, message ids;
+        #   G115  integer conversions: sizes and ids that are bounded where they are made (checked at the three places that read
+        #         them from a file or from the network);
+        #   G704  SSRF by taint: the URLs are the ones the user configured (providers, Ollama, document reader); the fetch tool
+        #         that takes a URL from the model has its own policy (internal/web/net_policy.go).
+        # The 400-odd findings of medium and low severity are not gated: they are mostly file permissions and variable paths.
+        # Pinned: an action or a tool that moves under the build is a way into the build.
+        uses: securego/gosec@deb54465fea23d19a77f037e11e6589021f8501d # v2.29.0
         with:
-          args: -exclude-generated ./...
+          args: -severity high -confidence medium -exclude=G101,G404,G115,G704 -exclude-generated ./...
 
       - name: govulncheck
         run: |
-          go install golang.org/x/vuln/cmd/govulncheck@latest
+          go install golang.org/x/vuln/cmd/govulncheck@v1.8.0
           govulncheck ./...
 
   branch-policy:

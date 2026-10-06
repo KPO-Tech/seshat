@@ -187,7 +187,7 @@ func (r *Runner) runOne(ctx context.Context, cfg HookConfig, env []string, input
 		shell = "sh"
 	}
 
-	cmd := exec.CommandContext(ctx, shell, "-c", cfg.Command)
+	cmd := exec.CommandContext(ctx, shell, "-c", cfg.Command) // #nosec G702 -- a hook is a command line the embedder wrote in its own configuration
 	cmd.Env = append(os.Environ(), env...)
 	cmd.Dir = r.cwd
 

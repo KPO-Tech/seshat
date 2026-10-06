@@ -510,7 +510,12 @@ func loadEnvFile(path string) error {
 			// Only set if not already present in the process environment,
 			// so that vars exported by start.sh take priority over .env files.
 			if key != "" && os.Getenv(key) == "" {
-				os.Setenv(key, strings.TrimSpace(parts[1]))
+				value := strings.TrimSpace(parts[1])
+				if reason := dotenvRefusal(key, value); reason != "" {
+					fmt.Fprintf(os.Stderr, "seshat: %s: %s ignored (%s); set it in the environment or in your own configuration file instead\n", path, key, reason)
+					continue
+				}
+				os.Setenv(key, value)
 			}
 		}
 	}

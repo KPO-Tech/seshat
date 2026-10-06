@@ -214,7 +214,7 @@ func (s *Session) submitWithMessage(ctx context.Context, userMsg types.Message, 
 	// before getting its real name.
 	if s.state.Metadata != nil && s.state.Metadata.TotalTurns == 0 && text != "" {
 		sid := s.state.SessionID
-		go s.engine.generateTitleAsync(sid, text)
+		go s.engine.generateTitleAsync(sid, text) // #nosec G118 -- the title may arrive after the turn; generateTitleAsync has its own 30 s timeout
 	}
 
 	s.rememberUserDirectives(text)
