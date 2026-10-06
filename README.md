@@ -523,4 +523,4 @@ To report a vulnerability, see [`SECURITY.md`](./SECURITY.md).
 
 ## 📄 License
 
-[Apache 2.0](./LICENSE)
+[Apache 2.0](./LICENSE). The terminal UI (`internal/seshattui`) was built from Crush and stays subject to its FSL-1.1-MIT licence: see [`NOTICE`](./NOTICE) and [`docs/licensing.md`](./docs/licensing.md).
