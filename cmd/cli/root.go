@@ -39,6 +39,8 @@ func execute(ctx context.Context, args []string, stdin io.Reader, stdout, stderr
 		return runWorkflow(ctx, args[1:], stdout, stderr)
 	case "memory":
 		return runMemory(args[1:], stdout, stderr)
+	case "trust":
+		return runTrust(args[1:], stdout, stderr)
 	case "login":
 		return runLogin(ctx, args[1:], stdout, stderr)
 	case "version", "--version", "-v":
@@ -96,6 +98,10 @@ func printUsage(out io.Writer) {
 	fmt.Fprintln(out, "")
 	fmt.Fprintln(out, "  seshat memory  [--project DIR] [--scope user|project|cross]")
 	fmt.Fprintln(out, "                [--action show|set|clear|context] [--key KEY] [--value VALUE]")
+	fmt.Fprintln(out, "")
+	fmt.Fprintln(out, "  seshat trust   [--status] [--untrust] [--cwd DIR]")
+	fmt.Fprintln(out, "                Trust the configuration files of this project: until then, what its")
+	fmt.Fprintln(out, "                .seshat.json says about MCP servers, hooks, LSP, providers and allowed tools is ignored.")
 	fmt.Fprintln(out, "")
 	fmt.Fprintln(out, "  seshat login   [--provider openai|anthropic] [--client-id ID]")
 	fmt.Fprintln(out, "                Authenticate via browser using your ChatGPT subscription.")
