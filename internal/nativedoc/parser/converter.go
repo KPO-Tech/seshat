@@ -10,6 +10,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"time"
 
 	"github.com/KPO-Tech/seshat/internal/documentreader"
 	"github.com/KPO-Tech/seshat/internal/nativedoc"
@@ -90,7 +91,7 @@ func (c *Converter) ConvertURL(ctx context.Context, docURL string) (*documentrea
 	if err != nil {
 		return nil, fmt.Errorf("nativedoc/parser: build request for %s: %w", docURL, err)
 	}
-	resp, err := http.DefaultClient.Do(req)
+	resp, err := downloadClient.Do(req)
 	if err != nil {
 		return nil, fmt.Errorf("nativedoc/parser: fetch %s: %w", docURL, err)
 	}
@@ -119,3 +120,6 @@ func (c *Converter) ConvertBytes(ctx context.Context, data []byte, filename stri
 }
 
 var _ documentreader.Converter = (*Converter)(nil)
+
+// downloadClient fetches the document of ConvertURL. The context of the caller still applies; the timeout is the ceiling when it has none.
+var downloadClient = &http.Client{Timeout: 5 * time.Minute}

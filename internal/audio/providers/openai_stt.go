@@ -44,7 +44,7 @@ func NewOpenAISTT(apiKey string, opts ...OpenAISTTOption) *OpenAISTT {
 		apiKey:     apiKey,
 		baseURL:    openAISTTBaseURL,
 		model:      openAISTTDefaultModel,
-		httpClient: &http.Client{},
+		httpClient: &http.Client{Timeout: requestTimeout},
 	}
 	for _, opt := range opts {
 		opt(c)
