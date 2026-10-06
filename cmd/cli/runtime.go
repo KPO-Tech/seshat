@@ -364,6 +364,14 @@ func buildRAGService(config engineconfig.Config, hnswDir, sqliteFallbackPath str
 		}
 	}
 
+	// RAG_RERANK_MARGIN overrides the margin at or above which the first stage is trusted and the reranker is not asked
+	// (default 0.2, 0 asks it for every search) - see Service.SetRerankMargin.
+	if raw := strings.TrimSpace(os.Getenv("RAG_RERANK_MARGIN")); raw != "" {
+		if m, err := strconv.ParseFloat(raw, 32); err == nil {
+			svc.SetRerankMargin(float32(m))
+		}
+	}
+
 	return svc
 }
 
