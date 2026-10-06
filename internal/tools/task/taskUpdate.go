@@ -182,7 +182,7 @@ func (t *TaskUpdateTool) Call(ctx context.Context, input tool.CallInput, permiss
 	if addBlocks, ok := parsed["addBlocks"].([]any); ok && len(addBlocks) > 0 {
 		for _, blockID := range addBlocks {
 			if blockIDStr, ok := blockID.(string); ok {
-				GlobalTaskStore().BlockTask(ctx, sessionID, taskID, blockIDStr) //nolint:errcheck
+				GlobalTaskStore().BlockTask(ctx, sessionID, taskID, blockIDStr) //nolint:errcheck // the error is dropped: a link that cannot be made does not fail the update
 			}
 		}
 		updatedFields = append(updatedFields, "blocks")
@@ -192,7 +192,7 @@ func (t *TaskUpdateTool) Call(ctx context.Context, input tool.CallInput, permiss
 	if addBlockedBy, ok := parsed["addBlockedBy"].([]any); ok && len(addBlockedBy) > 0 {
 		for _, blockerID := range addBlockedBy {
 			if blockerIDStr, ok := blockerID.(string); ok {
-				GlobalTaskStore().BlockTask(ctx, sessionID, blockerIDStr, taskID) //nolint:errcheck
+				GlobalTaskStore().BlockTask(ctx, sessionID, blockerIDStr, taskID) //nolint:errcheck // the error is dropped: a link that cannot be made does not fail the update
 			}
 		}
 		updatedFields = append(updatedFields, "blockedBy")
