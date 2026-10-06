@@ -90,7 +90,7 @@ func EncodeS3AccountConfig(bucket, region, endpoint, prefix string) (string, err
 // S3Connector implements S3-compatible Discover/Sync.
 type S3Connector struct {
 	// extractText is wired via WithTextExtractor, normally to the caller's
-	// own docling-backed extraction, so connector-synced content goes
+	// own document-reader extraction, so connector-synced content goes
 	// through the exact same extraction path as an uploaded file.
 	extractText TextExtractorFunc
 }

@@ -38,10 +38,10 @@ import (
 )
 
 // TextExtractorFunc converts a downloaded binary file's raw bytes into
-// ingestable text (e.g. PDF/DOCX/PPTX via Docling) - nil means "no
+// ingestable text (e.g. PDF/DOCX/PPTX via a document reader) - nil means "no
 // extractor wired", and each connector falls back to treating raw bytes as
 // text, which is wrong for binary formats. Wired via each connector type's
-// WithTextExtractor, normally to the caller's own docling-backed extraction
+// WithTextExtractor, normally to the caller's own document-reader extraction
 // so connector-synced content goes through the same path as a manual upload.
 type TextExtractorFunc func(ctx context.Context, data []byte, contentType, filename string) string
 

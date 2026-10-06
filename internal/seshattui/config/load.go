@@ -65,6 +65,7 @@ func Load(workingDir, dataDir string, debug bool) (*ConfigStore, error) {
 		if !json.Valid(wsData) {
 			return nil, fmt.Errorf("invalid JSON in config file %s", store.workspacePath)
 		}
+		wsData = readProjectConfig(store.workspacePath, wsData) // the workspace file may come with the repository: see trust.go
 		merged, mergeErr := loadFromBytes(append([][]byte{mustMarshalConfig(cfg)}, wsData))
 		if mergeErr == nil {
 			// Preserve defaults that setDefaults already applied.
@@ -788,6 +789,9 @@ func loadFromConfigPaths(configPaths []string) (*Config, []string, error) {
 		}
 		if !json.Valid(data) {
 			return nil, nil, fmt.Errorf("invalid JSON in config file %s", path)
+		}
+		if !isGlobalConfigPath(path) {
+			data = readProjectConfig(path, data) // the file of a project: see trust.go
 		}
 		configs = append(configs, data)
 		loaded = append(loaded, path)

@@ -3,6 +3,11 @@
 // ============================================================================
 //
 // Ce fichier définit les services gRPC pour l'API Seshat.
+//
+// État: expérimental et partiel. Le serveur (cmd/grpc) n'expose qu'une partie du SDK (requêtes, skills, MCP, modèles); les demandes de
+// permission, les questions à l'utilisateur, les plans et les sessions ne passent pas par ce contrat (voir docs/transports.md).
+// Les anciens services FileService et SystemService (dont une méthode Bash) ont été retirés: ils n'étaient pas implémentés.
+//
 // À compiler avec: protoc --go_out=. --go-grpc_out=. seshat.proto
 //
 // ============================================================================
@@ -32,14 +37,17 @@ const (
 
 // Requête pour exécuter une requête IA
 type QueryRequest struct {
-	state     protoimpl.MessageState `protogen:"open.v1"`
-	Prompt    string                 `protobuf:"bytes,1,opt,name=prompt,proto3" json:"prompt,omitempty"`                        // Le prompt à exécuter
-	Model     string                 `protobuf:"bytes,2,opt,name=model,proto3" json:"model,omitempty"`                          // Modèle à utiliser (ex: "claude-3-5-sonnet-20241022")
-	Tools     []string               `protobuf:"bytes,3,rep,name=tools,proto3" json:"tools,omitempty"`                          // Liste des tools à activer
-	Stream    bool                   `protobuf:"varint,4,opt,name=stream,proto3" json:"stream,omitempty"`                       // Mode streaming
-	ContextId string                 `protobuf:"bytes,5,opt,name=context_id,json=contextId,proto3" json:"context_id,omitempty"` // ID de contexte pour la continuité de conversation
+	state  protoimpl.MessageState `protogen:"open.v1"`
+	Prompt string                 `protobuf:"bytes,1,opt,name=prompt,proto3" json:"prompt,omitempty"` // Le prompt à exécuter
+	Model  string                 `protobuf:"bytes,2,opt,name=model,proto3" json:"model,omitempty"`   // Modèle à utiliser (ex: "claude-3-5-sonnet-20241022")
+	Tools  []string               `protobuf:"bytes,3,rep,name=tools,proto3" json:"tools,omitempty"`   // Liste des tools à activer
+	// Deprecated: Marked as deprecated in pkg/grpc/proto/seshat.proto.
+	Stream    bool   `protobuf:"varint,4,opt,name=stream,proto3" json:"stream,omitempty"`                       // Ignoré par le serveur: la méthode appelée (Query ou QueryStream) décide du mode
+	ContextId string `protobuf:"bytes,5,opt,name=context_id,json=contextId,proto3" json:"context_id,omitempty"` // ID de contexte pour la continuité de conversation
 	// Paramètres optionnels
-	Temperature   float32 `protobuf:"fixed32,10,opt,name=temperature,proto3" json:"temperature,omitempty"`             // Temperature (0.0 - 1.0)
+	//
+	// Deprecated: Marked as deprecated in pkg/grpc/proto/seshat.proto.
+	Temperature   float32 `protobuf:"fixed32,10,opt,name=temperature,proto3" json:"temperature,omitempty"`             // Ignoré par le serveur pour le moment (non transmis au modèle)
 	MaxTokens     int32   `protobuf:"varint,11,opt,name=max_tokens,json=maxTokens,proto3" json:"max_tokens,omitempty"` // Nombre max de tokens en sortie
 	ApiKey        string  `protobuf:"bytes,12,opt,name=api_key,json=apiKey,proto3" json:"api_key,omitempty"`           // Clé API ou bearer token OAuth explicite pour cette requête
 	unknownFields protoimpl.UnknownFields
@@ -97,6 +105,7 @@ func (x *QueryRequest) GetTools() []string {
 	return nil
 }
 
+// Deprecated: Marked as deprecated in pkg/grpc/proto/seshat.proto.
 func (x *QueryRequest) GetStream() bool {
 	if x != nil {
 		return x.Stream
@@ -111,6 +120,7 @@ func (x *QueryRequest) GetContextId() string {
 	return ""
 }
 
+// Deprecated: Marked as deprecated in pkg/grpc/proto/seshat.proto.
 func (x *QueryRequest) GetTemperature() float32 {
 	if x != nil {
 		return x.Temperature
@@ -1422,832 +1432,20 @@ func (x *HealthCheckResponse) GetUptime() string {
 	return ""
 }
 
-type FileReadRequest struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Path          string                 `protobuf:"bytes,1,opt,name=path,proto3" json:"path,omitempty"`
-	Offset        int32                  `protobuf:"varint,2,opt,name=offset,proto3" json:"offset,omitempty"`
-	Limit         int32                  `protobuf:"varint,3,opt,name=limit,proto3" json:"limit,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
-}
-
-func (x *FileReadRequest) Reset() {
-	*x = FileReadRequest{}
-	mi := &file_pkg_grpc_proto_seshat_proto_msgTypes[22]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
-}
-
-func (x *FileReadRequest) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*FileReadRequest) ProtoMessage() {}
-
-func (x *FileReadRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_pkg_grpc_proto_seshat_proto_msgTypes[22]
-	if x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use FileReadRequest.ProtoReflect.Descriptor instead.
-func (*FileReadRequest) Descriptor() ([]byte, []int) {
-	return file_pkg_grpc_proto_seshat_proto_rawDescGZIP(), []int{22}
-}
-
-func (x *FileReadRequest) GetPath() string {
-	if x != nil {
-		return x.Path
-	}
-	return ""
-}
-
-func (x *FileReadRequest) GetOffset() int32 {
-	if x != nil {
-		return x.Offset
-	}
-	return 0
-}
-
-func (x *FileReadRequest) GetLimit() int32 {
-	if x != nil {
-		return x.Limit
-	}
-	return 0
-}
-
-type FileReadResponse struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Content       string                 `protobuf:"bytes,1,opt,name=content,proto3" json:"content,omitempty"`
-	Error         bool                   `protobuf:"varint,2,opt,name=error,proto3" json:"error,omitempty"`
-	ErrorMessage  string                 `protobuf:"bytes,3,opt,name=error_message,json=errorMessage,proto3" json:"error_message,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
-}
-
-func (x *FileReadResponse) Reset() {
-	*x = FileReadResponse{}
-	mi := &file_pkg_grpc_proto_seshat_proto_msgTypes[23]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
-}
-
-func (x *FileReadResponse) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*FileReadResponse) ProtoMessage() {}
-
-func (x *FileReadResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_pkg_grpc_proto_seshat_proto_msgTypes[23]
-	if x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use FileReadResponse.ProtoReflect.Descriptor instead.
-func (*FileReadResponse) Descriptor() ([]byte, []int) {
-	return file_pkg_grpc_proto_seshat_proto_rawDescGZIP(), []int{23}
-}
-
-func (x *FileReadResponse) GetContent() string {
-	if x != nil {
-		return x.Content
-	}
-	return ""
-}
-
-func (x *FileReadResponse) GetError() bool {
-	if x != nil {
-		return x.Error
-	}
-	return false
-}
-
-func (x *FileReadResponse) GetErrorMessage() string {
-	if x != nil {
-		return x.ErrorMessage
-	}
-	return ""
-}
-
-type FileWriteRequest struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Path          string                 `protobuf:"bytes,1,opt,name=path,proto3" json:"path,omitempty"`
-	Content       string                 `protobuf:"bytes,2,opt,name=content,proto3" json:"content,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
-}
-
-func (x *FileWriteRequest) Reset() {
-	*x = FileWriteRequest{}
-	mi := &file_pkg_grpc_proto_seshat_proto_msgTypes[24]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
-}
-
-func (x *FileWriteRequest) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*FileWriteRequest) ProtoMessage() {}
-
-func (x *FileWriteRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_pkg_grpc_proto_seshat_proto_msgTypes[24]
-	if x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use FileWriteRequest.ProtoReflect.Descriptor instead.
-func (*FileWriteRequest) Descriptor() ([]byte, []int) {
-	return file_pkg_grpc_proto_seshat_proto_rawDescGZIP(), []int{24}
-}
-
-func (x *FileWriteRequest) GetPath() string {
-	if x != nil {
-		return x.Path
-	}
-	return ""
-}
-
-func (x *FileWriteRequest) GetContent() string {
-	if x != nil {
-		return x.Content
-	}
-	return ""
-}
-
-type FileWriteResponse struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Success       bool                   `protobuf:"varint,1,opt,name=success,proto3" json:"success,omitempty"`
-	Error         string                 `protobuf:"bytes,2,opt,name=error,proto3" json:"error,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
-}
-
-func (x *FileWriteResponse) Reset() {
-	*x = FileWriteResponse{}
-	mi := &file_pkg_grpc_proto_seshat_proto_msgTypes[25]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
-}
-
-func (x *FileWriteResponse) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*FileWriteResponse) ProtoMessage() {}
-
-func (x *FileWriteResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_pkg_grpc_proto_seshat_proto_msgTypes[25]
-	if x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use FileWriteResponse.ProtoReflect.Descriptor instead.
-func (*FileWriteResponse) Descriptor() ([]byte, []int) {
-	return file_pkg_grpc_proto_seshat_proto_rawDescGZIP(), []int{25}
-}
-
-func (x *FileWriteResponse) GetSuccess() bool {
-	if x != nil {
-		return x.Success
-	}
-	return false
-}
-
-func (x *FileWriteResponse) GetError() string {
-	if x != nil {
-		return x.Error
-	}
-	return ""
-}
-
-type FileEditRequest struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Path          string                 `protobuf:"bytes,1,opt,name=path,proto3" json:"path,omitempty"`
-	OldString     string                 `protobuf:"bytes,2,opt,name=old_string,json=oldString,proto3" json:"old_string,omitempty"`
-	NewString     string                 `protobuf:"bytes,3,opt,name=new_string,json=newString,proto3" json:"new_string,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
-}
-
-func (x *FileEditRequest) Reset() {
-	*x = FileEditRequest{}
-	mi := &file_pkg_grpc_proto_seshat_proto_msgTypes[26]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
-}
-
-func (x *FileEditRequest) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*FileEditRequest) ProtoMessage() {}
-
-func (x *FileEditRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_pkg_grpc_proto_seshat_proto_msgTypes[26]
-	if x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use FileEditRequest.ProtoReflect.Descriptor instead.
-func (*FileEditRequest) Descriptor() ([]byte, []int) {
-	return file_pkg_grpc_proto_seshat_proto_rawDescGZIP(), []int{26}
-}
-
-func (x *FileEditRequest) GetPath() string {
-	if x != nil {
-		return x.Path
-	}
-	return ""
-}
-
-func (x *FileEditRequest) GetOldString() string {
-	if x != nil {
-		return x.OldString
-	}
-	return ""
-}
-
-func (x *FileEditRequest) GetNewString() string {
-	if x != nil {
-		return x.NewString
-	}
-	return ""
-}
-
-type FileEditResponse struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Success       bool                   `protobuf:"varint,1,opt,name=success,proto3" json:"success,omitempty"`
-	Error         string                 `protobuf:"bytes,2,opt,name=error,proto3" json:"error,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
-}
-
-func (x *FileEditResponse) Reset() {
-	*x = FileEditResponse{}
-	mi := &file_pkg_grpc_proto_seshat_proto_msgTypes[27]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
-}
-
-func (x *FileEditResponse) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*FileEditResponse) ProtoMessage() {}
-
-func (x *FileEditResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_pkg_grpc_proto_seshat_proto_msgTypes[27]
-	if x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use FileEditResponse.ProtoReflect.Descriptor instead.
-func (*FileEditResponse) Descriptor() ([]byte, []int) {
-	return file_pkg_grpc_proto_seshat_proto_rawDescGZIP(), []int{27}
-}
-
-func (x *FileEditResponse) GetSuccess() bool {
-	if x != nil {
-		return x.Success
-	}
-	return false
-}
-
-func (x *FileEditResponse) GetError() string {
-	if x != nil {
-		return x.Error
-	}
-	return ""
-}
-
-type FileGlobRequest struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Pattern       string                 `protobuf:"bytes,1,opt,name=pattern,proto3" json:"pattern,omitempty"`
-	Path          string                 `protobuf:"bytes,2,opt,name=path,proto3" json:"path,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
-}
-
-func (x *FileGlobRequest) Reset() {
-	*x = FileGlobRequest{}
-	mi := &file_pkg_grpc_proto_seshat_proto_msgTypes[28]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
-}
-
-func (x *FileGlobRequest) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*FileGlobRequest) ProtoMessage() {}
-
-func (x *FileGlobRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_pkg_grpc_proto_seshat_proto_msgTypes[28]
-	if x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use FileGlobRequest.ProtoReflect.Descriptor instead.
-func (*FileGlobRequest) Descriptor() ([]byte, []int) {
-	return file_pkg_grpc_proto_seshat_proto_rawDescGZIP(), []int{28}
-}
-
-func (x *FileGlobRequest) GetPattern() string {
-	if x != nil {
-		return x.Pattern
-	}
-	return ""
-}
-
-func (x *FileGlobRequest) GetPath() string {
-	if x != nil {
-		return x.Path
-	}
-	return ""
-}
-
-type FileGlobResponse struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Files         []string               `protobuf:"bytes,1,rep,name=files,proto3" json:"files,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
-}
-
-func (x *FileGlobResponse) Reset() {
-	*x = FileGlobResponse{}
-	mi := &file_pkg_grpc_proto_seshat_proto_msgTypes[29]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
-}
-
-func (x *FileGlobResponse) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*FileGlobResponse) ProtoMessage() {}
-
-func (x *FileGlobResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_pkg_grpc_proto_seshat_proto_msgTypes[29]
-	if x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use FileGlobResponse.ProtoReflect.Descriptor instead.
-func (*FileGlobResponse) Descriptor() ([]byte, []int) {
-	return file_pkg_grpc_proto_seshat_proto_rawDescGZIP(), []int{29}
-}
-
-func (x *FileGlobResponse) GetFiles() []string {
-	if x != nil {
-		return x.Files
-	}
-	return nil
-}
-
-type FileGrepRequest struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Pattern       string                 `protobuf:"bytes,1,opt,name=pattern,proto3" json:"pattern,omitempty"`
-	Path          string                 `protobuf:"bytes,2,opt,name=path,proto3" json:"path,omitempty"`
-	Recursive     bool                   `protobuf:"varint,3,opt,name=recursive,proto3" json:"recursive,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
-}
-
-func (x *FileGrepRequest) Reset() {
-	*x = FileGrepRequest{}
-	mi := &file_pkg_grpc_proto_seshat_proto_msgTypes[30]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
-}
-
-func (x *FileGrepRequest) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*FileGrepRequest) ProtoMessage() {}
-
-func (x *FileGrepRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_pkg_grpc_proto_seshat_proto_msgTypes[30]
-	if x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use FileGrepRequest.ProtoReflect.Descriptor instead.
-func (*FileGrepRequest) Descriptor() ([]byte, []int) {
-	return file_pkg_grpc_proto_seshat_proto_rawDescGZIP(), []int{30}
-}
-
-func (x *FileGrepRequest) GetPattern() string {
-	if x != nil {
-		return x.Pattern
-	}
-	return ""
-}
-
-func (x *FileGrepRequest) GetPath() string {
-	if x != nil {
-		return x.Path
-	}
-	return ""
-}
-
-func (x *FileGrepRequest) GetRecursive() bool {
-	if x != nil {
-		return x.Recursive
-	}
-	return false
-}
-
-type FileGrepResponse struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Matches       []*GrepMatch           `protobuf:"bytes,1,rep,name=matches,proto3" json:"matches,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
-}
-
-func (x *FileGrepResponse) Reset() {
-	*x = FileGrepResponse{}
-	mi := &file_pkg_grpc_proto_seshat_proto_msgTypes[31]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
-}
-
-func (x *FileGrepResponse) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*FileGrepResponse) ProtoMessage() {}
-
-func (x *FileGrepResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_pkg_grpc_proto_seshat_proto_msgTypes[31]
-	if x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use FileGrepResponse.ProtoReflect.Descriptor instead.
-func (*FileGrepResponse) Descriptor() ([]byte, []int) {
-	return file_pkg_grpc_proto_seshat_proto_rawDescGZIP(), []int{31}
-}
-
-func (x *FileGrepResponse) GetMatches() []*GrepMatch {
-	if x != nil {
-		return x.Matches
-	}
-	return nil
-}
-
-type GrepMatch struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	File          string                 `protobuf:"bytes,1,opt,name=file,proto3" json:"file,omitempty"`
-	Line          int32                  `protobuf:"varint,2,opt,name=line,proto3" json:"line,omitempty"`
-	Content       string                 `protobuf:"bytes,3,opt,name=content,proto3" json:"content,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
-}
-
-func (x *GrepMatch) Reset() {
-	*x = GrepMatch{}
-	mi := &file_pkg_grpc_proto_seshat_proto_msgTypes[32]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
-}
-
-func (x *GrepMatch) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*GrepMatch) ProtoMessage() {}
-
-func (x *GrepMatch) ProtoReflect() protoreflect.Message {
-	mi := &file_pkg_grpc_proto_seshat_proto_msgTypes[32]
-	if x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use GrepMatch.ProtoReflect.Descriptor instead.
-func (*GrepMatch) Descriptor() ([]byte, []int) {
-	return file_pkg_grpc_proto_seshat_proto_rawDescGZIP(), []int{32}
-}
-
-func (x *GrepMatch) GetFile() string {
-	if x != nil {
-		return x.File
-	}
-	return ""
-}
-
-func (x *GrepMatch) GetLine() int32 {
-	if x != nil {
-		return x.Line
-	}
-	return 0
-}
-
-func (x *GrepMatch) GetContent() string {
-	if x != nil {
-		return x.Content
-	}
-	return ""
-}
-
-type BashRequest struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Command       string                 `protobuf:"bytes,1,opt,name=command,proto3" json:"command,omitempty"`
-	Cwd           string                 `protobuf:"bytes,2,opt,name=cwd,proto3" json:"cwd,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
-}
-
-func (x *BashRequest) Reset() {
-	*x = BashRequest{}
-	mi := &file_pkg_grpc_proto_seshat_proto_msgTypes[33]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
-}
-
-func (x *BashRequest) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*BashRequest) ProtoMessage() {}
-
-func (x *BashRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_pkg_grpc_proto_seshat_proto_msgTypes[33]
-	if x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use BashRequest.ProtoReflect.Descriptor instead.
-func (*BashRequest) Descriptor() ([]byte, []int) {
-	return file_pkg_grpc_proto_seshat_proto_rawDescGZIP(), []int{33}
-}
-
-func (x *BashRequest) GetCommand() string {
-	if x != nil {
-		return x.Command
-	}
-	return ""
-}
-
-func (x *BashRequest) GetCwd() string {
-	if x != nil {
-		return x.Cwd
-	}
-	return ""
-}
-
-type BashResponse struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Output        string                 `protobuf:"bytes,1,opt,name=output,proto3" json:"output,omitempty"`
-	ExitCode      int32                  `protobuf:"varint,2,opt,name=exit_code,json=exitCode,proto3" json:"exit_code,omitempty"`
-	Error         string                 `protobuf:"bytes,3,opt,name=error,proto3" json:"error,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
-}
-
-func (x *BashResponse) Reset() {
-	*x = BashResponse{}
-	mi := &file_pkg_grpc_proto_seshat_proto_msgTypes[34]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
-}
-
-func (x *BashResponse) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*BashResponse) ProtoMessage() {}
-
-func (x *BashResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_pkg_grpc_proto_seshat_proto_msgTypes[34]
-	if x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use BashResponse.ProtoReflect.Descriptor instead.
-func (*BashResponse) Descriptor() ([]byte, []int) {
-	return file_pkg_grpc_proto_seshat_proto_rawDescGZIP(), []int{34}
-}
-
-func (x *BashResponse) GetOutput() string {
-	if x != nil {
-		return x.Output
-	}
-	return ""
-}
-
-func (x *BashResponse) GetExitCode() int32 {
-	if x != nil {
-		return x.ExitCode
-	}
-	return 0
-}
-
-func (x *BashResponse) GetError() string {
-	if x != nil {
-		return x.Error
-	}
-	return ""
-}
-
-type SystemInfoRequest struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
-}
-
-func (x *SystemInfoRequest) Reset() {
-	*x = SystemInfoRequest{}
-	mi := &file_pkg_grpc_proto_seshat_proto_msgTypes[35]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
-}
-
-func (x *SystemInfoRequest) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*SystemInfoRequest) ProtoMessage() {}
-
-func (x *SystemInfoRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_pkg_grpc_proto_seshat_proto_msgTypes[35]
-	if x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use SystemInfoRequest.ProtoReflect.Descriptor instead.
-func (*SystemInfoRequest) Descriptor() ([]byte, []int) {
-	return file_pkg_grpc_proto_seshat_proto_rawDescGZIP(), []int{35}
-}
-
-type SystemInfoResponse struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Os            string                 `protobuf:"bytes,1,opt,name=os,proto3" json:"os,omitempty"`
-	Arch          string                 `protobuf:"bytes,2,opt,name=arch,proto3" json:"arch,omitempty"`
-	CpuCount      int32                  `protobuf:"varint,3,opt,name=cpu_count,json=cpuCount,proto3" json:"cpu_count,omitempty"`
-	MemoryTotal   int64                  `protobuf:"varint,4,opt,name=memory_total,json=memoryTotal,proto3" json:"memory_total,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
-}
-
-func (x *SystemInfoResponse) Reset() {
-	*x = SystemInfoResponse{}
-	mi := &file_pkg_grpc_proto_seshat_proto_msgTypes[36]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
-}
-
-func (x *SystemInfoResponse) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*SystemInfoResponse) ProtoMessage() {}
-
-func (x *SystemInfoResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_pkg_grpc_proto_seshat_proto_msgTypes[36]
-	if x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use SystemInfoResponse.ProtoReflect.Descriptor instead.
-func (*SystemInfoResponse) Descriptor() ([]byte, []int) {
-	return file_pkg_grpc_proto_seshat_proto_rawDescGZIP(), []int{36}
-}
-
-func (x *SystemInfoResponse) GetOs() string {
-	if x != nil {
-		return x.Os
-	}
-	return ""
-}
-
-func (x *SystemInfoResponse) GetArch() string {
-	if x != nil {
-		return x.Arch
-	}
-	return ""
-}
-
-func (x *SystemInfoResponse) GetCpuCount() int32 {
-	if x != nil {
-		return x.CpuCount
-	}
-	return 0
-}
-
-func (x *SystemInfoResponse) GetMemoryTotal() int64 {
-	if x != nil {
-		return x.MemoryTotal
-	}
-	return 0
-}
-
 var File_pkg_grpc_proto_seshat_proto protoreflect.FileDescriptor
 
 const file_pkg_grpc_proto_seshat_proto_rawDesc = "" +
 	"\n" +
-	"\x1bpkg/grpc/proto/seshat.proto\x12\x06seshat\"\xe3\x01\n" +
+	"\x1bpkg/grpc/proto/seshat.proto\x12\x06seshat\"\xeb\x01\n" +
 	"\fQueryRequest\x12\x16\n" +
 	"\x06prompt\x18\x01 \x01(\tR\x06prompt\x12\x14\n" +
 	"\x05model\x18\x02 \x01(\tR\x05model\x12\x14\n" +
-	"\x05tools\x18\x03 \x03(\tR\x05tools\x12\x16\n" +
-	"\x06stream\x18\x04 \x01(\bR\x06stream\x12\x1d\n" +
+	"\x05tools\x18\x03 \x03(\tR\x05tools\x12\x1a\n" +
+	"\x06stream\x18\x04 \x01(\bB\x02\x18\x01R\x06stream\x12\x1d\n" +
 	"\n" +
-	"context_id\x18\x05 \x01(\tR\tcontextId\x12 \n" +
+	"context_id\x18\x05 \x01(\tR\tcontextId\x12$\n" +
 	"\vtemperature\x18\n" +
-	" \x01(\x02R\vtemperature\x12\x1d\n" +
+	" \x01(\x02B\x02\x18\x01R\vtemperature\x12\x1d\n" +
 	"\n" +
 	"max_tokens\x18\v \x01(\x05R\tmaxTokens\x12\x17\n" +
 	"\aapi_key\x18\f \x01(\tR\x06apiKey\"8\n" +
@@ -2354,58 +1552,7 @@ const file_pkg_grpc_proto_seshat_proto_rawDesc = "" +
 	"\x13HealthCheckResponse\x12\x16\n" +
 	"\x06status\x18\x01 \x01(\tR\x06status\x12\x18\n" +
 	"\aversion\x18\x02 \x01(\tR\aversion\x12\x16\n" +
-	"\x06uptime\x18\x03 \x01(\tR\x06uptime\"S\n" +
-	"\x0fFileReadRequest\x12\x12\n" +
-	"\x04path\x18\x01 \x01(\tR\x04path\x12\x16\n" +
-	"\x06offset\x18\x02 \x01(\x05R\x06offset\x12\x14\n" +
-	"\x05limit\x18\x03 \x01(\x05R\x05limit\"g\n" +
-	"\x10FileReadResponse\x12\x18\n" +
-	"\acontent\x18\x01 \x01(\tR\acontent\x12\x14\n" +
-	"\x05error\x18\x02 \x01(\bR\x05error\x12#\n" +
-	"\rerror_message\x18\x03 \x01(\tR\ferrorMessage\"@\n" +
-	"\x10FileWriteRequest\x12\x12\n" +
-	"\x04path\x18\x01 \x01(\tR\x04path\x12\x18\n" +
-	"\acontent\x18\x02 \x01(\tR\acontent\"C\n" +
-	"\x11FileWriteResponse\x12\x18\n" +
-	"\asuccess\x18\x01 \x01(\bR\asuccess\x12\x14\n" +
-	"\x05error\x18\x02 \x01(\tR\x05error\"c\n" +
-	"\x0fFileEditRequest\x12\x12\n" +
-	"\x04path\x18\x01 \x01(\tR\x04path\x12\x1d\n" +
-	"\n" +
-	"old_string\x18\x02 \x01(\tR\toldString\x12\x1d\n" +
-	"\n" +
-	"new_string\x18\x03 \x01(\tR\tnewString\"B\n" +
-	"\x10FileEditResponse\x12\x18\n" +
-	"\asuccess\x18\x01 \x01(\bR\asuccess\x12\x14\n" +
-	"\x05error\x18\x02 \x01(\tR\x05error\"?\n" +
-	"\x0fFileGlobRequest\x12\x18\n" +
-	"\apattern\x18\x01 \x01(\tR\apattern\x12\x12\n" +
-	"\x04path\x18\x02 \x01(\tR\x04path\"(\n" +
-	"\x10FileGlobResponse\x12\x14\n" +
-	"\x05files\x18\x01 \x03(\tR\x05files\"]\n" +
-	"\x0fFileGrepRequest\x12\x18\n" +
-	"\apattern\x18\x01 \x01(\tR\apattern\x12\x12\n" +
-	"\x04path\x18\x02 \x01(\tR\x04path\x12\x1c\n" +
-	"\trecursive\x18\x03 \x01(\bR\trecursive\"?\n" +
-	"\x10FileGrepResponse\x12+\n" +
-	"\amatches\x18\x01 \x03(\v2\x11.seshat.GrepMatchR\amatches\"M\n" +
-	"\tGrepMatch\x12\x12\n" +
-	"\x04file\x18\x01 \x01(\tR\x04file\x12\x12\n" +
-	"\x04line\x18\x02 \x01(\x05R\x04line\x12\x18\n" +
-	"\acontent\x18\x03 \x01(\tR\acontent\"9\n" +
-	"\vBashRequest\x12\x18\n" +
-	"\acommand\x18\x01 \x01(\tR\acommand\x12\x10\n" +
-	"\x03cwd\x18\x02 \x01(\tR\x03cwd\"Y\n" +
-	"\fBashResponse\x12\x16\n" +
-	"\x06output\x18\x01 \x01(\tR\x06output\x12\x1b\n" +
-	"\texit_code\x18\x02 \x01(\x05R\bexitCode\x12\x14\n" +
-	"\x05error\x18\x03 \x01(\tR\x05error\"\x13\n" +
-	"\x11SystemInfoRequest\"x\n" +
-	"\x12SystemInfoResponse\x12\x0e\n" +
-	"\x02os\x18\x01 \x01(\tR\x02os\x12\x12\n" +
-	"\x04arch\x18\x02 \x01(\tR\x04arch\x12\x1b\n" +
-	"\tcpu_count\x18\x03 \x01(\x05R\bcpuCount\x12!\n" +
-	"\fmemory_total\x18\x04 \x01(\x03R\vmemoryTotal2\xf5\x04\n" +
+	"\x06uptime\x18\x03 \x01(\tR\x06uptime2\xf5\x04\n" +
 	"\rSeshatService\x124\n" +
 	"\x05Query\x12\x14.seshat.QueryRequest\x1a\x15.seshat.QueryResponse\x12<\n" +
 	"\vQueryStream\x12\x14.seshat.QueryRequest\x1a\x15.seshat.QueryResponse0\x01\x12C\n" +
@@ -2417,16 +1564,7 @@ const file_pkg_grpc_proto_seshat_proto_rawDesc = "" +
 	"ConnectMCP\x12\x19.seshat.ConnectMCPRequest\x1a\x1a.seshat.ConnectMCPResponse\x12L\n" +
 	"\rDisconnectMCP\x12\x1c.seshat.DisconnectMCPRequest\x1a\x1d.seshat.DisconnectMCPResponse\x12@\n" +
 	"\tGetModels\x12\x18.seshat.GetModelsRequest\x1a\x19.seshat.GetModelsResponse\x12F\n" +
-	"\vHealthCheck\x12\x1a.seshat.HealthCheckRequest\x1a\x1b.seshat.HealthCheckResponse2\xb7\x02\n" +
-	"\vFileService\x129\n" +
-	"\x04Read\x12\x17.seshat.FileReadRequest\x1a\x18.seshat.FileReadResponse\x12<\n" +
-	"\x05Write\x12\x18.seshat.FileWriteRequest\x1a\x19.seshat.FileWriteResponse\x129\n" +
-	"\x04Edit\x12\x17.seshat.FileEditRequest\x1a\x18.seshat.FileEditResponse\x129\n" +
-	"\x04Glob\x12\x17.seshat.FileGlobRequest\x1a\x18.seshat.FileGlobResponse\x129\n" +
-	"\x04Grep\x12\x17.seshat.FileGrepRequest\x1a\x18.seshat.FileGrepResponse2\x8a\x01\n" +
-	"\rSystemService\x121\n" +
-	"\x04Bash\x12\x13.seshat.BashRequest\x1a\x14.seshat.BashResponse\x12F\n" +
-	"\rGetSystemInfo\x12\x19.seshat.SystemInfoRequest\x1a\x1a.seshat.SystemInfoResponseB4Z2github.com/KPO-Tech/seshat/pkg/grpc/seshatb\x06proto3"
+	"\vHealthCheck\x12\x1a.seshat.HealthCheckRequest\x1a\x1b.seshat.HealthCheckResponseB,Z*github.com/KPO-Tech/seshat/pkg/grpc/seshatb\x06proto3"
 
 var (
 	file_pkg_grpc_proto_seshat_proto_rawDescOnce sync.Once
@@ -2440,7 +1578,7 @@ func file_pkg_grpc_proto_seshat_proto_rawDescGZIP() []byte {
 	return file_pkg_grpc_proto_seshat_proto_rawDescData
 }
 
-var file_pkg_grpc_proto_seshat_proto_msgTypes = make([]protoimpl.MessageInfo, 38)
+var file_pkg_grpc_proto_seshat_proto_msgTypes = make([]protoimpl.MessageInfo, 23)
 var file_pkg_grpc_proto_seshat_proto_goTypes = []any{
 	(*QueryRequest)(nil),            // 0: seshat.QueryRequest
 	(*ListSkillsRequest)(nil),       // 1: seshat.ListSkillsRequest
@@ -2464,25 +1602,10 @@ var file_pkg_grpc_proto_seshat_proto_goTypes = []any{
 	(*GetModelsResponse)(nil),       // 19: seshat.GetModelsResponse
 	(*ModelInfo)(nil),               // 20: seshat.ModelInfo
 	(*HealthCheckResponse)(nil),     // 21: seshat.HealthCheckResponse
-	(*FileReadRequest)(nil),         // 22: seshat.FileReadRequest
-	(*FileReadResponse)(nil),        // 23: seshat.FileReadResponse
-	(*FileWriteRequest)(nil),        // 24: seshat.FileWriteRequest
-	(*FileWriteResponse)(nil),       // 25: seshat.FileWriteResponse
-	(*FileEditRequest)(nil),         // 26: seshat.FileEditRequest
-	(*FileEditResponse)(nil),        // 27: seshat.FileEditResponse
-	(*FileGlobRequest)(nil),         // 28: seshat.FileGlobRequest
-	(*FileGlobResponse)(nil),        // 29: seshat.FileGlobResponse
-	(*FileGrepRequest)(nil),         // 30: seshat.FileGrepRequest
-	(*FileGrepResponse)(nil),        // 31: seshat.FileGrepResponse
-	(*GrepMatch)(nil),               // 32: seshat.GrepMatch
-	(*BashRequest)(nil),             // 33: seshat.BashRequest
-	(*BashResponse)(nil),            // 34: seshat.BashResponse
-	(*SystemInfoRequest)(nil),       // 35: seshat.SystemInfoRequest
-	(*SystemInfoResponse)(nil),      // 36: seshat.SystemInfoResponse
-	nil,                             // 37: seshat.ConnectMCPRequest.EnvEntry
+	nil,                             // 22: seshat.ConnectMCPRequest.EnvEntry
 }
 var file_pkg_grpc_proto_seshat_proto_depIdxs = []int32{
-	37, // 0: seshat.ConnectMCPRequest.env:type_name -> seshat.ConnectMCPRequest.EnvEntry
+	22, // 0: seshat.ConnectMCPRequest.env:type_name -> seshat.ConnectMCPRequest.EnvEntry
 	11, // 1: seshat.QueryResponse.token_usage:type_name -> seshat.TokenUsage
 	9,  // 2: seshat.QueryResponse.chunk:type_name -> seshat.ChunkDelta
 	10, // 3: seshat.QueryResponse.runtime_event:type_name -> seshat.RuntimeEvent
@@ -2492,44 +1615,29 @@ var file_pkg_grpc_proto_seshat_proto_depIdxs = []int32{
 	13, // 7: seshat.GetSkillDetailsResponse.skill:type_name -> seshat.Skill
 	16, // 8: seshat.ListMCPResponse.servers:type_name -> seshat.MCPServer
 	20, // 9: seshat.GetModelsResponse.models:type_name -> seshat.ModelInfo
-	32, // 10: seshat.FileGrepResponse.matches:type_name -> seshat.GrepMatch
-	0,  // 11: seshat.SeshatService.Query:input_type -> seshat.QueryRequest
-	0,  // 12: seshat.SeshatService.QueryStream:input_type -> seshat.QueryRequest
-	1,  // 13: seshat.SeshatService.ListSkills:input_type -> seshat.ListSkillsRequest
-	2,  // 14: seshat.SeshatService.GetSkillDetails:input_type -> seshat.GetSkillDetailsRequest
-	3,  // 15: seshat.SeshatService.ListMCP:input_type -> seshat.ListMCPRequest
-	4,  // 16: seshat.SeshatService.ConnectMCP:input_type -> seshat.ConnectMCPRequest
-	5,  // 17: seshat.SeshatService.DisconnectMCP:input_type -> seshat.DisconnectMCPRequest
-	6,  // 18: seshat.SeshatService.GetModels:input_type -> seshat.GetModelsRequest
-	7,  // 19: seshat.SeshatService.HealthCheck:input_type -> seshat.HealthCheckRequest
-	22, // 20: seshat.FileService.Read:input_type -> seshat.FileReadRequest
-	24, // 21: seshat.FileService.Write:input_type -> seshat.FileWriteRequest
-	26, // 22: seshat.FileService.Edit:input_type -> seshat.FileEditRequest
-	28, // 23: seshat.FileService.Glob:input_type -> seshat.FileGlobRequest
-	30, // 24: seshat.FileService.Grep:input_type -> seshat.FileGrepRequest
-	33, // 25: seshat.SystemService.Bash:input_type -> seshat.BashRequest
-	35, // 26: seshat.SystemService.GetSystemInfo:input_type -> seshat.SystemInfoRequest
-	8,  // 27: seshat.SeshatService.Query:output_type -> seshat.QueryResponse
-	8,  // 28: seshat.SeshatService.QueryStream:output_type -> seshat.QueryResponse
-	12, // 29: seshat.SeshatService.ListSkills:output_type -> seshat.ListSkillsResponse
-	14, // 30: seshat.SeshatService.GetSkillDetails:output_type -> seshat.GetSkillDetailsResponse
-	15, // 31: seshat.SeshatService.ListMCP:output_type -> seshat.ListMCPResponse
-	17, // 32: seshat.SeshatService.ConnectMCP:output_type -> seshat.ConnectMCPResponse
-	18, // 33: seshat.SeshatService.DisconnectMCP:output_type -> seshat.DisconnectMCPResponse
-	19, // 34: seshat.SeshatService.GetModels:output_type -> seshat.GetModelsResponse
-	21, // 35: seshat.SeshatService.HealthCheck:output_type -> seshat.HealthCheckResponse
-	23, // 36: seshat.FileService.Read:output_type -> seshat.FileReadResponse
-	25, // 37: seshat.FileService.Write:output_type -> seshat.FileWriteResponse
-	27, // 38: seshat.FileService.Edit:output_type -> seshat.FileEditResponse
-	29, // 39: seshat.FileService.Glob:output_type -> seshat.FileGlobResponse
-	31, // 40: seshat.FileService.Grep:output_type -> seshat.FileGrepResponse
-	34, // 41: seshat.SystemService.Bash:output_type -> seshat.BashResponse
-	36, // 42: seshat.SystemService.GetSystemInfo:output_type -> seshat.SystemInfoResponse
-	27, // [27:43] is the sub-list for method output_type
-	11, // [11:27] is the sub-list for method input_type
-	11, // [11:11] is the sub-list for extension type_name
-	11, // [11:11] is the sub-list for extension extendee
-	0,  // [0:11] is the sub-list for field type_name
+	0,  // 10: seshat.SeshatService.Query:input_type -> seshat.QueryRequest
+	0,  // 11: seshat.SeshatService.QueryStream:input_type -> seshat.QueryRequest
+	1,  // 12: seshat.SeshatService.ListSkills:input_type -> seshat.ListSkillsRequest
+	2,  // 13: seshat.SeshatService.GetSkillDetails:input_type -> seshat.GetSkillDetailsRequest
+	3,  // 14: seshat.SeshatService.ListMCP:input_type -> seshat.ListMCPRequest
+	4,  // 15: seshat.SeshatService.ConnectMCP:input_type -> seshat.ConnectMCPRequest
+	5,  // 16: seshat.SeshatService.DisconnectMCP:input_type -> seshat.DisconnectMCPRequest
+	6,  // 17: seshat.SeshatService.GetModels:input_type -> seshat.GetModelsRequest
+	7,  // 18: seshat.SeshatService.HealthCheck:input_type -> seshat.HealthCheckRequest
+	8,  // 19: seshat.SeshatService.Query:output_type -> seshat.QueryResponse
+	8,  // 20: seshat.SeshatService.QueryStream:output_type -> seshat.QueryResponse
+	12, // 21: seshat.SeshatService.ListSkills:output_type -> seshat.ListSkillsResponse
+	14, // 22: seshat.SeshatService.GetSkillDetails:output_type -> seshat.GetSkillDetailsResponse
+	15, // 23: seshat.SeshatService.ListMCP:output_type -> seshat.ListMCPResponse
+	17, // 24: seshat.SeshatService.ConnectMCP:output_type -> seshat.ConnectMCPResponse
+	18, // 25: seshat.SeshatService.DisconnectMCP:output_type -> seshat.DisconnectMCPResponse
+	19, // 26: seshat.SeshatService.GetModels:output_type -> seshat.GetModelsResponse
+	21, // 27: seshat.SeshatService.HealthCheck:output_type -> seshat.HealthCheckResponse
+	19, // [19:28] is the sub-list for method output_type
+	10, // [10:19] is the sub-list for method input_type
+	10, // [10:10] is the sub-list for extension type_name
+	10, // [10:10] is the sub-list for extension extendee
+	0,  // [0:10] is the sub-list for field type_name
 }
 
 func init() { file_pkg_grpc_proto_seshat_proto_init() }
@@ -2543,9 +1651,9 @@ func file_pkg_grpc_proto_seshat_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_pkg_grpc_proto_seshat_proto_rawDesc), len(file_pkg_grpc_proto_seshat_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   38,
+			NumMessages:   23,
 			NumExtensions: 0,
-			NumServices:   3,
+			NumServices:   1,
 		},
 		GoTypes:           file_pkg_grpc_proto_seshat_proto_goTypes,
 		DependencyIndexes: file_pkg_grpc_proto_seshat_proto_depIdxs,

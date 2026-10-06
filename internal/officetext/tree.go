@@ -58,29 +58,15 @@ func (n *node) child(local string) *node {
 	return nil
 }
 
-// text concatenates every descendant "t" element's text content, in document
-// order. This is the shared building block for extracting readable text from
-// a paragraph, a table cell, or a shape's text body regardless of which OOXML
-// dialect (WordprocessingML, DrawingML) produced it - both use a "t" leaf.
-func (n *node) text() string {
-	var sb []byte
-	n.collectText(&sb)
-	return string(sb)
-}
-
-func (n *node) collectText(sb *[]byte) {
-	if n.Local == "t" {
-		*sb = append(*sb, n.Text...)
-		return
-	}
-	// A line break inside a run should not silently glue two words together.
-	if n.Local == "br" || n.Local == "cr" {
-		*sb = append(*sb, '\n')
-		return
-	}
+// childrenNamed returns the direct children with the given local name, in order.
+func (n *node) childrenNamed(local string) []*node {
+	var out []*node
 	for _, c := range n.Children {
-		c.collectText(sb)
+		if c.Local == local {
+			out = append(out, c)
+		}
 	}
+	return out
 }
 
 // parseXMLTree reads an entire XML document into a generic node tree. OOXML

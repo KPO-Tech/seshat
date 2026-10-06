@@ -14,6 +14,8 @@ Technical documentation for the seshat runtime. For project overview and quick s
 | [SDK Guide](./sdk.md) | Go SDK usage, `ClientConfig`, sessions, callbacks, MCP |
 | [Skills](./skills.md) | Skills system, loading order, injection into prompt |
 | [Transports & Setup](./transports.md) | gRPC setup, proto codegen, env vars |
+| [Licensing and provenance](./licensing.md) | Apache-2.0, and the Crush origin of the terminal UI |
+| [Project trust](./project-trust.md) | what a project's `.seshat.json` may do in the terminal UI, and `seshat trust` |
 | [Permissions And Sandbox Roadmap](./issues/permissions-and-sandbox-roadmap.md) | Permission audit fixes and the planned Docker sandbox strategy |
 
 ## Quick orientation

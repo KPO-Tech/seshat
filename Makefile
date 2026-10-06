@@ -1,20 +1,18 @@
 CMD_CLI        := ./cmd/cli
 CMD_GRPC       := ./cmd/grpc
-CMD_SLACK_BOT  := ./cmd/slack-bot
-CMD_AUTOMATION := ./cmd/automation
 
 # Make built binaries discoverable from the repo root.
 export PATH := $(CURDIR)/bin:$(PATH)
 
-.PHONY: all build build-cli build-grpc build-slack-bot build-automation build_linux test test-race fmt vet lint tidy \
-        clean clean-runtime clean-all hooks setup install-python start-docling slack-bot
+.PHONY: all build build-cli build-grpc build_linux test test-race fmt vet lint tidy \
+        clean clean-runtime clean-all hooks setup install-deepdoc-models
 
 # ── Default ────────────────────────────────────────────────────────────────────
 
 all: build
 
 # ── First-time setup ──────────────────────────────────────────────────────────
-# Installs all dependencies (ripgrep, uv, Python venv + docling-serve),
+# Installs all dependencies (ripgrep),
 # builds the binaries, and wires git hooks.
 #
 # Linux / macOS:
@@ -36,7 +34,7 @@ setup:
 
 # ── Build ──────────────────────────────────────────────────────────────────────
 
-build: build-cli build-grpc build-slack-bot build-automation
+build: build-cli build-grpc
 
 build-cli:
 	go build -o bin/seshat $(CMD_CLI)
@@ -44,16 +42,6 @@ build-cli:
 
 build-grpc:
 	go build -o bin/seshat-grpc $(CMD_GRPC)
-
-build-slack-bot:
-	go build -o bin/seshat-slack $(CMD_SLACK_BOT)
-
-build-automation:
-	go build -o bin/seshat-auto $(CMD_AUTOMATION)
-
-slack-bot:
-	@export $$(grep -v '^#' private/.env.slack | xargs) && \
-	go run $(CMD_SLACK_BOT)
 
 build_linux:
 	go build -o /tmp/seshat $(CMD_CLI)
@@ -88,13 +76,13 @@ tidy:
 clean:
 	rm -rf bin/
 
-# Erase all seshat runtime data (DB, credentials, sessions, logs, venv).
+# Erase all seshat runtime data (DB, credentials, sessions, logs).
 # WARNING: credentials and session history cannot be recovered — you will need
 # to re-run `seshat login` and `seshat config` afterwards.
 # Uses SESHAT_RUNTIME_ROOT if set, otherwise falls back to ~/.config/seshat-*.
 clean-runtime:
 	@confdir="$${SESHAT_RUNTIME_ROOT:-$${XDG_CONFIG_HOME:-$$HOME/.config}}" ; \
-	for d in seshat-cli seshat-tui seshat-slack ; do \
+	for d in seshat-cli seshat-tui ; do \
 	    target="$$confdir/$$d" ; \
 	    if [ -d "$$target" ]; then \
 	        rm -rf "$$target" && echo "  removed $$target" ; \
@@ -110,20 +98,19 @@ hooks:
 	git config core.hooksPath .githooks
 	@echo "Git hooks installed from .githooks/"
 
-# ── Python / docling (optional feature) ───────────────────────────────────────
-# install-python creates the managed venv and installs docling-serve.
-# It is called automatically by `make setup`; use it to update or reinstall.
+# ── pkg/nativedoc (optional, opt-in) ──────────────────────────────────────────
+# Fully native PDF/DOCX/XLSX conversion (including OCR/layout for scanned
+# PDFs) with no external service - not wired in anywhere by default, an
+# embedder opts in via sdk.ClientConfig.DocumentConverter. See
+# pkg/nativedoc's own doc comment and docs/issues/document-intelligence-roadmap.md.
 #
-# Options (env vars):
-#   DOCLING_EXTRAS=gpu      → GPU-accelerated conversion
-#   PYTHON_VERSION=3.12     → specific Python version
+# install-deepdoc-models fetches the ONNX models. Building anything that
+# imports pkg/nativedoc also needs native libs (pdf_oxide/pdfium/onnxruntime)
+# and the `static` build tag - that's scripts/setup-nativedoc-cgo.sh, which
+# prints shell exports rather than being a Make target (Make can't export
+# into your calling shell):
+#   source <(./scripts/setup-nativedoc-cgo.sh)
+#   go build -tags "static nativedoc" ./your/package/...
 
-install-python:
-	@./scripts/install-python-env.sh
-
-# Start docling-serve manually.
-# Seshat auto-starts it at launch when the venv is installed — this is only
-# needed if you want to run it as a standalone process.
-
-start-docling:
-	@./scripts/start-docling.sh
+install-deepdoc-models:
+	@./scripts/install-deepdoc-models.sh

@@ -6,7 +6,7 @@ This file provides guidance for AI agents (Seshat, Claude Code, Codex, or simila
 
 ## Project overview
 
-seshat is an open-source Go AI agent runtime. It has no concept of users, organizations, or billing — those live in seshat-ai (a separate private repository). The engine exposes three entry points: `cmd/cli` (terminal), `cmd/grpc` (gRPC server), and `pkg/sdk` (Go SDK for embedding).
+seshat is an open-source Go AI agent runtime. It has no concept of users, organizations, or billing — those live in the products built on top of it: [SeshatOS](https://github.com/KPO-Tech/SeshatOS) (local) and [SeshatCloud](https://github.com/KPO-Tech/SeshatCloud) (multi-tenant), both separate repositories. The engine exposes three entry points: `cmd/cli` (terminal), `cmd/grpc` (gRPC server), and `pkg/sdk` (Go SDK for embedding).
 
 ---
 
@@ -52,7 +52,7 @@ realign `dev` from `main` immediately before opening new feature branches.
 
 - `pkg/` is the **public API**. Do not add `internal/` types to `pkg/` signatures without explicit need.
 - `internal/` packages must **never** import `pkg/` — dependency flows one way: entry points → `pkg/sdk` → `internal/`.
-- `internal/backend` does **not** exist here. It lives in seshat-ai. Do not recreate it.
+- `internal/backend` does **not** exist here. It lives in SeshatOS and SeshatCloud. Do not recreate it.
 - New tools go in `internal/tools/<category>/`. Register them in `internal/tools/builtin/builtin.go`.
 - New providers go in `internal/providers/`. Add a wire-format adapter in `internal/providers/adapter.go`.
 

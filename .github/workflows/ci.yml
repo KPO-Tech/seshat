@@ -35,6 +35,22 @@ jobs:
   test:
     name: Test
     runs-on: ubuntu-latest
+    # The pgvector store tests need a real database (they skip without one).
+    services:
+      postgres:
+        image: pgvector/pgvector:pg17
+        env:
+          POSTGRES_PASSWORD: test
+          POSTGRES_DB: seshat
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      SESHAT_TEST_POSTGRES_DSN: postgres://postgres:test@localhost:5432/seshat?sslmode=disable
     steps:
       - uses: actions/checkout@v7
 
@@ -91,19 +107,27 @@ jobs:
           cache: true
 
       - name: gosec
-        # Report-only for now: this is the first SAST pass on an existing
-        # ~176k line codebase and surfaced 446 pre-existing findings (57
-        # HIGH, 228 MEDIUM, 161 LOW) that need triage before this can gate
-        # merges. Tracked separately; flip continue-on-error off once the
-        # backlog is triaged (fixed or explicitly accepted with #nosec).
-        continue-on-error: true
-        uses: securego/gosec@master
-        with:
-          args: -exclude-generated ./...
+        # Blocks on a new finding of high severity (medium confidence or better). The 75 high-severity findings of the first scan
+        # were triaged: 10 were fixed or accepted one by one with a "#nosec <rule> -- reason" on the line; four classes were judged
+        # false positives for this code base and are excluded here, with the reason:
+        #   G101  hard-coded credentials: constants that are the NAME of an environment variable or an OAuth endpoint URL;
+        #   G404  weak random numbers: retry jitter, animations, load spreading, level draws of the HNSW graph, message ids;
+        #   G115  integer conversions: sizes and ids that are bounded where they are made (checked at the three places that read
+        #         them from a file or from the network);
+        #   G704  SSRF by taint: the URLs are the ones the user configured (providers, Ollama, document reader); the fetch tool
+        #         that takes a URL from the model has its own policy (internal/web/net_policy.go).
+        # The 400-odd findings of medium and low severity are not gated: they are mostly file permissions and variable paths.
+        # Built with the Go of the job (go.mod's), not run from the gosec Docker action: that image carries its own Go (1.26.5 when
+        # this was written) and cannot load a module that asks for 1.26.6, so it analysed nothing ("Issues: 0", with a "Golang
+        # errors" list), and the report-only mode hid it. A failure to load packages fails this step now.
+        # Pinned: a tool that moves under the build is a way into the build.
+        run: |
+          go install github.com/securego/gosec/v2/cmd/gosec@v2.29.0
+          gosec -severity high -confidence medium -exclude=G101,G404,G115,G704 -exclude-generated ./...
 
       - name: govulncheck
         run: |
-          go install golang.org/x/vuln/cmd/govulncheck@latest
+          go install golang.org/x/vuln/cmd/govulncheck@v1.8.0
           govulncheck ./...
 
   branch-policy:

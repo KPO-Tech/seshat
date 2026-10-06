@@ -138,15 +138,16 @@ func (s *OpenSearchStore) Search(ctx context.Context, query Query) ([]SearchResu
 	hasVector := len(query.Vector) > 0
 	switch {
 	case hasVector && hw < 1 && hasText && hw > 0:
-		vectorResults, err := s.searchVector(ctx, query, topK*2)
+		candidates := hybridCandidates(topK)
+		vectorResults, err := s.searchVector(ctx, query, candidates)
 		if err != nil {
 			return nil, err
 		}
-		textResults, err := s.searchText(ctx, query, topK*2)
+		textResults, err := s.searchText(ctx, query, candidates)
 		if err != nil {
 			return nil, err
 		}
-		return blendOpenSearchResults(vectorResults, textResults, hw, topK), nil
+		return blendHybrid(vectorResults, textResults, hw, topK), nil
 	case hasVector && hw < 1:
 		return s.searchVector(ctx, query, topK)
 	case hasText:
@@ -638,58 +639,6 @@ func openSearchFilterClauses(filter map[string]any) []any {
 		}
 	}
 	return clauses
-}
-
-func blendOpenSearchResults(vectorResults, textResults []SearchResult, hybridWeight float32, topK int) []SearchResult {
-	merged := map[string]SearchResult{}
-	vectorMax := maxOpenSearchScore(vectorResults)
-	textMax := maxOpenSearchScore(textResults)
-	for _, result := range vectorResults {
-		score := normalizeOpenSearchScore(result.Score, vectorMax) * (1 - hybridWeight)
-		result.Score = score
-		merged[result.Record.Key] = result
-	}
-	for _, result := range textResults {
-		score := normalizeOpenSearchScore(result.Score, textMax) * hybridWeight
-		if existing, ok := merged[result.Record.Key]; ok {
-			existing.Score += score
-			merged[result.Record.Key] = existing
-			continue
-		}
-		result.Score = score
-		merged[result.Record.Key] = result
-	}
-	out := make([]SearchResult, 0, len(merged))
-	for _, result := range merged {
-		out = append(out, result)
-	}
-	sort.Slice(out, func(i, j int) bool {
-		if out[i].Score == out[j].Score {
-			return out[i].Record.Key < out[j].Record.Key
-		}
-		return out[i].Score > out[j].Score
-	})
-	if topK > 0 && len(out) > topK {
-		out = out[:topK]
-	}
-	return out
-}
-
-func maxOpenSearchScore(results []SearchResult) float32 {
-	max := float32(0)
-	for _, result := range results {
-		if result.Score > max {
-			max = result.Score
-		}
-	}
-	return max
-}
-
-func normalizeOpenSearchScore(score, max float32) float32 {
-	if max <= 0 {
-		return 0
-	}
-	return score / max
 }
 
 func recordsFromSearchResults(results []SearchResult) []Record {

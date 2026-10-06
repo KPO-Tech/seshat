@@ -2,6 +2,7 @@ package rag
 
 import (
 	"context"
+	"github.com/KPO-Tech/seshat/internal/pagemark"
 	"math"
 	"strings"
 	"unicode"
@@ -43,6 +44,7 @@ func NewSemanticChunker(embedder Embedder, threshold float32) *SemanticChunker {
 // Split embeds each sentence and groups them into chunks by similarity.
 // On embedder error it falls back to ParagraphChunker.
 func (c *SemanticChunker) Split(ctx context.Context, text string) ([]Chunk, error) {
+	text = pagemark.Strip(text)
 	sentences := splitSentences(text)
 	if len(sentences) == 0 {
 		return nil, nil

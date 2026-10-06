@@ -99,13 +99,24 @@ type UnchangedFileResult struct {
 	Message string `json:"message"`
 }
 
-// PDFMarkdownFileResult is the result of a docling-converted PDF.
+// PDFMarkdownFileResult is the result of a DocumentReader-converted PDF.
 type PDFMarkdownFileResult struct {
 	FilePath     string     `json:"file_path"`
 	Markdown     string     `json:"markdown"`
 	OriginalSize int64      `json:"original_size"`
 	PageCount    int        `json:"page_count"`
 	Images       []PDFImage `json:"images,omitempty"`
+	VisualPages  []int      `json:"visual_pages,omitempty"`
+
+	// ShownPages are the pages whose text is in Markdown, NoTextPages the requested pages that had no
+	// readable text, and ContinueAt the first page left out because the output limit was reached.
+	ShownPages  []int `json:"shown_pages,omitempty"`
+	NoTextPages []int `json:"no_text_pages,omitempty"`
+	ContinueAt  int   `json:"continue_at,omitempty"`
+
+	// ModelSkipped counts the pages whose tables with no ruling lines were not looked for with the layout models,
+	// because the time given to them was spent. The text of those pages is complete.
+	ModelSkipped int `json:"model_skipped,omitempty"`
 }
 
 // PDFImage is one picture extracted from a converted PDF.
@@ -115,14 +126,17 @@ type PDFImage struct {
 	Base64   string `json:"base64"`
 }
 
-// DoclingFileResult is the result of converting a non-PDF file (DOCX, PPTX, XLSX, audio) via docling-serve.
-type DoclingFileResult struct {
+// DocumentReaderFileResult is the result of converting a non-PDF file (DOCX, PPTX, XLSX, audio) via the configured document reader.
+type DocumentReaderFileResult struct {
 	FilePath     string     `json:"file_path"`
 	Format       string     `json:"format"` // lowercase extension without dot, e.g. "docx"
 	Markdown     string     `json:"markdown"`
 	OriginalSize int64      `json:"original_size"`
 	PageCount    int        `json:"page_count,omitempty"` // 0 for audio
 	Images       []PDFImage `json:"images,omitempty"`
+	VisualPages  []int      `json:"visual_pages,omitempty"`
+	// Notes are lines shown before the text: where a partial read stopped, or that the document has little text.
+	Notes []string `json:"notes,omitempty"`
 }
 
 // FileReadResult is the union type for file read results
@@ -142,11 +156,11 @@ type FileReadResult struct {
 	// PDFExtracted contains the PDF extracted pages result (if Type == FileTypePDFExtracted)
 	PDFExtracted *PDFExtractedResult `json:"pdf_extracted,omitempty"`
 
-	// PDFMarkdown contains the docling-converted PDF result (if Type == FileTypePDFMarkdown)
+	// PDFMarkdown contains the DocumentReader-converted PDF result (if Type == FileTypePDFMarkdown)
 	PDFMarkdown *PDFMarkdownFileResult `json:"pdf_markdown,omitempty"`
 
-	// Docling contains the result of a docling conversion of a non-PDF format (if Type == FileTypeDocling)
-	Docling *DoclingFileResult `json:"docling,omitempty"`
+	// DocumentReader contains the result of a document-reader conversion of a non-PDF format (if Type == FileTypeDocumentReader)
+	DocumentReader *DocumentReaderFileResult `json:"document_reader,omitempty"`
 
 	// Notebook contains the notebook result (if Type == FileTypeNotebook)
 	Notebook *NotebookResult `json:"notebook,omitempty"`

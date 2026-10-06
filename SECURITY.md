@@ -22,6 +22,8 @@ Use GitHub's private vulnerability reporting:
 3. Fill in the affected component, a description, and steps to reproduce.
 4. Submit — the report is private and only visible to maintainers.
 
+If you cannot use GitHub, write to **seshatsupport@seshat-ai.com** instead.
+
 We will acknowledge receipt within **72 hours** and aim to provide a patch or mitigation within **14 days** for critical issues.
 
 ---
@@ -56,7 +58,7 @@ seshat is a **local-first** runtime. By default:
 - Credentials are read from environment variables or the local `~/.seshat/auth.json` store — never sent to external services except the configured LLM provider.
 - The gRPC server (`cmd/grpc`) has **no authentication layer** and is intended for local or trusted-network use only. Do not expose it publicly without adding your own auth proxy.
 
-When deploying as a shared service (via seshat-ai), additional security controls (user auth, session isolation, encrypted credential storage) are the responsibility of the product layer.
+When deploying as a shared service (for example via SeshatCloud), additional security controls (user auth, session isolation, encrypted credential storage) are the responsibility of the product layer.
 
 ---
 

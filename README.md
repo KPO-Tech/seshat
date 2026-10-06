@@ -13,7 +13,7 @@
   <a href="https://seshat-ai.com"><b>🌐 Website</b></a> ·
   <a href="https://github.com/KPO-Tech/seshat/discussions"><b>💬 Discussions</b></a> ·
   <a href="https://github.com/KPO-Tech/seshat/issues"><b>🐛 Issues</b></a> ·
-  <a href="https://github.com/KPO-Tech/seshat-ai"><b>🖥️ seshat-ai</b></a>
+  <a href="https://github.com/KPO-Tech/SeshatOS"><b>🖥️ SeshatOS</b></a>
 </p>
 
 <p align="center">
@@ -71,7 +71,7 @@ Use this repository if you want to:
 - embed the runtime inside a Go application or internal system
 - extend providers, tools, permissions, MCP integration, or runtime behavior
 
-If you want the full self-hosted platform layer for organizations, use [seshat-ai](https://github.com/KPO-Tech/seshat-ai): users, workspaces, REST API, knowledge base, scheduling, governance, and desktop product surfaces built on top of this engine.
+If you want a ready-to-use product built on this engine, see [SeshatOS](https://github.com/KPO-Tech/SeshatOS) (local-first desktop app and backend) or [SeshatCloud](https://github.com/KPO-Tech/SeshatCloud) (multi-tenant server and admin console for organizations).
 
 ---
 
@@ -125,31 +125,19 @@ If you want the full self-hosted platform layer for organizations, use [seshat-a
 
 seshat is the **headless runtime**: pure Go, no UI, no users, no billing. It is the foundation everything else builds on.
 
-### 🖥️ seshat-ai — Desktop & Platform
+### Products built on seshat
 
-**[→ seshat-ai](https://github.com/KPO-Tech/seshat-ai)** is the full production platform built on top of this engine. If you want a ready-to-use application rather than a library, that is where you want to go.
+| | seshat (this repo) | [SeshatOS](https://github.com/KPO-Tech/SeshatOS) | [SeshatCloud](https://github.com/KPO-Tech/SeshatCloud) |
+|---|---|---|---|
+| **What it is** | Go runtime + SDK + CLI/TUI + gRPC | Local-first desktop app and backend | Multi-tenant server and admin console |
+| **Stack** | Go | Go + TypeScript/React/Electron | Go + TypeScript/React (+ a Python service for document intelligence) |
+| **License** | Apache-2.0 | Apache-2.0 + Commons Clause (source-available) | Source-available (draft) |
+| **Who it's for** | Developers embedding agents in their own apps | Individuals and small teams who self-host | Organizations that need central administration |
+| **Status** | Stable, in production use | Under construction (chat-first desktop rebuild) | Server side solid, not yet a packaged offer |
 
-| | seshat (this repo) | seshat-ai |
-|---|---|---|
-| **What it is** | Go runtime + SDK + CLI | Desktop app + REST API platform |
-| **Stack** | Go | Go (API) + TypeScript/React/Electron (desktop) |
-| **License** | Apache 2.0 | AGPL-3.0 |
-| **Who it's for** | Developers embedding agents in their own apps | End users, teams, self-hosters |
-| **Includes** | Engine, tools, providers, gRPC, CLI/TUI | Multi-user auth, workspaces, knowledge base, scheduler, desktop UI |
+Both products consume `seshat` through `pkg/*` only. `seshat` knows nothing about them.
 
-**What seshat-ai gives you today:**
-- 🖥️ Native desktop app (Electron + React) with chat, tool views, plans, settings and a visual skills creator
-- 👥 Multi-user backend with organizations, workspaces, per-user API keys, quotas and audit log
-- 📡 REST + SSE HTTP API compatible with the Anthropic `/v1/messages` format
-- 📚 Knowledge base with hybrid BM25 + vector search and file ingestion
-- ⏰ Scheduled tasks, memories, plans and MCP server management
-
-**Coming next:**
-- 🤝 Agent teams: persistent groups of specialized agents collaborating on shared missions, each with its own inbox, role and memory
-- 🤖 Automation and background workflows triggered by schedule, events or voice
-- 🖼️ Image generation integrated directly into the chat and workspace
-- 🎙️ Voice input and audio output so you can talk to your agents naturally
-- 🌐 A multi-workspace environment covering code, research, creation and learning, all sharing the same runtime and data layer
+The commercial activity around Seshat (AI consulting and integration, plus the products above) is presented at [seshat-ai.com](https://seshat-ai.com).
 
 ### 🤝 Contribution split
 
@@ -158,8 +146,8 @@ seshat is the **headless runtime**: pure Go, no UI, no users, no billing. It is 
 | Improve execution speed, reduce latency, optimize the agent loop | **seshat** (Go) |
 | Add a new LLM provider or tool | **seshat** (Go) |
 | Expose new capabilities in the SDK or gRPC API | **seshat** (Go) |
-| Improve the desktop UI, add new views, fix UX | **seshat-ai** (TypeScript/React) |
-| Build features like agent teams, automation or scheduling | **seshat-ai** (Go API + React) |
+| Improve the desktop app or local backend | **SeshatOS** |
+| Work on organizations, IAM, or scheduled automation | **SeshatCloud** |
 
 The engine is intentionally kept minimal and fast. If you need something from the SDK that is not exposed yet, open an issue and we will prioritize it.
 
@@ -171,11 +159,10 @@ The engine is intentionally kept minimal and fast. If you need something from th
 curl -fsSL https://raw.githubusercontent.com/KPO-Tech/seshat/main/scripts/install.sh | bash
 ```
 
-Downloads the right binary for your platform, adds it to your PATH, installs `uv` and `docling-serve` for document processing, and leaves the runtime directory (`~/.config/seshat-cli/`) ready. The DB and sessions are created on first run.
+Downloads the right binary for your platform, adds it to your PATH, and leaves the runtime directory (`~/.config/seshat-cli/`) ready. The DB and sessions are created on first run.
 
 Options:
 ```bash
-NO_PYTHON=1    bash <(curl -fsSL ...)   # skip uv + docling (minimal install)
 VERSION=v0.1.0 bash <(curl -fsSL ...)   # pin a specific version
 ```
 
@@ -184,12 +171,6 @@ VERSION=v0.1.0 bash <(curl -fsSL ...)   # pin a specific version
 ```bash
 # Install the CLI binary
 go install github.com/KPO-Tech/seshat/cmd/cli@latest
-
-# Then set up document processing if needed
-seshat setup
-
-# Or check what is already installed
-seshat setup --check
 ```
 
 **SDK — embed in your Go application:**
@@ -214,8 +195,6 @@ curl -fsSL https://raw.githubusercontent.com/KPO-Tech/seshat/main/scripts/instal
 
 # Developers — binary only via Go toolchain:
 go install github.com/KPO-Tech/seshat/cmd/cli@latest
-seshat setup          # install uv + docling-serve afterwards if needed
-seshat setup --check  # check what is already configured
 ```
 
 **Configure a provider**
@@ -234,7 +213,6 @@ seshat chat --resume <session-id>                      # resume a specific sessi
 seshat chat --continue                                 # resume the most recent session
 seshat run "list all TODO comments in this codebase"   # one-shot task
 seshat sessions list                                   # browse past sessions
-seshat setup --check                                   # show uv / docling status
 seshat version                                         # print installed version
 seshat help                                            # full command reference
 ```
@@ -356,13 +334,12 @@ seshat/
 │   ├── auth/             ← provider auth abstraction, OAuth device flow
 │   ├── workspace/        ← sandbox path resolution, workspace layout
 │   ├── monitoring/       ← Prometheus metrics, OTel spans
-│   ├── docling/          ← PDF/DOCX/audio conversion via docling-serve
 │   ├── grpc/             ← proto definitions and generated code
 │   └── config/           ← app-level config from env
 └── internal/             ← private implementation (do not import directly)
 ```
 
-> seshat-ai and any third-party consumer must import `pkg/*` only, never `internal/*`.
+> SeshatOS, SeshatCloud and any third-party consumer must import `pkg/*` only, never `internal/*`.
 
 ---
 
@@ -492,7 +469,7 @@ make setup
 powershell -ExecutionPolicy Bypass -File scripts\setup.ps1
 ```
 
-`make setup` handles everything: Go version check, ripgrep, uv, Python venv with docling-serve, and the final build. Binaries land in `bin/`.
+`make setup` handles everything: Go version check, ripgrep, and the final build. Binaries land in `bin/`.
 
 ### Daily commands
 
@@ -503,27 +480,14 @@ make test-race       # run tests with race detector
 make lint            # golangci-lint
 make fmt             # gofmt
 make hooks           # (re-)install git pre-commit hooks
-make install-python  # install/update the Python venv + docling-serve only
-make start-docling   # start docling-serve manually (auto-started by seshat chat)
 make clean           # remove bin/
 make clean-runtime   # erase runtime data (~/.config/seshat-cli)
 make clean-all       # both
 ```
 
-### seshat setup (runtime, not source)
-
-When the CLI is installed via `curl | bash` or `go install`, use the built-in setup command to manage the Python environment:
-
-```bash
-seshat setup                      # install uv + docling-serve
-seshat setup --check              # show status without installing
-seshat setup --python 3.12        # use a specific Python version
-seshat setup --extras gpu         # GPU-accelerated docling
-```
-
 ### Runtime data directory
 
-Seshat stores sessions, config, and the Python venv under a platform-appropriate directory:
+Seshat stores sessions and config under a platform-appropriate directory:
 
 | OS | Default path |
 |---|---|
@@ -537,7 +501,7 @@ Override with `SESHAT_RUNTIME_ROOT=/your/path seshat chat`.
 
 > **ripgrep** — the `glob` and `grep` tools require [`ripgrep`](https://github.com/BurntSushi/ripgrep) (`rg`). Included in `make setup`; install separately with `make install-deps`.
 
-> **docling-serve** (optional) — enables the `read_document_url` tool for PDF/DOCX conversion. Included in `make setup` via `uv` (no system Python required). Seshat auto-starts it on launch when installed.
+> **A document-reader service** (optional) — for scans and complex layouts, run seshat-intelligence (or any compatible service) yourself and set `DOCUMENT_READER_URL`. The built-in reader needs nothing installed.
 
 ### OS compatibility
 
@@ -559,4 +523,4 @@ To report a vulnerability, see [`SECURITY.md`](./SECURITY.md).
 
 ## 📄 License
 
-[Apache 2.0](./LICENSE)
+[Apache 2.0](./LICENSE). The terminal UI (`internal/seshattui`) was built from Crush and stays subject to its FSL-1.1-MIT licence: see [`NOTICE`](./NOTICE) and [`docs/licensing.md`](./docs/licensing.md).

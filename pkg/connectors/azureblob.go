@@ -68,7 +68,7 @@ func EncodeAzureBlobAccountConfig(accountName, container, prefix string) (string
 // AzureBlobConnector implements Azure Blob Storage Discover/Sync.
 type AzureBlobConnector struct {
 	// extractText is wired via WithTextExtractor, normally to the caller's
-	// own docling-backed extraction, so connector-synced content goes
+	// own document-reader extraction, so connector-synced content goes
 	// through the exact same extraction path as an uploaded file.
 	extractText TextExtractorFunc
 }

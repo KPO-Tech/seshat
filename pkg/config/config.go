@@ -16,6 +16,18 @@ type Config struct {
 	RuntimeRoot       string  `mapstructure:"runtime_root" yaml:"runtime_root,omitempty"`
 	Cwd               string  `mapstructure:"cwd" yaml:"cwd,omitempty"`
 	Model             string  `mapstructure:"model" yaml:"model,omitempty"`
+	TitleModel        string  `mapstructure:"title_model" yaml:"title_model,omitempty"`
+	TitleModelBaseURL string  `mapstructure:"title_model_base_url" yaml:"title_model_base_url,omitempty"`
+	TitleModelAPIKey  string  `mapstructure:"title_model_api_key" yaml:"-"`
+	TitleLocalEnabled bool    `mapstructure:"title_local_enabled" yaml:"title_local_enabled,omitempty"`
+	TitleLocalRuntime string  `mapstructure:"title_local_runtime" yaml:"title_local_runtime,omitempty"`
+	TitleLocalExe     string  `mapstructure:"title_local_executable" yaml:"title_local_executable,omitempty"`
+	TitleLocalModel   string  `mapstructure:"title_local_model_path" yaml:"title_local_model_path,omitempty"`
+	TitleLocalHFRepo  string  `mapstructure:"title_local_hf_repo" yaml:"title_local_hf_repo,omitempty"`
+	TitleLocalHFFile  string  `mapstructure:"title_local_hf_file" yaml:"title_local_hf_file,omitempty"`
+	TitleLocalCache   string  `mapstructure:"title_local_cache_dir" yaml:"title_local_cache_dir,omitempty"`
+	TitleLocalArgs    string  `mapstructure:"title_local_args" yaml:"title_local_args,omitempty"`
+	TitleLocalTimeout string  `mapstructure:"title_local_timeout" yaml:"title_local_timeout,omitempty"`
 	MaxTokens         int     `mapstructure:"max_tokens" yaml:"max_tokens,omitempty"`
 	Temperature       float64 `mapstructure:"temperature" yaml:"temperature,omitempty"`
 	MCPEnabled        bool    `mapstructure:"mcp_enabled" yaml:"mcp_enabled,omitempty"`
@@ -87,7 +99,7 @@ type Config struct {
 	StorageGCNamespaces     string `mapstructure:"storage_gc_namespaces" yaml:"storage_gc_namespaces,omitempty"`
 	BrowserRemoteControlURL string `mapstructure:"browser_remote_control_url" yaml:"browser_remote_control_url,omitempty"`
 	BrowserExecutablePath   string `mapstructure:"browser_executable_path" yaml:"browser_executable_path,omitempty"`
-	DoclingURL              string `mapstructure:"docling_url" yaml:"docling_url,omitempty"`
+	DocumentReaderURL       string `mapstructure:"document_reader_url" yaml:"document_reader_url,omitempty"`
 	AutomationServiceURL    string `mapstructure:"automation_service_url" yaml:"automation_service_url,omitempty"`
 	AutomationAPIKey        string `mapstructure:"-" yaml:"-"` // loaded from env only, never persisted
 
@@ -222,6 +234,18 @@ func LoadInto(config *Config) error {
 	v.BindEnv("runtime_root", runtimepath.EnvRuntimeRoot)
 	v.BindEnv("cwd", "SESHAT_CWD")
 	v.BindEnv("model", "SESHAT_MODEL")
+	v.BindEnv("title_model", "SESHAT_TITLE_MODEL")
+	v.BindEnv("title_model_base_url", "SESHAT_TITLE_MODEL_BASE_URL")
+	v.BindEnv("title_model_api_key", "SESHAT_TITLE_MODEL_API_KEY")
+	v.BindEnv("title_local_enabled", "SESHAT_TITLE_LOCAL_ENABLED")
+	v.BindEnv("title_local_runtime", "SESHAT_TITLE_LOCAL_RUNTIME")
+	v.BindEnv("title_local_executable", "SESHAT_TITLE_LOCAL_EXECUTABLE")
+	v.BindEnv("title_local_model_path", "SESHAT_TITLE_LOCAL_MODEL_PATH")
+	v.BindEnv("title_local_hf_repo", "SESHAT_TITLE_LOCAL_HF_REPO")
+	v.BindEnv("title_local_hf_file", "SESHAT_TITLE_LOCAL_HF_FILE")
+	v.BindEnv("title_local_cache_dir", "SESHAT_TITLE_LOCAL_CACHE_DIR")
+	v.BindEnv("title_local_args", "SESHAT_TITLE_LOCAL_ARGS")
+	v.BindEnv("title_local_timeout", "SESHAT_TITLE_LOCAL_TIMEOUT")
 	v.BindEnv("debug", "SESHAT_DEBUG")
 	v.BindEnv("api_key", "SESHAT_API_KEY")
 	v.BindEnv("db_path", "SESHAT_DB_PATH")
@@ -486,7 +510,12 @@ func loadEnvFile(path string) error {
 			// Only set if not already present in the process environment,
 			// so that vars exported by start.sh take priority over .env files.
 			if key != "" && os.Getenv(key) == "" {
-				os.Setenv(key, strings.TrimSpace(parts[1]))
+				value := strings.TrimSpace(parts[1])
+				if reason := dotenvRefusal(key, value); reason != "" {
+					fmt.Fprintf(os.Stderr, "seshat: %s: %s ignored (%s); set it in the environment or in your own configuration file instead\n", path, key, reason)
+					continue
+				}
+				os.Setenv(key, value)
 			}
 		}
 	}

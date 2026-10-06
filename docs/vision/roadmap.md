@@ -26,7 +26,7 @@
 
 ### What still needs work
 
-- **gRPC surface** — `FileService` and `SystemService` are defined in the proto but not yet implemented in `cmd/grpc`. Sessions are not yet manageable via gRPC.
+- **gRPC surface** — experimental: `SeshatService` only (`Query`, `QueryStream`, `ConnectMCP`, `GetModels`, `HealthCheck`). Sessions, files and system operations are not exposed; a versioned contract (`seshat.v1`) will be designed when a Python or TypeScript client needs it.
 - **CLI** — `cmd/cli` works but is not yet polished enough to be the primary user-facing tool. Experience improvements, installation docs, and deep skills integration are planned.
 - **Sandbox hardening** — Landlock read isolation (`/usr`, `/lib`, `/bin` read-only allowlist) is deferred due to cross-platform complexity. Current implementation restricts write/delete to the workspace but allows read from the full filesystem.
 - **MCP spec conformance** — The MCP client implements the core spec. Async tasks and elicitation (MCP November 2025 spec) are not yet implemented.

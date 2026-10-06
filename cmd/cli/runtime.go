@@ -36,7 +36,7 @@ type runtimeOptions struct {
 	ProviderResource        string
 	BrowserRemoteControlURL string
 	BrowserExecutablePath   string
-	DoclingURL              string
+	DocumentReaderURL       string
 	StorageGCEnabled        bool
 	StorageGCInterval       time.Duration
 	StorageGCLimit          int
@@ -142,7 +142,7 @@ func loadRuntimeOptions(overrides runtimeOverrides) (runtimeOptions, error) {
 		ProviderResource:        config.ProviderResource,
 		BrowserRemoteControlURL: strings.TrimSpace(config.BrowserRemoteControlURL),
 		BrowserExecutablePath:   strings.TrimSpace(config.BrowserExecutablePath),
-		DoclingURL:              strings.TrimSpace(config.DoclingURL),
+		DocumentReaderURL:       strings.TrimSpace(config.DocumentReaderURL),
 		StorageGCEnabled:        config.StorageGCEnabled,
 		StorageGCInterval:       parseDurationOrDefault(config.StorageGCInterval, time.Hour),
 		StorageGCLimit:          config.StorageGCLimit,
@@ -223,7 +223,7 @@ func newClient(
 		WorkingDir:              options.WorkingDir,
 		BrowserRemoteControlURL: options.BrowserRemoteControlURL,
 		BrowserExecutablePath:   options.BrowserExecutablePath,
-		DoclingURL:              options.DoclingURL,
+		DocumentReaderURL:       options.DocumentReaderURL,
 		StorageGCEnabled:        options.StorageGCEnabled,
 		StorageGCInterval:       options.StorageGCInterval,
 		StorageGCLimit:          options.StorageGCLimit,
@@ -308,11 +308,11 @@ func parsePermissionMode(raw string) (sdk.PermissionMode, error) {
 // Returns nil only when no vector store backend could be constructed at all.
 //
 // Vector storage prefers the embedded HNSW backend, falling back to the
-// SQLite backend at sqliteFallbackPath when HNSW isn't available - notably
-// on Windows, where github.com/coder/hnsw's atomic-write dependency
-// (google/renameio) doesn't build (see internal/vector/hnsw_store_windows.go).
-// Without this fallback, RAG was silently disabled on every Windows install
-// regardless of embedding configuration.
+// SQLite backend at sqliteFallbackPath when HNSW isn't available (its
+// directory cannot be created). Before 1.2.73 HNSW did not build on Windows,
+// so every Windows install kept its corpus in the SQLite file: such an
+// install stays on it until it is emptied (see hasSQLiteCorpusOnly), instead
+// of starting an empty HNSW store beside a corpus it would no longer read.
 func buildRAGService(config engineconfig.Config, hnswDir, sqliteFallbackPath string) *sdk.RAGService {
 	emb := embedder.NewFromEnv() // nil is fine - vectorless mode covers it
 
@@ -364,7 +364,26 @@ func buildRAGService(config engineconfig.Config, hnswDir, sqliteFallbackPath str
 		}
 	}
 
+	// RAG_RERANK_MARGIN overrides the margin at or above which the first stage is trusted and the reranker is not asked
+	// (default 0.2, 0 asks it for every search) - see Service.SetRerankMargin.
+	if raw := strings.TrimSpace(os.Getenv("RAG_RERANK_MARGIN")); raw != "" {
+		if m, err := strconv.ParseFloat(raw, 32); err == nil {
+			svc.SetRerankMargin(float32(m))
+		}
+	}
+
 	return svc
+}
+
+// hasSQLiteCorpusOnly reports whether a corpus is already in the SQLite file and none in the HNSW directory: the case of an
+// install that ran when HNSW was not available (Windows before 1.2.73).
+func hasSQLiteCorpusOnly(hnswDir, sqlitePath string) bool {
+	info, err := os.Stat(sqlitePath)
+	if err != nil || info.IsDir() || info.Size() == 0 {
+		return false
+	}
+	files, _ := filepath.Glob(filepath.Join(hnswDir, "*.hnsw"))
+	return len(files) == 0
 }
 
 func buildVectorStore(config engineconfig.Config, hnswDir, sqliteFallbackPath string) vector.Store {
@@ -390,7 +409,12 @@ func buildVectorStore(config engineconfig.Config, hnswDir, sqliteFallbackPath st
 		return nil
 	}
 
-	if hnswStore, err := vector.NewHNSWStore(hnswDir); err == nil { //nolint:staticcheck // SA4023: only dead on the Windows build (hnsw_store_windows.go's stub always errors); live on every other platform's real implementation
+	if hasSQLiteCorpusOnly(hnswDir, sqliteFallbackPath) {
+		if sqliteStore, err := vector.OpenSQLiteStore(sqliteFallbackPath); err == nil {
+			return sqliteStore
+		}
+	}
+	if hnswStore, err := vector.NewHNSWStore(hnswDir); err == nil {
 		return hnswStore
 	} else {
 		log.Printf("[cli] hnsw vector store unavailable (%v), falling back to sqlite", err)

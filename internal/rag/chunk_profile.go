@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/KPO-Tech/seshat/internal/docling"
+	"github.com/KPO-Tech/seshat/internal/documentreader"
 )
 
 // ChunkProfileName identifies a recommended chunking profile for RAG
@@ -17,7 +17,16 @@ const (
 	ChunkProfileMedium     ChunkProfileName = "medium"
 	ChunkProfileLarge      ChunkProfileName = "large"
 	ChunkProfileStructured ChunkProfileName = "structured"
-	ChunkProfileCustom     ChunkProfileName = "custom"
+	// ChunkProfileTable routes to TableChunker: table rows/structure stay
+	// intact as their own chunk(s) (header row repeated on every split
+	// piece) instead of a generic splitter cutting through the middle of a
+	// table. See TableChunker's own doc comment.
+	ChunkProfileTable ChunkProfileName = "table"
+	// ChunkProfileQA routes to QAChunker: one chunk per detected
+	// question/answer pair instead of arbitrary token-count splitting. See
+	// QAChunker's own doc comment.
+	ChunkProfileQA     ChunkProfileName = "qa"
+	ChunkProfileCustom ChunkProfileName = "custom"
 )
 
 // ChunkProfile describes the chunking policy to use for document ingestion.
@@ -46,10 +55,30 @@ var recommendedChunkProfiles = map[ChunkProfileName]ChunkProfile{
 		MaxTokens:     1536,
 		OverlapTokens: 200,
 	},
+	// Structured is the profile for documents read as markdown (headings, tables, code): chunks follow the
+	// document's structure and stay small enough to embed and retrieve precisely, 512 tokens at most, with an overlap
+	// of 64 tokens where a paragraph has to be cut. (It was 1024: such chunks hold several topics.)
 	ChunkProfileStructured: {
 		Name:          ChunkProfileStructured,
-		MaxTokens:     1024,
-		OverlapTokens: 120,
+		MaxTokens:     512,
+		OverlapTokens: 64,
+	},
+	ChunkProfileTable: {
+		Name:      ChunkProfileTable,
+		MaxTokens: 1536,
+		// No overlap: repeating the header row on every split piece (see
+		// TableChunker) already gives each chunk the context an overlap
+		// would otherwise exist to provide - repeating data rows on top of
+		// that would just be noise for a structured table.
+		OverlapTokens: 0,
+	},
+	ChunkProfileQA: {
+		Name:      ChunkProfileQA,
+		MaxTokens: 512,
+		// No overlap: each chunk is already exactly one self-contained
+		// Q/A pair - there is no "next chunk" content an overlap would
+		// usefully carry forward.
+		OverlapTokens: 0,
 	},
 }
 
@@ -86,9 +115,10 @@ func NewCustomChunkProfile(maxTokens, overlapTokens int) (ChunkProfile, error) {
 	}, nil
 }
 
-// DoclingChunkOptionsForProfile maps a RAG chunk profile to docling-serve's
-// hybrid chunker options while preserving caller-provided structural options.
-func DoclingChunkOptionsForProfile(profile ChunkProfile, opts docling.ChunkOptions) docling.ChunkOptions {
+// DocumentReaderChunkOptionsForProfile maps a RAG chunk profile to hybrid
+// document-reader chunk options while preserving caller-provided structural
+// options.
+func DocumentReaderChunkOptionsForProfile(profile ChunkProfile, opts documentreader.ChunkOptions) documentreader.ChunkOptions {
 	if profile.MaxTokens > 0 {
 		opts.MaxTokens = profile.MaxTokens
 	}

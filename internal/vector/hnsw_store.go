@@ -1,10 +1,4 @@
-//go:build !windows
-
-// This file is excluded from Windows builds: github.com/coder/hnsw depends
-// on github.com/google/renameio for atomic index-file writes, and renameio
-// has no Windows support. See hnsw_store_windows.go for the stub that keeps
-// the rest of the package compiling there — vector.StoreSQLite and
-// vector.StoreMemory remain fully available on every platform.
+// The HNSW graph is in hnsw_index.go. This file is the Store around it: one graph and one metadata file per namespace.
 package vector
 
 import (
@@ -12,14 +6,13 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io/fs"
 	"log"
 	"os"
 	"path/filepath"
 	"sort"
 	"strings"
 	"sync"
-
-	"github.com/coder/hnsw"
 )
 
 // HNSWStore is an embedded, persistent vector store backed by HNSW graphs.
@@ -28,7 +21,9 @@ import (
 //   - <slug>.hnsw  — binary HNSW index (vectors + graph topology)
 //   - <slug>.meta.json — text and metadata per key
 //
-// Search is O(log n) via HNSW. No external service or CGO required.
+// Search is O(log n) via HNSW. No external service or CGO required. An index file written by an older version (the
+// github.com/coder/hnsw format) is read once and rewritten in the current format; the old file is kept next to it as
+// <slug>.hnsw.legacy.
 // Designed as the default RAG backend for the Seshat CLI.
 type HNSWStore struct {
 	dir string
@@ -37,10 +32,11 @@ type HNSWStore struct {
 }
 
 type hnswNamespace struct {
-	mu       sync.RWMutex
-	graph    *hnsw.SavedGraph[string]
-	meta     map[string]hnswMeta
-	metaPath string
+	mu        sync.RWMutex
+	graph     *hnswIndex
+	meta      map[string]hnswMeta
+	metaPath  string
+	graphPath string
 }
 
 // hnswMeta stores everything except the vector itself (the graph holds that).
@@ -88,15 +84,6 @@ func (s *HNSWStore) namespace(name string) (*hnswNamespace, error) {
 	graphPath := filepath.Join(s.dir, slug+".hnsw")
 	metaPath := filepath.Join(s.dir, slug+".meta.json")
 
-	g, err := hnsw.LoadSavedGraph[string](graphPath)
-	if err != nil {
-		return nil, fmt.Errorf("load hnsw graph %q: %w", name, err)
-	}
-	// Higher efSearch for better recall on CLI-scale corpora.
-	if g.Len() == 0 {
-		g.EfSearch = 50
-	}
-
 	meta := make(map[string]hnswMeta)
 	if data, err := os.ReadFile(metaPath); err == nil {
 		if unmarshalErr := json.Unmarshal(data, &meta); unmarshalErr != nil {
@@ -104,7 +91,28 @@ func (s *HNSWStore) namespace(name string) (*hnswNamespace, error) {
 		}
 	}
 
-	n = &hnswNamespace{graph: g, meta: meta, metaPath: metaPath}
+	g, err := loadHNSWIndex(graphPath)
+	switch {
+	case err == nil:
+	case errors.Is(err, fs.ErrNotExist):
+		g = newHNSWIndex()
+	case errors.Is(err, errNotHNSWIndex):
+		g, err = migrateLegacyHNSW(graphPath, meta)
+		if err != nil {
+			return nil, fmt.Errorf("convert the hnsw graph of %q to the current format: %w", name, err)
+		}
+		if err := os.Rename(graphPath, graphPath+".legacy"); err != nil {
+			return nil, fmt.Errorf("keep the old hnsw graph of %q: %w", name, err)
+		}
+		if err := g.Save(graphPath); err != nil {
+			return nil, fmt.Errorf("write the converted hnsw graph of %q: %w", name, err)
+		}
+		log.Printf("[vector/hnsw] namespace %q: converted its graph to the current format (the old file is %s.legacy)", name, graphPath)
+	default:
+		return nil, fmt.Errorf("load hnsw graph %q: %w", name, err)
+	}
+
+	n = &hnswNamespace{graph: g, meta: meta, metaPath: metaPath, graphPath: graphPath}
 	s.ns[name] = n
 	return n, nil
 }
@@ -148,11 +156,14 @@ func (s *HNSWStore) Upsert(ctx context.Context, records []Record) error {
 		n.mu.Lock()
 		for _, r := range recs {
 			if len(r.Vector) > 0 {
-				n.graph.Add(hnsw.MakeNode(r.Key, r.Vector))
+				if err := n.graph.Add(r.Key, r.Vector); err != nil {
+					n.mu.Unlock()
+					return fmt.Errorf("hnsw upsert %q: %w", r.Key, err)
+				}
 			}
 			n.meta[r.Key] = hnswMeta{Text: r.Text, Metadata: r.Metadata}
 		}
-		saveErr := n.graph.Save()
+		saveErr := n.graph.Save(n.graphPath)
 		metaErr := n.saveMeta()
 		n.mu.Unlock()
 		if err := errors.Join(saveErr, metaErr); err != nil {
@@ -163,8 +174,8 @@ func (s *HNSWStore) Upsert(ctx context.Context, records []Record) error {
 }
 
 // Search performs HNSW ANN search (O(log n)) over the namespace.
-// When query.HybridWeight > 0 and query.QueryText is set, keyword scores
-// are blended with vector scores using linear interpolation.
+// When query.HybridWeight > 0 and query.QueryText is set, the best keyword hits and the
+// best vector hits are blended (see blendHybrid).
 func (s *HNSWStore) Search(ctx context.Context, query Query) ([]SearchResult, error) {
 	if query.Namespace == "" {
 		return nil, fmt.Errorf("vector query namespace is required")
@@ -193,32 +204,44 @@ func (s *HNSWStore) Search(ctx context.Context, query Query) ([]SearchResult, er
 		return nil, nil
 	}
 
-	nodes := n.graph.Search(query.Vector, topK)
-	results := make([]SearchResult, 0, len(nodes))
+	// A hybrid search reads more vector hits than it returns: the keyword hits are blended with them (see hybrid.go).
+	hybrid := query.HybridWeight > 0 && strings.TrimSpace(query.QueryText) != ""
+	limit := topK
+	if hybrid {
+		limit = hybridCandidates(topK)
+	}
+	// A metadata filter is applied to the hits, after the graph search: ask for more so that some are left.
+	fetch := limit
+	if len(query.Filter) > 0 {
+		fetch = limit * 5
+	}
+	nodes, err := n.graph.Search(query.Vector, fetch, 0)
+	if err != nil {
+		return nil, err
+	}
+	results := make([]SearchResult, 0, min(len(nodes), limit))
 	for _, node := range nodes {
 		m := n.meta[node.Key]
 		r := Record{
 			Namespace: query.Namespace,
 			Key:       node.Key,
 			Text:      m.Text,
-			Vector:    node.Value,
+			Vector:    node.Vec,
 			Metadata:  m.Metadata,
 		}
 		if len(query.Filter) > 0 && !matchesFilter(r, query.Filter) {
 			continue
 		}
-		// coder/hnsw uses cosine distance (0 = identical, 2 = opposite).
-		// Convert to cosine similarity (1 = identical) to match the other backends.
-		dist := hnsw.CosineDistance(query.Vector, node.Value)
-		results = append(results, SearchResult{Record: r, Score: 1 - dist})
+		results = append(results, SearchResult{Record: r, Score: 1 - node.Dist})
+		if len(results) == limit {
+			break
+		}
 	}
 
-	if query.HybridWeight > 0 && strings.TrimSpace(query.QueryText) != "" && len(results) > 0 {
-		results = hnswBlendKeyword(results, query.QueryText, query.HybridWeight)
-		// Re-sort after blending: keyword scores change the ranking.
-		sort.Slice(results, func(i, j int) bool {
-			return results[i].Score > results[j].Score
-		})
+	if hybrid {
+		// The keyword list is a scan of the namespace (the graph cannot be searched by words), which is what this backend is
+		// for: a corpus of a command line tool, not a server's.
+		return blendHybrid(results, searchKeywordOnly(n, query, limit), query.HybridWeight, topK), nil
 	}
 
 	return results, nil
@@ -300,7 +323,7 @@ func (s *HNSWStore) DeleteKeys(ctx context.Context, namespace string, keys []str
 		n.graph.Delete(key)
 		delete(n.meta, key)
 	}
-	saveErr := n.graph.Save()
+	saveErr := n.graph.Save(n.graphPath)
 	metaErr := n.saveMeta()
 	n.mu.Unlock()
 
@@ -308,17 +331,6 @@ func (s *HNSWStore) DeleteKeys(ctx context.Context, namespace string, keys []str
 		return fmt.Errorf("persist hnsw namespace %q after delete: %w", namespace, err)
 	}
 	return nil
-}
-
-// hnswBlendKeyword blends HNSW cosine scores with keywordScore.
-// This replaces FTS5 BM25 (unavailable in the standalone HNSW backend).
-// Score per result = (1-hw)*vector_score + hw*keyword_score
-func hnswBlendKeyword(results []SearchResult, queryText string, hw float32) []SearchResult {
-	for i := range results {
-		kwScore := keywordScore(results[i].Record.Text, queryText)
-		results[i].Score = (1-hw)*results[i].Score + hw*kwScore
-	}
-	return results
 }
 
 // searchKeywordOnly ranks every record in the namespace by keywordScore

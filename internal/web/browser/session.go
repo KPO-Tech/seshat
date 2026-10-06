@@ -49,11 +49,34 @@ func (m *RodManager) OpenPage(ctx context.Context, sessionID types.SessionID, ta
 	if err := validateNavigationURL(targetURL); err != nil {
 		return PageInfo{}, err
 	}
-	page, err := withRodResult(func() (*rod.Page, error) {
-		return session.incognito.Page(proto.TargetCreateTarget{URL: targetURL})
-	})
-	if err != nil {
-		return PageInfo{}, err
+	var page *rod.Page
+	if session.attachedFirstPage != nil {
+		// First page of an attached (desktop-visible) session - reuse the
+		// tab TargetResolver already pointed us at instead of opening a new
+		// target, so the agent's very first navigation shows up live in the
+		// tab the user is already looking at.
+		page = session.attachedFirstPage
+		session.attachedFirstPage = nil
+		if err := withRod(func() error { return page.Navigate(targetURL) }); err != nil {
+			return PageInfo{}, err
+		}
+	} else {
+		// Attached sessions have no incognito context (see
+		// ensureSessionLocked) - any page beyond the first goes straight to
+		// the root browser instead, landing in the same visible/persistent
+		// storage as the attached tab rather than reverting to an isolated
+		// one.
+		browserCtx := session.incognito
+		if browserCtx == nil {
+			browserCtx = m.root
+		}
+		var err error
+		page, err = withRodResult(func() (*rod.Page, error) {
+			return browserCtx.Page(proto.TargetCreateTarget{URL: targetURL})
+		})
+		if err != nil {
+			return PageInfo{}, err
+		}
 	}
 	if err := m.waitForPageReady(page); err != nil {
 		return PageInfo{}, err
@@ -218,25 +241,48 @@ func (m *RodManager) ensureSessionLocked(ctx context.Context, sessionID types.Se
 	if err != nil {
 		return nil, err
 	}
-	incognito, err := withRodResult(func() (*rod.Browser, error) {
-		return root.Incognito()
-	})
-	if err != nil {
-		return nil, err
-	}
+
 	session := &sessionState{
 		id:           sessionID,
 		createdAt:    time.Now().UTC(),
 		lastActivity: time.Now().UTC(),
-		incognito:    incognito,
 		pages:        make(map[string]*pageState),
 		pageTargets:  make(map[string]string),
 		downloadByID: make(map[string]int),
 		maxNetLog:    m.config.MaxNetworkEntries,
 		maxDownloads: m.config.MaxDownloadEntries,
 	}
+
+	if m.config.TargetResolver != nil {
+		if targetID, ok := m.config.TargetResolver(ctx, sessionID); ok && strings.TrimSpace(targetID) != "" {
+			page, attachErr := withRodResult(func() (*rod.Page, error) {
+				return root.PageFromTarget(proto.TargetTargetID(strings.TrimSpace(targetID)))
+			})
+			if attachErr == nil {
+				session.attached = true
+				session.attachedFirstPage = page
+			}
+			// A resolver error/stale target falls through to the normal
+			// incognito path below rather than failing session creation -
+			// the desktop panel being unavailable shouldn't block the agent
+			// from browsing at all, just from doing so visibly.
+		}
+	}
+
+	if !session.attached {
+		incognito, err := withRodResult(func() (*rod.Browser, error) {
+			return root.Incognito()
+		})
+		if err != nil {
+			return nil, err
+		}
+		session.incognito = incognito
+	}
+
 	if err := m.configureSessionDownloadsLocked(session); err != nil {
-		_ = withRod(func() error { return incognito.Close() })
+		if session.incognito != nil {
+			_ = withRod(func() error { return session.incognito.Close() })
+		}
 		return nil, err
 	}
 	m.sessions[sessionID] = session

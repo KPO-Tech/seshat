@@ -162,6 +162,7 @@ func (s *ConfigStore) atomicWrite(scope Scope, fn func(current []byte) ([]byte, 
 	}
 
 	data, err := os.ReadFile(path)
+	existed := err == nil
 	if err != nil {
 		if os.IsNotExist(err) {
 			data = []byte("{}")
@@ -175,7 +176,14 @@ func (s *ConfigStore) atomicWrite(scope Scope, fn func(current []byte) ([]byte, 
 		return err
 	}
 
-	return atomicWriteFile(path, newData, 0o600)
+	if err := atomicWriteFile(path, newData, 0o600); err != nil {
+		return err
+	}
+	if scope == ScopeWorkspace {
+		// the user changed a setting of this project through the interface: see trust.go
+		keepTrustAfterOwnWrite(path, data, existed, newData)
+	}
+	return nil
 }
 
 // configPath returns the file path for the given scope.
@@ -757,6 +765,7 @@ func (s *ConfigStore) reloadFromDiskLocked(ctx context.Context) error {
 		if !json.Valid(wsData) {
 			return fmt.Errorf("invalid JSON in config file %s", workspacePath)
 		}
+		wsData = readProjectConfig(workspacePath, wsData) // see trust.go
 		merged, mergeErr := loadFromBytes(append([][]byte{mustMarshalConfig(cfg)}, wsData))
 		if mergeErr == nil {
 			dataDir := cfg.Options.DataDirectory

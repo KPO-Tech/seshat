@@ -39,28 +39,34 @@ type RodManager struct {
 }
 
 type sessionState struct {
-	mu            sync.Mutex
-	id            types.SessionID
-	createdAt     time.Time
-	lastActivity  time.Time
-	actionCount   int
-	lastAction    string
-	repeatCount   int
-	incognito     *rod.Browser
-	pages         map[string]*pageState
-	pageTargets   map[string]string
-	pageOrder     []string
-	nextPageSeq   int
-	activePageID  string
-	networkLog    []NetworkEntry
-	nextNetSeq    int64
-	downloads     []DownloadEntry
-	downloadByID  map[string]int
-	downloadDir   string
-	networkPolicy NetworkPolicy
-	watchCancel   context.CancelFunc
-	maxNetLog     int
-	maxDownloads  int
+	mu           sync.Mutex
+	id           types.SessionID
+	createdAt    time.Time
+	lastActivity time.Time
+	actionCount  int
+	lastAction   string
+	repeatCount  int
+	incognito    *rod.Browser
+	// Set by ensureSessionLocked when Config.TargetResolver attached this
+	// session to an existing (desktop-visible) tab instead of opening an
+	// incognito context. incognito is nil for the lifetime of an attached
+	// session - see OpenPage and the nil-guards throughout target_watcher.go.
+	attached          bool
+	attachedFirstPage *rod.Page
+	pages             map[string]*pageState
+	pageTargets       map[string]string
+	pageOrder         []string
+	nextPageSeq       int
+	activePageID      string
+	networkLog        []NetworkEntry
+	nextNetSeq        int64
+	downloads         []DownloadEntry
+	downloadByID      map[string]int
+	downloadDir       string
+	networkPolicy     NetworkPolicy
+	watchCancel       context.CancelFunc
+	maxNetLog         int
+	maxDownloads      int
 }
 
 type pageState struct {

@@ -1,9 +1,6 @@
-// Package pdftext extracts plain text from PDFs that carry a real text
-// layer (i.e. not a scan) without any external service. It exists so
-// readPDFFile has a better no-docling fallback than raw base64 pass-through:
-// most PDFs - reports, exports, invoices - are text-native, and pdfcpu
-// (already a dependency here) only exposes page/content-stream manipulation,
-// not decoded text.
+// Package pdftext reads the text layer of a PDF page as markdown (headings, paragraphs, lists, code, formulas and
+// tables), without any external service: most PDFs - reports, exports, invoices - are text-native. See
+// PageMarkdown, and PageMarkdownWith for a host that has a layout model to find the tables with no ruling lines.
 package pdftext
 
 import (
@@ -17,8 +14,8 @@ import (
 // MinCharsPerPage is the threshold below which extracted text is treated as
 // "not really there" - a scanned/image-only PDF will still yield a handful
 // of stray characters from stamps or embedded metadata, but nowhere near
-// this per page on average. Below it, callers should prefer OCR (docling)
-// or the base64/vision fallback instead of trusting this near-empty text.
+// this per page on average. Below it, callers should prefer OCR (the
+// document reader) or the vision fallback instead of trusting this near-empty text.
 const MinCharsPerPage = 20
 
 // Result holds the outcome of a native PDF text extraction attempt.
@@ -30,10 +27,9 @@ type Result struct {
 	Sparse bool
 }
 
-// Extract reads a PDF's embedded text layer. It does not attempt OCR: a
-// scanned PDF with no text layer will return a Sparse result with little or
-// no text, not an error - callers decide what to do next (try docling, or
-// fall back to sending the raw PDF to a vision-capable model).
+// Extract reads a whole PDF's text layer as markdown, page after page. It does not attempt OCR: a scanned PDF
+// with no text layer returns a Sparse result with little or no text, not an error - callers decide what to do next.
+// A host that wants the pages one at a time, with the tables its layout model finds, uses PageMarkdownWith.
 func Extract(data []byte) (*Result, error) {
 	r, err := pdf.NewReader(bytes.NewReader(data), int64(len(data)))
 	if err != nil {
@@ -43,11 +39,7 @@ func Extract(data []byte) (*Result, error) {
 	pageCount := r.NumPage()
 	var sb strings.Builder
 	for i := 1; i <= pageCount; i++ {
-		page := r.Page(i)
-		if page.V.IsNull() {
-			continue
-		}
-		text, err := page.GetPlainText(nil)
+		text, err := PageMarkdown(r.Page(i))
 		if err != nil {
 			// A single malformed page shouldn't sink extraction for the
 			// whole document - skip it and keep going.
@@ -58,11 +50,9 @@ func Extract(data []byte) (*Result, error) {
 	}
 
 	text := strings.TrimSpace(sb.String())
-	sparse := pageCount == 0 || len(text) < MinCharsPerPage*pageCount
-
 	return &Result{
 		Text:      text,
 		PageCount: pageCount,
-		Sparse:    sparse,
+		Sparse:    pageCount == 0 || len(text) < MinCharsPerPage*pageCount,
 	}, nil
 }

@@ -35,8 +35,10 @@ type Query struct {
 	// HybridWeight blends BM25 keyword search with vector similarity.
 	//   0   (default) → pure vector
 	//   1             → pure BM25
-	//   0 < w < 1    → linear blend: (1-w)*vector + w*bm25
-	// Only vector stores with keyword support implement BM25/keyword blending.
+	//   0 < w < 1    → blend of the best candidates of both rankings, each divided by
+	//                  its best score: (1-w)*vector + w*keyword (see hybrid.go)
+	// Every store implements it and blends the same way. Qdrant and Chroma have no ranked keyword search, so their keyword
+	// side is one lookup per word of the query (see term_keyword.go): rarer words weigh more, there is no term frequency.
 	// Meaningless when Vector is empty - see the Vector field doc.
 	HybridWeight float32
 

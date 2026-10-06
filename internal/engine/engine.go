@@ -37,6 +37,8 @@ type sessionRestorer interface {
 type Engine struct {
 	mu                   sync.RWMutex // protects apiClient and loop.apiClient swaps
 	apiClient            *providers.Client
+	titleAPIClient       *providers.Client
+	titleGenerator       TitleGenerator
 	orchestrator         *execution.Orchestrator
 	compactor            *compact.Engine
 	promptAssembler      *prompt.Assembler
@@ -55,6 +57,12 @@ type Engine struct {
 	// onSessionTitled, when set, is called once after the first completed turn
 	// with the AI-generated session title.
 	onSessionTitled func(sessionID types.SessionID, title string)
+}
+
+// TitleGenerator can generate a short title without going through the regular
+// provider client. Hosts use it for local-only title models.
+type TitleGenerator interface {
+	GenerateTitle(ctx context.Context, firstUserMsg string) (string, error)
 }
 
 // NewEngine creates a new query engine.
@@ -130,6 +138,22 @@ func NewEngine(
 		monitoring:           monitoringSys,
 		browserManager:       config.BrowserManager,
 	}
+}
+
+// SetTitleAPIClient sets the provider client used only for session title
+// generation. Passing nil falls back to the main API client.
+func (e *Engine) SetTitleAPIClient(apiClient *providers.Client) {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	e.titleAPIClient = apiClient
+}
+
+// SetTitleGenerator sets a local title generator. When present it is tried
+// before the provider-backed title client.
+func (e *Engine) SetTitleGenerator(generator TitleGenerator) {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	e.titleGenerator = generator
 }
 
 // SetAPIClient swaps the loop-facing API client.
@@ -243,6 +267,26 @@ func (e *Engine) SetOnSessionTitled(fn func(types.SessionID, string)) {
 	e.onSessionTitled = fn
 }
 
+func (e *Engine) titleClientAndModel() (*providers.Client, types.ModelIdentifier) {
+	e.mu.RLock()
+	defer e.mu.RUnlock()
+	client := e.titleAPIClient
+	if client == nil {
+		client = e.apiClient
+	}
+	model := e.config.TitleModel
+	if strings.TrimSpace(model.Model) == "" || model.Provider == "" {
+		model = e.config.Model
+	}
+	return client, model
+}
+
+func (e *Engine) localTitleGenerator() TitleGenerator {
+	e.mu.RLock()
+	defer e.mu.RUnlock()
+	return e.titleGenerator
+}
+
 // titleSystemPrompt is the system prompt used for session title generation.
 const titleSystemPrompt = `You generate ultra-short session titles.
 Rules:
@@ -256,7 +300,7 @@ Rules:
 // short session title from the first user message and then invokes the
 // onSessionTitled callback with the result.
 func (e *Engine) generateTitleAsync(sessionID types.SessionID, firstUserMsg string) {
-	if e.apiClient == nil || e.onSessionTitled == nil {
+	if e.onSessionTitled == nil {
 		return
 	}
 	const maxInputRunes = 500
@@ -264,18 +308,33 @@ func (e *Engine) generateTitleAsync(sessionID types.SessionID, firstUserMsg stri
 	if len(runes) > maxInputRunes {
 		firstUserMsg = string(runes[:maxInputRunes])
 	}
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+
+	if generator := e.localTitleGenerator(); generator != nil {
+		if title, err := generator.GenerateTitle(ctx, firstUserMsg); err == nil {
+			if title = cleanGeneratedTitle(title); title != "" {
+				e.onSessionTitled(sessionID, title)
+				return
+			}
+		}
+	}
+
+	apiClient, titleModel := e.titleClientAndModel()
+	if apiClient == nil {
+		return
+	}
 	req := types.APIRequest{
-		Model:        e.config.Model,
-		MaxTokens:    50,
+		Model: titleModel,
+		// Reasoning models spend part of the budget thinking before the title.
+		MaxTokens:    512,
 		Stream:       false,
 		SystemPrompt: titleSystemPrompt,
 		Messages: []types.Message{
 			types.UserMessage("title-req", firstUserMsg),
 		},
 	}
-	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
-	defer cancel()
-	resp, err := e.apiClient.CreateMessage(ctx, req)
+	resp, err := apiClient.CreateMessage(ctx, req)
 	if err != nil || resp == nil {
 		return
 	}
@@ -290,5 +349,17 @@ func (e *Engine) generateTitleAsync(sessionID types.SessionID, firstUserMsg stri
 	if title == "" {
 		return
 	}
-	e.onSessionTitled(sessionID, title)
+	if title = cleanGeneratedTitle(title); title != "" {
+		e.onSessionTitled(sessionID, title)
+	}
+}
+
+func cleanGeneratedTitle(title string) string {
+	if end := strings.LastIndex(title, "</think>"); end >= 0 {
+		title = title[end+len("</think>"):]
+	}
+	title = strings.TrimSpace(title)
+	title = strings.Trim(title, "\"'` \t\r\n")
+	title = strings.TrimRight(title, ".:;!?")
+	return strings.TrimSpace(title)
 }

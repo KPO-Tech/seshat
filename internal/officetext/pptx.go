@@ -7,27 +7,24 @@ import (
 	"path"
 	"strconv"
 	"strings"
+
+	"github.com/KPO-Tech/seshat/internal/mdtable"
 )
 
-// ExtractPPTX converts a slide deck to markdown: one "## Slide N" section per
-// slide, with the slide's title (if any) promoted to a heading and other
-// text placeholders/tables rendered below it. Slide order follows the
-// presentation's actual slide order (ppt/presentation.xml's sldIdLst,
-// resolved through the rels part), not filename sort - a deck whose slides
-// were reordered after slideN.xml files were first created would otherwise
-// come out in the wrong order.
+// ExtractPPTX converts a slide deck to markdown: one "## Slide N" section per slide, with the slide's title
+// promoted to a heading, bullets with their depth, tables with their merged cells, charts as tables of their
+// data, the description of pictures, the text of SmartArt diagrams, and the speaker notes. Slide order follows the
+// presentation's slide list (ppt/presentation.xml's sldIdLst, resolved through the rels part), not filename
+// sort: a deck whose slides were reordered after the files were first created would come out in the wrong order.
 //
-// slideCount is the deck's total slide count (including slides that render
-// to nothing, e.g. a slide that's entirely an image with no text shapes) -
-// the caller (officetext.Extract) uses it to flag decks whose extracted
-// text is sparse relative to how many slides actually exist, not just
-// whether it's literally empty.
+// slideCount is the deck's total slide count (including slides that render to nothing, e.g. a slide that is
+// entirely a picture) - the caller (officetext.Extract) uses it to flag decks whose extracted text is sparse
+// relative to how many slides actually exist, not just whether it is literally empty.
 func ExtractPPTX(data []byte) (markdown string, slideCount int, err error) {
 	zr, err := zip.NewReader(bytes.NewReader(data), int64(len(data)))
 	if err != nil {
 		return "", 0, fmt.Errorf("not a valid PPTX (zip open failed): %w", err)
 	}
-
 	slidePaths, err := orderedSlidePaths(zr)
 	if err != nil {
 		return "", 0, err
@@ -38,85 +35,49 @@ func ExtractPPTX(data []byte) (markdown string, slideCount int, err error) {
 
 	var sb strings.Builder
 	for i, slidePath := range slidePaths {
-		f := findZipFile(zr, slidePath)
-		if f == nil {
+		tree := readPart(zr, slidePath)
+		if tree == nil {
 			continue
 		}
-		rc, err := f.Open()
-		if err != nil {
+		slide := &pptxSlide{zr: zr, path: slidePath, rels: loadSlideRels(zr, slidePath)}
+		body := slide.render(tree)
+		if strings.TrimSpace(body) == "" {
 			continue
 		}
-		tree, err := parseXMLTree(rc)
-		rc.Close()
-		if err != nil {
-			continue
+		heading := fmt.Sprintf("## Slide %d", i+1)
+		if sld := findFirst(tree, "sld"); sld != nil && sld.attr("show") == "0" {
+			heading += " (hidden)"
 		}
-
-		slideMD := renderSlide(tree)
-		if strings.TrimSpace(slideMD) == "" {
-			continue
-		}
-		sb.WriteString(fmt.Sprintf("## Slide %d\n\n", i+1))
-		sb.WriteString(slideMD)
+		sb.WriteString(heading + "\n\n")
+		sb.WriteString(body)
 	}
-
 	return strings.TrimSpace(sb.String()), len(slidePaths), nil
 }
 
-// orderedSlidePaths resolves ppt/presentation.xml's <p:sldId> list (in
-// document order) to zip entry paths via ppt/_rels/presentation.xml.rels.
-// Falls back to a numeric sort of ppt/slides/slideN.xml if either part is
-// missing or malformed, so a still-valid-but-unusual PPTX degrades to
-// filename order instead of failing outright.
+// orderedSlidePaths resolves ppt/presentation.xml's <p:sldId> list (in document order) to zip entry paths via
+// ppt/_rels/presentation.xml.rels. Falls back to a numeric sort of ppt/slides/slideN.xml if either part is
+// missing or malformed, so a still-valid-but-unusual PPTX degrades to filename order instead of failing outright.
 func orderedSlidePaths(zr *zip.Reader) ([]string, error) {
-	presFile := findZipFile(zr, "ppt/presentation.xml")
-	relsFile := findZipFile(zr, "ppt/_rels/presentation.xml.rels")
-	if presFile == nil || relsFile == nil {
+	presTree := readPart(zr, "ppt/presentation.xml")
+	relsTree := readPart(zr, "ppt/_rels/presentation.xml.rels")
+	if presTree == nil || relsTree == nil {
 		return fallbackSlidePaths(zr), nil
 	}
-
-	presRC, err := presFile.Open()
-	if err != nil {
-		return fallbackSlidePaths(zr), nil
-	}
-	presTree, err := parseXMLTree(presRC)
-	presRC.Close()
-	if err != nil {
-		return fallbackSlidePaths(zr), nil
-	}
-
-	relsRC, err := relsFile.Open()
-	if err != nil {
-		return fallbackSlidePaths(zr), nil
-	}
-	relsTree, err := parseXMLTree(relsRC)
-	relsRC.Close()
-	if err != nil {
-		return fallbackSlidePaths(zr), nil
-	}
-
 	targets := make(map[string]string) // rId -> "ppt/slides/slideN.xml"
 	for _, rel := range findAll(relsTree, "Relationship") {
-		id := rel.attr("Id")
-		target := rel.attr("Target")
-		if id == "" || target == "" {
-			continue
+		if id, target := rel.attr("Id"), rel.attr("Target"); id != "" && target != "" {
+			targets[id] = resolveTarget("ppt/presentation.xml", target)
 		}
-		targets[id] = path.Join("ppt", target)
 	}
-
 	sldIDLst := findFirst(presTree, "sldIdLst")
 	if sldIDLst == nil {
 		return fallbackSlidePaths(zr), nil
 	}
-
 	var paths []string
 	for _, sldID := range findAll(sldIDLst, "sldId") {
-		// <p:sldId id="256" r:id="rId2"/> - "id" and "r:id" collide on local
-		// name, so this must go through nsAttr, not attr, to reliably get
-		// the relationship id rather than the arbitrary sldId number.
-		rID := sldID.nsAttr("id")
-		if target, ok := targets[rID]; ok {
+		// <p:sldId id="256" r:id="rId2"/> - "id" and "r:id" collide on local name, so this must go through
+		// nsAttr, not attr, to get the relationship id rather than the arbitrary sldId number.
+		if target, ok := targets[sldID.nsAttr("id")]; ok {
 			paths = append(paths, target)
 		}
 	}
@@ -133,13 +94,14 @@ func fallbackSlidePaths(zr *zip.Reader) []string {
 	}
 	var slides []indexed
 	for _, f := range zr.File {
-		dir := path.Dir(f.Name)
-		base := path.Base(f.Name)
-		if dir != "ppt/slides" || !strings.HasPrefix(base, "slide") || !strings.HasSuffix(base, ".xml") {
+		if path.Dir(f.Name) != "ppt/slides" {
 			continue
 		}
-		numPart := strings.TrimSuffix(strings.TrimPrefix(base, "slide"), ".xml")
-		n, err := strconv.Atoi(numPart)
+		base := path.Base(f.Name)
+		if !strings.HasPrefix(base, "slide") || !strings.HasSuffix(base, ".xml") {
+			continue
+		}
+		n, err := strconv.Atoi(strings.TrimSuffix(strings.TrimPrefix(base, "slide"), ".xml"))
 		if err != nil {
 			continue
 		}
@@ -159,84 +121,365 @@ func fallbackSlidePaths(zr *zip.Reader) []string {
 	return paths
 }
 
-// renderSlide walks a slide's shape tree (p:cSld/p:spTree), promoting the
-// title placeholder (if any) to a heading and rendering other text shapes as
-// bullet lines, tables as markdown tables.
-func renderSlide(slideTree *node) string {
-	spTree := findFirst(slideTree, "spTree")
+// resolveTarget turns a relationship target into a path in the package: absolute ("/ppt/x.xml") or relative to
+// the part that holds the relationship.
+func resolveTarget(from, target string) string {
+	if strings.HasPrefix(target, "/") {
+		return strings.TrimPrefix(target, "/")
+	}
+	return path.Join(path.Dir(from), target)
+}
+
+type slideRel struct {
+	kind   string // the last element of the relationship type: "chart", "notesSlide", "hyperlink", "diagramData"...
+	target string // a package path, or an address for an external target
+	web    bool
+}
+
+func loadSlideRels(zr *zip.Reader, slidePath string) map[string]slideRel {
+	rels := map[string]slideRel{}
+	tree := readPart(zr, path.Join(path.Dir(slidePath), "_rels", path.Base(slidePath)+".rels"))
+	if tree == nil {
+		return rels
+	}
+	for _, rel := range findAll(tree, "Relationship") {
+		kind := rel.attr("Type")
+		kind = kind[strings.LastIndex(kind, "/")+1:]
+		external := rel.attr("TargetMode") == "External"
+		target := rel.attr("Target")
+		if !external {
+			target = resolveTarget(slidePath, target)
+		}
+		rels[rel.attr("Id")] = slideRel{kind: kind, target: target, web: external}
+	}
+	return rels
+}
+
+type pptxSlide struct {
+	zr   *zip.Reader
+	path string
+	rels map[string]slideRel
+	out  strings.Builder
+	list listState
+}
+
+// listState counts the numbered items of the current text shape, level by level.
+type listState struct {
+	counters map[int]int
+}
+
+func (l *listState) reset() { l.counters = map[int]int{} }
+
+func (l *listState) next(level int) int {
+	if l.counters == nil {
+		l.counters = map[int]int{}
+	}
+	l.counters[level]++
+	for deeper := range l.counters {
+		if deeper > level {
+			delete(l.counters, deeper)
+		}
+	}
+	return l.counters[level]
+}
+
+// render writes a slide: the title first, then the shapes in the order the file lists them, then the notes.
+func (s *pptxSlide) render(tree *node) string {
+	spTree := findFirst(tree, "spTree")
 	if spTree == nil {
 		return ""
 	}
-
-	var title string
-	var body strings.Builder
-
-	for _, shape := range spTree.Children {
-		switch shape.Local {
-		case "sp":
-			text, isTitle := shapeText(shape)
-			text = strings.TrimSpace(text)
-			if text == "" {
-				continue
-			}
-			if isTitle && title == "" {
-				title = text
-				continue
-			}
-			for _, line := range strings.Split(text, "\n") {
-				line = strings.TrimSpace(line)
-				if line == "" {
-					continue
-				}
-				body.WriteString("- ")
-				body.WriteString(line)
-				body.WriteByte('\n')
-			}
-		case "graphicFrame":
-			if tbl := findFirst(shape, "tbl"); tbl != nil {
-				writeMarkdownTable(tbl, &body)
-			}
-		}
-	}
+	var title, subtitle string
+	s.shapes(spTree, &title, &subtitle)
 
 	var out strings.Builder
 	if title != "" {
-		out.WriteString("### ")
-		out.WriteString(title)
-		out.WriteString("\n\n")
+		out.WriteString("### " + title + "\n\n")
 	}
-	out.WriteString(body.String())
-	out.WriteByte('\n')
+	if subtitle != "" {
+		out.WriteString(subtitle + "\n\n")
+	}
+	out.WriteString(s.out.String())
+	if notes := s.notes(); notes != "" {
+		out.WriteString("> **Notes:** " + strings.ReplaceAll(notes, "\n", "\n> ") + "\n\n")
+	}
 	return out.String()
 }
 
-// shapeText extracts a shape's text body (p:txBody -> a:p -> a:r/a:t) and
-// reports whether the shape is a title/centered-title placeholder
-// (p:nvSpPr/p:nvPr/p:ph[@type=title|ctrTitle]).
-func shapeText(sp *node) (text string, isTitle bool) {
-	if nvSpPr := sp.child("nvSpPr"); nvSpPr != nil {
-		if nvPr := nvSpPr.child("nvPr"); nvPr != nil {
+func (s *pptxSlide) shapes(container *node, title, subtitle *string) {
+	for _, shape := range container.Children {
+		switch shape.Local {
+		case "sp":
+			s.textShape(shape, title, subtitle)
+		case "grpSp":
+			s.shapes(shape, title, subtitle)
+		case "AlternateContent":
+			if choice := shape.child("Choice"); choice != nil {
+				s.shapes(choice, title, subtitle)
+			}
+		case "pic":
+			if alt := pictureAlt(shape); alt != "" {
+				s.out.WriteString("[Image: " + alt + "]\n\n")
+			}
+		case "graphicFrame":
+			s.graphicFrame(shape)
+		}
+	}
+}
+
+// textShape writes a shape's paragraphs. Title and subtitle placeholders are returned to the caller to put at
+// the top; slide numbers, dates and footers are not content and are left out.
+func (s *pptxSlide) textShape(sp *node, title, subtitle *string) {
+	kind, plain := placeholderKind(sp)
+	switch kind {
+	case "sldNum", "dt", "ftr", "hdr":
+		return
+	}
+	txBody := sp.child("txBody")
+	if txBody == nil {
+		return
+	}
+	paragraphs := s.paragraphs(txBody)
+	switch kind {
+	case "title", "ctrTitle":
+		if text := strings.Join(oneLines(paragraphs), " "); text != "" && *title == "" {
+			*title = text
+			return
+		}
+	case "subTitle":
+		if text := strings.Join(oneLines(paragraphs), " "); text != "" && *subtitle == "" {
+			*subtitle = text
+			return
+		}
+	}
+
+	s.list.reset()
+	wrote := false
+	for _, p := range paragraphs {
+		if p.text == "" {
+			continue
+		}
+		bullet := (!plain && !p.noBullet) || p.bullet != ""
+		switch {
+		case p.numbered:
+			label := formatBulletNumber(p.numberType, s.list.next(p.level)+p.numberStart-1)
+			s.out.WriteString(strings.Repeat("  ", p.level) + label + " " + p.text + "\n")
+		case bullet:
+			s.list.next(p.level)
+			s.out.WriteString(strings.Repeat("  ", p.level) + "- " + p.text + "\n")
+		default:
+			if wrote {
+				s.out.WriteString("\n")
+			}
+			s.out.WriteString(p.text + "\n")
+		}
+		wrote = true
+	}
+	if wrote {
+		s.out.WriteString("\n")
+	}
+}
+
+// placeholderKind returns the placeholder type of a shape ("title", "body", "sldNum"...), and whether the shape is
+// a plain text box, whose paragraphs are text rather than bullets unless they say otherwise.
+func placeholderKind(sp *node) (kind string, plainBox bool) {
+	if nv := sp.child("nvSpPr"); nv != nil {
+		if c := nv.child("cNvSpPr"); c != nil && c.attr("txBox") == "1" {
+			plainBox = true
+		}
+		if nvPr := nv.child("nvPr"); nvPr != nil {
 			if ph := nvPr.child("ph"); ph != nil {
-				t := ph.attr("type")
-				isTitle = t == "title" || t == "ctrTitle"
+				return ph.attr("type"), false
 			}
 		}
 	}
+	return "", plainBox
+}
 
-	txBody := sp.child("txBody")
-	if txBody == nil {
-		return "", isTitle
+type pptxParagraph struct {
+	text        string
+	level       int
+	noBullet    bool
+	bullet      string // an explicit bullet character
+	numbered    bool
+	numberType  string
+	numberStart int
+}
+
+func (s *pptxSlide) paragraphs(txBody *node) []pptxParagraph {
+	var out []pptxParagraph
+	for _, p := range txBody.childrenNamed("p") {
+		para := pptxParagraph{numberStart: 1}
+		if pPr := p.child("pPr"); pPr != nil {
+			para.level, _ = strconv.Atoi(pPr.attr("lvl"))
+			para.noBullet = pPr.child("buNone") != nil
+			if b := pPr.child("buChar"); b != nil {
+				para.bullet = b.attr("char")
+			}
+			if n := pPr.child("buAutoNum"); n != nil {
+				para.numbered, para.numberType = true, n.attr("type")
+				if v, err := strconv.Atoi(n.attr("startAt")); err == nil {
+					para.numberStart = v
+				}
+			}
+		}
+		para.text = s.paragraphText(p)
+		out = append(out, para)
 	}
+	return out
+}
 
-	var lines []string
-	for _, p := range txBody.Children {
-		if p.Local != "p" {
+// paragraphText joins the runs of a paragraph; a run with a hyperlink becomes a markdown link.
+func (s *pptxSlide) paragraphText(p *node) string {
+	var sb strings.Builder
+	for _, c := range p.Children {
+		switch c.Local {
+		case "r", "fld":
+			text := ""
+			if t := c.child("t"); t != nil {
+				text = t.Text
+			}
+			if rPr := c.child("rPr"); rPr != nil && text != "" {
+				if link := rPr.child("hlinkClick"); link != nil {
+					if rel, ok := s.rels[link.nsAttr("id")]; ok && rel.web && strings.TrimSpace(text) != "" {
+						text = "[" + strings.TrimSpace(text) + "](" + rel.target + ")"
+					}
+				}
+			}
+			sb.WriteString(text)
+		case "br":
+			sb.WriteByte(' ')
+		}
+	}
+	return strings.TrimSpace(sb.String())
+}
+
+func oneLines(paragraphs []pptxParagraph) []string {
+	var out []string
+	for _, p := range paragraphs {
+		if p.text != "" {
+			out = append(out, p.text)
+		}
+	}
+	return out
+}
+
+func formatBulletNumber(kind string, n int) string {
+	suffix := "."
+	if strings.Contains(kind, "ParenR") {
+		suffix = ")"
+	} else if strings.Contains(kind, "ParenBoth") {
+		return "(" + formatCount(bulletFormat(kind), n) + ")"
+	}
+	return formatCount(bulletFormat(kind), n) + suffix
+}
+
+func bulletFormat(kind string) string {
+	switch {
+	case strings.HasPrefix(kind, "alphaLc"):
+		return "lowerLetter"
+	case strings.HasPrefix(kind, "alphaUc"):
+		return "upperLetter"
+	case strings.HasPrefix(kind, "romanLc"):
+		return "lowerRoman"
+	case strings.HasPrefix(kind, "romanUc"):
+		return "upperRoman"
+	}
+	return "decimal"
+}
+
+func pictureAlt(pic *node) string {
+	if nv := pic.child("nvPicPr"); nv != nil {
+		if c := nv.child("cNvPr"); c != nil {
+			alt := strings.TrimSpace(c.attr("descr"))
+			if alt == "" {
+				alt = strings.TrimSpace(c.attr("title"))
+			}
+			return oneLine(alt)
+		}
+	}
+	return ""
+}
+
+// graphicFrame writes what a frame holds: a table, a chart (as a table of its data) or a SmartArt diagram.
+func (s *pptxSlide) graphicFrame(frame *node) {
+	if tbl := findFirst(frame, "tbl"); tbl != nil {
+		s.pptxTable(tbl).RenderMarkdown(&s.out)
+		return
+	}
+	if chart := findFirst(frame, "chart"); chart != nil {
+		if rel, ok := s.rels[chart.nsAttr("id")]; ok {
+			if tree := readPart(s.zr, rel.target); tree != nil {
+				chartTable(tree).RenderMarkdown(&s.out)
+			}
+		}
+		return
+	}
+	if ids := findFirst(frame, "relIds"); ids != nil {
+		if rel, ok := s.rels[ids.nsAttr("dm")]; ok {
+			if tree := readPart(s.zr, rel.target); tree != nil {
+				for _, line := range smartArtLines(tree) {
+					s.out.WriteString("- " + line + "\n")
+				}
+				s.out.WriteString("\n")
+			}
+		}
+	}
+}
+
+// pptxTable reads an a:tbl. DrawingML writes a merged cell once, with gridSpan/rowSpan, and leaves a placeholder
+// (hMerge/vMerge) where the cell continues; the placeholders take the text of the cell they continue.
+func (s *pptxSlide) pptxTable(tbl *node) mdtable.Table {
+	t := mdtable.Table{}
+	if pr := tbl.child("tblPr"); pr != nil && pr.attr("firstRow") == "1" {
+		t.HeaderRows = 1
+	}
+	for _, tr := range tbl.childrenNamed("tr") {
+		var row []string
+		for _, tc := range tr.childrenNamed("tc") {
+			text := ""
+			if body := tc.child("txBody"); body != nil {
+				var lines []string
+				for _, p := range body.childrenNamed("p") {
+					if line := s.paragraphText(p); line != "" {
+						lines = append(lines, line)
+					}
+				}
+				text = strings.Join(lines, "\n")
+			}
+			switch {
+			case tc.attr("hMerge") == "1" && len(row) > 0:
+				text = row[len(row)-1]
+			case tc.attr("vMerge") == "1" && len(t.Rows) > 0 && len(row) < len(t.Rows[len(t.Rows)-1]):
+				text = t.Rows[len(t.Rows)-1][len(row)]
+			}
+			row = append(row, text)
+		}
+		t.Rows = append(t.Rows, row)
+	}
+	return t
+}
+
+// notes returns the speaker notes of the slide.
+func (s *pptxSlide) notes() string {
+	for _, rel := range s.rels {
+		if rel.kind != "notesSlide" {
 			continue
 		}
-		line := strings.TrimSpace(p.text())
-		if line != "" {
-			lines = append(lines, line)
+		tree := readPart(s.zr, rel.target)
+		if tree == nil {
+			return ""
 		}
+		var lines []string
+		for _, sp := range findAll(tree, "sp") {
+			if kind, _ := placeholderKind(sp); kind != "body" {
+				continue
+			}
+			if body := sp.child("txBody"); body != nil {
+				lines = append(lines, oneLines(s.paragraphs(body))...)
+			}
+		}
+		return strings.Join(lines, "\n")
 	}
-	return strings.Join(lines, "\n"), isTitle
+	return ""
 }

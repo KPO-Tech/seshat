@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/KPO-Tech/seshat/internal/documentreader"
 	"github.com/KPO-Tech/seshat/internal/providers"
 	"github.com/KPO-Tech/seshat/internal/rag"
 	engineconfig "github.com/KPO-Tech/seshat/pkg/config"
@@ -29,12 +30,13 @@ type RunnerConfig struct {
 	// way WebSearchKeys is resolved per owner rather than read from a
 	// single process-wide config.
 	RAGService *rag.Service
-	// DoclingURL enables the read_document_url tool when set — fetches
-	// and converts a remote document (PDF, webpage, ...) to markdown via a
-	// running docling-serve instance. Unlike WebSearchKeys/RAGService this
-	// isn't a secret or per-tenant value, so it's fine to read straight
-	// from RunnerConfig rather than resolved per execution.
-	DoclingURL string
+	// DocumentReaderURL enables document conversion tools when set. Unlike
+	// WebSearchKeys/RAGService this isn't a secret or per-tenant value, so it's
+	// fine to read straight from RunnerConfig rather than resolved per execution.
+	DocumentReaderURL string
+	// DocumentConverter, when set, is used instead of building a service client
+	// from DocumentReaderURL. Takes precedence over DocumentReaderURL.
+	DocumentConverter documentreader.Converter
 	// ArtifactStore backs the SDK client's file I/O (e.g. artifacts written
 	// by the bash/file tools) for this execution when set. Like RAGService,
 	// callers embedding automation in a multi-tenant host are expected to
@@ -166,7 +168,8 @@ func (r *Runner) buildClientConfig(model sdk.ModelIdentifier) *sdk.ClientConfig 
 		ProviderConfig:         r.cfg.ProviderConfig,
 		WebSearchKeys:          r.cfg.WebSearchKeys,
 		RAGService:             r.cfg.RAGService,
-		DoclingURL:             r.cfg.DoclingURL,
+		DocumentReaderURL:      r.cfg.DocumentReaderURL,
+		DocumentConverter:      r.cfg.DocumentConverter,
 		ArtifactStore:          r.cfg.ArtifactStore,
 		MCPServers:             r.cfg.MCPServers,
 		RequireSandbox:         r.cfg.RequireSandbox,

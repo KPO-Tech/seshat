@@ -39,10 +39,10 @@ func execute(ctx context.Context, args []string, stdin io.Reader, stdout, stderr
 		return runWorkflow(ctx, args[1:], stdout, stderr)
 	case "memory":
 		return runMemory(args[1:], stdout, stderr)
+	case "trust":
+		return runTrust(args[1:], stdout, stderr)
 	case "login":
 		return runLogin(ctx, args[1:], stdout, stderr)
-	case "setup":
-		return runSetup(args[1:], stdout, stderr)
 	case "version", "--version", "-v":
 		fmt.Fprintln(stdout, version)
 		return nil
@@ -99,13 +99,13 @@ func printUsage(out io.Writer) {
 	fmt.Fprintln(out, "  seshat memory  [--project DIR] [--scope user|project|cross]")
 	fmt.Fprintln(out, "                [--action show|set|clear|context] [--key KEY] [--value VALUE]")
 	fmt.Fprintln(out, "")
+	fmt.Fprintln(out, "  seshat trust   [--status] [--untrust] [--cwd DIR]")
+	fmt.Fprintln(out, "                Trust the configuration files of this project: until then, what its")
+	fmt.Fprintln(out, "                .seshat.json says about MCP servers, hooks, LSP, providers and allowed tools is ignored.")
+	fmt.Fprintln(out, "")
 	fmt.Fprintln(out, "  seshat login   [--provider openai|anthropic] [--client-id ID]")
 	fmt.Fprintln(out, "                Authenticate via browser using your ChatGPT subscription.")
 	fmt.Fprintln(out, "                Runs a device-code flow — no API key required.")
-	fmt.Fprintln(out, "")
-	fmt.Fprintln(out, "  seshat setup   [--check] [--python VERSION] [--extras EXTRAS]")
-	fmt.Fprintln(out, "                Install uv + docling-serve for document processing.")
-	fmt.Fprintln(out, "                --check  show status without installing.")
 	fmt.Fprintln(out, "")
 	fmt.Fprintln(out, "  seshat version  Print the current version.")
 }

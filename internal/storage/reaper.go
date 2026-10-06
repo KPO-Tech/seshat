@@ -58,7 +58,7 @@ func (r *Reaper) Start(parent context.Context) {
 	ctx, cancel := context.WithCancel(parent)
 	r.cancel = cancel
 
-	go func() {
+	go func() { // #nosec G118 -- the loop stops with ctx (Stop); each collection is bounded by the store, and is not tied to a request
 		defer close(r.done)
 		ticker := time.NewTicker(r.config.Interval)
 		defer ticker.Stop()

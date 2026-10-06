@@ -3,9 +3,9 @@ package bash
 import (
 	"context"
 	"fmt"
-	"os"
 	"time"
 
+	"github.com/KPO-Tech/seshat/internal/envfilter"
 	tool "github.com/KPO-Tech/seshat/internal/tools/registry"
 	"github.com/KPO-Tech/seshat/internal/tools/schema"
 	"github.com/KPO-Tech/seshat/internal/types"
@@ -89,7 +89,7 @@ func (t *MonitorTool) Call(ctx context.Context, input tool.CallInput, permission
 			return tool.CallResult{Error: fmt.Errorf("permission denied: %s", result.Reason)}, nil
 		}
 	}
-	task, err := t.taskManager.StartBackgroundTask(ctx, command, t.workingDir, os.Environ(), "bash")
+	task, err := t.taskManager.StartBackgroundTask(ctx, command, t.workingDir, envfilter.Environ(), "bash")
 	if err != nil {
 		return tool.CallResult{Error: fmt.Errorf("failed to start monitor: %w", err)}, nil
 	}

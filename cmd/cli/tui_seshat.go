@@ -12,7 +12,6 @@ import (
 	tea "charm.land/bubbletea/v2"
 	"github.com/KPO-Tech/seshat/cmd/cli/appdir"
 	"github.com/KPO-Tech/seshat/internal/monitoring"
-	"github.com/KPO-Tech/seshat/internal/python"
 	mcptools "github.com/KPO-Tech/seshat/internal/seshattui/agent/tools/mcp"
 	tuiconfig "github.com/KPO-Tech/seshat/internal/seshattui/config"
 	tuicommon "github.com/KPO-Tech/seshat/internal/seshattui/ui/common"
@@ -32,19 +31,6 @@ func runSeshatTUI(ctx context.Context, options runtimeOptions, initialSessionID 
 	_ = appdir.EnsureAppDirs()
 	if err := validateProviderSetup(options); err != nil {
 		return err
-	}
-
-	// Auto-start docling-serve when no URL is configured and the managed venv
-	// has docling-serve installed. Starts non-blocking; the tool falls back to
-	// "not configured" during the few seconds it takes to warm up.
-	var doclingManager *python.DoclingManager
-	if options.DoclingURL == "" || strings.EqualFold(options.DoclingURL, "auto") {
-		if mgr := python.DefaultDoclingManager(); mgr != nil {
-			if err := mgr.Start(ctx); err == nil {
-				doclingManager = mgr
-				options.DoclingURL = mgr.BaseURL()
-			}
-		}
 	}
 
 	options.Monitoring = buildTUIMonitoring()
@@ -104,9 +90,6 @@ func runSeshatTUI(ctx context.Context, options runtimeOptions, initialSessionID 
 	_, runErr := p.Run()
 
 	ws.Shutdown()
-	if doclingManager != nil {
-		doclingManager.Stop()
-	}
 	return runErr
 }
 

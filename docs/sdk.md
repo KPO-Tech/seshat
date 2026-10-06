@@ -137,6 +137,10 @@ type ClientConfig struct {
     SystemPromptTemplate string       // replace default system prompt
     PromptConfig         *PromptConfig // stage overlays, tool hints, append text
 
+    // Document conversion
+    DocumentReaderURL string // optional document-reader base URL for PDF/document conversion
+    DocumentConverter documentreader.Converter // overrides DocumentReaderURL with a custom backend; documentreader.GenericClient covers any HTTP server speaking "multipart upload, JSON response"
+
     // ── Stop hooks ────────────────────────────────────────────────────────
     StopHooks []StopHook // post-turn policy checks (append messages, request continuation)
 }

@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"encoding/json"
 	"fmt"
+	"regexp"
 	"sort"
 	"strconv"
 	"strings"
@@ -17,7 +18,8 @@ import (
 // Schema: a single `vector_chunks` table shared by all namespaces.
 // Each row: (collection_name TEXT, id TEXT, text TEXT, embedding VECTOR(dim), metadata JSONB)
 // Primary key: (collection_name, id).
-// An HNSW cosine index is created on `embedding` at initialization.
+// An HNSW cosine index is created on `embedding` at initialization, and a GIN index on `text_search`, a tsvector column the
+// database keeps from `text` (the keyword side of a hybrid search).
 //
 // Vectors are passed as formatted strings (e.g. "[0.1,0.2,0.3]") and cast
 // with ::vector, avoiding the need for any codec registration.
@@ -33,6 +35,11 @@ type PgVectorOptions struct {
 	HNSWM              int
 	HNSWEfConstruction int
 	IVFFlatLists       int
+
+	// TextSearchConfig is the PostgreSQL text search configuration of the keyword side of a hybrid search: "simple" (the default)
+	// keeps every word as it is and works in any language, "english", "french"... stem and drop the stop words of one. It is
+	// read when the column is created: changing it for a table that has the column needs the column to be dropped.
+	TextSearchConfig string
 }
 
 // NewPgVectorStore opens a pgvector store using an already-open Postgres DB.
@@ -69,6 +76,11 @@ func (s *PgVectorStore) initialize(ctx context.Context) error {
 			PRIMARY KEY (collection_name, id)
 		)`, s.options.Dim),
 		`CREATE INDEX IF NOT EXISTS idx_vector_chunks_collection ON vector_chunks(collection_name)`,
+		// The words of a chunk, kept by the database (PostgreSQL 12 or later), so that a keyword search reads an index and does not
+		// parse the text of every row of a collection for every query.
+		fmt.Sprintf(`ALTER TABLE vector_chunks ADD COLUMN IF NOT EXISTS text_search tsvector
+			GENERATED ALWAYS AS (to_tsvector('%s', text)) STORED`, s.options.TextSearchConfig),
+		`CREATE INDEX IF NOT EXISTS idx_vector_chunks_text_search ON vector_chunks USING gin (text_search)`,
 	}
 	for _, stmt := range stmts {
 		if _, err := s.db.ExecContext(ctx, stmt); err != nil {
@@ -140,8 +152,7 @@ func (s *PgVectorStore) Search(ctx context.Context, query Query) ([]SearchResult
 		topK = 5
 	}
 
-	hw := query.HybridWeight
-	if hw > 0 && strings.TrimSpace(query.QueryText) != "" {
+	if hw := query.HybridWeight; hw > 0 && strings.TrimSpace(query.QueryText) != "" {
 		return s.searchHybrid(ctx, query, topK, hw)
 	}
 	return s.searchVector(ctx, query, topK)
@@ -161,10 +172,11 @@ func (s *PgVectorStore) searchVector(ctx context.Context, query Query, topK int)
 		ORDER  BY embedding <=> $2::vector
 		LIMIT  $3`, where)
 
-	rows, err := s.db.QueryContext(ctx, q, args...)
+	rows, done, err := s.queryNearest(ctx, topK, q, args)
 	if err != nil {
 		return nil, fmt.Errorf("pgvector search: %w", err)
 	}
+	defer done()
 	defer rows.Close()
 
 	var results []SearchResult
@@ -188,35 +200,71 @@ func (s *PgVectorStore) searchVector(ctx context.Context, query Query, topK int)
 	return results, nil
 }
 
-// searchHybrid blends cosine similarity with ts_rank full-text scoring.
-// final_score = (1-hw)*vector_score + hw*ts_rank
-func (s *PgVectorStore) searchHybrid(ctx context.Context, query Query, topK int, hw float32) ([]SearchResult, error) {
-	args := []any{
-		query.Namespace,
-		formatVector(query.Vector),
-		query.QueryText,
-		1 - hw,
-		hw,
-		topK,
-	}
-	baseArgIdx := 6
-	where := "collection_name = $1"
-	where += pgFilterClause(query.Filter, &args)
+// pgHNSWDefaultEfSearch is the pgvector default of hnsw.ef_search: a search of an HNSW index returns at most that many rows,
+// whatever its LIMIT says.
+const pgHNSWDefaultEfSearch = 40
 
+// queryNearest runs a nearest neighbour query. A hybrid search asks for more than 40 candidates (see hybridCandidates), and an
+// HNSW index would stop at 40 and miss more of the true neighbours, so for a larger limit the query runs in a transaction with
+// hnsw.ef_search raised to it (1000 at most, the maximum of pgvector). The returned function ends the transaction, after the
+// rows have been read.
+func (s *PgVectorStore) queryNearest(ctx context.Context, limit int, q string, args []any) (*sql.Rows, func(), error) {
+	if s.options.IndexMethod != "hnsw" || limit <= pgHNSWDefaultEfSearch {
+		rows, err := s.db.QueryContext(ctx, q, args...)
+		return rows, func() {}, err
+	}
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return nil, func() {}, err
+	}
+	if _, err := tx.ExecContext(ctx, fmt.Sprintf("SET LOCAL hnsw.ef_search = %d", min(limit, 1000))); err != nil {
+		_ = tx.Rollback()
+		return nil, func() {}, err
+	}
+	rows, err := tx.QueryContext(ctx, q, args...)
+	if err != nil {
+		_ = tx.Rollback()
+		return nil, func() {}, err
+	}
+	return rows, func() { _ = tx.Rollback() }, nil
+}
+
+// searchHybrid blends the best vector hits (the vector index) and the best keyword hits (the full text index): see blendHybrid.
+// A failure of either query is an error: a hybrid search that quietly became a vector search would hide a missing column or a
+// bad configuration.
+func (s *PgVectorStore) searchHybrid(ctx context.Context, query Query, topK int, hw float32) ([]SearchResult, error) {
+	candidates := hybridCandidates(topK)
+	vectorResults, err := s.searchVector(ctx, query, candidates)
+	if err != nil {
+		return nil, err
+	}
+	keywordResults, err := s.searchKeywords(ctx, query, candidates)
+	if err != nil {
+		return nil, err
+	}
+	return blendHybrid(vectorResults, keywordResults, hw, topK), nil
+}
+
+// searchKeywords ranks the chunks that hold at least one word of the query by ts_rank_cd, on the full text index. The words are
+// joined by OR, not AND: a question is not a list of words that all have to be in one chunk.
+func (s *PgVectorStore) searchKeywords(ctx context.Context, query Query, limit int) ([]SearchResult, error) {
+	tsQuery := pgTextSearchQuery(query.QueryText)
+	if tsQuery == "" {
+		return nil, nil
+	}
+	args := []any{query.Namespace, tsQuery, limit}
+	where := fmt.Sprintf("collection_name = $1 AND text_search @@ to_tsquery('%s', $2)", s.options.TextSearchConfig)
+	where += pgFilterClause(query.Filter, &args)
 	q := fmt.Sprintf(`
-		SELECT id, text, metadata,
-		    $4::float4 * (1 - (embedding <=> $2::vector)) +
-		    $5::float4 * COALESCE(ts_rank(to_tsvector('simple', text), plainto_tsquery('simple', $3)), 0)
-		    AS blended_score
-		FROM vector_chunks
-		WHERE %s
-		ORDER BY blended_score DESC
-		LIMIT $%d`, where, baseArgIdx)
+		SELECT id, text, metadata, ts_rank_cd(text_search, to_tsquery('%s', $2)) AS score
+		FROM   vector_chunks
+		WHERE  %s
+		ORDER  BY score DESC
+		LIMIT  $3`, s.options.TextSearchConfig, where)
 
 	rows, err := s.db.QueryContext(ctx, q, args...)
 	if err != nil {
-		// ts_rank may not be available in all pg setups — fall back to pure vector.
-		return s.searchVector(ctx, query, topK)
+		return nil, fmt.Errorf("pgvector keyword search: %w", err)
 	}
 	defer rows.Close()
 
@@ -225,7 +273,7 @@ func (s *PgVectorStore) searchHybrid(ctx context.Context, query Query, topK int,
 		var id, text, metaJSON string
 		var score float32
 		if err := rows.Scan(&id, &text, &metaJSON, &score); err != nil {
-			return nil, fmt.Errorf("pgvector hybrid scan: %w", err)
+			return nil, fmt.Errorf("pgvector keyword scan: %w", err)
 		}
 		var meta map[string]string
 		_ = json.Unmarshal([]byte(metaJSON), &meta)
@@ -235,10 +283,25 @@ func (s *PgVectorStore) searchHybrid(ctx context.Context, query Query, topK int,
 		})
 	}
 	if err := rows.Err(); err != nil {
-		return nil, fmt.Errorf("pgvector hybrid iterate: %w", err)
+		return nil, fmt.Errorf("pgvector keyword iterate: %w", err)
 	}
-	sort.Slice(results, func(i, j int) bool { return results[i].Score > results[j].Score })
 	return results, nil
+}
+
+var pgWordRe = regexp.MustCompile(`[\p{L}\p{N}]+`)
+
+// maxQueryWords bounds the words of a keyword query: a long question does not need more to find its chunks.
+const maxQueryWords = 32
+
+// pgTextSearchQuery writes the words of a query as a tsquery of alternatives ("deep | learning"). Only letters and digits
+// reach the database, each word quoted, so that nothing a user types is read as the syntax of a tsquery. A word of one
+// or two characters is dropped: it is in every chunk and says nothing (PostgreSQL has no IDF to tell it, as BM25 has).
+func pgTextSearchQuery(text string) string {
+	words := queryWords(text, maxQueryWords)
+	for i, word := range words {
+		words[i] = "'" + word + "'"
+	}
+	return strings.Join(words, " | ")
 }
 
 func (s *PgVectorStore) Get(ctx context.Context, namespace string, keys []string) ([]Record, error) {
@@ -360,7 +423,7 @@ func pgFilterClause(filter map[string]any, args *[]any) string {
 		return ""
 	}
 	var sb strings.Builder
-	idx := len(*args) + 1
+	idx := len(*args)
 	for k, v := range filter {
 		switch t := v.(type) {
 		case string:
@@ -396,6 +459,9 @@ func pgFilterClause(filter map[string]any, args *[]any) string {
 	return sb.String()
 }
 
+// pgTextSearchConfigRe is what a text search configuration name may be: it goes into SQL as an identifier.
+var pgTextSearchConfigRe = regexp.MustCompile(`^[a-z_]+$`)
+
 func normalizePgVectorOptions(options PgVectorOptions) PgVectorOptions {
 	if options.Dim <= 0 {
 		options.Dim = 1536
@@ -408,6 +474,9 @@ func normalizePgVectorOptions(options PgVectorOptions) PgVectorOptions {
 	}
 	if options.IVFFlatLists <= 0 {
 		options.IVFFlatLists = 100
+	}
+	if !pgTextSearchConfigRe.MatchString(options.TextSearchConfig) {
+		options.TextSearchConfig = "simple"
 	}
 	if !strings.EqualFold(options.IndexMethod, "ivfflat") {
 		options.IndexMethod = "hnsw"

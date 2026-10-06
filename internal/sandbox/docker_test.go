@@ -383,10 +383,19 @@ func TestDockerExecutorCloseRemovesContainers(t *testing.T) {
 		t.Fatalf("Close: %v", err)
 	}
 
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-	defer cancel()
-	if err := exec.CommandContext(ctx, "docker", "inspect", containerID).Run(); err == nil {
-		t.Fatalf("expected container %s to be removed after Close, but docker inspect succeeded", containerID)
+	// stop returns when the container has exited; --rm removes it a moment later, longer on a busy machine.
+	deadline := time.Now().Add(30 * time.Second)
+	for {
+		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		err := exec.CommandContext(ctx, "docker", "inspect", containerID).Run()
+		cancel()
+		if err != nil {
+			return
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("expected container %s to be removed after Close, but docker inspect still succeeds after 30s", containerID)
+		}
+		time.Sleep(250 * time.Millisecond)
 	}
 }
 
@@ -481,11 +490,11 @@ func mustRandomBytes(t *testing.T, n int) []byte {
 }
 
 // TestDockerExecutorDoesNotLeakHostEnvironment is a regression test for a
-// security property DockerExecutor already has, not a gap: unlike
-// NoopExecutor.Run (which inherits the full host process environment via
-// cmd.Environ()), a sandboxed command must NOT see host-side environment
-// variables the seshat process holds (API keys, tokens, …) unless the
-// caller explicitly passes them via RunRequest.Env.
+// security property DockerExecutor already has, not a gap: a sandboxed
+// command must NOT see host-side environment variables the seshat process
+// holds (API keys, tokens, …) unless the caller explicitly passes them via
+// RunRequest.Env. (NoopExecutor.Run now gives a command the process
+// environment minus its secrets, see internal/envfilter.)
 func TestDockerExecutorDoesNotLeakHostEnvironment(t *testing.T) {
 	requireDocker(t)
 	t.Setenv("SESHAT_TEST_HOST_SECRET", "this-must-not-reach-the-sandbox")

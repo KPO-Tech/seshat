@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -15,7 +16,20 @@ import (
 	"github.com/KPO-Tech/seshat/internal/sandbox"
 	tool "github.com/KPO-Tech/seshat/internal/tools/contract"
 	"github.com/KPO-Tech/seshat/internal/types"
+	"github.com/KPO-Tech/seshat/pkg/runtimepath"
 )
+
+type fakeTitleGenerator struct {
+	title string
+	calls chan string
+}
+
+func (f fakeTitleGenerator) GenerateTitle(ctx context.Context, firstUserMsg string) (string, error) {
+	if f.calls != nil {
+		f.calls <- firstUserMsg
+	}
+	return f.title, nil
+}
 
 func TestNewClientPropagatesPromptFnToAskUserTool(t *testing.T) {
 	client, err := NewClient(&ClientConfig{
@@ -2260,6 +2274,7 @@ func sdkPayloadContainsText(payload map[string]any, want string) bool {
 
 func TestSessionAutoTitleGeneration(t *testing.T) {
 	requestsChan := make(chan string, 2)
+	titleModelChan := make(chan string, 1)
 
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		var payload map[string]any
@@ -2269,6 +2284,9 @@ func TestSessionAutoTitleGeneration(t *testing.T) {
 
 		systemPrompt, _ := payload["system"].(string)
 		if strings.Contains(systemPrompt, "ultra-short session titles") {
+			if model, _ := payload["model"].(string); model != "" {
+				titleModelChan <- model
+			}
 			requestsChan <- "title"
 			w.Header().Set("Content-Type", "application/json")
 			w.WriteHeader(http.StatusOK)
@@ -2325,6 +2343,10 @@ func TestSessionAutoTitleGeneration(t *testing.T) {
 			Provider: types.APIProviderAnthropic,
 			Model:    "claude-3-5-sonnet-20241022",
 		},
+		TitleModel: types.ModelIdentifier{
+			Provider: types.APIProviderAnthropic,
+			Model:    "claude-3-5-haiku-20241022",
+		},
 		OnSessionTitled: func(id SessionID, title string) {
 			titleCalled <- title
 		},
@@ -2362,6 +2384,14 @@ func TestSessionAutoTitleGeneration(t *testing.T) {
 	case <-time.After(5 * time.Second):
 		t.Fatal("timed out waiting for OnSessionTitled callback")
 	}
+	select {
+	case model := <-titleModelChan:
+		if model != "claude-3-5-haiku-20241022" {
+			t.Errorf("expected title model claude-3-5-haiku-20241022, got %q", model)
+		}
+	default:
+		t.Fatal("title request did not record a model")
+	}
 
 	// Verify the stored session has the title updated
 	metadata, err := client.GetSessionStore().LoadSession(types.SessionID(session.GetID()))
@@ -2370,5 +2400,143 @@ func TestSessionAutoTitleGeneration(t *testing.T) {
 	}
 	if metadata.Title != "Greeting" {
 		t.Errorf("expected stored title to be 'Greeting', got %q", metadata.Title)
+	}
+}
+
+func TestSessionAutoTitleGenerationUsesLocalGenerator(t *testing.T) {
+	requestsChan := make(chan string, 2)
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		requestsChan <- "message"
+		w.Header().Set("Content-Type", "text/event-stream")
+		sdkWriteStreamEvents(t, w, []map[string]any{
+			{
+				"type": "content_block_start",
+				"content_block": map[string]any{
+					"type": "text",
+					"text": "",
+				},
+			},
+			{
+				"type": "content_block_delta",
+				"delta": map[string]any{
+					"type": "text_delta",
+					"text": "Hello there!",
+				},
+			},
+			{"type": "content_block_stop"},
+			{
+				"type": "message_delta",
+				"delta": map[string]any{
+					"stop_reason": "end_turn",
+				},
+			},
+			{"type": "message_stop"},
+		})
+	}))
+	defer server.Close()
+
+	titleCalled := make(chan string, 1)
+	titleInput := make(chan string, 1)
+	client, err := NewClient(&ClientConfig{
+		PersistSessions:   true,
+		SessionStorageDir: filepath.Join(t.TempDir(), "sessions"),
+		PermissionMode:    types.PermissionModeBypass,
+		AutoCompact:       false,
+		Model: types.ModelIdentifier{
+			Provider: types.APIProviderAnthropic,
+			Model:    "claude-3-5-sonnet-20241022",
+		},
+		TitleGenerator: fakeTitleGenerator{title: "Titre local", calls: titleInput},
+		OnSessionTitled: func(id SessionID, title string) {
+			titleCalled <- title
+		},
+	})
+	if err != nil {
+		t.Fatalf("NewClient failed: %v", err)
+	}
+	defer client.Close()
+
+	apiClient := providers.NewClientWithConfig("test-key", &providers.Config{
+		Provider: types.APIProviderAnthropic,
+		BaseURL:  server.URL,
+	})
+	apiClient.SetHTTPClient(server.Client())
+	apiClient.SetRetryConfig(types.RetryConfig{MaxAttempts: 1})
+	client.queryEngine.SetAPIClient(apiClient)
+
+	session, err := client.CreateSession(context.Background())
+	if err != nil {
+		t.Fatalf("CreateSession failed: %v", err)
+	}
+	if _, err = session.SubmitMessage(context.Background(), "analyse ce document"); err != nil {
+		t.Fatalf("SubmitMessage failed: %v", err)
+	}
+
+	select {
+	case got := <-titleInput:
+		if got != "analyse ce document" {
+			t.Fatalf("unexpected title input: %q", got)
+		}
+	case <-time.After(5 * time.Second):
+		t.Fatal("timed out waiting for local title generator")
+	}
+	select {
+	case title := <-titleCalled:
+		if title != "Titre local" {
+			t.Errorf("expected local title, got %q", title)
+		}
+	case <-time.After(5 * time.Second):
+		t.Fatal("timed out waiting for OnSessionTitled callback")
+	}
+	select {
+	case <-requestsChan:
+	default:
+		t.Fatal("expected one main provider request")
+	}
+	select {
+	case <-requestsChan:
+		t.Fatal("unexpected second provider request; title should be local")
+	default:
+	}
+}
+
+func TestDeleteSessionRemovesItsDirectoryAndGrants(t *testing.T) {
+	root := t.TempDir()
+	t.Setenv("SESHAT_RUNTIME_ROOT", root)
+
+	client, err := NewClient(&ClientConfig{
+		PersistSessions:        true,
+		SessionStorageDir:      filepath.Join(root, "data", "sessions"),
+		DisableTitleGeneration: true,
+	})
+	if err != nil {
+		t.Fatalf("NewClient failed: %v", err)
+	}
+	defer client.Close()
+
+	session, err := client.CreateSession(context.Background())
+	if err != nil {
+		t.Fatalf("CreateSession failed: %v", err)
+	}
+	id := string(session.GetID())
+
+	plan := filepath.Join(runtimepath.SessionPlansDir("", id), "plan.md")
+	grants := runtimepath.SessionPermissionsPath("", id)
+	for _, path := range []string{plan, grants} {
+		if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(path, []byte("x"), 0o600); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	if err := client.DeleteSession(session.GetID()); err != nil {
+		t.Fatalf("DeleteSession failed: %v", err)
+	}
+	for _, path := range []string{filepath.Dir(plan), grants} {
+		if _, err := os.Stat(path); !os.IsNotExist(err) {
+			t.Errorf("%s should have been removed with the session (err=%v)", path, err)
+		}
 	}
 }

@@ -116,6 +116,56 @@ func TestLoadIntoBindsBrowserRuntimeEnv(t *testing.T) {
 	}
 }
 
+func TestLoadIntoBindsTitleModelEnv(t *testing.T) {
+	t.Setenv("SESHAT_TITLE_MODEL", "ollama:llama3.2:1b")
+	t.Setenv("SESHAT_TITLE_MODEL_BASE_URL", "http://localhost:11434")
+	t.Setenv("SESHAT_TITLE_MODEL_API_KEY", "title-key")
+	t.Setenv("SESHAT_TITLE_LOCAL_ENABLED", "true")
+	t.Setenv("SESHAT_TITLE_LOCAL_RUNTIME", "llama.cpp")
+	t.Setenv("SESHAT_TITLE_LOCAL_EXECUTABLE", "llama-cli")
+	t.Setenv("SESHAT_TITLE_LOCAL_MODEL_PATH", "/models/title.gguf")
+	t.Setenv("SESHAT_TITLE_LOCAL_HF_REPO", "Qwen/Qwen2.5-0.5B-Instruct-GGUF")
+	t.Setenv("SESHAT_TITLE_LOCAL_HF_FILE", "qwen2.5-0.5b-instruct-q4_k_m.gguf")
+	t.Setenv("SESHAT_TITLE_LOCAL_CACHE_DIR", "/cache/title")
+	t.Setenv("SESHAT_TITLE_LOCAL_TIMEOUT", "20s")
+
+	var cfg Config
+	if err := LoadInto(&cfg); err != nil {
+		t.Fatalf("load config: %v", err)
+	}
+
+	if cfg.TitleModel != "ollama:llama3.2:1b" {
+		t.Fatalf("unexpected title model: %q", cfg.TitleModel)
+	}
+	if cfg.TitleModelBaseURL != "http://localhost:11434" {
+		t.Fatalf("unexpected title model base url: %q", cfg.TitleModelBaseURL)
+	}
+	if cfg.TitleModelAPIKey != "title-key" {
+		t.Fatalf("unexpected title model api key: %q", cfg.TitleModelAPIKey)
+	}
+	if !cfg.TitleLocalEnabled {
+		t.Fatal("expected local title enabled")
+	}
+	if cfg.TitleLocalRuntime != "llama.cpp" || cfg.TitleLocalExe != "llama-cli" {
+		t.Fatalf("unexpected local title runtime: %q exe=%q", cfg.TitleLocalRuntime, cfg.TitleLocalExe)
+	}
+	if cfg.TitleLocalModel != "/models/title.gguf" {
+		t.Fatalf("unexpected local title model path: %q", cfg.TitleLocalModel)
+	}
+	if cfg.TitleLocalHFRepo != "Qwen/Qwen2.5-0.5B-Instruct-GGUF" {
+		t.Fatalf("unexpected local title hf repo: %q", cfg.TitleLocalHFRepo)
+	}
+	if cfg.TitleLocalHFFile != "qwen2.5-0.5b-instruct-q4_k_m.gguf" {
+		t.Fatalf("unexpected local title hf file: %q", cfg.TitleLocalHFFile)
+	}
+	if cfg.TitleLocalCache != "/cache/title" {
+		t.Fatalf("unexpected local title cache dir: %q", cfg.TitleLocalCache)
+	}
+	if cfg.TitleLocalTimeout != "20s" {
+		t.Fatalf("unexpected local title timeout: %q", cfg.TitleLocalTimeout)
+	}
+}
+
 func TestLoadIntoBindsStorageGCEnv(t *testing.T) {
 	t.Setenv("SESHAT_STORAGE_GC_ENABLED", "true")
 	t.Setenv("SESHAT_STORAGE_GC_INTERVAL", "30m")

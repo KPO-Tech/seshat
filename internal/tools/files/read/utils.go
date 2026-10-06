@@ -118,20 +118,6 @@ func GetAlternateScreenshotPath(filePath string) (string, bool) {
 	return "", false
 }
 
-// GetCanonicalName returns a canonical name for models (for future use)
-func GetCanonicalName(modelName string) string {
-	// Convert to lowercase and remove common prefixes
-	name := strings.ToLower(modelName)
-
-	// Remove common model prefixes
-	prefixes := []string{"claude-", "anthropic/", "openai/"}
-	for _, prefix := range prefixes {
-		name = strings.TrimPrefix(name, prefix)
-	}
-
-	return name
-}
-
 // SuggestPathUnderCwd suggests an alternative path under the current working directory
 // This is an improved version with symlink support
 func SuggestPathUnderCwd(requestedPath string, workingDir string) (string, error) {

@@ -63,7 +63,7 @@ Tools marked **stub** are registered but `IsEnabled()` returns `false` — they 
 
 | Tool | Description |
 |---|---|
-| `file_read` | Read file content — text, image (PNG/JPG), or PDF. Supports line-range limits. |
+| `file_read` | Read file content — text, image (PNG/JPG), or PDF. Supports line-range limits. A PDF is read page by page with a `--- page N ---` marker before each page; a read stops at a size limit (120,000 characters, or 20 pages sent to the document reader) and says which page to continue from with `pages`. The result names the pages that hold images or have no readable text. Native pages come back as markdown: headings, fenced code with its indentation, lists, paragraphs, formulas as `$...$` / `$$...$$` in LaTeX-like notation, and tables as markdown tables (merged cells resolved; tables with no lines too, and tables that are pictures, including scanned ones, when the native reader has its layout models and OCR). DOCX, PPTX and XLSX files are converted to markdown natively, with their headings, nested lists, tables (merged cells resolved), charts as data tables, footnotes, picture descriptions and speaker notes; a long one is read in pieces of about 120,000 characters, the result saying which `offset` to continue from, and a deck that is mostly pictures gives the little text it has; an HTML file is shown as source. An encrypted PDF is decrypted (AES-256 included); one that needs a password says so, and `password` takes the one the user gave. |
 | `file_write` | Create or fully overwrite a file. |
 | `file_edit` | Replace an exact string in a file (string-targeted, not line-based). |
 | `file_patch` | Apply a unified diff patch to a file. |
@@ -77,6 +77,18 @@ Tools marked **stub** are registered but `IsEnabled()` returns `false` — they 
 
 ---
 
+### Document reader tools (`internal/tools/files/documentreader/`)
+
+Require a document reader/renderer to be configured on `ClientConfig` (`DocumentReaderURL`/`DocumentConverter` for the first two, `DocumentPageRenderer` for the third) — each registers unconditionally but returns a "not configured" result when its dependency is nil.
+
+| Tool | Description |
+|---|---|
+| `convert_document` | Convert a local file to markdown via the configured document reader — OCR, layout analysis, table structure, audio transcription. Prefer `read_file` first; reach for this to force reconversion or for files `read_file` couldn't handle natively. |
+| `read_document_url` | Fetch a document at a URL (PDF, DOCX, PPTX, XLSX, HTML, arXiv) and convert it to markdown. Can optionally save the result to a workspace path. |
+| `render_document_page` | Render one page of a local PDF to a PNG and attach it to the conversation as a real image (delivered via a follow-up message, not inlined as text) for visual inspection of diagrams, charts, tables, or scanned content that markdown extraction would miss. Renders up to 8 MiB per page; larger renders are reported instead of attached. |
+
+---
+
 ### Bash tool (`internal/tools/bash/`)
 
 | Tool | Description |
@@ -86,6 +98,8 @@ Tools marked **stub** are registered but `IsEnabled()` returns `false` — they 
 | `bash_job_output` | Read buffered stdout/stderr from a background job. |
 | `bash_job_kill` | Send SIGTERM/SIGKILL to a background job. |
 | `monitor` | Start a shell command and stream its stdout line-by-line as notifications. Designed for log tailing, build watching, and long-running processes. |
+
+**Environment of the commands.** A command the model runs gets the environment of the process **without its secrets** (`internal/envfilter`): the variables whose name says secret (`*_API_KEY`, `*_TOKEN`, `*_SECRET`, `*_PASSWORD`, `*_DSN`, `DATABASE_URL`, ...), the families of the providers Seshat talks to (`ANTHROPIC_*`, `OPENAI_*`, `AWS_SECRET*`, `SESHAT_DB_*`, `SESHAT_S3_*`, ...) and the ones whose value is a credential (a URL with a password, a private key, the usual token prefixes). `PATH`, `HOME`, the locale, the proxies and the build settings stay. Otherwise a command that prints its environment (`env`, `curl -d "$(env)"`) hands the provider keys to whoever a prompt injection names. This applies to the `bash` tool (foreground, background, `monitor`), to the local sandbox executor and to the shell of the terminal UI; the Docker sandbox never forwarded the environment. Two settings: `SESHAT_BASH_ENV_ALLOW=NAME,PREFIX_*` keeps variables that look like secrets (for a command that needs `GITHUB_TOKEN`, say), `SESHAT_BASH_INHERIT_ENV=true` restores the old behaviour. Variables given by the call itself (`env` of a tool call, `RunRequest.Env`) always pass.
 
 ---
 

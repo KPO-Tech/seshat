@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"log"
 	"sort"
 	"strconv"
 	"strings"
@@ -13,10 +14,31 @@ import (
 	"github.com/KPO-Tech/seshat/internal/vector"
 )
 
-// defaultRerankWeight is used whenever a SearchRequest doesn't specify its
-// own RerankWeight - see SetRerankWeight's doc comment for why 0.7 (weighted
-// toward the reranker, but not a full override) is the chosen default.
+// Reranking defaults, from the retrieval benchmark of SeshatCloud (seshat-intelligence/benchmarks/chunk_bench, rerank.py: 192
+// questions on 19 documents, hybrid bge-m3 + BM25 as the first stage, three cross-encoders from 118M to 568M parameters):
+//
+//   - Weight 0.7. The best weight depends on the reranker: 0.5 for a small one (mMARCO MiniLM, bge-reranker-base: the reranker
+//     alone gained nothing), 1.0 for the strongest (Cohere rerank-v3.5: MRR .909, .917, .928 at 0.5, 0.7, 1.0), indifferent for
+//     bge-reranker-v2-m3 (equal within 0.006). Against the best weight of each of the five rerankers measured, 0.7 never loses more
+//     than 0.012 of MRR, 0.5 loses up to 0.019 and 1.0 up to 0.020.
+//   - A pool of max(topK, 10) chunks. Reading 20 chunks was not better than 10 for any of the three models, and costs twice
+//     the time (a cross-encoder reads every pair). The first stage already puts the answer in its first ten.
+//   - The score of the whole pool is normalised and blended, then the list is cut to topK: normalising only the few the
+//     reranker returned changes the blend with the server in use.
+//
+// bge-reranker-v2-m3 moved the answering chunk up by 0.09 of MRR (hit@1 +0.15, both with a 95% interval above 0); the small
+// ones by 0.03 to 0.04.
 const defaultRerankWeight float32 = 0.7
+
+const rerankMinPool = 10
+
+// defaultRerankMargin: the reranker is not asked when the first stage is sure of its answer, that is when its best chunk beats
+// the second by at least this share of its own score ((s1 - s2) / s1). On the benchmark, skipping the questions with a margin of
+// 0.2 or more lost nothing (MRR 0.902 with and without the gate on the single-fact questions, 0.421 against 0.425 on the ones
+// whose answer needs several passages) and saved 24% and 8% of the pairs a cross-encoder reads; a margin of 0.1 saved more and lost
+// a fifth of the gain. Deeper gating (a pool of 5, a margin of 0.05) did not hold on the multi-passage questions. The margin is
+// that of the scores of a hybrid search, divided by the best of each list; 0 asks the reranker for every search.
+const defaultRerankMargin float32 = 0.2
 
 type Service struct {
 	artifacts    storage.ArtifactStore // optional — nil = skip rag-doc blob storage
@@ -25,6 +47,8 @@ type Service struct {
 	chunker      Chunker
 	reranker     Reranker // optional — nil = return vector results as-is
 	rerankWeight float32
+	rerankMargin float32
+	enricher     Enricher // optional — nil = skip chunk enrichment
 }
 
 func NewService(artifacts storage.ArtifactStore, vectors vector.Store, embedder Embedder, chunker Chunker) *Service {
@@ -37,6 +61,7 @@ func NewService(artifacts storage.ArtifactStore, vectors vector.Store, embedder 
 		embedder:     embedder,
 		chunker:      chunker,
 		rerankWeight: defaultRerankWeight,
+		rerankMargin: defaultRerankMargin,
 	}
 }
 
@@ -49,12 +74,22 @@ func (s *Service) SetReranker(r Reranker) {
 	s.reranker = r
 }
 
-// SetRerankWeight overrides the default blend weight (0.7) applied between
-// the reranker's normalized score and each result's original retrieval
-// score, for any SearchRequest that doesn't set its own RerankWeight. 0.7
-// was chosen to stay close to the previous behavior (which fully trusted
-// the reranker) while still being a genuine blend rather than a wholesale
-// override. w is clamped to [0,1].
+// SetEnricher installs a chunk-enrichment step run during Ingest, before
+// embedding: each chunk's synthetic questions (see Enricher's doc comment)
+// are appended to the text that gets embedded, not to the chunk's stored/
+// displayed text. Pass nil (the default) to disable enrichment - it costs
+// one LLM call per chunk, so it is never on by default.
+func (s *Service) SetEnricher(e Enricher) {
+	if s == nil {
+		return
+	}
+	s.enricher = e
+}
+
+// SetRerankWeight overrides the default blend weight (0.7, see the measures at
+// defaultRerankWeight) applied between the reranker's normalized score and
+// each result's original retrieval score, for any SearchRequest that doesn't
+// set its own RerankWeight. w is clamped to [0,1].
 func (s *Service) SetRerankWeight(w float32) {
 	if s == nil {
 		return
@@ -66,6 +101,35 @@ func (s *Service) SetRerankWeight(w float32) {
 		w = 1
 	}
 	s.rerankWeight = w
+}
+
+// SetRerankMargin sets the margin at or above which the first stage is trusted and the reranker is not asked (see
+// defaultRerankMargin). 0 or less asks it for every search.
+func (s *Service) SetRerankMargin(m float32) {
+	if s == nil {
+		return
+	}
+	if m < 0 {
+		m = 0
+	}
+	s.rerankMargin = m
+}
+
+// firstStageIsSure reports whether the best result beats the second by at least the rerank margin of the service.
+func (s *Service) firstStageIsSure(results []vector.SearchResult) bool {
+	if s.rerankMargin <= 0 || len(results) < 2 {
+		return false
+	}
+	best, second := float32(0), float32(0)
+	for _, r := range results {
+		switch {
+		case r.Score > best:
+			best, second = r.Score, best
+		case r.Score > second:
+			second = r.Score
+		}
+	}
+	return best > 0 && (best-second)/best >= s.rerankMargin
 }
 
 // Vectors returns the underlying vector store, e.g. for callers that need to
@@ -189,13 +253,40 @@ func (s *Service) Ingest(ctx context.Context, request IngestRequest) (IngestResu
 	if len(chunks) == 0 {
 		return IngestResult{Artifact: artifact}, nil
 	}
+	// Chunk enrichment (synthetic questions) runs before embedding, if
+	// configured: the questions get folded into the text that is embedded,
+	// so retrieval benefits from them, but never into chunk.Text itself -
+	// records store and return the original, unenriched text (see
+	// buildEmbeddingText).
+	var embedTexts []string
+	if s.enricher != nil {
+		plain := make([]string, len(chunks))
+		for i, chunk := range chunks {
+			plain[i] = chunk.Text
+		}
+		questionSets, err := s.enricher.EnrichChunks(ctx, plain)
+		if err != nil {
+			return IngestResult{}, fmt.Errorf("enricher: %w", err)
+		}
+		if len(questionSets) != len(chunks) {
+			return IngestResult{}, fmt.Errorf("enricher returned %d results for %d chunks", len(questionSets), len(chunks))
+		}
+		embedTexts = make([]string, len(chunks))
+		for i, chunk := range chunks {
+			embedTexts[i] = buildEmbeddingText(chunk.Text, questionSets[i])
+		}
+	}
+
 	// vectorsOut stays nil when there's no embedder configured - records get
 	// stored without a vector (vectorless/BM25-only), see vector.Record.Vector.
 	var vectorsOut [][]float32
 	if s.embedder != nil {
-		texts := make([]string, 0, len(chunks))
-		for _, chunk := range chunks {
-			texts = append(texts, chunk.Text)
+		texts := embedTexts
+		if texts == nil {
+			texts = make([]string, 0, len(chunks))
+			for _, chunk := range chunks {
+				texts = append(texts, chunk.Text)
+			}
 		}
 		vectorsOut, err = s.embedder.EmbedTexts(ctx, texts)
 		if err != nil {
@@ -276,6 +367,24 @@ func (s *Service) splitChunks(ctx context.Context, request IngestRequest) ([]Chu
 	return s.chunker.Split(ctx, request.Text)
 }
 
+// buildEmbeddingText appends a chunk's synthetic questions to its text for
+// embedding purposes only - the returned string is never stored or returned
+// to search callers, see the vector.Record built from chunk.Text in Ingest.
+func buildEmbeddingText(chunkText string, questions []string) string {
+	if len(questions) == 0 {
+		return chunkText
+	}
+	var sb strings.Builder
+	sb.WriteString(chunkText)
+	sb.WriteString("\n\nQuestions this passage answers:\n")
+	for _, q := range questions {
+		sb.WriteString("- ")
+		sb.WriteString(q)
+		sb.WriteString("\n")
+	}
+	return strings.TrimRight(sb.String(), "\n")
+}
+
 func (s *Service) Search(ctx context.Context, request SearchRequest) (SearchResponse, error) {
 	if s == nil || s.vectors == nil {
 		return SearchResponse{}, fmt.Errorf("rag service is not fully configured (a vector store is required)")
@@ -297,10 +406,7 @@ func (s *Service) Search(ctx context.Context, request SearchRequest) (SearchResp
 	fetchK := topK
 	useReranker := s.reranker != nil && s.reranker.IsConfigured()
 	if useReranker {
-		fetchK = topK * 3
-		if fetchK < 20 {
-			fetchK = 20
-		}
+		fetchK = max(topK, rerankMinPool)
 	}
 
 	// Vectorless (pure keyword/BM25) when no embedder is configured, or the
@@ -331,13 +437,13 @@ func (s *Service) Search(ctx context.Context, request SearchRequest) (SearchResp
 		return SearchResponse{}, err
 	}
 
-	// Apply reranker when configured. On failure, fall back to vector order silently.
-	if useReranker && len(results) > 0 {
+	// Apply reranker when configured, unless the first stage is sure of its answer. On failure, keep the retrieval order.
+	if useReranker && len(results) > 0 && !s.firstStageIsSure(results) {
 		texts := make([]string, 0, len(results))
 		for _, r := range results {
 			texts = append(texts, r.Record.Text)
 		}
-		indices, scores, rerankErr := s.reranker.Rerank(ctx, request.Query, texts, topK)
+		indices, scores, rerankErr := s.reranker.Rerank(ctx, request.Query, texts, 0)
 		if rerankErr == nil && len(indices) > 0 {
 			normScores := reranker.NormalizeScores(scores)
 			weight := request.RerankWeight
@@ -369,7 +475,13 @@ func (s *Service) Search(ctx context.Context, request SearchRequest) (SearchResp
 			// order once blended with the retrieval score - re-sort by the
 			// blended score itself.
 			sort.Slice(reranked, func(i, j int) bool { return reranked[i].Score > reranked[j].Score })
+			if len(reranked) > topK {
+				reranked = reranked[:topK]
+			}
 			return SearchResponse{CorpusID: request.CorpusID, Results: reranked}, nil
+		}
+		if rerankErr != nil {
+			log.Printf("[rag] reranker failed, keeping the retrieval order: %v", rerankErr)
 		}
 		// reranker failed — fall through to vector order below
 	}
