@@ -346,7 +346,7 @@ func (e *Tool) Call(
 		"structured_patch":  structuredPatch,
 		"user_modified":     false,
 	}
-	if gitDiff, ok := shared.ComputeGitDiff(absolutePath); ok {
+	if gitDiff, ok := shared.ComputeGitDiff(ctx, absolutePath); ok {
 		output["git_diff"] = gitDiff
 	}
 
