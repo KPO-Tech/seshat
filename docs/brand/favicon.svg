@@ -1,0 +1,28 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" role="img" aria-label="Seshat AI">
+  <rect x="1" y="1" width="98" height="98" rx="21" fill="#2F2E34"/>
+  <g transform="translate(50 50) scale(0.8) translate(-50 -50)">
+    <rect x="5" y="7" width="90" height="86" rx="13" fill="none" stroke="#E7E2DA" stroke-width="6"/>
+    <path d="M5,29 H95" stroke="#E7E2DA" stroke-width="5"/>
+    <circle cx="19" cy="18" r="3.6" fill="#EF7C2F"/>
+    <g transform="translate(12 31) scale(.76)">
+      <path d="M13,46 C11,24 30,10 47.5,12 C49,9 47.5,5.5 45.5,3 M52.5,12 C70,10 89,24 87,46 M52.5,12 C51,9 52.5,5.5 54.5,3" fill="none" stroke="#E7E2DA" stroke-width="4.6" stroke-linecap="round" stroke-linejoin="round"/>
+      <path d="M0,-5 Q-7.6,-16.25 0,-27.5 Q7.6,-16.25 0,-5Z" transform="translate(50 64) rotate(-96)" fill="none" stroke="#EF7C2F" stroke-width="4" stroke-linejoin="round"/>
+      <circle cx="19.17" cy="67.24" r="3.6" fill="#EF7C2F"/>
+      <path d="M0,-5 Q-7.6,-16.25 0,-27.5 Q7.6,-16.25 0,-5Z" transform="translate(50 64) rotate(-64)" fill="none" stroke="#EF7C2F" stroke-width="4" stroke-linejoin="round"/>
+      <circle cx="22.14" cy="50.41" r="3.6" fill="#EF7C2F"/>
+      <path d="M0,-5 Q-7.6,-16.25 0,-27.5 Q7.6,-16.25 0,-5Z" transform="translate(50 64) rotate(-32)" fill="none" stroke="#EF7C2F" stroke-width="4" stroke-linejoin="round"/>
+      <circle cx="33.57" cy="37.71" r="3.6" fill="#EF7C2F"/>
+      <path d="M0,-5 Q-7.6,-16.25 0,-27.5 Q7.6,-16.25 0,-5Z" transform="translate(50 64) rotate(0)" fill="none" stroke="#EF7C2F" stroke-width="4" stroke-linejoin="round"/>
+      <circle cx="50.00" cy="33.00" r="3.6" fill="#EF7C2F"/>
+      <path d="M0,-5 Q-7.6,-16.25 0,-27.5 Q7.6,-16.25 0,-5Z" transform="translate(50 64) rotate(32)" fill="none" stroke="#EF7C2F" stroke-width="4" stroke-linejoin="round"/>
+      <circle cx="66.43" cy="37.71" r="3.6" fill="#EF7C2F"/>
+      <path d="M0,-5 Q-7.6,-16.25 0,-27.5 Q7.6,-16.25 0,-5Z" transform="translate(50 64) rotate(64)" fill="none" stroke="#EF7C2F" stroke-width="4" stroke-linejoin="round"/>
+      <circle cx="77.86" cy="50.41" r="3.6" fill="#EF7C2F"/>
+      <path d="M0,-5 Q-7.6,-16.25 0,-27.5 Q7.6,-16.25 0,-5Z" transform="translate(50 64) rotate(96)" fill="none" stroke="#EF7C2F" stroke-width="4" stroke-linejoin="round"/>
+      <circle cx="80.83" cy="67.24" r="3.6" fill="#EF7C2F"/>
+      <circle cx="50" cy="64" r="4.4" fill="#EF7C2F"/>
+      <circle cx="13" cy="46" r="3.2" fill="#E7E2DA"/>
+      <circle cx="87" cy="46" r="3.2" fill="#E7E2DA"/>
+    </g>
+  </g>
+</svg>
