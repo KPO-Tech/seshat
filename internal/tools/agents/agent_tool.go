@@ -896,7 +896,7 @@ func (t *AgentTool) runAgentInWorktree(ctx context.Context, agentType, task stri
 
 	eng := t.engine
 	if eng == nil {
-		_ = worktreeManager.RemoveWorktree(session, false)
+		_ = worktreeManager.RemoveWorktree(context.WithoutCancel(ctx), session, false)
 		return &coreagent.RunResult{
 			AgentType: agentType,
 			Success:   false,
@@ -906,7 +906,7 @@ func (t *AgentTool) runAgentInWorktree(ctx context.Context, agentType, task stri
 
 	agentDef := t.resolveAgentDef(agentType)
 	if agentDef == nil {
-		_ = worktreeManager.RemoveWorktree(session, false)
+		_ = worktreeManager.RemoveWorktree(context.WithoutCancel(ctx), session, false)
 		return &coreagent.RunResult{
 			AgentType: agentType,
 			Success:   false,
@@ -940,7 +940,7 @@ func (t *AgentTool) runAgentInWorktree(ctx context.Context, agentType, task stri
 	result, err := coreagent.RunAgent(config)
 	if err != nil {
 		if result == nil {
-			_ = worktreeManager.RemoveWorktree(session, false)
+			_ = worktreeManager.RemoveWorktree(context.WithoutCancel(ctx), session, false)
 			return &coreagent.RunResult{
 				AgentType: agentType,
 				Success:   false,

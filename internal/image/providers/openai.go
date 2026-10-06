@@ -60,7 +60,7 @@ func NewOpenAI(apiKey string, opts ...OpenAIOption) *OpenAIClient {
 		model:      openAIDefaultModel,
 		size:       openAIDefaultSize,
 		quality:    openAIDefaultQuality,
-		httpClient: &http.Client{},
+		httpClient: &http.Client{Timeout: requestTimeout},
 	}
 	for _, opt := range opts {
 		opt(c)

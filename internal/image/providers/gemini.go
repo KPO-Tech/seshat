@@ -64,7 +64,7 @@ func NewGemini(apiKey string, opts ...GeminiOption) *GeminiClient {
 		model:       geminiDefaultModel,
 		count:       geminiDefaultCount,
 		aspectRatio: geminiDefaultAspect,
-		httpClient:  &http.Client{},
+		httpClient:  &http.Client{Timeout: requestTimeout},
 	}
 	for _, opt := range opts {
 		opt(c)

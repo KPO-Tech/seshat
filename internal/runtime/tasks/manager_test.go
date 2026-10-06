@@ -20,7 +20,7 @@ func newTestManager(t *testing.T, maxConcurrent int) *Manager {
 	if err != nil {
 		t.Fatalf("MkdirTemp: %v", err)
 	}
-	t.Cleanup(func() { os.RemoveAll(tmpDir) }) //nolint:errcheck // best-effort cleanup
+	t.Cleanup(func() { os.RemoveAll(tmpDir) })
 	cfg := &ManagerConfig{
 		MaxConcurrentTasks: maxConcurrent,
 		TaskTimeout:        30 * time.Second,

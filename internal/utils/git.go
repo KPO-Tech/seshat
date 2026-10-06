@@ -2,6 +2,7 @@ package utils
 
 import (
 	"bytes"
+	"context"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -438,7 +439,9 @@ func GetCachedDefaultBranch(root string) string {
 
 	entry := stateCache.get(root)
 
-	cmd := exec.Command("git", "rev-parse", "--abbrev-ref", "origin/HEAD")
+	ctx, cancel := context.WithTimeout(context.Background(), gitQueryTimeout)
+	defer cancel()
+	cmd := exec.CommandContext(ctx, "git", "rev-parse", "--abbrev-ref", "origin/HEAD")
 	cmd.Dir = root
 	var stdout, stderr bytes.Buffer
 	cmd.Stdout = &stdout
@@ -461,7 +464,9 @@ func GetCachedRemoteUrl(root string) string {
 
 	entry := stateCache.get(root)
 
-	cmd := exec.Command("git", "remote", "get-url", "origin")
+	ctx, cancel := context.WithTimeout(context.Background(), gitQueryTimeout)
+	defer cancel()
+	cmd := exec.CommandContext(ctx, "git", "remote", "get-url", "origin")
 	cmd.Dir = root
 	var stdout, stderr bytes.Buffer
 	cmd.Stdout = &stdout
@@ -583,3 +588,7 @@ func (e *cacheEntry) setHead(head string) {
 	e.head = head
 	e.lastCheck = time.Now()
 }
+
+// gitQueryTimeout bounds the git commands of the cached lookups (they run from the interface, with no caller context): a repository on a
+// stalled network drive or a locked index must not freeze it.
+const gitQueryTimeout = 5 * time.Second

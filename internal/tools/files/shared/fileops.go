@@ -1,6 +1,7 @@
 package shared
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"os/exec"
@@ -91,8 +92,8 @@ type GitDiff struct {
 
 // ComputeGitDiff computes a git diff summary for absolutePath.
 // Returns (diff, true) when inside a git repo; (nil, false) otherwise.
-func ComputeGitDiff(absolutePath string) (*GitDiff, bool) {
-	repoRootBytes, err := exec.Command("git", "-C", filepath.Dir(absolutePath), "rev-parse", "--show-toplevel").Output()
+func ComputeGitDiff(ctx context.Context, absolutePath string) (*GitDiff, bool) {
+	repoRootBytes, err := exec.CommandContext(ctx, "git", "-C", filepath.Dir(absolutePath), "rev-parse", "--show-toplevel").Output()
 	if err != nil {
 		return nil, false
 	}
@@ -106,7 +107,7 @@ func ComputeGitDiff(absolutePath string) (*GitDiff, bool) {
 		relPath = absolutePath
 	}
 
-	statusBytes, err := exec.Command("git", "-C", repoRoot, "status", "--short", "--", relPath).Output()
+	statusBytes, err := exec.CommandContext(ctx, "git", "-C", repoRoot, "status", "--short", "--", relPath).Output()
 	if err != nil {
 		return nil, false
 	}
@@ -116,7 +117,7 @@ func ComputeGitDiff(absolutePath string) (*GitDiff, bool) {
 		status = "added"
 	}
 
-	patchBytes, err := exec.Command("git", "-C", repoRoot, "diff", "--no-ext-diff", "--", relPath).Output()
+	patchBytes, err := exec.CommandContext(ctx, "git", "-C", repoRoot, "diff", "--no-ext-diff", "--", relPath).Output()
 	if err != nil {
 		return nil, false
 	}

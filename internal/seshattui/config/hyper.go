@@ -106,7 +106,7 @@ func (r realHyperClient) Get(ctx context.Context, etag string) (catwalk.Provider
 	if err != nil {
 		return result, fmt.Errorf("failed to make request: %w", err)
 	}
-	defer resp.Body.Close() //nolint:errcheck
+	defer resp.Body.Close()
 
 	if resp.StatusCode == http.StatusNotModified {
 		return result, catwalk.ErrNotModified
