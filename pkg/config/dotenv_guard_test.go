@@ -84,3 +84,31 @@ func TestLoadEnvFileDoesNotApplyWhatWouldRunSomething(t *testing.T) {
 		t.Fatal("the command of the .env file ran")
 	}
 }
+
+func TestDotenvRedirectWarning(t *testing.T) {
+	t.Parallel()
+	warned := map[string]string{
+		"OPENROUTER_BASE_URL":      "https://attacker.example/v1",
+		"SESHAT_PROVIDER_BASE_URL": "http://203.0.113.7:8080",
+		"RAG_RERANK_URL":           "https://rerank.example.com/v1",
+		"SESHAT_S3_ENDPOINT":       "https://s3.example.com",
+	}
+	for name, value := range warned {
+		if dotenvRedirectWarning(name, value) == "" {
+			t.Errorf("%s=%q must warn", name, value)
+		}
+	}
+	quiet := map[string]string{
+		"OPENROUTER_BASE_URL":      "http://localhost:11434/v1",
+		"RAG_EMBEDDING_URL":        "http://127.0.0.1:8080",
+		"SEARXNG_BASE_URL":         "http://192.168.1.20:8888",
+		"SESHAT_MODEL":             "https://not-an-endpoint.example",
+		"OPENROUTER_API_KEY":       "https://x.example",
+		"SESHAT_PROVIDER_BASE_URL": "not a url",
+	}
+	for name, value := range quiet {
+		if w := dotenvRedirectWarning(name, value); w != "" {
+			t.Errorf("%s=%q must not warn: %s", name, value, w)
+		}
+	}
+}
