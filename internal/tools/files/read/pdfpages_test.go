@@ -51,7 +51,7 @@ func mergePDFs(t *testing.T, parts ...[]byte) []byte {
 		inputs[i] = bytes.NewReader(part)
 	}
 	var out bytes.Buffer
-	if err := api.MergeRaw(inputs, &out, false, nil); err != nil {
+	if err := api.MergeRaw(context.Background(), inputs, &out, false, nil); err != nil {
 		t.Fatalf("merge PDFs: %v", err)
 	}
 	return out.Bytes()
