@@ -2,7 +2,7 @@
 
 This document covers the gRPC server, proto codegen, and environment configuration for seshat.
 
-> The HTTP REST/SSE API (`cmd/api`) is part of **[seshat-ai](https://github.com/KPO-Tech/seshat-ai)**, not seshat. See seshat-ai documentation for that surface.
+> The HTTP REST/SSE API (`cmd/api`) is part of the products built on seshat — **[SeshatOS](https://github.com/KPO-Tech/SeshatOS)** (local backend) and **[SeshatCloud](https://github.com/KPO-Tech/SeshatCloud)** (multi-tenant server) — not seshat itself. See their documentation for that surface.
 
 ---
 

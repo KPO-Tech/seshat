@@ -5,7 +5,7 @@ Python process) document-handling capabilities up to par with what
 [RAGFlow](https://github.com/infiniflow/ragflow) does in its own Go code,
 adopting and adapting their Apache-2.0 work where it makes sense rather than
 rebuilding from scratch. It complements, not replaces,
-`seshat-ai/seshat-intelligence` (the standalone Python service for
+`SeshatCloud/seshat-intelligence` (the standalone Python service for
 Docling/Marker conversion and hybrid chunking) — this roadmap is about what
 seshat gets **by default, with no external server configured**.
 
