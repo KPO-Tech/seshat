@@ -17,8 +17,10 @@ import (
 // Reranking defaults, from the retrieval benchmark of SeshatCloud (seshat-intelligence/benchmarks/chunk_bench, rerank.py: 192
 // questions on 19 documents, hybrid bge-m3 + BM25 as the first stage, three cross-encoders from 118M to 568M parameters):
 //
-//   - Weight 0.5. For a small reranker (mMARCO MiniLM, bge-reranker-base) 0.5 was the best of 0.5, 0.7 and 1.0, and the
-//     reranker alone gained nothing; for bge-reranker-v2-m3 the three were equal within 0.006 of MRR. 0.5 is never worse.
+//   - Weight 0.7. The best weight depends on the reranker: 0.5 for a small one (mMARCO MiniLM, bge-reranker-base: the reranker
+//     alone gained nothing), 1.0 for the strongest (Cohere rerank-v3.5: MRR .909, .917, .928 at 0.5, 0.7, 1.0), indifferent for
+//     bge-reranker-v2-m3 (equal within 0.006). Against the best weight of each of the five rerankers measured, 0.7 never loses more
+//     than 0.012 of MRR, 0.5 loses up to 0.019 and 1.0 up to 0.020.
 //   - A pool of max(topK, 10) chunks. Reading 20 chunks was not better than 10 for any of the three models, and costs twice
 //     the time (a cross-encoder reads every pair). The first stage already puts the answer in its first ten.
 //   - The score of the whole pool is normalised and blended, then the list is cut to topK: normalising only the few the
@@ -26,7 +28,7 @@ import (
 //
 // bge-reranker-v2-m3 moved the answering chunk up by 0.09 of MRR (hit@1 +0.15, both with a 95% interval above 0); the small
 // ones by 0.03 to 0.04.
-const defaultRerankWeight float32 = 0.5
+const defaultRerankWeight float32 = 0.7
 
 const rerankMinPool = 10
 
@@ -84,7 +86,7 @@ func (s *Service) SetEnricher(e Enricher) {
 	s.enricher = e
 }
 
-// SetRerankWeight overrides the default blend weight (0.5, see the measures at
+// SetRerankWeight overrides the default blend weight (0.7, see the measures at
 // defaultRerankWeight) applied between the reranker's normalized score and
 // each result's original retrieval score, for any SearchRequest that doesn't
 // set its own RerankWeight. w is clamped to [0,1].
