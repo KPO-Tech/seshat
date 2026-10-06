@@ -115,7 +115,7 @@ func (t *ExitWorktreeTool) Call(
 	var changedFiles, commits int
 	if action == "remove" {
 		changedFiles, commits, _ = t.config.Manager.CountWorktreeChanges(
-			worktreePath, session.OriginalHeadCommit,
+			ctx, worktreePath, session.OriginalHeadCommit,
 		)
 
 		// Check for uncommitted changes
@@ -150,7 +150,7 @@ func (t *ExitWorktreeTool) Call(
 
 	} else {
 		// Remove the worktree from disk.
-		if err := t.config.Manager.RemoveWorktree(session, discardChanges); err != nil {
+		if err := t.config.Manager.RemoveWorktree(ctx, session, discardChanges); err != nil {
 			return tool.CallResult{
 				Data:    map[string]any{"error": err.Error()},
 				Content: "Error: " + err.Error(),

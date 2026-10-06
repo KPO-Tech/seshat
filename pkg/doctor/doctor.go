@@ -9,6 +9,7 @@ import (
 	"path/filepath"
 	"runtime"
 	"strings"
+	"time"
 
 	dbpkg "github.com/KPO-Tech/seshat/internal/db"
 	"github.com/KPO-Tech/seshat/pkg/config"
@@ -216,7 +217,9 @@ func checkCommand(add func(string, string, Status, string, string), section, nam
 		add(section, name, StatusWarn, "not found on PATH", fmt.Sprintf("Install `%s` or add it to PATH.", command))
 		return
 	}
-	out, err := exec.Command(command, args...).CombinedOutput()
+	ctx, cancel := context.WithTimeout(context.Background(), checkCommandTimeout)
+	defer cancel()
+	out, err := exec.CommandContext(ctx, command, args...).CombinedOutput()
 	if err != nil {
 		add(section, name, StatusWarn, path, strings.TrimSpace(string(out)))
 		return
@@ -260,3 +263,6 @@ func titleCase(value string) string {
 	}
 	return strings.ToUpper(value[:1]) + value[1:]
 }
+
+// checkCommandTimeout bounds the `<tool> --version` style probes: a tool that hangs must not hang the diagnosis.
+const checkCommandTimeout = 10 * time.Second
