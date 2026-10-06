@@ -3,6 +3,7 @@ package agent
 import (
 	"context"
 	"fmt"
+	"log/slog"
 	"strings"
 	"time"
 
@@ -619,14 +620,14 @@ func (r *Runner) executeHook(ctx context.Context, event types.HookEvent, data ma
 
 	results, err := r.hookExecutor.Execute(ctx, event, data)
 	if err != nil {
-		fmt.Printf("[agent-runner] Hook error for %s: %v\n", event, err)
+		slog.Warn("agent runner: hook failed", "event", event, "error", err)
 		return
 	}
 
 	// Process hook results
 	for _, result := range results {
 		if result.Action == types.HookActionStop {
-			fmt.Printf("[agent-runner] Hook %s requested stop: %s\n", event, result.Message)
+			slog.Info("agent runner: hook requested stop", "event", event, "message", result.Message)
 		}
 	}
 }
