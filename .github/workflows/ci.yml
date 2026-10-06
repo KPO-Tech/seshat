@@ -117,10 +117,13 @@ jobs:
         #   G704  SSRF by taint: the URLs are the ones the user configured (providers, Ollama, document reader); the fetch tool
         #         that takes a URL from the model has its own policy (internal/web/net_policy.go).
         # The 400-odd findings of medium and low severity are not gated: they are mostly file permissions and variable paths.
-        # Pinned: an action or a tool that moves under the build is a way into the build.
-        uses: securego/gosec@deb54465fea23d19a77f037e11e6589021f8501d # v2.29.0
-        with:
-          args: -severity high -confidence medium -exclude=G101,G404,G115,G704 -exclude-generated ./...
+        # Built with the Go of the job (go.mod's), not run from the gosec Docker action: that image carries its own Go (1.26.5 when
+        # this was written) and cannot load a module that asks for 1.26.6, so it analysed nothing ("Issues: 0", with a "Golang
+        # errors" list), and the report-only mode hid it. A failure to load packages fails this step now.
+        # Pinned: a tool that moves under the build is a way into the build.
+        run: |
+          go install github.com/securego/gosec/v2/cmd/gosec@v2.29.0
+          gosec -severity high -confidence medium -exclude=G101,G404,G115,G704 -exclude-generated ./...
 
       - name: govulncheck
         run: |
