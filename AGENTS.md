@@ -51,7 +51,7 @@ realign `dev` from `main` immediately before opening new feature branches.
 ## Package boundary rules (critical)
 
 - `pkg/` is the **public API**. Do not add `internal/` types to `pkg/` signatures without explicit need.
-- `internal/` packages must **never** import `pkg/` — dependency flows one way: entry points → `pkg/sdk` → `internal/`.
+- `internal/` packages must **never** import `pkg/` — dependency flows one way: entry points → `pkg/sdk` → `internal/`. 46 imports from before the rule was enforced are listed in `internal/archtest/boundary_test.go`; that test fails on a new one (and on an entry that is no longer needed), so the list only shrinks. `pkg/runtimepath` (standard library only) is the shared leaf expected to stay.
 - `internal/backend` does **not** exist here. It lives in SeshatOS and SeshatCloud. Do not recreate it.
 - New tools go in `internal/tools/<category>/`. Register them in `internal/tools/builtin/builtin.go`.
 - New providers go in `internal/providers/`. Add a wire-format adapter in `internal/providers/adapter.go`.
