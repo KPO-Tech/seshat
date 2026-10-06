@@ -465,7 +465,7 @@ func stretchLetterformPart(s string, p letterformProps) string {
 	}
 	n := p.width
 	if p.stretch {
-		n = cachedRandN(p.maxStretch-p.minStretch) + p.minStretch //nolint:gosec
+		n = cachedRandN(p.maxStretch-p.minStretch) + p.minStretch //nolint:gosec // animation jitter, not a security use of math/rand
 	}
 	parts := make([]string, n)
 	for i := range parts {

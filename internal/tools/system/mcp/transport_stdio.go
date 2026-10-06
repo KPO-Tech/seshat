@@ -122,7 +122,7 @@ func (t *StdioTransport) Start(ctx context.Context) error {
 	if cmd.Stderr == nil {
 		stderrPipe, err := cmd.StderrPipe()
 		if err == nil {
-			go io.Copy(stderrDst, stderrPipe) //nolint:errcheck
+			go io.Copy(stderrDst, stderrPipe) //nolint:errcheck // the copy ends with the process; its error is not actionable
 		}
 	}
 
@@ -244,7 +244,7 @@ func (t *StdioTransport) Close() error {
 		select {
 		case <-done:
 		case <-time.After(5 * time.Second):
-			t.cmd.Process.Kill() //nolint:errcheck
+			t.cmd.Process.Kill() //nolint:errcheck // the process may already have exited
 			<-done
 		}
 	}

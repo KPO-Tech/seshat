@@ -67,7 +67,7 @@ func TestAgentTool_runAgent_NilEngine_ReturnsError(t *testing.T) {
 	a := NewAgentTool(nil)
 	// Do NOT call SetEngine — engine is nil.
 
-	result := a.runAgent(nil, "general", "do something", 1, nil, nil) //nolint:staticcheck
+	result := a.runAgent(nil, "general", "do something", 1, nil, nil)
 	if result == nil {
 		t.Fatal("expected non-nil RunResult, got nil")
 	} else {
@@ -84,7 +84,7 @@ func TestAgentTool_runAgent_NilEngine_ReturnsError(t *testing.T) {
 func TestAgentTool_runForkAgent_NilEngine_ReturnsError(t *testing.T) {
 	a := NewAgentTool(nil)
 
-	result := a.runForkAgent(nil, "general", "do something", 1, nil, nil, nil) //nolint:staticcheck
+	result := a.runForkAgent(nil, "general", "do something", 1, nil, nil, nil)
 	if result == nil {
 		t.Fatal("expected non-nil RunResult, got nil")
 	} else {
@@ -109,7 +109,7 @@ func TestAgentTool_Call_NilEngine_ReturnsErrorResult(t *testing.T) {
 		"prompt": "do something",
 	})
 
-	result, err := a.Call(nil, tool.CallInput{Raw: string(raw)}, nil) //nolint:staticcheck
+	result, err := a.Call(nil, tool.CallInput{Raw: string(raw)}, nil)
 	if err != nil {
 		t.Fatalf("Call must not return a Go error for missing engine, got: %v", err)
 	}

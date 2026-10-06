@@ -250,9 +250,9 @@ func (e Encoding) Render(id string, cols, rows int) string {
 			fg = ansi.IndexedColor(b)
 		} else {
 			fg = color.RGBA{
-				R: uint8(r), //nolint:gosec
-				G: uint8(g), //nolint:gosec
-				B: uint8(b), //nolint:gosec
+				R: uint8(r), //nolint:gosec // masked with 0xff above, so it fits in a byte
+				G: uint8(g), //nolint:gosec // masked with 0xff above, so it fits in a byte
+				B: uint8(b), //nolint:gosec // masked with 0xff above, so it fits in a byte
 				A: 0xff,
 			}
 		}
