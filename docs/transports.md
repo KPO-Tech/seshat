@@ -114,7 +114,7 @@ Defined in `pkg/grpc/proto/seshat.proto`.
 | `GetModels` | unary | List available models from provider registry |
 | `HealthCheck` | unary | Health status |
 
-> Note: `FileService` and `SystemService` are defined in the `.proto` but not yet implemented in `cmd/grpc`.
+> Note: the gRPC surface is experimental and partial: `SeshatService` only. `FileService` and `SystemService` were removed from the `.proto` (they were never implemented). `QueryRequest.stream` and `QueryRequest.temperature` are deprecated and ignored by the server; use `QueryStream` for streaming.
 
 > Note: server reflection is not enabled. Provide the `.proto` file explicitly when using `grpcurl`.
 

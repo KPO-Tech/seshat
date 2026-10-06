@@ -20,6 +20,7 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Changed
 
+- **The gRPC contract says what it is.** `seshat.proto` no longer declares `FileService` and `SystemService` (with its `Bash` RPC): they were never implemented in `cmd/grpc` and nothing in the repository used them, so a client generated from the file got stubs that always failed. `QueryRequest.stream` and `QueryRequest.temperature` are marked `deprecated` (the server ignores both). The file now states that the surface is experimental and partial (`SeshatService` only: `Query`, `QueryStream`, `ConnectMCP`, `GetModels`, `HealthCheck`). Generated code regenerated with protoc 34.1, protoc-gen-go v1.36.11 and protoc-gen-go-grpc v1.6.1.
 - **The reranker is not asked when the first stage is sure** (`Service.SetRerankMargin`, `RAG_RERANK_MARGIN`, 0.2 by default; 0 asks it for every search): when the best chunk beats the second by at least that share of its own score, the retrieval order stands. On the SeshatCloud benchmark this lost nothing (MRR 0.902 with and without on the 192 single-fact questions, 0.421 against 0.425 on the 49 multi-passage ones) and saved 24% and 8% of the (question, chunk) pairs a cross-encoder reads. Deeper savings (a pool of 5, a margin of 0.05 to 0.1, cheap lexical features) did not hold on the multi-passage questions and are not used. With no reranker configured nothing changes.
 
 ### Changed

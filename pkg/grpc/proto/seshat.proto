@@ -3,6 +3,11 @@
 // ============================================================================
 //
 // Ce fichier définit les services gRPC pour l'API Seshat.
+//
+// État: expérimental et partiel. Le serveur (cmd/grpc) n'expose qu'une partie du SDK (requêtes, skills, MCP, modèles); les demandes de
+// permission, les questions à l'utilisateur, les plans et les sessions ne passent pas par ce contrat (voir docs/transports.md).
+// Les anciens services FileService et SystemService (dont une méthode Bash) ont été retirés: ils n'étaient pas implémentés.
+//
 // À compiler avec: protoc --go_out=. --go-grpc_out=. seshat.proto
 //
 // ============================================================================
@@ -57,11 +62,11 @@ message QueryRequest {
     string prompt = 1;           // Le prompt à exécuter
     string model = 2;            // Modèle à utiliser (ex: "claude-3-5-sonnet-20241022")
     repeated string tools = 3;   // Liste des tools à activer
-    bool stream = 4;             // Mode streaming
+    bool stream = 4 [deprecated = true];             // Ignoré par le serveur: la méthode appelée (Query ou QueryStream) décide du mode
     string context_id = 5;       // ID de contexte pour la continuité de conversation
 
     // Paramètres optionnels
-    float temperature = 10;     // Temperature (0.0 - 1.0)
+    float temperature = 10 [deprecated = true];     // Ignoré par le serveur pour le moment (non transmis au modèle)
     int32 max_tokens = 11;       // Nombre max de tokens en sortie
     string api_key = 12;           // Clé API ou bearer token OAuth explicite pour cette requête
 }
@@ -216,101 +221,4 @@ message HealthCheckResponse {
     string status = 1;          // "ok", "degraded", "down"
     string version = 2;          // Version du serveur
     string uptime = 3;          // Durée de fonctionnement
-}
-
-// ============================================================================
-// Services additionnels (optionnels)
-// ============================================================================
-
-// Service pour les opérations de fichiers
-service FileService {
-    rpc Read(FileReadRequest) returns (FileReadResponse);
-    rpc Write(FileWriteRequest) returns (FileWriteResponse);
-    rpc Edit(FileEditRequest) returns (FileEditResponse);
-    rpc Glob(FileGlobRequest) returns (FileGlobResponse);
-    rpc Grep(FileGrepRequest) returns (FileGrepResponse);
-}
-
-// Service pour les opérations système
-service SystemService {
-    rpc Bash(BashRequest) returns (BashResponse);
-    rpc GetSystemInfo(SystemInfoRequest) returns (SystemInfoResponse);
-}
-
-// ============================================================================
-// Messages additionnels pour FileService
-// ============================================================================
-
-message FileReadRequest {
-    string path = 1;
-    int32 offset = 2;
-    int32 limit = 3;
-}
-message FileReadResponse {
-    string content = 1;
-    bool error = 2;
-    string error_message = 3;
-}
-
-message FileWriteRequest {
-    string path = 1;
-    string content = 2;
-}
-message FileWriteResponse {
-    bool success = 1;
-    string error = 2;
-}
-
-message FileEditRequest {
-    string path = 1;
-    string old_string = 2;
-    string new_string = 3;
-}
-message FileEditResponse {
-    bool success = 1;
-    string error = 2;
-}
-
-message FileGlobRequest {
-    string pattern = 1;
-    string path = 2;
-}
-message FileGlobResponse {
-    repeated string files = 1;
-}
-
-message FileGrepRequest {
-    string pattern = 1;
-    string path = 2;
-    bool recursive = 3;
-}
-message FileGrepResponse {
-    repeated GrepMatch matches = 1;
-}
-message GrepMatch {
-    string file = 1;
-    int32 line = 2;
-    string content = 3;
-}
-
-// ============================================================================
-// Messages additionnels pour SystemService
-// ============================================================================
-
-message BashRequest {
-    string command = 1;
-    string cwd = 2;
-}
-message BashResponse {
-    string output = 1;
-    int32 exit_code = 2;
-    string error = 3;
-}
-
-message SystemInfoRequest {}
-message SystemInfoResponse {
-    string os = 1;
-    string arch = 2;
-    int32 cpu_count = 3;
-    int64 memory_total = 4;
 }
