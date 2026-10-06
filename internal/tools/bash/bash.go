@@ -706,34 +706,18 @@ func (t *Tool) executeViaSandbox(ctx context.Context, execCtx *ExecutionContext,
 }
 
 func (t *Tool) runCommand(ctx context.Context, cmd *exec.Cmd, maxOutputSize int64, chunkCb func(string, string)) (stdout, stderr string, exitCode int, timeout bool) {
-	stdoutPipe, err := cmd.StdoutPipe()
-	if err != nil {
-		return "", fmt.Sprintf("failed to capture stdout: %v", err), 1, false
-	}
-	stderrPipe, err := cmd.StderrPipe()
-	if err != nil {
-		return "", fmt.Sprintf("failed to capture stderr: %v", err), 1, false
-	}
-	if err := cmd.Start(); err != nil {
-		return "", fmt.Sprintf("failed to start command: %v", err), 1, false
-	}
-
 	stdoutBuf := newCappedBuffer(maxOutputSize)
 	stderrBuf := newCappedBuffer(maxOutputSize)
 
-	var wg sync.WaitGroup
-	wg.Add(2)
-	go func() {
-		defer wg.Done()
-		copyWithCallback(stdoutBuf, stdoutPipe, "stdout", chunkCb)
-	}()
-	go func() {
-		defer wg.Done()
-		copyWithCallback(stderrBuf, stderrPipe, "stderr", chunkCb)
-	}()
-
+	// The streams are given to exec as writers, not read from StdoutPipe: exec copies them in goroutines of its own and Wait returns only
+	// when the copies are done (or cmd.WaitDelay after the process ended, for a child that kept the pipe open). Reading a pipe from
+	// here while calling Wait closes the pipe under the reader, and a command that ends at once loses its whole output.
+	cmd.Stdout = &chunkWriter{dst: stdoutBuf, stream: "stdout", cb: chunkCb}
+	cmd.Stderr = &chunkWriter{dst: stderrBuf, stream: "stderr", cb: chunkCb}
+	if err := cmd.Start(); err != nil {
+		return "", fmt.Sprintf("failed to start command: %v", err), 1, false
+	}
 	waitErr := cmd.Wait()
-	wg.Wait()
 
 	switch {
 	case errors.Is(ctx.Err(), context.DeadlineExceeded):
@@ -751,24 +735,24 @@ func (t *Tool) runCommand(ctx context.Context, cmd *exec.Cmd, maxOutputSize int6
 	return stdoutBuf.String(), stderrBuf.String(), 0, false
 }
 
-// copyWithCallback copies src to dst while calling chunkCb for each read chunk.
-// When chunkCb is nil it degrades to a plain io.Copy.
-func copyWithCallback(dst io.Writer, src io.Reader, stream string, chunkCb func(string, string)) {
-	const chunkSize = 8192
-	buf := make([]byte, chunkSize)
-	for {
-		n, err := src.Read(buf)
-		if n > 0 {
-			chunk := string(buf[:n])
-			dst.Write([]byte(chunk))
-			if chunkCb != nil {
-				chunkCb(chunk, stream)
-			}
-		}
-		if err != nil {
-			break
-		}
+// chunkWriter writes what a command prints to dst and tells cb about each chunk as it comes. With a nil cb it is a plain writer.
+type chunkWriter struct {
+	dst    io.Writer
+	stream string
+	cb     func(chunk, stream string)
+}
+
+func (w *chunkWriter) Write(p []byte) (int, error) {
+	if len(p) == 0 {
+		return 0, nil
 	}
+	if _, err := w.dst.Write(p); err != nil {
+		return 0, err
+	}
+	if w.cb != nil {
+		w.cb(string(p), w.stream)
+	}
+	return len(p), nil
 }
 
 // capOutput applies the same head+tail-biased truncation as local command
