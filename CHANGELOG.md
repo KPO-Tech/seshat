@@ -11,6 +11,10 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Changed
 
+- **The reranker is not asked when the first stage is sure** (`Service.SetRerankMargin`, `RAG_RERANK_MARGIN`, 0.2 by default; 0 asks it for every search): when the best chunk beats the second by at least that share of its own score, the retrieval order stands. On the SeshatCloud benchmark this lost nothing (MRR 0.902 with and without on the 192 single-fact questions, 0.421 against 0.425 on the 49 multi-passage ones) and saved 24% and 8% of the (question, chunk) pairs a cross-encoder reads. Deeper savings (a pool of 5, a margin of 0.05 to 0.1, cheap lexical features) did not hold on the multi-passage questions and are not used. With no reranker configured nothing changes.
+
+### Changed
+
 - **Reranking defaults, measured** (retrieval benchmark of SeshatCloud: 192 questions on 19 documents, bge-m3 + BM25 as first stage, three cross-encoders; see `docs/rag.md`). The blend weight is 0.5, not 0.7: for the two small rerankers (mMARCO MiniLM 118M, bge-reranker-base 278M) 0.5 was the best of 0.5, 0.7 and 1.0 and the reranker alone gained nothing, for bge-reranker-v2-m3 the three were equal within 0.006 of MRR. The pool is `max(topK, 10)` chunks instead of `max(3 x topK, 20)`: 20 was not better than 10 for any model and costs twice the time. The reranker is now asked for the whole pool and its scores are normalised over the whole pool, then the list is cut to `topK` (it was asked for `topK` only, so the normalisation, and with it the blend, depended on which few chunks came back). bge-reranker-v2-m3 moves the answering chunk up by 0.094 of MRR [+0.054, +0.137] and hit@1 from 0.71 to 0.87; the small ones by 0.03 to 0.04.
 - A reranker that fails now logs a warning ("keeping the retrieval order") instead of falling back silently.
 
