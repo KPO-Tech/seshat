@@ -38,12 +38,12 @@ func withPicture(t *testing.T, pdf []byte, pages []string, side int) []byte {
 	if err := os.WriteFile(file, encoded.Bytes(), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	watermark, err := pdfcpu.ParseImageWatermarkDetails(file, "scale:0.3 abs, pos:c", true, types.POINTS)
+	watermark, err := pdfcpu.ParseImageWatermarkDetails(context.Background(), file, "scale:0.3 abs, pos:c", true, types.POINTS, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
 	var out bytes.Buffer
-	if err := api.AddWatermarks(bytes.NewReader(pdf), &out, pages, watermark, nil); err != nil {
+	if err := api.AddWatermarks(context.Background(), bytes.NewReader(pdf), &out, pages, watermark, nil); err != nil {
 		t.Fatal(err)
 	}
 	return out.Bytes()
@@ -101,7 +101,7 @@ func TestAPageWithNoTextIsStillAFailureWithoutAnEngine(t *testing.T) {
 func TestAPictureOnEveryPageIsALogoNotAFigure(t *testing.T) {
 	t.Parallel()
 	data := withPicture(t, readTestdata(t, "three_pages.pdf"), nil, 300)
-	pages, _, pictures, err := pagesWithEmbeddedImages(data, nil)
+	pages, _, pictures, err := pagesWithEmbeddedImages(context.Background(), data, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -172,7 +172,7 @@ func merged(t *testing.T, parts ...[]byte) []byte {
 		readers[i] = bytes.NewReader(part)
 	}
 	var out bytes.Buffer
-	if err := api.MergeRaw(readers, &out, false, nil); err != nil {
+	if err := api.MergeRaw(context.Background(), readers, &out, false, nil); err != nil {
 		t.Fatal(err)
 	}
 	return out.Bytes()
@@ -197,7 +197,7 @@ func TestAPageThatIsOnlyAPictureDoesNotFailADocumentWithTextWhenNothingCanReadIt
 func TestABlankPageDoesNotFailADocumentWithTextWhenNothingCanReadIt(t *testing.T) {
 	t.Parallel()
 	var out bytes.Buffer
-	if err := api.InsertPages(bytes.NewReader(readTestdata(t, "text_layer.pdf")), &out, []string{"1"}, false, nil, nil); err != nil {
+	if err := api.InsertPages(context.Background(), bytes.NewReader(readTestdata(t, "text_layer.pdf")), &out, []string{"1"}, false, nil, nil); err != nil {
 		t.Fatal(err)
 	}
 	result, ok, err := Convert(context.Background(), out.Bytes(), nil, VisionFallback{})

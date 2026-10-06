@@ -3,6 +3,7 @@ package pdfsmart
 import (
 	"bytes"
 	"container/list"
+	"context"
 	"crypto/sha256"
 	"errors"
 	"fmt"
@@ -72,7 +73,8 @@ func decrypt(data []byte, password string) ([]byte, error) {
 	conf := pdfcpumodel.NewDefaultConfiguration()
 	conf.UserPW, conf.OwnerPW = password, password
 	var out bytes.Buffer
-	err := api.Decrypt(bytes.NewReader(data), &out, conf)
+	// Unlock is part of the public API without a context, and decrypting is a short computation on bytes already in memory.
+	err := api.Decrypt(context.Background(), bytes.NewReader(data), &out, conf)
 	if err == nil && opens(out.Bytes()) {
 		return out.Bytes(), nil
 	}

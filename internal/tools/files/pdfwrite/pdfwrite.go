@@ -191,7 +191,7 @@ func (t *Tool) Call(
 
 	switch {
 	case hasDeletePages:
-		if err := deletePagesFromFile(absolutePath, selectedPages); err != nil {
+		if err := deletePagesFromFile(ctx, absolutePath, selectedPages); err != nil {
 			return tool.NewErrorResult(fmt.Errorf("failed to delete pages from %s: %w", filePath, err)), nil
 		}
 		operationType = "delete_pages"
@@ -205,7 +205,7 @@ func (t *Tool) Call(
 		}
 		operationType = "create"
 	default:
-		if err := appendContentToFile(absolutePath, content); err != nil {
+		if err := appendContentToFile(ctx, absolutePath, content); err != nil {
 			return tool.NewErrorResult(fmt.Errorf("failed to append to %s: %w", filePath, err)), nil
 		}
 		operationType = "append"
@@ -214,7 +214,7 @@ func (t *Tool) Call(
 	if info, statErr := os.Stat(absolutePath); statErr == nil {
 		fileReadTool.RecordExternalRead(absolutePath, info.ModTime(), "", true)
 	}
-	if n, err := api.PageCountFile(absolutePath); err == nil {
+	if n, err := api.PageCountFile(ctx, absolutePath); err == nil {
 		pageCount = n
 	}
 
@@ -262,10 +262,10 @@ func parseSelectedPages(spec string) ([]string, error) {
 // deletePagesFromFile removes selectedPages from the PDF at path, writing
 // through a sibling temp file and renaming over the original so a failure
 // partway through never corrupts the existing file.
-func deletePagesFromFile(path string, selectedPages []string) error {
+func deletePagesFromFile(ctx context.Context, path string, selectedPages []string) error {
 	tmp := path + ".tmp"
 	conf := model.NewDefaultConfiguration()
-	if err := api.RemovePagesFile(path, tmp, selectedPages, conf); err != nil {
+	if err := api.RemovePagesFile(ctx, path, tmp, selectedPages, conf); err != nil {
 		os.Remove(tmp)
 		return err
 	}
@@ -274,7 +274,7 @@ func deletePagesFromFile(path string, selectedPages []string) error {
 
 // appendContentToFile renders content into a standalone PDF and merges its
 // page(s) onto the end of the existing PDF at path.
-func appendContentToFile(path, content string) error {
+func appendContentToFile(ctx context.Context, path, content string) error {
 	docBytes, err := renderTextToPDF(content)
 	if err != nil {
 		return err
@@ -294,7 +294,7 @@ func appendContentToFile(path, content string) error {
 	}
 
 	conf := model.NewDefaultConfiguration()
-	return api.MergeAppendFile([]string{tmpContentPath}, path, false, conf)
+	return api.MergeAppendFile(ctx, []string{tmpContentPath}, path, false, conf)
 }
 
 // ── Tool interface plumbing ────────────────────────────────────────────────

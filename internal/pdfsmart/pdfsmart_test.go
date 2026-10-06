@@ -274,7 +274,7 @@ func textThenScan(t *testing.T) []byte {
 	t.Helper()
 	var out bytes.Buffer
 	inputs := []io.ReadSeeker{bytes.NewReader(readTestdata(t, "text_layer.pdf")), bytes.NewReader(readTestdata(t, "scanned.pdf"))}
-	if err := api.MergeRaw(inputs, &out, false, nil); err != nil {
+	if err := api.MergeRaw(context.Background(), inputs, &out, false, nil); err != nil {
 		t.Fatalf("merge fixtures: %v", err)
 	}
 	return out.Bytes()
@@ -311,7 +311,7 @@ func TestReadPages_PagesPastTheEngineBudgetAreDeferredNotFailed(t *testing.T) {
 	t.Parallel()
 	scan := readTestdata(t, "scanned.pdf")
 	var out bytes.Buffer
-	if err := api.MergeRaw([]io.ReadSeeker{bytes.NewReader(scan), bytes.NewReader(scan), bytes.NewReader(scan)}, &out, false, nil); err != nil {
+	if err := api.MergeRaw(context.Background(), []io.ReadSeeker{bytes.NewReader(scan), bytes.NewReader(scan), bytes.NewReader(scan)}, &out, false, nil); err != nil {
 		t.Fatal(err)
 	}
 	engine := &countingConverter{markdown: "Engine text."}
@@ -438,7 +438,7 @@ func TestOnlyAPictureBigEnoughForATableIsLarge(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	pages, large, _, err := pagesWithEmbeddedImages(data, nil)
+	pages, large, _, err := pagesWithEmbeddedImages(context.Background(), data, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
