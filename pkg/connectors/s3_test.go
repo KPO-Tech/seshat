@@ -140,7 +140,7 @@ func waitForMinIOReady(t *testing.T, endpoint string) {
 	t.Helper()
 	deadline := time.Now().Add(30 * time.Second)
 	for time.Now().Before(deadline) {
-		resp, err := http.Get(endpoint + "/minio/health/live")
+		resp, err := httpGet(endpoint + "/minio/health/live")
 		if err == nil {
 			resp.Body.Close()
 			if resp.StatusCode == http.StatusOK {

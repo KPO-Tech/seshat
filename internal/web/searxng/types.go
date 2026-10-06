@@ -1,5 +1,7 @@
 package searxng
 
+import "context"
+
 // WebResult mirrors SearXNGWebResult from the MCP types.ts.
 type WebResult struct {
 	Title         string   `json:"title"`
@@ -44,6 +46,8 @@ type SearchResponse struct {
 // SearchInput holds all parameters for a search request.
 // Zero values are omitted from the query string.
 type SearchInput struct {
+	// Ctx is propagated to the HTTP requests; nil falls back to context.Background().
+	Ctx context.Context
 	// Query is the search string. Required.
 	Query string
 	// PageNo is the page number (default 1).
@@ -63,4 +67,12 @@ type SearchInput struct {
 	Categories string
 	// Engines is a comma-separated list of engine names, e.g. "google,bing,ddg".
 	Engines string
+}
+
+// ctx returns a non-nil context for use in HTTP requests.
+func (s SearchInput) ctx() context.Context {
+	if s.Ctx != nil {
+		return s.Ctx
+	}
+	return context.Background()
 }

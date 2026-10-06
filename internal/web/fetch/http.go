@@ -211,64 +211,6 @@ func (s *Service) doRequest(ctx context.Context, urlStr string) (*http.Response,
 	}
 }
 
-// FetchWithRedirect performs HTTP request with custom redirect handling
-func FetchWithRedirect(
-	client HTTPClient,
-	method, url string,
-	headers map[string]string,
-	redirectChecker func(original, redirect string) bool,
-	maxRedirects int,
-) (resp *http.Response, err error) {
-	currentURL := url
-	redirectCount := 0
-
-	for {
-		req, err := http.NewRequest(method, currentURL, nil)
-		if err != nil {
-			return nil, err
-		}
-
-		for k, v := range headers {
-			req.Header.Set(k, v)
-		}
-		req.Header.Set("User-Agent", "SeshatAI/1.0")
-
-		resp, err = client.Do(req)
-		if err != nil {
-			return nil, err
-		}
-
-		// Check for redirect
-		if resp.StatusCode >= 300 && resp.StatusCode <= 399 {
-			location := resp.Header.Get("Location")
-			if location == "" {
-				resp.Body.Close()
-				return nil, Err("redirect missing Location header")
-			}
-
-			// Resolve relative redirect
-			redirectURL := resolveURL(currentURL, location)
-
-			if redirectChecker != nil && !redirectChecker(currentURL, redirectURL) {
-				resp.Body.Close()
-				return nil, nil // Signal redirect needed
-			}
-
-			resp.Body.Close()
-			redirectCount++
-
-			if redirectCount > maxRedirects {
-				return nil, ErrTooManyRedirects
-			}
-
-			currentURL = redirectURL
-			continue
-		}
-
-		return resp, nil
-	}
-}
-
 func resolveURL(base, location string) string {
 	parsed, _ := url.Parse(location)
 	if parsed != nil && parsed.IsAbs() {

@@ -64,7 +64,7 @@ func TestProviderAdapterDispatch(t *testing.T) {
 				t.Errorf("endpoint = %q, want substring %q", ep, tc.wantEndpoint)
 			}
 
-			httpReq, err := http.NewRequest(http.MethodPost, ep, nil)
+			httpReq, err := http.NewRequestWithContext(t.Context(), http.MethodPost, ep, nil)
 			if err != nil {
 				t.Fatalf("new request: %v", err)
 			}

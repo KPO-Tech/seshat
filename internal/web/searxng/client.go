@@ -16,6 +16,7 @@
 package searxng
 
 import (
+	"context"
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
@@ -146,7 +147,7 @@ func (c *Client) Search(input SearchInput) (*SearchResponse, error) {
 
 	// --- JSON attempt ---
 	jsonURL := c.buildSearchURL(input, true)
-	resp, err := c.doRequest(jsonURL)
+	resp, err := c.doRequest(input.ctx(), jsonURL)
 	if err != nil {
 		return nil, err
 	}
@@ -252,8 +253,8 @@ type rawResponse struct {
 	ok     bool
 }
 
-func (c *Client) doRequest(u string) (rawResponse, error) {
-	req, err := http.NewRequest(http.MethodGet, u, nil)
+func (c *Client) doRequest(ctx context.Context, u string) (rawResponse, error) {
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, u, nil)
 	if err != nil {
 		return rawResponse{}, fmt.Errorf("building request: %w", err)
 	}
@@ -288,7 +289,7 @@ func (c *Client) parseJSONOrHTMLFallback(resp rawResponse, input SearchInput) (*
 
 func (c *Client) htmlFallback(input SearchInput) (*SearchResponse, error) {
 	htmlURL := c.buildSearchURL(input, false)
-	resp, err := c.doRequest(htmlURL)
+	resp, err := c.doRequest(input.ctx(), htmlURL)
 	if err != nil {
 		return nil, err
 	}
