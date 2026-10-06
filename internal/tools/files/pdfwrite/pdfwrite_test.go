@@ -114,7 +114,7 @@ func TestTool_Call_AppendsToExistingPDFAfterRead(t *testing.T) {
 	}
 	fileReadTool.RecordExternalRead(path, info.ModTime(), "", true)
 
-	countBefore, err := api.PageCountFile(path)
+	countBefore, err := api.PageCountFile(context.Background(), path)
 	if err != nil {
 		t.Fatalf("PageCountFile before: %v", err)
 	}
@@ -133,7 +133,7 @@ func TestTool_Call_AppendsToExistingPDFAfterRead(t *testing.T) {
 		t.Fatalf("Call returned an error result: %v", result.Error)
 	}
 
-	countAfter, err := api.PageCountFile(path)
+	countAfter, err := api.PageCountFile(context.Background(), path)
 	if err != nil {
 		t.Fatalf("PageCountFile after: %v", err)
 	}
@@ -164,10 +164,10 @@ func TestTool_Call_DeletesPagesFromExistingPDF(t *testing.T) {
 	if err := os.WriteFile(path, first, 0o600); err != nil {
 		t.Fatalf("write fixture: %v", err)
 	}
-	if err := appendContentToFile(path, "Page two."); err != nil {
+	if err := appendContentToFile(context.Background(), path, "Page two."); err != nil {
 		t.Fatalf("appendContentToFile (seed page 2): %v", err)
 	}
-	if err := appendContentToFile(path, "Page three."); err != nil {
+	if err := appendContentToFile(context.Background(), path, "Page three."); err != nil {
 		t.Fatalf("appendContentToFile (seed page 3): %v", err)
 	}
 
@@ -177,7 +177,7 @@ func TestTool_Call_DeletesPagesFromExistingPDF(t *testing.T) {
 	}
 	fileReadTool.RecordExternalRead(path, info.ModTime(), "", true)
 
-	countBefore, err := api.PageCountFile(path)
+	countBefore, err := api.PageCountFile(context.Background(), path)
 	if err != nil {
 		t.Fatalf("PageCountFile before: %v", err)
 	}
@@ -199,7 +199,7 @@ func TestTool_Call_DeletesPagesFromExistingPDF(t *testing.T) {
 		t.Fatalf("Call returned an error result: %v", result.Error)
 	}
 
-	countAfter, err := api.PageCountFile(path)
+	countAfter, err := api.PageCountFile(context.Background(), path)
 	if err != nil {
 		t.Fatalf("PageCountFile after: %v", err)
 	}
