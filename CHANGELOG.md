@@ -9,6 +9,8 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [1.3.0] - 2026-10-06
+
 ### Security
 
 - **The web fetch guard against requests to the local network refuses more.** It already refused loopback, private, link-local and unspecified addresses; a test of 28 ways of writing a local target found that these still went through: `100.64.0.0/10` (carrier-grade NAT, where Alibaba Cloud serves its metadata endpoint at `100.100.100.200`), `0.0.0.0/8`, the broadcast address, multicast beyond link-local, an IPv4 address embedded in a NAT64 address (`64:ff9b::7f00:1` reaches `127.0.0.1`), and the names `localhost.` and `metadata.google.internal.` with a root dot (refused by the name check only after the name was resolved, not before). They are refused now, before and after DNS resolution. The check is used by `web_fetch` only.
