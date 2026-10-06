@@ -515,6 +515,9 @@ func loadEnvFile(path string) error {
 					fmt.Fprintf(os.Stderr, "seshat: %s: %s ignored (%s); set it in the environment or in your own configuration file instead\n", path, key, reason)
 					continue
 				}
+				if warning := dotenvRedirectWarning(key, value); warning != "" {
+					fmt.Fprintf(os.Stderr, "seshat: %s: %s; check that this .env is yours\n", path, warning)
+				}
 				os.Setenv(key, value)
 			}
 		}
