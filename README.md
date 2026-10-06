@@ -1,5 +1,8 @@
 <p align="center">
-  <img src="docs/images/seshat.png" alt="Seshat" width="120">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="docs/images/logo-dark.svg">
+    <img src="docs/images/logo-light.svg" alt="seshat" width="120">
+  </picture>
 </p>
 
 <h1 align="center">Seshat</h1>
