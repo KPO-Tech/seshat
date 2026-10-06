@@ -15,6 +15,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/KPO-Tech/seshat/internal/envfilter"
 	"github.com/KPO-Tech/seshat/internal/sandbox"
 	tool "github.com/KPO-Tech/seshat/internal/tools/registry"
 	"github.com/KPO-Tech/seshat/internal/tools/schema"
@@ -798,8 +799,10 @@ func (t *Tool) effectiveWorkingDirectory(toolCtx tool.ToolUseContext) string {
 	return "."
 }
 
+// buildEnvironment is the environment of a command the model asked for: the one of the process without its secrets (the provider keys, the
+// database and cloud credentials: a command can print them, and a prompt injection can send them out), see internal/envfilter.
 func (t *Tool) buildEnvironment(extra map[string]string) []string {
-	env := os.Environ()
+	env := envfilter.Environ()
 	for k, v := range extra {
 		env = append(env, k+"="+v)
 	}
