@@ -6,6 +6,8 @@ import (
 	"os/exec"
 	"strings"
 	"time"
+
+	"github.com/KPO-Tech/seshat/internal/envfilter"
 )
 
 // NoopExecutor runs commands directly on the host OS with no additional
@@ -42,9 +44,8 @@ func (e *NoopExecutor) Run(ctx context.Context, req RunRequest) (RunResult, erro
 	if req.WorkDir != "" {
 		cmd.Dir = req.WorkDir
 	}
-	if len(req.Env) > 0 {
-		cmd.Env = append(cmd.Environ(), envMapToSlice(req.Env)...)
-	}
+	// the environment of the process without its secrets (a nil Env would give the command all of it), plus what the request names
+	cmd.Env = append(envfilter.Environ(), envMapToSlice(req.Env)...)
 	if req.Stdin != nil {
 		cmd.Stdin = req.Stdin
 	}
