@@ -704,7 +704,10 @@ func (e *DockerExecutor) Close() error {
 }
 
 func (e *DockerExecutor) stopContainer(containerID string) error {
-	cmd := exec.Command(e.cfg.DockerBinary, "stop", "--time", "5", containerID)
+	// A cleanup with no caller context (Close, and the failure paths of Start): bounded, so a stuck docker daemon cannot hold it for ever.
+	ctx, cancel := context.WithTimeout(context.Background(), dockerStopTimeout)
+	defer cancel()
+	cmd := exec.CommandContext(ctx, e.cfg.DockerBinary, "stop", "--time", "5", containerID)
 	var stderr bytes.Buffer
 	cmd.Stderr = &stderr
 	if err := cmd.Run(); err != nil {
@@ -746,3 +749,6 @@ func sanitizeDockerNameHint(s string) string {
 	}
 	return out
 }
+
+// dockerStopTimeout is the ceiling for `docker stop --time 5`, which itself waits up to 5 seconds for the container.
+const dockerStopTimeout = 30 * time.Second
