@@ -28,7 +28,7 @@ func RejectLocalNetworkTarget(parsed *url.URL) error {
 	if parsed == nil {
 		return fmt.Errorf("missing URL")
 	}
-	host := NormalizeHost(parsed.Hostname())
+	host := policyHost(parsed.Hostname())
 	return rejectHostAndIP(host)
 }
 
@@ -39,7 +39,7 @@ func ResolveAndRejectLocalNetworkTarget(ctx context.Context, parsed *url.URL, re
 	if parsed == nil {
 		return fmt.Errorf("missing URL")
 	}
-	host := NormalizeHost(parsed.Hostname())
+	host := policyHost(parsed.Hostname())
 	if err := rejectHostAndIP(host); err != nil {
 		return err
 	}
@@ -75,7 +75,7 @@ func RejectLocalDialTarget(ctx context.Context, address string, resolver HostRes
 	if err != nil {
 		host = strings.TrimSpace(address)
 	}
-	host = NormalizeHost(host)
+	host = policyHost(host)
 	if err := rejectHostAndIP(host); err != nil {
 		return err
 	}
@@ -117,8 +117,30 @@ func rejectHostAndIP(host string) error {
 	return nil
 }
 
+// policyHost is NormalizeHost without the root dot: "localhost." and "metadata.google.internal." name the same hosts as the names
+// without it, and must not slip past the checks on the name.
+func policyHost(host string) string {
+	return strings.TrimSuffix(NormalizeHost(host), ".")
+}
+
+var (
+	// carrierGradeNAT (RFC 6598) is shared address space of providers, where some clouds put their metadata service
+	// (Alibaba Cloud: 100.100.100.200).
+	carrierGradeNAT = netip.MustParsePrefix("100.64.0.0/10")
+	// thisNetwork (RFC 1122) is "this host on this network", which several stacks treat as the local machine.
+	thisNetwork = netip.MustParsePrefix("0.0.0.0/8")
+	// nat64 (RFC 6052) embeds an IPv4 address in the last 32 bits: 64:ff9b::7f00:1 reaches 127.0.0.1 through a NAT64 gateway.
+	nat64 = netip.MustParsePrefix("64:ff9b::/96")
+)
+
 func rejectResolvedAddr(ip netip.Addr) error {
-	if ip.IsLoopback() || ip.IsPrivate() || ip.IsLinkLocalUnicast() || ip.IsLinkLocalMulticast() {
+	ip = ip.Unmap()
+	if nat64.Contains(ip) {
+		raw := ip.As16()
+		return rejectResolvedAddr(netip.AddrFrom4([4]byte{raw[12], raw[13], raw[14], raw[15]}))
+	}
+	if ip.IsLoopback() || ip.IsPrivate() || ip.IsLinkLocalUnicast() || ip.IsMulticast() ||
+		carrierGradeNAT.Contains(ip) || thisNetwork.Contains(ip) || ip == netip.AddrFrom4([4]byte{255, 255, 255, 255}) {
 		return fmt.Errorf("private or loopback IP targets are not allowed")
 	}
 	if ip.IsUnspecified() {

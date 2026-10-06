@@ -90,7 +90,7 @@ See [`docs/team.md`](./docs/team.md) for the full multi-agent system documentati
 - Avoid global mutable state outside of init-once singletons.
 - No `interface{}` — use `any` (Go 1.18+).
 - Struct fields that are interfaces: use pointer receivers consistently within the same type.
-- New public types in `pkg/` need exported doc comments.
+- New public types in `pkg/` need exported doc comments. 680 exported symbols of `pkg/` still have none; `internal/archtest/doccomments_test.go` counts them per package, fails when a count goes up, and fails when it goes down until the number in the test is lowered too.
 - Value receivers on types that contain `sync.Mutex` or `sync.RWMutex` are forbidden — always use pointer receivers.
 
 ---
