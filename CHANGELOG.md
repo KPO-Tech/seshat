@@ -9,6 +9,10 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Fixed
+
+- **A command that ends at once no longer loses its whole output.** The `bash` tool read the stdout and stderr pipes in goroutines while it called `cmd.Wait()`, and `Wait` closes those pipes; when the command finished before the readers had read, the model got an empty result (exit code 0, stdout and stderr empty). Measured on Linux with the CPU limited to 0.3: 6 of 1,600 `echo` commands lost everything; after the change, 0 of 2,400. The streams are now handed to `exec` as writers, so `Wait` returns only when the copies are done, and the chunk callback is unchanged. This was also the cause of `TestExecuteCommandDoesNotPrintTheSecretsOfTheProcess` failing now and then in CI.
+
 ### Security
 
 - **The terminal UI no longer applies the executable parts of a project's configuration until the project is trusted.** `.seshat.json`, `seshat.json` (from the working directory up to the git root) and `.seshat/seshat.json` are merged into the configuration, and a repository that was just cloned can carry any of them: a test loads one with an MCP server in stdio mode, a hook, an LSP server, a provider with a `base_url` and an `api_key` written `$(...)`, `permissions.allowed_tools` and extra context paths, and all of it was applied, so opening Seshat in the folder started the command (nothing asked). Now `mcp`/`mcpServers`, `hooks`, `lsp`, `providers`, `permissions`, `image_generation`, `text_to_speech`, `speech_to_text`, `options.context_paths` and `options.skills_paths` of a project file are ignored unless the user ran **`seshat trust`** in the project (`--status` to see, `--untrust` to withdraw). The trust is recorded for the SHA-256 of each file, so a file that changes has to be trusted again; a setting changed through the interface keeps a trusted file trusted and does not trust a file that came with the repository. The interface warns at startup when something was ignored. The user's own configuration, in the runtime root, is never restricted. See `docs/project-trust.md`.
