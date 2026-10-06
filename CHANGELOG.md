@@ -9,6 +9,10 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Security
+
+- **`cmd/grpc` is closed by default.** It listened on every interface (`:50051`), with no authentication and no TLS, and `ConnectMCP` took a `command`, `args` and `env` and started that process on the host (and saved it in the user's MCP configuration, so it came back at the next start): anyone who could reach the port could run commands as the user of the server, and spend its provider keys through `Query`. Now: it listens on `127.0.0.1` unless `SESHAT_GRPC_HOST` says otherwise; on any other address it refuses to start without `SESHAT_GRPC_AUTH_TOKEN` (or `SESHAT_GRPC_ALLOW_INSECURE_REMOTE=true`); with a token, every call but `HealthCheck` needs `authorization: Bearer <token>` (compared in constant time); `SESHAT_GRPC_TLS_CERT` and `SESHAT_GRPC_TLS_KEY` turn TLS on; and `ConnectMCP` refuses a stdio server (`PermissionDenied`) unless `SESHAT_GRPC_ALLOW_STDIO_MCP=true`. **Breaking for a deployment that reached the server from outside its host or container**: set `SESHAT_GRPC_HOST=0.0.0.0` and a token (see `docs/transports.md`); one that calls `ConnectMCP` with a stdio server must set `SESHAT_GRPC_ALLOW_STDIO_MCP=true`. Found in an audit of the repository.
+
 ### Changed
 
 - **The reranker is not asked when the first stage is sure** (`Service.SetRerankMargin`, `RAG_RERANK_MARGIN`, 0.2 by default; 0 asks it for every search): when the best chunk beats the second by at least that share of its own score, the retrieval order stands. On the SeshatCloud benchmark this lost nothing (MRR 0.902 with and without on the 192 single-fact questions, 0.421 against 0.425 on the 49 multi-passage ones) and saved 24% and 8% of the (question, chunk) pairs a cross-encoder reads. Deeper savings (a pool of 5, a margin of 0.05 to 0.1, cheap lexical features) did not hold on the multi-passage questions and are not used. With no reranker configured nothing changes.
