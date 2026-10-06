@@ -61,7 +61,7 @@ func NewOpenAITTS(apiKey string, opts ...OpenAITTSOption) *OpenAITTS {
 		model:      openAITTSDefaultModel,
 		voice:      openAITTSDefaultVoice,
 		format:     openAITTSDefaultFmt,
-		httpClient: &http.Client{},
+		httpClient: &http.Client{Timeout: requestTimeout},
 	}
 	for _, opt := range opts {
 		opt(c)

@@ -43,6 +43,7 @@ func (p *SearXNGProvider) Search(input SearchInput) (ProviderOutput, error) {
 	start := time.Now()
 
 	resp, err := p.client.Search(searxng.SearchInput{
+		Ctx:   input.Ctx,
 		Query: input.Query,
 	})
 	if err != nil {
