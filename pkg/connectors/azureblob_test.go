@@ -119,7 +119,7 @@ func waitForAzuriteReady(t *testing.T, endpoint string) {
 		// Azurite has no dedicated health endpoint - a request against the
 		// account root returns a real (if error) HTTP response once the
 		// server is actually listening, which is all readiness needs here.
-		resp, err := http.Get(endpoint + "/" + azuriteAccountName)
+		resp, err := httpGet(endpoint + "/" + azuriteAccountName)
 		if err == nil {
 			resp.Body.Close()
 			return
@@ -253,4 +253,13 @@ func TestAzureBlobSyncRejectsWrongCredentials(t *testing.T) {
 	if err == nil {
 		t.Fatal("expected wrong credentials to be rejected by the real Azurite server")
 	}
+}
+
+// httpGet is a GET with a context, for the readiness polls of the container tests (shared with s3_test.go).
+func httpGet(url string) (*http.Response, error) {
+	req, err := http.NewRequestWithContext(context.Background(), http.MethodGet, url, nil)
+	if err != nil {
+		return nil, err
+	}
+	return http.DefaultClient.Do(req)
 }
