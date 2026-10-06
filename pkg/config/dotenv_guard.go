@@ -2,6 +2,8 @@ package config
 
 import (
 	"fmt"
+	"net"
+	"net/url"
 	"strings"
 )
 
@@ -44,4 +46,31 @@ func dotenvRefusal(name, value string) string {
 		return "its value contains a shell substitution"
 	}
 	return ""
+}
+
+// dotenvEndpointNames are variables, besides every *_BASE_URL, that decide which server receives a request carrying a key.
+var dotenvEndpointNames = map[string]bool{
+	"RAG_EMBEDDING_URL": true, "RAG_RERANK_URL": true, "SESHAT_S3_ENDPOINT": true, "SEARXNG_BASE_URL": true,
+}
+
+// dotenvRedirectWarning returns a warning when a .env entry points a service that is sent a key to a server outside this machine.
+// The entry is still applied: a remote gateway is a normal setup, but a .env that comes with a cloned repository can also use it to
+// collect the keys of the user, so the user is told where the keys will go.
+func dotenvRedirectWarning(name, value string) string {
+	upper := strings.ToUpper(name)
+	if !strings.HasSuffix(upper, "_BASE_URL") && !dotenvEndpointNames[upper] {
+		return ""
+	}
+	u, err := url.Parse(value)
+	if err != nil || u.Hostname() == "" {
+		return ""
+	}
+	host := strings.ToLower(u.Hostname())
+	if host == "localhost" || strings.HasSuffix(host, ".localhost") {
+		return ""
+	}
+	if ip := net.ParseIP(host); ip != nil && (ip.IsLoopback() || ip.IsPrivate()) {
+		return ""
+	}
+	return fmt.Sprintf("%s sends requests, with their API key, to %s", name, u.Host)
 }
