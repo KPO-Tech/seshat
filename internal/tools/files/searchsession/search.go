@@ -247,6 +247,10 @@ func searchOfficeFiles(searchPath, pattern, globPattern string, caseInsensitive 
 	}
 
 	var matches []string
+	root, _ := os.OpenRoot(searchPath) // nil when searchPath is a file
+	if root != nil {
+		defer root.Close()
+	}
 	walkErr := filepath.WalkDir(searchPath, func(path string, d fs.DirEntry, err error) error {
 		if err != nil {
 			return nil //nolint:nilerr // best-effort walk: skip unreadable entries, don't abort the whole search
@@ -255,6 +259,10 @@ func searchOfficeFiles(searchPath, pattern, globPattern string, caseInsensitive 
 			if excluded[d.Name()] {
 				return filepath.SkipDir
 			}
+			return nil
+		}
+		// regular files only: following a symlink found while walking would read a file outside the searched directory
+		if !d.Type().IsRegular() {
 			return nil
 		}
 		ext := strings.ToLower(filepath.Ext(path))
@@ -267,7 +275,7 @@ func searchOfficeFiles(searchPath, pattern, globPattern string, caseInsensitive 
 			}
 		}
 
-		data, readErr := os.ReadFile(path)
+		data, readErr := readUnderRoot(root, searchPath, path)
 		if readErr != nil {
 			return nil
 		}
@@ -355,4 +363,17 @@ func (t *Tool) effectiveWorkingDir(toolCtx tool.ToolUseContext) string {
 		return t.workingDir
 	}
 	return "."
+}
+
+// readUnderRoot reads a file found while walking base: through the root when base is a directory, so that a file swapped for a
+// symlink between the walk and the read cannot take the read outside of base; directly when base is itself a file.
+func readUnderRoot(root *os.Root, base, path string) ([]byte, error) {
+	if root == nil {
+		return os.ReadFile(path)
+	}
+	rel, err := filepath.Rel(base, path)
+	if err != nil {
+		return nil, err
+	}
+	return root.ReadFile(rel)
 }

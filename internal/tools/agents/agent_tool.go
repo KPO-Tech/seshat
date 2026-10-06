@@ -651,7 +651,7 @@ func (t *AgentTool) runAgentBackground(ctx context.Context, agentType, prompt st
 	}
 
 	if emitter, ok := ctx.Value(types.RuntimeEventEmitterKey).(func(types.RuntimeEvent)); ok && emitter != nil {
-		go t.notifyAgentTaskCompletion(manager, task.ID, callID, emitter)
+		go t.notifyAgentTaskCompletion(manager, task.ID, callID, emitter) // #nosec G118 -- outlives the turn on purpose, see notifyAgentTaskCompletion
 	}
 
 	return tool.CallResult{

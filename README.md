@@ -13,7 +13,7 @@
   <a href="https://seshat-ai.com"><b>🌐 Website</b></a> ·
   <a href="https://github.com/KPO-Tech/seshat/discussions"><b>💬 Discussions</b></a> ·
   <a href="https://github.com/KPO-Tech/seshat/issues"><b>🐛 Issues</b></a> ·
-  <a href="https://github.com/KPO-Tech/seshat-ai"><b>🖥️ seshat-ai</b></a>
+  <a href="https://github.com/KPO-Tech/SeshatOS"><b>🖥️ SeshatOS</b></a>
 </p>
 
 <p align="center">
@@ -71,7 +71,7 @@ Use this repository if you want to:
 - embed the runtime inside a Go application or internal system
 - extend providers, tools, permissions, MCP integration, or runtime behavior
 
-If you want the full self-hosted platform layer for organizations, use [seshat-ai](https://github.com/KPO-Tech/seshat-ai): users, workspaces, REST API, knowledge base, scheduling, governance, and desktop product surfaces built on top of this engine.
+If you want a ready-to-use product built on this engine, see [SeshatOS](https://github.com/KPO-Tech/SeshatOS) (local-first desktop app and backend) or [SeshatCloud](https://github.com/KPO-Tech/SeshatCloud) (multi-tenant server and admin console for organizations).
 
 ---
 
@@ -125,31 +125,19 @@ If you want the full self-hosted platform layer for organizations, use [seshat-a
 
 seshat is the **headless runtime**: pure Go, no UI, no users, no billing. It is the foundation everything else builds on.
 
-### 🖥️ seshat-ai — Desktop & Platform
+### Products built on seshat
 
-**[→ seshat-ai](https://github.com/KPO-Tech/seshat-ai)** is the full production platform built on top of this engine. If you want a ready-to-use application rather than a library, that is where you want to go.
+| | seshat (this repo) | [SeshatOS](https://github.com/KPO-Tech/SeshatOS) | [SeshatCloud](https://github.com/KPO-Tech/SeshatCloud) |
+|---|---|---|---|
+| **What it is** | Go runtime + SDK + CLI/TUI + gRPC | Local-first desktop app and backend | Multi-tenant server and admin console |
+| **Stack** | Go | Go + TypeScript/React/Electron | Go + TypeScript/React (+ a Python service for document intelligence) |
+| **License** | Apache-2.0 | Apache-2.0 + Commons Clause (source-available) | Source-available (draft) |
+| **Who it's for** | Developers embedding agents in their own apps | Individuals and small teams who self-host | Organizations that need central administration |
+| **Status** | Stable, in production use | Under construction (chat-first desktop rebuild) | Server side solid, not yet a packaged offer |
 
-| | seshat (this repo) | seshat-ai |
-|---|---|---|
-| **What it is** | Go runtime + SDK + CLI | Desktop app + REST API platform |
-| **Stack** | Go | Go (API) + TypeScript/React/Electron (desktop) |
-| **License** | Apache 2.0 | AGPL-3.0 |
-| **Who it's for** | Developers embedding agents in their own apps | End users, teams, self-hosters |
-| **Includes** | Engine, tools, providers, gRPC, CLI/TUI | Multi-user auth, workspaces, knowledge base, scheduler, desktop UI |
+Both products consume `seshat` through `pkg/*` only. `seshat` knows nothing about them.
 
-**What seshat-ai gives you today:**
-- 🖥️ Native desktop app (Electron + React) with chat, tool views, plans, settings and a visual skills creator
-- 👥 Multi-user backend with organizations, workspaces, per-user API keys, quotas and audit log
-- 📡 REST + SSE HTTP API compatible with the Anthropic `/v1/messages` format
-- 📚 Knowledge base with hybrid BM25 + vector search and file ingestion
-- ⏰ Scheduled tasks, memories, plans and MCP server management
-
-**Coming next:**
-- 🤝 Agent teams: persistent groups of specialized agents collaborating on shared missions, each with its own inbox, role and memory
-- 🤖 Automation and background workflows triggered by schedule, events or voice
-- 🖼️ Image generation integrated directly into the chat and workspace
-- 🎙️ Voice input and audio output so you can talk to your agents naturally
-- 🌐 A multi-workspace environment covering code, research, creation and learning, all sharing the same runtime and data layer
+The commercial activity around Seshat (AI consulting and integration, plus the products above) is presented at [seshat-ai.com](https://seshat-ai.com).
 
 ### 🤝 Contribution split
 
@@ -158,8 +146,8 @@ seshat is the **headless runtime**: pure Go, no UI, no users, no billing. It is 
 | Improve execution speed, reduce latency, optimize the agent loop | **seshat** (Go) |
 | Add a new LLM provider or tool | **seshat** (Go) |
 | Expose new capabilities in the SDK or gRPC API | **seshat** (Go) |
-| Improve the desktop UI, add new views, fix UX | **seshat-ai** (TypeScript/React) |
-| Build features like agent teams, automation or scheduling | **seshat-ai** (Go API + React) |
+| Improve the desktop app or local backend | **SeshatOS** |
+| Work on organizations, IAM, or scheduled automation | **SeshatCloud** |
 
 The engine is intentionally kept minimal and fast. If you need something from the SDK that is not exposed yet, open an issue and we will prioritize it.
 
@@ -351,7 +339,7 @@ seshat/
 └── internal/             ← private implementation (do not import directly)
 ```
 
-> seshat-ai and any third-party consumer must import `pkg/*` only, never `internal/*`.
+> SeshatOS, SeshatCloud and any third-party consumer must import `pkg/*` only, never `internal/*`.
 
 ---
 

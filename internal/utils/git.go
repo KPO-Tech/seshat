@@ -228,7 +228,7 @@ func resolveCanonicalRoot(gitRoot string) string {
 		worktreeGitDir := filepath.Clean(filepath.Join(gitRoot, strings.TrimPrefix(trimmed, "gitdir:")))
 
 		commondirPath := filepath.Join(worktreeGitDir, "commondir")
-		commondirContent, err := os.ReadFile(commondirPath)
+		commondirContent, err := os.ReadFile(commondirPath) // #nosec G703 -- reads a file named commondir; the link it gives is checked by isSecureWorktreeLink below
 		if err != nil {
 			return gitRoot
 		}
@@ -265,7 +265,7 @@ func isSecureWorktreeLink(gitRoot, worktreeGitDir, commonDir string) bool {
 	}
 
 	gitdirPath := filepath.Join(worktreeGitDir, "gitdir")
-	backlinkContent, err := os.ReadFile(gitdirPath)
+	backlinkContent, err := os.ReadFile(gitdirPath) // #nosec G703 -- reads a file named gitdir in a directory whose place was checked just above; its content is compared, not followed
 	if err != nil {
 		return false
 	}
@@ -334,10 +334,18 @@ func ReadGitHead(gitDir string) (string, bool) {
 	if strings.HasPrefix(trimmed, "ref: ") {
 		ref := strings.TrimPrefix(trimmed, "ref: ")
 		ref = strings.TrimSpace(ref)
+		// a HEAD file comes with the repository: a ref is a name under refs/, never a path that leaves the git directory
+		if !strings.HasPrefix(ref, "refs/") || strings.Contains(ref, "..") || filepath.IsAbs(ref) || strings.ContainsAny(ref, "\\:") {
+			return "", false
+		}
 
-		refFile := filepath.Join(gitDir, ref)
-		if content, err := os.ReadFile(refFile); err == nil {
-			return strings.TrimSpace(string(content)), true
+		// read through a root: even a ref that is a symlink cannot take the read out of the git directory
+		if root, err := os.OpenRoot(gitDir); err == nil {
+			content, readErr := root.ReadFile(ref)
+			_ = root.Close()
+			if readErr == nil {
+				return strings.TrimSpace(string(content)), true
+			}
 		}
 
 		packedRefsPath := filepath.Join(gitDir, "packed-refs")

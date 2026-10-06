@@ -143,11 +143,16 @@ func (t *ValidateTool) Call(ctx context.Context, input tool.CallInput, _ types.C
 
 	// 6. Directory size hint
 	totalLines := 0
+	root, _ := os.OpenRoot(cleanPath) // nil when the path is a file
+	if root != nil {
+		defer root.Close()
+	}
 	_ = filepath.Walk(cleanPath, func(p string, info os.FileInfo, err error) error {
-		if err != nil || info.IsDir() || !strings.HasSuffix(strings.ToLower(p), ".md") {
+		// regular files only: a symlink in a skill directory must not make the validator read a file outside of it
+		if err != nil || !info.Mode().IsRegular() || !strings.HasSuffix(strings.ToLower(p), ".md") {
 			return nil
 		}
-		data, readErr := os.ReadFile(p)
+		data, readErr := readUnderRoot(root, cleanPath, p)
 		if readErr == nil {
 			totalLines += strings.Count(string(data), "\n")
 		}
@@ -215,4 +220,17 @@ func parseSkillFrontmatter(content string) (map[string]any, string, error) {
 		fm = map[string]any{}
 	}
 	return fm, body, nil
+}
+
+// readUnderRoot reads a file found while walking base: through the root when base is a directory, so that a file swapped for a
+// symlink between the walk and the read cannot take the read outside of base; directly when base is itself a file.
+func readUnderRoot(root *os.Root, base, path string) ([]byte, error) {
+	if root == nil {
+		return os.ReadFile(path)
+	}
+	rel, err := filepath.Rel(base, path)
+	if err != nil {
+		return nil, err
+	}
+	return root.ReadFile(rel)
 }

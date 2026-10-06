@@ -111,7 +111,7 @@ func applyLandlock(workspaceRoot string) error {
 	if err != nil {
 		return err
 	}
-	if err := os.MkdirAll(root, 0o700); err != nil {
+	if err := os.MkdirAll(root, 0o700); err != nil { // #nosec G703 -- root is the workspace that the parent seshat process put in SESHAT_LANDLOCK_WORKSPACE when it started this helper, which only makes sure it exists
 		return err
 	}
 
