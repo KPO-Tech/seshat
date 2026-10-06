@@ -166,7 +166,7 @@ func (s *Scheduler) tick(ctx context.Context, now time.Time) {
 
 	for _, job := range due {
 		// Run synchronously — one job at a time.
-		s.executor.Run(ctx, job.workflow, job.opts) //nolint:errcheck
+		s.executor.Run(ctx, job.workflow, job.opts) //nolint:errcheck // the error of one run does not stop the scheduler loop
 
 		s.mu.Lock()
 		job.nextRun = job.schedule.Next(now)

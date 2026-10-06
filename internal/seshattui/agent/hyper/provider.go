@@ -66,7 +66,7 @@ func FetchCredits(ctx context.Context, apiKey string) (int, error) {
 	if err != nil {
 		return 0, fmt.Errorf("failed to make request: %w", err)
 	}
-	defer resp.Body.Close() //nolint:errcheck
+	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
 		return 0, fmt.Errorf("unexpected status code: %d", resp.StatusCode)

@@ -760,7 +760,7 @@ func copyWithCallback(dst io.Writer, src io.Reader, stream string, chunkCb func(
 		n, err := src.Read(buf)
 		if n > 0 {
 			chunk := string(buf[:n])
-			dst.Write([]byte(chunk)) //nolint:errcheck
+			dst.Write([]byte(chunk))
 			if chunkCb != nil {
 				chunkCb(chunk, stream)
 			}
@@ -781,7 +781,7 @@ func capOutput(s string, max int64) string {
 		return s
 	}
 	buf := newCappedBuffer(max)
-	buf.Write([]byte(s)) //nolint:errcheck
+	buf.Write([]byte(s)) //nolint:errcheck // cappedBuffer.Write never returns an error
 	return buf.String()
 }
 
