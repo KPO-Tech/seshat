@@ -31,13 +31,26 @@ import (
 
 // GRPCConfig holds server configuration.
 type GRPCConfig struct {
+	// Host is the address the server listens on: the loopback address unless SESHAT_GRPC_HOST says otherwise.
+	Host              string
 	Port              int
 	MaxConcurrentRPCs int
 	KeepaliveTime     time.Duration
 	EnableReflection  bool
+
+	// AuthToken, when set, is required of every call but HealthCheck as "authorization: Bearer <token>".
+	AuthToken string
+	// TLSCertFile and TLSKeyFile turn TLS on when both are set.
+	TLSCertFile string
+	TLSKeyFile  string
+	// AllowInsecureRemote accepts a listen address that is not the loopback with no AuthToken.
+	AllowInsecureRemote bool
+	// AllowStdioMCP lets ConnectMCP start a stdio MCP server, that is a command line given by the caller.
+	AllowStdioMCP bool
 }
 
 var defaultGRPCConfig = GRPCConfig{
+	Host:              "127.0.0.1",
 	Port:              50051,
 	MaxConcurrentRPCs: 10,
 	KeepaliveTime:     30 * time.Second,
@@ -128,6 +141,8 @@ type SeshatServer struct {
 	skillsCWD     string
 	mcpManager    *publicmcp.Manager
 	clientFactory func(*pb.QueryRequest) (grpcSDKClient, error)
+	// allowStdioMCP: see GRPCConfig.AllowStdioMCP.
+	allowStdioMCP bool
 }
 
 var _ pb.SeshatServiceServer = (*SeshatServer)(nil)
@@ -189,14 +204,29 @@ func main() {
 	}
 
 	cfg := loadGRPCConfigFromEnv()
-	listener, err := net.Listen("tcp", fmt.Sprintf(":%d", cfg.Port))
+	if err := validateListenConfig(cfg); err != nil {
+		fmt.Fprintf(os.Stderr, "[gRPC] %v\n", err)
+		os.Exit(1)
+	}
+	securityOpts, err := serverOptions(cfg)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "[gRPC] %v\n", err)
+		os.Exit(1)
+	}
+	if cfg.AuthToken != "" && cfg.TLSCertFile == "" && !isLoopbackHost(cfg.Host) {
+		fmt.Fprintln(os.Stderr, "[gRPC] warning: the token travels in clear text; set SESHAT_GRPC_TLS_CERT and SESHAT_GRPC_TLS_KEY")
+	}
+	if cfg.AuthToken == "" && !isLoopbackHost(cfg.Host) {
+		fmt.Fprintf(os.Stderr, "[gRPC] warning: listening on %s with no authentication (SESHAT_GRPC_ALLOW_INSECURE_REMOTE)\n", cfg.Host)
+	}
+	listener, err := net.Listen("tcp", listenAddress(cfg))
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "[gRPC] listen: %v\n", err)
 		os.Exit(1)
 	}
 	defer listener.Close()
 
-	grpcServer := grpc.NewServer(
+	grpcServer := grpc.NewServer(append([]grpc.ServerOption{
 		grpc.MaxConcurrentStreams(uint32(cfg.MaxConcurrentRPCs)),
 		grpc.KeepaliveEnforcementPolicy(keepalive.EnforcementPolicy{
 			MinTime: cfg.KeepaliveTime,
@@ -204,15 +234,17 @@ func main() {
 		grpc.KeepaliveParams(keepalive.ServerParameters{
 			MaxConnectionAge: cfg.KeepaliveTime * 2,
 		}),
-	)
+	}, securityOpts...)...)
 
-	pb.RegisterSeshatServiceServer(grpcServer, NewSeshatServer(hostConfig))
+	seshatServer := NewSeshatServer(hostConfig)
+	seshatServer.allowStdioMCP = cfg.AllowStdioMCP
+	pb.RegisterSeshatServiceServer(grpcServer, seshatServer)
 	if cfg.EnableReflection {
 		reflection.Register(grpcServer)
 	}
 
 	go func() {
-		fmt.Printf("[gRPC] listening on :%d\n", cfg.Port)
+		fmt.Printf("[gRPC] listening on %s\n", listener.Addr())
 		if err := grpcServer.Serve(listener); err != nil {
 			fmt.Fprintf(os.Stderr, "[gRPC] serve: %v\n", err)
 			cancel()
@@ -510,6 +542,11 @@ func (s *SeshatServer) ConnectMCP(ctx context.Context, req *pb.ConnectMCPRequest
 		serverType = publicmcp.ServerTypeWebSocket
 	}
 
+	if serverType == publicmcp.ServerTypeStdio && !s.allowStdioMCP {
+		return nil, status.Error(codes.PermissionDenied,
+			"a stdio MCP server is a command line to run on this host: ConnectMCP refuses it unless the server is started with SESHAT_GRPC_ALLOW_STDIO_MCP=true")
+	}
+
 	cfg := publicmcp.McpServerConfig{
 		Type:    serverType,
 		Command: req.Command,
@@ -600,9 +637,22 @@ func loadGRPCConfigFromEnv() GRPCConfig {
 		}
 	}
 	if raw := strings.TrimSpace(os.Getenv("SESHAT_GRPC_ENABLE_REFLECTION")); raw != "" {
-		cfg.EnableReflection = strings.EqualFold(raw, "1") || strings.EqualFold(raw, "true") || strings.EqualFold(raw, "yes")
+		cfg.EnableReflection = envTrue(raw)
 	}
+	if raw := strings.TrimSpace(os.Getenv("SESHAT_GRPC_HOST")); raw != "" {
+		cfg.Host = raw
+	}
+	cfg.AuthToken = strings.TrimSpace(os.Getenv("SESHAT_GRPC_AUTH_TOKEN"))
+	cfg.TLSCertFile = strings.TrimSpace(os.Getenv("SESHAT_GRPC_TLS_CERT"))
+	cfg.TLSKeyFile = strings.TrimSpace(os.Getenv("SESHAT_GRPC_TLS_KEY"))
+	cfg.AllowInsecureRemote = envTrue(os.Getenv("SESHAT_GRPC_ALLOW_INSECURE_REMOTE"))
+	cfg.AllowStdioMCP = envTrue(os.Getenv("SESHAT_GRPC_ALLOW_STDIO_MCP"))
 	return cfg
+}
+
+func envTrue(raw string) bool {
+	raw = strings.TrimSpace(raw)
+	return strings.EqualFold(raw, "1") || strings.EqualFold(raw, "true") || strings.EqualFold(raw, "yes")
 }
 
 func grpcServerVersion() string {

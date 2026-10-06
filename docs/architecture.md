@@ -19,7 +19,7 @@
 
 Seshat is a **headless AI coding runtime**. It connects an LLM provider to a set of tools (file system, bash, web, LSP, etc.) and orchestrates multi-turn conversations where the model can invoke tools, observe results, and continue reasoning.
 
-The engine exposes two built-in entry points. A third (HTTP REST + SSE) is provided by [seshat-ai](https://github.com/KPO-Tech/seshat-ai) and built on top of the Go SDK.
+The engine exposes two built-in entry points. Products built on top of the Go SDK add their own HTTP surfaces: [SeshatOS](https://github.com/KPO-Tech/SeshatOS) (local backend) and [SeshatCloud](https://github.com/KPO-Tech/SeshatCloud) (multi-tenant server).
 
 ```
               ┌─────────────┐                           ┌──────────────┐
@@ -71,7 +71,7 @@ The system is organized in four layers:
             ╔══════════════════════════════════════════════════════════════════╗
             ║  ENTRY POINTS (seshat)                                     ║
             ║  cmd/cli (terminal) · cmd/grpc (gRPC :50051)                     ║
-            ║  + cmd/api (HTTP+SSE) lives in seshat-ai, uses pkg/sdk            ║
+            ║  + HTTP+SSE lives in SeshatOS / SeshatCloud, uses pkg/sdk         ║
             ╚══════════════════════════╤═══════════════════════════════════════╝
                                       │ uses
             ╔══════════════════════════▼═══════════════════════════════════════╗

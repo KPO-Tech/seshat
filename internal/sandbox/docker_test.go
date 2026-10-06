@@ -490,11 +490,11 @@ func mustRandomBytes(t *testing.T, n int) []byte {
 }
 
 // TestDockerExecutorDoesNotLeakHostEnvironment is a regression test for a
-// security property DockerExecutor already has, not a gap: unlike
-// NoopExecutor.Run (which inherits the full host process environment via
-// cmd.Environ()), a sandboxed command must NOT see host-side environment
-// variables the seshat process holds (API keys, tokens, …) unless the
-// caller explicitly passes them via RunRequest.Env.
+// security property DockerExecutor already has, not a gap: a sandboxed
+// command must NOT see host-side environment variables the seshat process
+// holds (API keys, tokens, …) unless the caller explicitly passes them via
+// RunRequest.Env. (NoopExecutor.Run now gives a command the process
+// environment minus its secrets, see internal/envfilter.)
 func TestDockerExecutorDoesNotLeakHostEnvironment(t *testing.T) {
 	requireDocker(t)
 	t.Setenv("SESHAT_TEST_HOST_SECRET", "this-must-not-reach-the-sandbox")

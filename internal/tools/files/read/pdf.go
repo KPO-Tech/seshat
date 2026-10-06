@@ -2,6 +2,7 @@ package read
 
 import (
 	"bytes"
+	"context"
 	"fmt"
 	"os"
 	"strconv"
@@ -118,7 +119,7 @@ func ReadPDF(filePath string) (*PDFResult, error) {
 	}
 
 	// Validate PDF and get page count
-	ctx, err := pdfcpu.Read(bytes.NewReader(data), model.NewDefaultConfiguration())
+	ctx, err := pdfcpu.Read(context.Background(), bytes.NewReader(data), model.NewDefaultConfiguration())
 	if err != nil {
 		return nil, fmt.Errorf("failed to parse PDF: %w", err)
 	}
@@ -146,7 +147,7 @@ func GetPDFPageCount(filePath string) (int, error) {
 	}
 
 	// Parse PDF
-	ctx, err := pdfcpu.Read(bytes.NewReader(data), model.NewDefaultConfiguration())
+	ctx, err := pdfcpu.Read(context.Background(), bytes.NewReader(data), model.NewDefaultConfiguration())
 	if err != nil {
 		return 0, fmt.Errorf("failed to parse PDF: %w", err)
 	}
@@ -182,7 +183,7 @@ func ExtractPDFPages(filePath string, pageRange *PDFPageRange) (*PDFExtractionRe
 
 	// Extract pages as separate PDFs
 	conf := model.NewDefaultConfiguration()
-	err = api.ExtractPagesFile(filePath, outputDir, pageRanges, conf)
+	err = api.ExtractPagesFile(context.Background(), filePath, outputDir, pageRanges, conf)
 	if err != nil {
 		os.RemoveAll(outputDir)
 		return nil, fmt.Errorf("failed to extract pages: %w", err)

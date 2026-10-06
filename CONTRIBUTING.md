@@ -100,7 +100,7 @@ export OPENAI_API_KEY=sk-...
 
 - `pkg/` is the public API. Only add to `pkg/` what external consumers need. Do not expose `internal/` types directly.
 - `internal/` packages must not import `pkg/` — the dependency goes one way.
-- `internal/backend` does not exist in this repository — it lives in `seshat-ai`. Do not recreate it here.
+- `internal/backend` does not exist in this repository — it lives in SeshatOS and SeshatCloud. Do not recreate it here.
 - New tools go in `internal/tools/<category>/`. New providers go in `internal/providers/`.
 
 **Multi-agent packages** — respect the dependency direction (no cycles):

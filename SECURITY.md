@@ -58,7 +58,7 @@ seshat is a **local-first** runtime. By default:
 - Credentials are read from environment variables or the local `~/.seshat/auth.json` store — never sent to external services except the configured LLM provider.
 - The gRPC server (`cmd/grpc`) has **no authentication layer** and is intended for local or trusted-network use only. Do not expose it publicly without adding your own auth proxy.
 
-When deploying as a shared service (via seshat-ai), additional security controls (user auth, session isolation, encrypted credential storage) are the responsibility of the product layer.
+When deploying as a shared service (for example via SeshatCloud), additional security controls (user auth, session isolation, encrypted credential storage) are the responsibility of the product layer.
 
 ---
 

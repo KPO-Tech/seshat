@@ -430,6 +430,9 @@ func (m *UI) Init() tea.Cmd {
 	if m.com.IsHyper() {
 		cmds = append(cmds, m.fetchHyperCredits())
 	}
+	if notices := config.ProjectConfigNotices(); len(notices) > 0 {
+		cmds = append(cmds, util.ReportWarn(strings.Join(notices, "; ")))
+	}
 	return tea.Batch(cmds...)
 }
 
@@ -3257,7 +3260,7 @@ func (m *UI) openEditor(value string) tea.Cmd {
 		return util.ReportError(err)
 	}
 	tmpPath := tmpfile.Name()
-	defer tmpfile.Close() //nolint:errcheck
+	defer tmpfile.Close()
 	if _, err := tmpfile.WriteString(value); err != nil {
 		return util.ReportError(err)
 	}

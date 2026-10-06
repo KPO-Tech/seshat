@@ -2,6 +2,7 @@ package rag
 
 import (
 	"context"
+	"errors"
 	"testing"
 
 	"github.com/KPO-Tech/seshat/internal/storage"
@@ -59,6 +60,8 @@ func newBlendFixtureService(t *testing.T) *Service {
 		t.Fatalf("DefaultArtifactStore: %v", err)
 	}
 	svc := NewService(artifacts, vector.NewMemoryStore(), blendFixtureEmbedder{}, nil)
+	// These tests are about the blend: the reranker is asked for every search (the margin has its own tests below).
+	svc.SetRerankMargin(0)
 	ctx := context.Background()
 	// Ingested as their own text so blendFixtureEmbedder recognizes them by
 	// exact content; production text/chunk pipelines aren't under test here.
@@ -114,10 +117,10 @@ func TestServiceSearch_DefaultWeightAppliesRealBlendNotVectorOrder(t *testing.T)
 	}
 	got := keyOrder(t, resp.Results)
 	if got[0] == "doc-a" {
-		t.Fatalf("expected the default rerank weight to move doc-c/doc-b ahead of the top vector match, got order %v", got)
+		t.Fatalf("expected the default rerank weight to move doc-c and doc-b ahead of the top vector match, got order %v", got)
 	}
-	// At weight 0.7 the reranker's own order dominates for this fixture:
-	// blended(a)=0.3*0.9+0.7*0.2=0.41, blended(b)=0.3*0.4+0.7*0.6=0.54, blended(c)=0.3*0.3+0.7*0.9=0.72
+	// At weight 0.7: blended(a)=0.3*0.9+0.7*0.2=0.41, blended(b)=0.3*0.4+0.7*0.6=0.54,
+	// blended(c)=0.3*0.3+0.7*0.9=0.72 -> c, b, a.
 	want := []string{"doc-c", "doc-b", "doc-a"}
 	if got[0] != want[0] || got[1] != want[1] || got[2] != want[2] {
 		t.Fatalf("got %v want %v", got, want)
@@ -149,5 +152,108 @@ func TestServiceSearch_BlendProducesOrderDistinctFromBothPureExtremes(t *testing
 	}
 	if got[0] == pureRerankOrder[0] && got[1] == pureRerankOrder[1] && got[2] == pureRerankOrder[2] {
 		t.Fatal("blended order should not equal the pure rerank order")
+	}
+}
+
+// The whole pool is reranked and blended, then cut to TopK: the best chunk of the pool comes first even when TopK is 1.
+func TestServiceSearch_RerankReadsTheWholePoolThenCutsToTopK(t *testing.T) {
+	svc := newBlendFixtureService(t)
+	svc.SetReranker(scriptedReranker{indices: []int{2, 1, 0}, scores: []float32{0.9, 0.6, 0.2}})
+
+	resp, err := svc.Search(context.Background(), SearchRequest{CorpusID: "kb", Query: "search-query", TopK: 1, RerankWeight: 1})
+	if err != nil {
+		t.Fatalf("Search: %v", err)
+	}
+	got := keyOrder(t, resp.Results)
+	if len(got) != 1 || got[0] != "doc-c" {
+		t.Fatalf("TopK=1 with the reranker alone should give doc-c, got %v", got)
+	}
+}
+
+type failingReranker struct{}
+
+func (failingReranker) IsConfigured() bool { return true }
+
+func (failingReranker) Rerank(context.Context, string, []string, int) ([]int, []float32, error) {
+	return nil, nil, errors.New("rerank server down")
+}
+
+// A reranker that fails must not fail the search: the retrieval order stands.
+func TestServiceSearch_FailingRerankerKeepsTheRetrievalOrder(t *testing.T) {
+	svc := newBlendFixtureService(t)
+	svc.SetReranker(failingReranker{})
+
+	resp, err := svc.Search(context.Background(), SearchRequest{CorpusID: "kb", Query: "search-query", TopK: 3})
+	if err != nil {
+		t.Fatalf("Search: %v", err)
+	}
+	got := keyOrder(t, resp.Results)
+	want := []string{"doc-a", "doc-b", "doc-c"}
+	if len(got) != 3 || got[0] != want[0] || got[1] != want[1] || got[2] != want[2] {
+		t.Fatalf("got %v want the vector order %v", got, want)
+	}
+}
+
+// A first stage that is sure of its best chunk (here 0.9 against 0.4) keeps its order: the reranker is not asked.
+func TestServiceSearch_SureFirstStageSkipsTheReranker(t *testing.T) {
+	svc := newBlendFixtureService(t)
+	svc.SetRerankMargin(defaultRerankMargin)
+	svc.SetReranker(scriptedReranker{indices: []int{2, 1, 0}, scores: []float32{0.9, 0.6, 0.2}})
+
+	resp, err := svc.Search(context.Background(), SearchRequest{CorpusID: "kb", Query: "search-query", TopK: 3, RerankWeight: 1})
+	if err != nil {
+		t.Fatalf("Search: %v", err)
+	}
+	got := keyOrder(t, resp.Results)
+	if len(got) != 3 || got[0] != "doc-a" || got[1] != "doc-b" || got[2] != "doc-c" {
+		t.Fatalf("a sure first stage should keep the vector order a, b, c, got %v", got)
+	}
+}
+
+// A margin above the gap between the best two (0.56 here) asks the reranker, which moves doc-c to the front.
+func TestServiceSearch_UnsureFirstStageAsksTheReranker(t *testing.T) {
+	svc := newBlendFixtureService(t)
+	svc.SetRerankMargin(0.9)
+	svc.SetReranker(scriptedReranker{indices: []int{2, 1, 0}, scores: []float32{0.9, 0.6, 0.2}})
+
+	resp, err := svc.Search(context.Background(), SearchRequest{CorpusID: "kb", Query: "search-query", TopK: 3, RerankWeight: 1})
+	if err != nil {
+		t.Fatalf("Search: %v", err)
+	}
+	if got := keyOrder(t, resp.Results); got[0] != "doc-c" {
+		t.Fatalf("an unsure first stage should be reranked, got %v", got)
+	}
+}
+
+func TestFirstStageIsSure(t *testing.T) {
+	t.Parallel()
+	scores := func(v ...float32) []vector.SearchResult {
+		out := make([]vector.SearchResult, len(v))
+		for i, x := range v {
+			out[i] = vector.SearchResult{Score: x}
+		}
+		return out
+	}
+	cases := []struct {
+		name   string
+		margin float32
+		in     []vector.SearchResult
+		want   bool
+	}{
+		{"clear winner", 0.2, scores(1, 0.5, 0.4), true},
+		{"order of the results does not matter", 0.2, scores(0.4, 1, 0.5), true},
+		{"close", 0.2, scores(1, 0.9, 0.2), false},
+		{"exactly the margin", 0.5, scores(1, 0.5), true},
+		{"a single result is never sure", 0.2, scores(1), false},
+		{"no results", 0.2, nil, false},
+		{"margin 0 asks every time", 0, scores(1, 0.1), false},
+		{"scores of 0", 0.2, scores(0, 0), false},
+		{"a tie", 0.2, scores(0.7, 0.7), false},
+	}
+	for _, tc := range cases {
+		svc := &Service{rerankMargin: tc.margin}
+		if got := svc.firstStageIsSure(tc.in); got != tc.want {
+			t.Errorf("%s: firstStageIsSure = %v, want %v", tc.name, got, tc.want)
+		}
 	}
 }

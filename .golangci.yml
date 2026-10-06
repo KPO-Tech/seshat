@@ -12,8 +12,16 @@ linters:
     - errcheck
     - gofmt
     - misspell
+    # AGENTS.md: no //nolint without an explanation on the same line, and none that no longer suppresses anything.
+    - nolintlint
+    # An HTTP request must carry the context of its caller, so that cancelling the call cancels the request.
+    - noctx
 
 linters-settings:
+  nolintlint:
+    require-explanation: true
+    require-specific: true
+    allow-unused: false
   errcheck:
     # Intentional fire-and-forget calls throughout the codebase.
     exclude-functions:

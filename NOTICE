@@ -1,0 +1,21 @@
+Seshat
+Copyright 2025-2026 KPO-Tech
+
+This product is licensed under the Apache License, Version 2.0 (see LICENSE).
+
+Third-party origin
+------------------
+
+The terminal user interface in internal/seshattui (the interface packages
+such as ui/, and the support packages next to them) was built from the terminal
+interface of Crush, https://github.com/charmbracelet/crush, Copyright
+2025-2026 Charmbracelet, Inc.
+
+Crush is published under the Functional Source License, Version 1.1, MIT
+Future License (FSL-1.1-MIT). That licence allows use, copy, modification and
+redistribution for any purpose other than a Competing Use, and each version
+becomes available under the MIT licence two years after it was published. The
+licence text is at https://github.com/charmbracelet/crush/blob/main/LICENSE.md.
+
+The files of internal/seshattui that come from Crush remain subject to that
+licence, in addition to the terms above. See docs/licensing.md.

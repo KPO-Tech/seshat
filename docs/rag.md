@@ -171,3 +171,27 @@ The agent calls this tool autonomously when it needs to retrieve information. Re
 - [MCP Client](./mcp.md) - connect external knowledge servers via MCP
 - [Planning Mode](./planning.md) - how the agent decides when to search vs act
 - [Tools](./tools.md) - full built-in tool reference
+
+## Reranking
+
+A reranker is optional (`RAG_RERANK_URL`: a TEI, vLLM or Cohere-compatible `/rerank` endpoint such as `bge-reranker-v2-m3`; `RAG_RERANK_MODEL`, `RAG_RERANK_API_KEY`; `LANGSEARCH_API_KEY` for the hosted default). Nothing is required for search: without one, the retrieval order stands, and so it does when the reranker fails (a warning is logged).
+
+When one is set, the search first checks whether the first stage is sure of its answer: when its best chunk beats the second by at least 20% of its own score (`RAG_RERANK_MARGIN`, 0.2 by default, 0 asks the reranker every time), the reranker is not asked and the retrieval order stands. Otherwise the search reads a pool of `max(topK, 10)` chunks, the reranker scores each (question, chunk) pair, the scores of the whole pool are normalised (min-max, unless they are already within 0 and 1), blended as `(1 - w) x retrieval + w x reranker` and the list is cut to `topK`. `w` is `RAG_RERANK_WEIGHT` or a request's `RerankWeight`, 0.7 by default.
+
+Those defaults come from the retrieval benchmark of SeshatCloud (192 questions on 19 documents, hybrid bge-m3 + BM25 as the first stage, `seshat-intelligence/benchmarks/chunk_bench/rerank.py`):
+
+| Reranker | Parameters | MRR of the hybrid retriever 0.810 becomes | Time per pair, laptop GPU |
+|---|---|---|---|
+| mMARCO MiniLM L12 | 118M | 0.852 (+0.043 [+0.010, +0.075]) | 68 ms |
+| bge-reranker-base | 278M | 0.846 (+0.036, not different from 0) | 236 ms |
+| bge-reranker-v2-m3 | 568M | 0.904 (+0.094 [+0.054, +0.137]), hit@1 0.714 to 0.865 | 819 ms |
+| Jina jina-reranker-v2-base-multilingual (API, 64 of the questions) | n/a | 0.850 against 0.787 (+0.063 [+0.008, +0.122]) | 181 ms |
+| Cohere rerank-v3.5 (API) | n/a | 0.917 (+0.107 [+0.062, +0.156]), alone 0.928 (+0.118), hit@1 0.714 to 0.875 | 37 ms |
+
+- The best weight depends on the reranker: 0.5 for the two small models (the reranker alone gained nothing), equal within 0.006 of MRR for bge-reranker-v2-m3, 1.0 for Cohere rerank-v3.5 (MRR 0.909, 0.917, 0.928 at 0.5, 0.7, 1.0). Against the best weight of each of the five, 0.7 never loses more than 0.012 of MRR, 0.5 up to 0.019 and 1.0 up to 0.020: 0.7 is the default.
+- A pool of 20 chunks was not better than 10 for any of them, and costs twice the time. A pool of 5 kept 83% of the gain of bge-reranker-v2-m3 on single-fact questions but none on the questions whose answer needs several passages, so the pool stays at 10.
+- Skipping the reranker when the margin of the first stage is 0.2 or more lost nothing (MRR 0.902 with and without, on the single-fact questions; 0.421 against 0.425 on the multi-passage ones) and saved 24% and 8% of the pairs; a margin of 0.1 saved 54% of them and lost a fifth of the gain.
+- Cheap lexical features with no model (the share of the question's words and word pairs in the chunk) added +0.02 of MRR on the single-fact questions and lost 0.004 to 0.010 on the multi-passage ones: they are not used. With no reranker, the hybrid order is the result.
+- The gain is in the order of the first results (hit@1, MRR), not in whether the answer is among the first five (+0.01 to +0.03, not different from 0).
+- Time per pair is that of a 4 GB laptop GPU that heats up; a server GPU is dozens of times faster. A cross-encoder of this size is a service to deploy next to the server, not something to ask a laptop for at each question.
+

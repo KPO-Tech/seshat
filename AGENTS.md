@@ -6,7 +6,7 @@ This file provides guidance for AI agents (Seshat, Claude Code, Codex, or simila
 
 ## Project overview
 
-seshat is an open-source Go AI agent runtime. It has no concept of users, organizations, or billing — those live in seshat-ai (a separate private repository). The engine exposes three entry points: `cmd/cli` (terminal), `cmd/grpc` (gRPC server), and `pkg/sdk` (Go SDK for embedding).
+seshat is an open-source Go AI agent runtime. It has no concept of users, organizations, or billing — those live in the products built on top of it: [SeshatOS](https://github.com/KPO-Tech/SeshatOS) (local) and [SeshatCloud](https://github.com/KPO-Tech/SeshatCloud) (multi-tenant), both separate repositories. The engine exposes three entry points: `cmd/cli` (terminal), `cmd/grpc` (gRPC server), and `pkg/sdk` (Go SDK for embedding).
 
 ---
 
@@ -51,8 +51,8 @@ realign `dev` from `main` immediately before opening new feature branches.
 ## Package boundary rules (critical)
 
 - `pkg/` is the **public API**. Do not add `internal/` types to `pkg/` signatures without explicit need.
-- `internal/` packages must **never** import `pkg/` — dependency flows one way: entry points → `pkg/sdk` → `internal/`.
-- `internal/backend` does **not** exist here. It lives in seshat-ai. Do not recreate it.
+- `internal/` packages must **never** import `pkg/` — dependency flows one way: entry points → `pkg/sdk` → `internal/`. 46 imports from before the rule was enforced are listed in `internal/archtest/boundary_test.go`; that test fails on a new one (and on an entry that is no longer needed), so the list only shrinks. `pkg/runtimepath` (standard library only) is the shared leaf expected to stay.
+- `internal/backend` does **not** exist here. It lives in SeshatOS and SeshatCloud. Do not recreate it.
 - New tools go in `internal/tools/<category>/`. Register them in `internal/tools/builtin/builtin.go`.
 - New providers go in `internal/providers/`. Add a wire-format adapter in `internal/providers/adapter.go`.
 
@@ -90,7 +90,7 @@ See [`docs/team.md`](./docs/team.md) for the full multi-agent system documentati
 - Avoid global mutable state outside of init-once singletons.
 - No `interface{}` — use `any` (Go 1.18+).
 - Struct fields that are interfaces: use pointer receivers consistently within the same type.
-- New public types in `pkg/` need exported doc comments.
+- New public types in `pkg/` need exported doc comments. 680 exported symbols of `pkg/` still have none; `internal/archtest/doccomments_test.go` counts them per package, fails when a count goes up, and fails when it goes down until the number in the test is lowered too.
 - Value receivers on types that contain `sync.Mutex` or `sync.RWMutex` are forbidden — always use pointer receivers.
 
 ---

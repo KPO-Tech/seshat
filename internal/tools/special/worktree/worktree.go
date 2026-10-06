@@ -137,7 +137,7 @@ func (m *WorktreeManager) CreateWorktree(
 	worktreePath := filepath.Join(gitRoot, m.config.WorktreeBaseDir, worktreeName)
 
 	// Get current head commit
-	headCommit, err := m.getCurrentHeadCommit(gitRoot)
+	headCommit, err := m.getCurrentHeadCommit(ctx, gitRoot)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get current commit: %w", err)
 	}
@@ -149,7 +149,7 @@ func (m *WorktreeManager) CreateWorktree(
 	}
 
 	// Create the worktree using git
-	if err := m.createGitWorktree(gitRoot, worktreePath, worktreeBranch); err != nil {
+	if err := m.createGitWorktree(ctx, gitRoot, worktreePath, worktreeBranch); err != nil {
 		return nil, fmt.Errorf("failed to create worktree: %w", err)
 	}
 
@@ -164,8 +164,8 @@ func (m *WorktreeManager) CreateWorktree(
 }
 
 // getCurrentHeadCommit gets the current HEAD commit hash
-func (m *WorktreeManager) getCurrentHeadCommit(gitRoot string) (string, error) {
-	cmd := exec.Command("git", "-C", gitRoot, "rev-parse", "HEAD")
+func (m *WorktreeManager) getCurrentHeadCommit(ctx context.Context, gitRoot string) (string, error) {
+	cmd := exec.CommandContext(ctx, "git", "-C", gitRoot, "rev-parse", "HEAD")
 	out, err := cmd.Output()
 	if err != nil {
 		return "", fmt.Errorf("git rev-parse failed: %w", err)
@@ -174,7 +174,7 @@ func (m *WorktreeManager) getCurrentHeadCommit(gitRoot string) (string, error) {
 }
 
 // createGitWorktree creates a git worktree
-func (m *WorktreeManager) createGitWorktree(gitRoot, worktreePath, branch string) error {
+func (m *WorktreeManager) createGitWorktree(ctx context.Context, gitRoot, worktreePath, branch string) error {
 	// Create parent directory
 	parentDir := filepath.Dir(worktreePath)
 	if err := os.MkdirAll(parentDir, 0755); err != nil {
@@ -182,11 +182,11 @@ func (m *WorktreeManager) createGitWorktree(gitRoot, worktreePath, branch string
 	}
 
 	// Create the worktree
-	cmd := exec.Command("git", "-C", gitRoot, "worktree", "add", "-b", branch, worktreePath)
+	cmd := exec.CommandContext(ctx, "git", "-C", gitRoot, "worktree", "add", "-b", branch, worktreePath)
 	if out, err := cmd.CombinedOutput(); err != nil {
 		// If branch already exists, try checking it out
 		if strings.Contains(string(out), "branch already exists") {
-			return m.checkoutWorktreeBranch(gitRoot, worktreePath, branch)
+			return m.checkoutWorktreeBranch(ctx, gitRoot, worktreePath, branch)
 		}
 		return fmt.Errorf("git worktree add failed: %w, output: %s", err, string(out))
 	}
@@ -195,7 +195,7 @@ func (m *WorktreeManager) createGitWorktree(gitRoot, worktreePath, branch string
 }
 
 // checkoutWorktreeBranch checks out an existing branch in a worktree path
-func (m *WorktreeManager) checkoutWorktreeBranch(gitRoot, worktreePath, branch string) error {
+func (m *WorktreeManager) checkoutWorktreeBranch(ctx context.Context, gitRoot, worktreePath, branch string) error {
 	// Remove the directory if it exists (git will fail otherwise)
 	if _, err := os.Stat(worktreePath); err == nil {
 		if err := os.RemoveAll(worktreePath); err != nil {
@@ -203,7 +203,7 @@ func (m *WorktreeManager) checkoutWorktreeBranch(gitRoot, worktreePath, branch s
 		}
 	}
 
-	cmd := exec.Command("git", "-C", gitRoot, "worktree", "add", worktreePath, branch)
+	cmd := exec.CommandContext(ctx, "git", "-C", gitRoot, "worktree", "add", worktreePath, branch)
 	if out, err := cmd.CombinedOutput(); err != nil {
 		return fmt.Errorf("git worktree add failed: %w, output: %s", err, string(out))
 	}
@@ -213,14 +213,14 @@ func (m *WorktreeManager) checkoutWorktreeBranch(gitRoot, worktreePath, branch s
 
 // RemoveWorktree removes the given worktree from disk.
 // The caller is responsible for clearing the session registry entry.
-func (m *WorktreeManager) RemoveWorktree(session *WorktreeSession, force bool) error {
+func (m *WorktreeManager) RemoveWorktree(ctx context.Context, session *WorktreeSession, force bool) error {
 	if session == nil {
 		return fmt.Errorf("no active worktree session")
 	}
 
 	// Check for uncommitted changes
 	if !force {
-		hasChanges, err := m.hasUncommittedChanges(session.WorktreePath)
+		hasChanges, err := m.hasUncommittedChanges(ctx, session.WorktreePath)
 		if err != nil {
 			return err
 		}
@@ -236,7 +236,7 @@ func (m *WorktreeManager) RemoveWorktree(session *WorktreeSession, force bool) e
 	}
 
 	// Remove the worktree
-	cmd := exec.Command("git", "-C", gitRoot, "worktree", "remove", session.WorktreePath, "--force")
+	cmd := exec.CommandContext(ctx, "git", "-C", gitRoot, "worktree", "remove", session.WorktreePath, "--force")
 	if out, err := cmd.CombinedOutput(); err != nil {
 		return fmt.Errorf("failed to remove worktree: %w, output: %s", err, string(out))
 	}
@@ -245,8 +245,8 @@ func (m *WorktreeManager) RemoveWorktree(session *WorktreeSession, force bool) e
 }
 
 // hasUncommittedChanges checks if worktree has uncommitted changes
-func (m *WorktreeManager) hasUncommittedChanges(worktreePath string) (bool, error) {
-	cmd := exec.Command("git", "-C", worktreePath, "status", "--porcelain")
+func (m *WorktreeManager) hasUncommittedChanges(ctx context.Context, worktreePath string) (bool, error) {
+	cmd := exec.CommandContext(ctx, "git", "-C", worktreePath, "status", "--porcelain")
 	out, err := cmd.Output()
 	if err != nil {
 		return false, fmt.Errorf("git status failed: %w", err)
@@ -255,9 +255,9 @@ func (m *WorktreeManager) hasUncommittedChanges(worktreePath string) (bool, erro
 }
 
 // CountWorktreeChanges counts changed files and commits
-func (m *WorktreeManager) CountWorktreeChanges(worktreePath, originalCommit string) (int, int, error) {
+func (m *WorktreeManager) CountWorktreeChanges(ctx context.Context, worktreePath, originalCommit string) (int, int, error) {
 	// Count uncommitted files
-	cmd := exec.Command("git", "-C", worktreePath, "status", "--porcelain")
+	cmd := exec.CommandContext(ctx, "git", "-C", worktreePath, "status", "--porcelain")
 	out, err := cmd.Output()
 	if err != nil {
 		return 0, 0, fmt.Errorf("git status failed: %w", err)
@@ -270,7 +270,7 @@ func (m *WorktreeManager) CountWorktreeChanges(worktreePath, originalCommit stri
 	// Count commits ahead of original
 	commits := 0
 	if originalCommit != "" {
-		cmd = exec.Command("git", "-C", worktreePath, "rev-list", "--count", originalCommit+"..HEAD")
+		cmd = exec.CommandContext(ctx, "git", "-C", worktreePath, "rev-list", "--count", originalCommit+"..HEAD")
 		out, err = cmd.Output()
 		if err == nil {
 			lines := strings.TrimSpace(string(out))

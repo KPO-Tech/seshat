@@ -248,7 +248,7 @@ func ReadPages(ctx context.Context, data []byte, pages []int, opts Options, docu
 			selection = append(selection, strconv.Itoa(n))
 		}
 	}
-	pagesWithImages, largeImages, pagePictures, err := pagesWithEmbeddedImages(data, selection)
+	pagesWithImages, largeImages, pagePictures, err := pagesWithEmbeddedImages(ctx, data, selection)
 	imageDetectionOK := err == nil
 	if err != nil {
 		// Can't tell which pages have images - conservatively treat every
@@ -318,7 +318,7 @@ func ReadPages(ctx context.Context, data []byte, pages []int, opts Options, docu
 			source = PageSourceDocling
 			text = ""
 			if documentReader != nil && documentReader.IsAvailable(ctx) {
-				if pageData, extractErr := extractSinglePage(data, i); extractErr == nil {
+				if pageData, extractErr := extractSinglePage(ctx, data, i); extractErr == nil {
 					if conversion, convErr := documentReader.ConvertBytes(ctx, pageData, fmt.Sprintf("page-%d.pdf", i)); convErr == nil &&
 						strings.TrimSpace(conversion.Markdown) != "" && !textquality.IsGarbledText(conversion.Markdown) {
 						text = conversion.Markdown
@@ -459,8 +459,8 @@ func allPages(n int) map[int]bool {
 // pdfcpu's own resource inspection - a deterministic read of the file's
 // structure, not a heuristic or an ML classification. large says which of them hold one big enough to be a table, and
 // pictures counts, for each page, the pictures worth a marker in its text (see withImageMarkers).
-func pagesWithEmbeddedImages(data []byte, selectedPages []string) (pages, large map[int]bool, pictures map[int]int, err error) {
-	imageSets, err := api.ExtractImagesRaw(bytes.NewReader(data), selectedPages, nil)
+func pagesWithEmbeddedImages(ctx context.Context, data []byte, selectedPages []string) (pages, large map[int]bool, pictures map[int]int, err error) {
+	imageSets, err := api.ExtractImagesRaw(ctx, bytes.NewReader(data), selectedPages, nil)
 	if err != nil {
 		return nil, nil, nil, err
 	}
@@ -531,9 +531,9 @@ const (
 // extractSinglePage produces a standalone one-page PDF containing just
 // page n, so documentReader only has to process that one page instead of
 // the whole document.
-func extractSinglePage(data []byte, n int) ([]byte, error) {
+func extractSinglePage(ctx context.Context, data []byte, n int) ([]byte, error) {
 	var buf bytes.Buffer
-	if err := api.Trim(bytes.NewReader(data), &buf, []string{strconv.Itoa(n)}, nil); err != nil {
+	if err := api.Trim(ctx, bytes.NewReader(data), &buf, []string{strconv.Itoa(n)}, nil); err != nil {
 		return nil, fmt.Errorf("pdfsmart: extract page %d: %w", n, err)
 	}
 	return buf.Bytes(), nil

@@ -23,6 +23,8 @@ import (
 	"github.com/charmbracelet/x/exp/slice"
 	"mvdan.cc/sh/v3/interp"
 	"mvdan.cc/sh/v3/syntax"
+
+	"github.com/KPO-Tech/seshat/internal/envfilter"
 )
 
 // ShellType represents the type of shell to use
@@ -91,7 +93,8 @@ func NewShell(opts *Options) *Shell {
 
 	env := opts.Env
 	if env == nil {
-		env = os.Environ()
+		// the environment of the process without its secrets: the command is one the model asked for (see internal/envfilter)
+		env = envfilter.Environ()
 	}
 
 	// Allow tools to detect execution by Seshat.
