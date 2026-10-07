@@ -9,6 +9,10 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Changed
+
+- **The permission resolver is split into steps.** `Integrator.ResolverWithContext` was one closure of 270 lines (cyclomatic complexity 52). Looking up what the session or the turn already granted, recording an approval, reading the user's answer and its refusal reason are now `sessionAllows`, `recordApproval`, `promptApproval` and `promptDenyReason`. The behaviour is unchanged (the existing resolver tests pass untouched); the two pure helpers get their own tests.
+
 ### Fixed
 
 - **A connection that sent an MCP notification over HTTP is given back to the pool, and `bodyclose` checks it.** `HTTPTransport.SendNotification` discarded the response without reading or closing its body, so every notification held a socket open. The body is read (up to 64 KiB) and closed. The other 25 findings of the linter were a function that returned a response whose body it had already closed (`spGraphClient.get` now returns only the error), two cases that are not leaks (the response returned to the caller in the retry wrapper, the handshake response of a websocket) with the reason on the line, and the tests, which now close what they receive.
