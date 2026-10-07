@@ -2,6 +2,7 @@ package storage
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"io/fs"
@@ -175,7 +176,7 @@ func (p *LocalProvider) List(ctx context.Context, options ListOptions) ([]Object
 		}
 		return nil
 	})
-	if err != nil && err != fs.SkipAll {
+	if err != nil && !errors.Is(err, fs.SkipAll) {
 		return nil, fmt.Errorf("failed to list files: %w", err)
 	}
 	sort.Slice(results, func(i, j int) bool {

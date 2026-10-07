@@ -36,7 +36,7 @@ func Tools() iter.Seq2[string, []*Tool] {
 func RunTool(ctx context.Context, cfg *config.ConfigStore, name, toolName string, input string) (ToolResult, error) {
 	var args map[string]any
 	if err := json.Unmarshal([]byte(input), &args); err != nil {
-		return ToolResult{}, fmt.Errorf("error parsing parameters: %s", err)
+		return ToolResult{}, fmt.Errorf("error parsing parameters: %w", err)
 	}
 
 	c, err := getOrRenewClient(ctx, cfg, name)

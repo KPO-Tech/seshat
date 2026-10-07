@@ -186,7 +186,7 @@ func TestWrapGDriveRateLimit_PlainPermissionErrorIsNotWrapped(t *testing.T) {
 	if errors.As(wrapped, &rl) {
 		t.Fatalf("expected a genuine 403 permission error to NOT be wrapped as RateLimited, got one anyway: %v", wrapped)
 	}
-	if wrapped != error(base) {
+	if wrapped != error(base) { //nolint:errorlint // identity on purpose: the very same error value must come back, not a wrapper of it
 		t.Fatal("expected a non-rate-limit error to be returned completely unchanged")
 	}
 }
@@ -196,7 +196,7 @@ func TestWrapGDriveRateLimit_NilAndNonGoogleErrorsPassThrough(t *testing.T) {
 		t.Fatal("expected nil to pass through as nil")
 	}
 	plain := errors.New("boom")
-	if wrapGDriveRateLimit(plain) != error(plain) {
+	if wrapGDriveRateLimit(plain) != error(plain) { //nolint:errorlint // identity on purpose: the very same error value must come back, not a wrapper of it
 		t.Fatal("expected a non-googleapi.Error to pass through unchanged")
 	}
 }

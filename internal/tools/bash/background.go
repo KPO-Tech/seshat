@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/rand"
 	"encoding/hex"
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -257,7 +258,8 @@ func (m *BackgroundTaskManager) waitForTask(task *BackgroundTask) {
 
 	task.mu.Lock()
 	task.stdinPipe = nil
-	if exitErr, ok := err.(*exec.ExitError); ok {
+	var exitErr *exec.ExitError
+	if errors.As(err, &exitErr) {
 		if status, ok := exitErr.Sys().(syscall.WaitStatus); ok {
 			task.ExitCode = status.ExitStatus()
 		} else {

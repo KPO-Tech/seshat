@@ -48,7 +48,7 @@ func (i *Input) Validate() error {
 
 	parsed, err := url.Parse(strings.TrimSpace(i.URL))
 	if err != nil {
-		return fmt.Errorf("%w: %v", fetchcore.ErrInvalidURL, err)
+		return fmt.Errorf("%w: %w", fetchcore.ErrInvalidURL, err)
 	}
 	if parsed.Scheme != "http" && parsed.Scheme != "https" {
 		return fetchcore.Err("URL must use http or https")

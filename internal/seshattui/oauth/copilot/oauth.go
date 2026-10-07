@@ -80,10 +80,10 @@ func PollForToken(ctx context.Context, dc *DeviceCode) (*oauth.Token, error) {
 		}
 
 		token, err := tryGetToken(ctx, dc.DeviceCode)
-		if err == errPending {
+		if errors.Is(err, errPending) {
 			continue
 		}
-		if err == errSlowDown {
+		if errors.Is(err, errSlowDown) {
 			interval += 5
 			ticker.Reset(time.Duration(interval) * time.Second)
 			continue

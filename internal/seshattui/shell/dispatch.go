@@ -129,7 +129,7 @@ func probeFile(path string) ([]byte, error) {
 	}
 	probe := make([]byte, probeWindow)
 	n, err := io.ReadFull(f, probe)
-	if err != nil && err != io.EOF && err != io.ErrUnexpectedEOF {
+	if err != nil && !errors.Is(err, io.EOF) && !errors.Is(err, io.ErrUnexpectedEOF) {
 		return nil, err
 	}
 	return probe[:n], nil

@@ -725,7 +725,8 @@ func (t *Tool) runCommand(ctx context.Context, cmd *exec.Cmd, maxOutputSize int6
 	case errors.Is(ctx.Err(), context.Canceled):
 		return stdoutBuf.String(), stderrBuf.String(), 130, false
 	case waitErr != nil:
-		if exitError, ok := waitErr.(*exec.ExitError); ok {
+		var exitError *exec.ExitError
+		if errors.As(waitErr, &exitError) {
 			if status, ok := exitError.Sys().(syscall.WaitStatus); ok {
 				return stdoutBuf.String(), stderrBuf.String(), status.ExitStatus(), false
 			}
