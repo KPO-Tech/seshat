@@ -2,6 +2,8 @@
 
 Technical documentation for the seshat runtime. For project overview and quick start, see the [root README](../README.md).
 
+The website has the documentation written for users: [installation](https://seshat-ai.com/en/docs/getting-started/installation), [configuration](https://seshat-ai.com/en/docs/getting-started/configuration), the [concepts](https://seshat-ai.com/en/docs/concepts/what-is-seshat) (architecture, memory, security and trust, skills and MCP, RAG), the [Go SDK](https://seshat-ai.com/en/docs/sdk/go-sdk), the [gRPC API](https://seshat-ai.com/en/docs/sdk/grpc-api) and the [CLI guide](https://seshat-ai.com/en/docs/guides/cli), all at [seshat-ai.com/en/docs](https://seshat-ai.com/en/docs). The files in this directory are the engineering notes that stay next to the code.
+
 ## Contents
 
 | Document | What it covers |
