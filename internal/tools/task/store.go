@@ -3,6 +3,7 @@ package task
 import (
 	"context"
 	"database/sql"
+	"errors"
 	"fmt"
 	"sync"
 	"sync/atomic"
@@ -171,7 +172,7 @@ func (s *TaskStore) GetTask(ctx context.Context, sessionID, taskID string) (*Tas
 	if s.database != nil {
 		row, err := s.database.GetSessionTask(ctx, sessionID, taskID)
 		if err != nil {
-			if err == sql.ErrNoRows {
+			if errors.Is(err, sql.ErrNoRows) {
 				return nil, fmt.Errorf("task not found: %s", taskID)
 			}
 			return nil, err

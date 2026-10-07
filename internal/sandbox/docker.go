@@ -7,6 +7,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 	"os/exec"
@@ -392,7 +393,8 @@ func (e *DockerExecutor) Run(ctx context.Context, req RunRequest) (RunResult, er
 
 	exitCode := 0
 	if runErr != nil {
-		if exitErr, ok := runErr.(*exec.ExitError); ok {
+		var exitErr *exec.ExitError
+		if errors.As(runErr, &exitErr) {
 			exitCode = exitErr.ExitCode()
 			runErr = nil // non-zero exit is not a Run error — mirrors NoopExecutor
 		}

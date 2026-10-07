@@ -10,6 +10,7 @@ package officetext
 
 import (
 	"encoding/xml"
+	"errors"
 	"io"
 )
 
@@ -81,7 +82,7 @@ func parseXMLTree(r io.Reader) (*node, error) {
 
 	for {
 		tok, err := dec.Token()
-		if err == io.EOF {
+		if errors.Is(err, io.EOF) {
 			break
 		}
 		if err != nil {

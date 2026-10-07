@@ -2,6 +2,7 @@ package sandbox
 
 import (
 	"context"
+	"errors"
 	"os"
 	"path/filepath"
 	"testing"
@@ -239,10 +240,12 @@ func TestErrorForDecisionReturnsExpectedErrorTypes(t *testing.T) {
 	if err := ErrorForDecision(DecisionResult{Decision: DecisionAllow}); err != nil {
 		t.Fatalf("expected nil error for allow, got %v", err)
 	}
-	if _, ok := ErrorForDecision(DecisionResult{Decision: DecisionAsk}).(*ApprovalRequiredError); !ok {
+	var asked *ApprovalRequiredError
+	if !errors.As(ErrorForDecision(DecisionResult{Decision: DecisionAsk}), &asked) {
 		t.Fatal("expected approval required error")
 	}
-	if _, ok := ErrorForDecision(DecisionResult{Decision: DecisionDeny}).(*PermissionDeniedError); !ok {
+	var denied *PermissionDeniedError
+	if !errors.As(ErrorForDecision(DecisionResult{Decision: DecisionDeny}), &denied) {
 		t.Fatal("expected permission denied error")
 	}
 }
@@ -467,10 +470,12 @@ func TestErrorForPermissionResultReturnsExpectedErrorTypes(t *testing.T) {
 	if err := ErrorForPermissionResult(types.Passthrough(nil), "fallback"); err != nil {
 		t.Fatalf("expected nil error for passthrough, got %v", err)
 	}
-	if _, ok := ErrorForPermissionResult(types.Ask("approval required"), "fallback").(*ApprovalRequiredError); !ok {
+	var askedResult *ApprovalRequiredError
+	if !errors.As(ErrorForPermissionResult(types.Ask("approval required"), "fallback"), &askedResult) {
 		t.Fatal("expected approval required error")
 	}
-	if _, ok := ErrorForPermissionResult(types.Deny("denied"), "fallback").(*PermissionDeniedError); !ok {
+	var deniedResult *PermissionDeniedError
+	if !errors.As(ErrorForPermissionResult(types.Deny("denied"), "fallback"), &deniedResult) {
 		t.Fatal("expected permission denied error")
 	}
 }

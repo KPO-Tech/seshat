@@ -18,6 +18,8 @@ linters:
     - noctx
     # The body of an HTTP response is closed, so that the connection goes back to the pool.
     - bodyclose
+    # An error is compared with errors.Is and read with errors.As, and wrapped with %w: a wrapped error must still be recognised.
+    - errorlint
 
 linters-settings:
   nolintlint:

@@ -11,6 +11,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log/slog"
 	"os"
@@ -199,7 +200,8 @@ func (r *Runner) runOne(ctx context.Context, cfg HookConfig, env []string, input
 	err := cmd.Run()
 	if err != nil {
 		exitCode := 0
-		if exitErr, ok := err.(*exec.ExitError); ok {
+		var exitErr *exec.ExitError
+		if errors.As(err, &exitErr) {
 			exitCode = exitErr.ExitCode()
 		}
 		switch exitCode {

@@ -252,7 +252,7 @@ func (b *SQLiteBackend) LoadTranscript(sessionID types.SessionID) ([]types.Trans
 		}
 		var entry types.TranscriptEntry
 		if err := json.Unmarshal([]byte(payload), &entry); err != nil {
-			return nil, fmt.Errorf("%w for session %s at row %d: %v", ErrMalformedTranscriptEntry, sessionID, lineNumber, err)
+			return nil, fmt.Errorf("%w for session %s at row %d: %w", ErrMalformedTranscriptEntry, sessionID, lineNumber, err)
 		}
 		entries = append(entries, entry)
 	}

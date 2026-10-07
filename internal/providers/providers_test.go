@@ -1717,7 +1717,10 @@ func TestCircuitBreakerExecuteWithTimeout(t *testing.T) {
 
 	assert.Error(t, err)
 	assert.True(t, IsCircuitBreakerTimeoutError(err))
-	assert.Equal(t, 100*time.Millisecond, err.(*CircuitBreakerTimeoutError).Timeout)
+	var timeoutErr *CircuitBreakerTimeoutError
+	if assert.True(t, errors.As(err, &timeoutErr)) {
+		assert.Equal(t, 100*time.Millisecond, timeoutErr.Timeout)
+	}
 	assert.Equal(t, CircuitStateOpen, cb.State()) // Should have tripped
 }
 

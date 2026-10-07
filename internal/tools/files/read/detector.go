@@ -2,6 +2,7 @@ package read
 
 import (
 	"bytes"
+	"errors"
 	"io"
 	"os"
 	"path/filepath"
@@ -132,7 +133,7 @@ func DetectFileType(filePath string) (FileType, error) {
 	// Read first 512 bytes for magic number detection
 	buffer := make([]byte, 512)
 	n, err := file.Read(buffer)
-	if err != nil && err != io.EOF {
+	if err != nil && !errors.Is(err, io.EOF) {
 		return FileTypeBinary, err
 	}
 

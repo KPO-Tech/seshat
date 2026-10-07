@@ -1,6 +1,7 @@
 package vector
 
 import (
+	"errors"
 	"fmt"
 	"math/rand"
 	"os"
@@ -222,7 +223,7 @@ func TestHNSWIndexSaveAndLoad(t *testing.T) {
 	}
 	notOurs := filepath.Join(t.TempDir(), "legacy.hnsw")
 	_ = os.WriteFile(notOurs, []byte("anything else"), 0o600)
-	if _, err := loadHNSWIndex(notOurs); err != errNotHNSWIndex {
+	if _, err := loadHNSWIndex(notOurs); !errors.Is(err, errNotHNSWIndex) {
 		t.Fatalf("err = %v, want errNotHNSWIndex", err)
 	}
 }

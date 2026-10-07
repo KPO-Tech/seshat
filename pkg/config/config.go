@@ -1,6 +1,7 @@
 package config
 
 import (
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -323,7 +324,8 @@ func LoadInto(config *Config) error {
 	v.SetDefault("enable_api_keys", true)
 
 	if err := v.ReadInConfig(); err != nil {
-		if _, ok := err.(viper.ConfigFileNotFoundError); ok {
+		var notFound viper.ConfigFileNotFoundError
+		if errors.As(err, &notFound) {
 			// Config not found — no fallback, config is optional.
 		} else {
 			return fmt.Errorf("failed to read config: %w", err)
