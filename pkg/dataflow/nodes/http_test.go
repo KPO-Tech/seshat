@@ -55,7 +55,7 @@ func TestHTTPRequestExecuteParsesJSONResponse(t *testing.T) {
 	defer srv.Close()
 
 	node := NewHTTPRequest()
-	node.checkSSRF = func(string) error { return nil } // httptest binds to 127.0.0.1, itself a blocked address
+	allowLocal(node)
 
 	output, err := node.Execute(context.Background(), nil, nil, map[string]any{
 		"url":     srv.URL,
@@ -91,7 +91,7 @@ func TestHTTPRequestExecuteResolvesExpressionsInURLBodyAndHeaders(t *testing.T) 
 	defer srv.Close()
 
 	node := NewHTTPRequest()
-	node.checkSSRF = func(string) error { return nil }
+	allowLocal(node)
 	rt := &dataflow.Runtime{Expr: expr.NewPool(1)}
 	input := []dataflow.Item{{"id": "42"}}
 
@@ -122,7 +122,7 @@ func TestHTTPRequestExecuteLeavesLiteralParamsUnresolvedWithNoRuntimeExpr(t *tes
 	defer srv.Close()
 
 	node := NewHTTPRequest()
-	node.checkSSRF = func(string) error { return nil }
+	allowLocal(node)
 	// No Runtime at all (nil) - must behave exactly as before Tier 2.1 for a
 	// literal URL, not error out just because expressions aren't wired up.
 	_, err := node.Execute(context.Background(), nil, nil, map[string]any{"url": srv.URL})
