@@ -9,6 +9,10 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Changed
+
+- **A function can no longer grow past a cyclomatic complexity of 30.** 37 functions already did (counted as `gocyclo` does, and the same numbers): the message switches of the terminal UI (`UI.Update` 168, `handleKeyPressMsg` 149, `handleDialogMsg` 96), and in the engine `ReadPages` (54), `RunAgent` (53), the `edit` tool (47) and a few others. `internal/archtest` lists them with their complexity: a new function above 30 fails the test, so does a listed one that gets more complex, and so does one that gets less complex until its number is lowered, so the list only shrinks. No behaviour change.
+
 ### Security
 
 - **The `http_request` node of the workflow engine can no longer be sent to an internal address by a redirect or a DNS answer.** It checked the URL once, before the call, and then let the client follow up to 10 redirects without looking at them: a public server answering with a redirect to `http://169.254.169.254/` (or to any internal address) got the response through. It also resolved the name for the check and again to connect, so a name that answered a public address the first time and an internal one the second (DNS rebinding) got through. Every redirect is now checked against the guard (10 at most), and the address a connection is really made to is checked when it is made. The NAT64 range (`64:ff9b::/96`, which reaches IPv4 addresses through a gateway) is blocked too. The node connects directly and ignores the proxy variables of the environment, which would hide the destination from both checks.
