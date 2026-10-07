@@ -11,6 +11,7 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Fixed
 
+- **A connection that sent an MCP notification over HTTP is given back to the pool, and `bodyclose` checks it.** `HTTPTransport.SendNotification` discarded the response without reading or closing its body, so every notification held a socket open. The body is read (up to 64 KiB) and closed. The other 25 findings of the linter were a function that returned a response whose body it had already closed (`spGraphClient.get` now returns only the error), two cases that are not leaks (the response returned to the caller in the retry wrapper, the handshake response of a websocket) with the reason on the line, and the tests, which now close what they receive.
 - **Wrapped errors are recognised, and `errorlint` checks it.** 59 places compared an error with `==`/`!=` (`io.EOF`, `sql.ErrNoRows`, `context.Canceled`...), read it with a type assertion (`*exec.ExitError`, `*types.EngineError`, the circuit-breaker and permission errors) or wrapped it with `%v`; a wrapped error was then missed. The retry and recovery classification in the engine, the exit-code reading of commands and hooks, and the end-of-input handling now use `errors.Is` and `errors.As`, and the messages that hide their cause use `%w`. The linter is on, so a new one fails the build.
 
 ## [1.3.0] - 2026-10-06

@@ -96,7 +96,7 @@ func (c *Client) executeWithCircuitBreaker(ctx context.Context, req types.APIReq
 
 	// Execute through circuit breaker
 	err := c.circuitBreaker.Execute(func() error {
-		resp, err := c.sendMessage(ctx, req)
+		resp, err := c.sendMessage(ctx, req) //nolint:bodyclose // the response is returned to the caller of this function, which owns the body
 		result = resp
 		resultErr = err
 		if err != nil {
