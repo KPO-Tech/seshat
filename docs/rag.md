@@ -30,16 +30,7 @@ Seshat can convert rich documents before indexing through a configured document 
 | HTML | Via fetch |
 | Audio (MP3, WAV) | Transcription via Whisper |
 
-```bash
-# Index a document
-seshat rag add ./docs/architecture.pdf --collection "internal-docs"
-
-# Index a URL
-seshat rag add https://example.com/spec.pdf --collection "specs"
-
-# List collections
-seshat rag list
-```
+The embedded RAG service is used through three tools, active whenever a RAG service is attached to the client: `rag_ingest` (text into a named corpus), `rag_search` and `rag_delete`. There is no `seshat rag` command. From Go, use `rag.NewService(...)`, `Ingest` and `Search` (a complete example is in [Retrieval and knowledge](https://seshat-ai.com/en/docs/concepts/rag) on seshat-ai.com).
 
 ### Default reader
 
@@ -136,32 +127,22 @@ OPENSEARCH_INTEGRATION_URL=http://localhost:9200 go test ./internal/vector -run 
 
 ## Embedding models
 
-Seshat uses local embedding models via [Ollama](https://ollama.com) or remote APIs:
+Seshat uses local embedding models via [Ollama](https://ollama.com) or any OpenAI-compatible API. Configure them with the environment:
 
-```go
-client, _ := sdk.NewClient(&sdk.ClientConfig{
-    RAGConfig: &sdk.RAGConfig{
-        EmbeddingProvider: "ollama",
-        EmbeddingModel:    "nomic-embed-text",
-        ChunkSize:         512,
-        ChunkOverlap:      64,
-    },
-})
+```bash
+RAG_EMBEDDING_URL=http://localhost:11434
+RAG_EMBEDDING_MODEL=nomic-embed-text
+RAG_EMBEDDING_API_KEY=...        # not needed for Ollama
+RAG_EMBEDDING_PROVIDER=ollama    # "openai" or "ollama", detected if empty
 ```
 
-Supported embedding providers: Ollama (local), OpenAI, Google, Mistral.
+In Go, `embedder.NewFromEnv()` (package `pkg/rag/embedder`) returns an embedder, or `nil` when the variables are not set, which gives keyword-only search.
 
 ---
 
 ## Agent tools
 
-The `search_knowledge` built-in tool is available in every session:
-
-```
-search_knowledge(query="architecture of the permission system", collection="internal-docs", top_k=5)
-```
-
-The agent calls this tool autonomously when it needs to retrieve information. Results are formatted as cited excerpts and injected into the context.
+`rag_ingest`, `rag_search` and `rag_delete` are registered when a RAG service is attached (`ClientConfig.RAGService`). `rag_search` takes `corpus_id`, `query`, `top_k` (default 5), `hybrid_weight` and an optional metadata `filter`.
 
 ---
 

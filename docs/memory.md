@@ -28,12 +28,15 @@ When the context approaches the limit, **compaction** runs automatically.
 
 ### 3. Agent memory tool
 
-The `memory` built-in tool lets agents persist notes that survive across sessions:
+The memory tools let agents persist notes that survive across sessions:
+
+The memory tools store a small knowledge graph of entities and observations:
 
 ```
-save_memory: "User prefers concise answers without preamble."
-list_memories
-delete_memory <id>
+memory_create_entities   create entities (a person, a project, a decision)
+memory_add_observations  add facts to an entity
+memory_search_nodes      search what is stored
+memory_open_nodes        read specific entities
 ```
 
 These notes are injected into the system prompt at the start of each new session, giving the agent a form of long-term memory across conversations.
@@ -46,21 +49,14 @@ When a session's token count approaches the model's context window limit, Seshat
 
 **How it works:**
 
-1. Seshat detects that the active context is above the compaction threshold (default: 80% of the model's window).
+1. Seshat detects that the active context is above the compaction threshold (default: 85% of the model's window).
 2. The oldest messages in the conversation are summarized into a compact representation.
 3. The summary replaces the original messages in the active context.
 4. The full history remains in SQLite and is never deleted.
 
 The result: sessions can run indefinitely without hitting context limits, while the full history remains queryable.
 
-**Configuration:**
-
-```go
-client, _ := sdk.NewClient(&sdk.ClientConfig{
-    CompactionThreshold: 0.8,   // compact at 80% of context window
-    CompactionStrategy:  "summarize",
-})
-```
+**Configuration:** in the Go SDK, `ClientConfig.AutoCompact` turns automatic compaction on (it is on in `DefaultClientConfig`). The engine compacts at 85% of the usable window by default and aims for about 50% afterwards.
 
 Manual compaction (from the TUI): planned for a future release once the runtime exposes a manual-compaction hook.
 

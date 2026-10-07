@@ -11,6 +11,10 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Changed
 
+- **The docs say what the code does.** `docs/memory.md` names the memory tools that exist (`memory_create_entities`, `memory_add_observations`, `memory_search_nodes`, `memory_open_nodes`) and the real compaction settings (85% of the usable window, about 50% afterwards, `ClientConfig.AutoCompact`); `docs/sdk.md` has the current hook API (`HookEventPreToolUse`, a handler that takes a `HookProgress`, `HookRegistry().Remove`); `docs/team.md` says that teams are internal packages not exposed through the CLI, the SDK or gRPC; `docs/rag.md` describes the three RAG tools and the `RAG_EMBEDDING_*` variables instead of a `seshat rag` command and a `RAGConfig` that do not exist. `docs/providers.md` is regenerated: new models and limits, the Kimi provider, and the environment variable of Codex, Foundry, Workers AI and OpenCode, which `scripts/gen_provider_docs.go` left blank because it read them only from provider discovery; it falls back to the credential variables of the configuration now.
+
+### Changed
+
 - **A function can no longer grow past a cyclomatic complexity of 30.** 37 functions already did (counted as `gocyclo` does, and the same numbers): the message switches of the terminal UI (`UI.Update` 168, `handleKeyPressMsg` 149, `handleDialogMsg` 96), and in the engine `ReadPages` (54), `RunAgent` (53), the `edit` tool (47) and a few others. `internal/archtest` lists them with their complexity: a new function above 30 fails the test, so does a listed one that gets more complex, and so does one that gets less complex until its number is lowered, so the list only shrinks. No behaviour change.
 
 ### Security
