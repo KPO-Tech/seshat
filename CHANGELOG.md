@@ -9,6 +9,10 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Security
+
+- **The `http_request` node of the workflow engine can no longer be sent to an internal address by a redirect or a DNS answer.** It checked the URL once, before the call, and then let the client follow up to 10 redirects without looking at them: a public server answering with a redirect to `http://169.254.169.254/` (or to any internal address) got the response through. It also resolved the name for the check and again to connect, so a name that answered a public address the first time and an internal one the second (DNS rebinding) got through. Every redirect is now checked against the guard (10 at most), and the address a connection is really made to is checked when it is made. The NAT64 range (`64:ff9b::/96`, which reaches IPv4 addresses through a gateway) is blocked too. The node connects directly and ignores the proxy variables of the environment, which would hide the destination from both checks.
+
 ### Fixed
 
 - **A PDF's page count was always 0, and PDF reads now stop with their context.** `ReadPDF` and `GetPDFPageCount` took the count from `pdfcpu.Read`, which leaves it at 0 (checked on pdfcpu 0.13 and 0.16): the "too many pages to read at once" check of the fallback readers never fired and a very large PDF went through whole as base64. The count comes from `api.PageCount` now. `ReadPDF`, `GetPDFPageCount`, `ExtractPDFPages`, the page reader and the decryption of an encrypted PDF take the context of the read (they handed pdfcpu a `context.Background()`), so a cancelled read stops parsing; `pkg/pdfsmart` keeps `Unlock` and gains `UnlockContext`. The local storage provider and the loading of MCP skills use the caller's context too.
