@@ -20,7 +20,7 @@ func TestAnEncryptedPDFWithAnEmptyUserPasswordIsRead(t *testing.T) {
 	for _, name := range []string{"aes256_nouser.pdf", "aes256r5_nouser.pdf", "aes128_nouser.pdf", "rc4_128_nouser.pdf"} {
 		t.Run(name, func(t *testing.T) {
 			data := encryptedFixture(t, name)
-			if n, err := PageCount(data); err != nil || n != 3 {
+			if n, err := PageCount(context.Background(), data); err != nil || n != 3 {
 				t.Fatalf("PageCount = %d, %v", n, err)
 			}
 			result, ok, err := ReadPages(context.Background(), data, []int{2}, Options{}, nil, VisionFallback{})
@@ -38,7 +38,7 @@ func TestEncryptionThatSomeProducersWriteInlineIsOpenedToo(t *testing.T) {
 	t.Parallel()
 	// MuPDF writes the encryption dictionary directly in the trailer instead of as an indirect object.
 	data := encryptedFixture(t, "mupdf_aes256_nouser.pdf")
-	if n, err := PageCount(data); err != nil || n != 1 {
+	if n, err := PageCount(context.Background(), data); err != nil || n != 1 {
 		t.Fatalf("PageCount = %d, %v", n, err)
 	}
 }
@@ -47,7 +47,7 @@ func TestAPasswordProtectedPDFAsksForThePassword(t *testing.T) {
 	t.Parallel()
 	for _, name := range []string{"aes256_user.pdf", "mupdf_aes256_user.pdf"} {
 		data := encryptedFixture(t, name)
-		if _, err := PageCount(data); !errors.Is(err, ErrPasswordRequired) {
+		if _, err := PageCount(context.Background(), data); !errors.Is(err, ErrPasswordRequired) {
 			t.Errorf("%s: PageCount error = %v, want ErrPasswordRequired", name, err)
 		}
 		if _, _, err := ReadPages(context.Background(), data, nil, Options{}, nil, VisionFallback{}); !errors.Is(err, ErrPasswordRequired) {
@@ -75,12 +75,12 @@ func TestTheRightPasswordOpensItAndAWrongOneDoesNot(t *testing.T) {
 func TestAFileThatIsNotEncryptedComesBackAsItWas(t *testing.T) {
 	t.Parallel()
 	plain := threePages(t)
-	got, err := Unlock(plain, "")
+	got, err := Unlock(context.Background(), plain, "")
 	if err != nil || &got[0] != &plain[0] {
 		t.Fatalf("an open PDF should be returned unchanged (err=%v)", err)
 	}
 	junk := []byte("this is not a pdf at all")
-	if got, err := Unlock(junk, ""); err != nil || string(got) != string(junk) {
+	if got, err := Unlock(context.Background(), junk, ""); err != nil || string(got) != string(junk) {
 		t.Fatalf("junk should be returned for the caller to report: %v", err)
 	}
 }
@@ -88,11 +88,11 @@ func TestAFileThatIsNotEncryptedComesBackAsItWas(t *testing.T) {
 func TestADecryptedCopyIsRememberedForTheNextCall(t *testing.T) {
 	// Not parallel: the cache is shared and small, and other tests pushing their own files in would evict this one.
 	data := encryptedFixture(t, "aes256_nouser.pdf")
-	first, err := Unlock(data, "")
+	first, err := Unlock(context.Background(), data, "")
 	if err != nil {
 		t.Fatal(err)
 	}
-	second, err := Unlock(data, "")
+	second, err := Unlock(context.Background(), data, "")
 	if err != nil || &first[0] != &second[0] {
 		t.Fatalf("the second call should reuse the first's copy (err=%v)", err)
 	}

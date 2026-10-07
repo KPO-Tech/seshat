@@ -3,13 +3,21 @@ package agent
 import internalagent "github.com/KPO-Tech/seshat/internal/agent"
 
 type (
-	AgentDefinition   = internalagent.AgentDefinition
-	AgentSource       = internalagent.AgentSource
-	AgentRegistry     = internalagent.AgentRegistry
-	AsyncAgent        = internalagent.AsyncAgent
+	// AgentDefinition defines an agent
+	AgentDefinition = internalagent.AgentDefinition
+	// AgentSource indicates where the agent definition comes from
+	AgentSource = internalagent.AgentSource
+	// AgentRegistry is a unified registry for built-in and skill-derived agents.
+	// Built-in agents are pre-loaded at construction; dynamic agents are loaded
+	// via LoadFromSkills. Skill-defined agents never shadow built-in ones.
+	AgentRegistry = internalagent.AgentRegistry
+	// AsyncAgent represents an asynchronous agent execution
+	AsyncAgent = internalagent.AsyncAgent
+	// AsyncAgentManager manages concurrent async agent executions
 	AsyncAgentManager = internalagent.AsyncAgentManager
 )
 
+// NewAgentRegistry creates a registry pre-populated with all built-in agents.
 func NewAgentRegistry() *AgentRegistry {
 	return internalagent.NewAgentRegistry()
 }

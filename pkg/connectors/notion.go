@@ -74,10 +74,12 @@ type NotionConnector struct {
 	extractText TextExtractorFunc
 }
 
+// NewNotionConnector creates a Notion connector that authenticates with the given OAuth configuration.
 func NewNotionConnector(oauthConfig *oauth2.Config) *NotionConnector {
 	return &NotionConnector{oauthConfig: oauthConfig}
 }
 
+// WithTextExtractor sets the function that turns a downloaded binary file into text (see TextExtractorFunc) and returns the connector, for chaining.
 func (c *NotionConnector) WithTextExtractor(fn TextExtractorFunc) *NotionConnector {
 	c.extractText = fn
 	return c

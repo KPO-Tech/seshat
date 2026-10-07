@@ -62,6 +62,7 @@ type GraphError struct {
 	Body   string
 }
 
+// Error returns the status and the body of the answer of Microsoft Graph.
 func (e *GraphError) Error() string {
 	return fmt.Sprintf("microsoft graph returned %d: %s", e.Status, e.Body)
 }

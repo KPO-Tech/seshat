@@ -49,19 +49,23 @@ type Message struct {
 	Deleted        *struct{} `json:"@removed,omitempty"`
 }
 
+// MessageBody is the body of a mail message: its content type (for example Text or HTML) and its content.
 type MessageBody struct {
 	ContentType string `json:"contentType"`
 	Content     string `json:"content"`
 }
 
+// RecipientEntry is one recipient of a message, in its toRecipients and ccRecipients lists.
 type RecipientEntry struct {
 	EmailAddress EmailAddress `json:"emailAddress"`
 }
 
+// Recipient is the sender of a message, in its from field.
 type Recipient struct {
 	EmailAddress EmailAddress `json:"emailAddress"`
 }
 
+// EmailAddress is a display name and an address.
 type EmailAddress struct {
 	Name    string `json:"name"`
 	Address string `json:"address"`

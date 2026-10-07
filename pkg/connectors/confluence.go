@@ -63,10 +63,12 @@ type ConfluenceConnector struct {
 	lastRefreshed *oauth2.Token
 }
 
+// NewConfluenceConnector creates a Confluence connector that authenticates with the given OAuth configuration.
 func NewConfluenceConnector(oauthConfig *oauth2.Config) *ConfluenceConnector {
 	return &ConfluenceConnector{oauthConfig: oauthConfig}
 }
 
+// WithTextExtractor sets the function that turns a downloaded binary file into text (see TextExtractorFunc) and returns the connector, for chaining.
 func (c *ConfluenceConnector) WithTextExtractor(fn TextExtractorFunc) *ConfluenceConnector {
 	c.extractText = fn
 	return c

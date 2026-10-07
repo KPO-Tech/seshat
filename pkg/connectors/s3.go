@@ -95,10 +95,12 @@ type S3Connector struct {
 	extractText TextExtractorFunc
 }
 
+// NewS3Connector creates a connector for S3-compatible storage.
 func NewS3Connector() *S3Connector {
 	return &S3Connector{}
 }
 
+// WithTextExtractor sets the function that turns a downloaded binary file into text (see TextExtractorFunc) and returns the connector, for chaining.
 func (c *S3Connector) WithTextExtractor(fn TextExtractorFunc) *S3Connector {
 	c.extractText = fn
 	return c

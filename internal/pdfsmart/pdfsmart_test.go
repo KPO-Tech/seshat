@@ -299,10 +299,10 @@ func (c *countingConverter) ConvertURL(context.Context, string) (*documentreader
 
 func TestPageCount(t *testing.T) {
 	t.Parallel()
-	if n, err := PageCount(threePages(t)); err != nil || n != 3 {
+	if n, err := PageCount(context.Background(), threePages(t)); err != nil || n != 3 {
 		t.Fatalf("PageCount = %d, %v, want 3", n, err)
 	}
-	if _, err := PageCount([]byte("not a pdf")); err == nil {
+	if _, err := PageCount(context.Background(), []byte("not a pdf")); err == nil {
 		t.Fatal("a file that is not a PDF should be an error")
 	}
 }

@@ -12,6 +12,7 @@ import (
 	"github.com/KPO-Tech/seshat/pkg/sdk"
 )
 
+// ProviderSetupField is one value needed to set a provider up: its key, label and description, the environment variable that can carry it, whether it is a secret and whether it is required.
 type ProviderSetupField struct {
 	Key         string
 	Label       string
@@ -21,6 +22,7 @@ type ProviderSetupField struct {
 	Required    bool
 }
 
+// ProviderInfo describes a provider: its name, display name and description, how it authenticates (AuthType, and every accepted type in AuthTypes), whether it accepts images (SupportsCVMM) and supports prompt caching (SupportsPC), its models, the fields to set it up and a hint about the setup.
 type ProviderInfo struct {
 	Name         sdk.APIProvider
 	DisplayName  string
@@ -34,6 +36,7 @@ type ProviderInfo struct {
 	SetupHint    string
 }
 
+// ModelInfo describes a model of a provider: its identifier, its context window and maximum output in tokens, whether it supports prompt caching, its pricing and a description.
 type ModelInfo struct {
 	Identifier    string
 	ContextWindow int
@@ -62,6 +65,7 @@ var providerOrder = []sdk.APIProvider{
 	sdk.APIProviderFoundry,
 }
 
+// AvailableProviders returns the providers the runtime knows, in the order of the catalogue, with their models and setup fields.
 func AvailableProviders() []ProviderInfo {
 	raw := internalproviders.AllProvidersInfo()
 	providers := make([]ProviderInfo, 0, len(raw))
@@ -77,6 +81,7 @@ func AvailableProviders() []ProviderInfo {
 	return providers
 }
 
+// GetProviderInfo returns the catalogue entry of a provider, and false when the provider is unknown.
 func GetProviderInfo(provider sdk.APIProvider) (ProviderInfo, bool) {
 	info, ok := internalproviders.GetProviderInfo(provider)
 	if !ok {
@@ -85,6 +90,7 @@ func GetProviderInfo(provider sdk.APIProvider) (ProviderInfo, bool) {
 	return providerInfoFromInternal(provider, info), true
 }
 
+// ResolveProvider turns a provider name as a user may write it (for example "claude", "gpt", "aws", "z.ai") into a provider, or returns an empty provider when the name is not recognised.
 func ResolveProvider(raw string) sdk.APIProvider {
 	provider, ok := parseProvider(raw)
 	if !ok {
@@ -93,6 +99,7 @@ func ResolveProvider(raw string) sdk.APIProvider {
 	return provider
 }
 
+// ProviderForModel returns the provider whose catalogue lists the model identifier, compared without regard to case, or an empty provider when no catalogue lists it.
 func ProviderForModel(model string) sdk.APIProvider {
 	normalized := strings.ToLower(strings.TrimSpace(model))
 	if normalized == "" {
@@ -110,6 +117,7 @@ func ProviderForModel(model string) sdk.APIProvider {
 	return ""
 }
 
+// ProviderCredentialEnvVars returns the environment variables that can carry the credentials of a provider (for example ANTHROPIC_API_KEY), or none for a provider that does not use an API key (Ollama, Bedrock, Vertex).
 func ProviderCredentialEnvVars(provider sdk.APIProvider) []string {
 	switch provider {
 	case sdk.APIProviderAnthropic:
@@ -145,6 +153,7 @@ func ProviderCredentialEnvVars(provider sdk.APIProvider) []string {
 	}
 }
 
+// ResolveAPIKey returns the API key to use for provider: the one in the environment when it is set, otherwise the key of config.
 func ResolveAPIKey(config Config, provider sdk.APIProvider) string {
 	if key := resolveAPIKeyFromEnv(provider); key != "" {
 		return key
@@ -152,6 +161,7 @@ func ResolveAPIKey(config Config, provider sdk.APIProvider) string {
 	return strings.TrimSpace(config.APIKey)
 }
 
+// ValidateProviderSetup checks that config holds what provider needs: an API key for most providers, a region for Bedrock, a project id and a region for Vertex, a key and an account id for Workers AI, a key and a base URL or resource id for Foundry, and nothing for Ollama. The error names what is missing.
 func ValidateProviderSetup(config Config, provider sdk.APIProvider) error {
 	switch provider {
 	case sdk.APIProviderOllama:
@@ -196,6 +206,7 @@ func ValidateProviderSetup(config Config, provider sdk.APIProvider) error {
 	}
 }
 
+// ApplyRuntimeEnv exports parts of config to the environment: the runtime root and the settings of the selected provider that its client reads there (the region of Bedrock, the project and region of Vertex, the resource of Foundry, the account of Workers AI). Blank values are not exported.
 func ApplyRuntimeEnv(config Config) {
 	setEnvIfPresent(runtimepath.EnvRuntimeRoot, EffectiveRuntimeRoot(config))
 
@@ -443,6 +454,7 @@ func setEnvIfPresent(key, value string) {
 	_ = os.Setenv(key, value)
 }
 
+// ProviderNames returns the names of the providers of the catalogue, in catalogue order.
 func ProviderNames() []sdk.APIProvider {
 	out := make([]sdk.APIProvider, 0, len(providerOrder))
 	for _, provider := range providerOrder {
@@ -453,6 +465,7 @@ func ProviderNames() []sdk.APIProvider {
 	return out
 }
 
+// IsKnownProvider reports whether provider is in the catalogue.
 func IsKnownProvider(provider sdk.APIProvider) bool {
 	return slices.Contains(ProviderNames(), provider)
 }
