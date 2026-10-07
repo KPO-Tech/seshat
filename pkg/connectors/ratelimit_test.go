@@ -58,7 +58,7 @@ func TestSPGraphClientGet_RateLimitWithRetryAfter(t *testing.T) {
 	defer server.Close()
 
 	client := &spGraphClient{http: server.Client()}
-	_, err := client.get(context.Background(), server.URL, nil)
+	err := client.get(context.Background(), server.URL, nil)
 	if err == nil {
 		t.Fatal("expected an error for a 429 response")
 	}
@@ -79,7 +79,7 @@ func TestSPGraphClientGet_RateLimitWithoutRetryAfterUsesDefault(t *testing.T) {
 	defer server.Close()
 
 	client := &spGraphClient{http: server.Client()}
-	_, err := client.get(context.Background(), server.URL, nil)
+	err := client.get(context.Background(), server.URL, nil)
 	var rl RateLimited
 	if !errors.As(err, &rl) {
 		t.Fatalf("expected a 503 to satisfy RateLimited, got %T: %v", err, err)
@@ -97,7 +97,7 @@ func TestSPGraphClientGet_NonRateLimitErrorIsNotRateLimited(t *testing.T) {
 	defer server.Close()
 
 	client := &spGraphClient{http: server.Client()}
-	_, err := client.get(context.Background(), server.URL, nil)
+	err := client.get(context.Background(), server.URL, nil)
 	if err == nil {
 		t.Fatal("expected an error for a 404 response")
 	}
