@@ -10,11 +10,23 @@ import (
 )
 
 type (
-	StoreKind    = internalvector.StoreKind
-	Query        = internalvector.Query
-	Record       = internalvector.Record
+	// StoreKind identifies which vector store implementation to use.
+	StoreKind = internalvector.StoreKind
+	// Query describes a vector similarity search.
+	// Filter applies optional metadata predicates server-side (where supported)
+	// or client-side (SQLite / in-memory backends).
+	//
+	// Simple equality:  {"source_file": "doc.txt"}
+	// IN operator:      {"source_file": {"$in": ["a.txt", "b.txt"]}}
+	Query = internalvector.Query
+	// Record is one vectorized chunk stored in a vector store.
+	Record = internalvector.Record
+	// SearchResult is one ranked vector search hit.
 	SearchResult = internalvector.SearchResult
-	Store        = internalvector.Store
+	// Store abstracts the vector storage/search engine used by RAG.
+	// Concrete implementations target SQLite, pgvector, Qdrant, Chroma, or any
+	// future provider — the rag.Service and knowledge.Service call only this interface.
+	Store = internalvector.Store
 )
 
 const (
@@ -48,6 +60,7 @@ type DBHandle struct {
 	BusyTimeoutMS int
 }
 
+// NewDBHandle describes a database for a vector store by its driver name and DSN, with a busy timeout of 5 seconds for SQLite.
 func NewDBHandle(driverName, dsn string) *DBHandle {
 	handle := &DBHandle{
 		DriverName: strings.TrimSpace(driverName),
@@ -59,6 +72,7 @@ func NewDBHandle(driverName, dsn string) *DBHandle {
 	return handle
 }
 
+// Config selects and tunes a vector store: its kind, the database for the SQL-backed kinds, the dimension of the embeddings, and the settings specific to pgvector, Qdrant, OpenSearch, Chroma and HNSW.
 type Config struct {
 	StoreKind StoreKind
 	DB        *DBHandle
@@ -94,10 +108,12 @@ type Config struct {
 	HNSWDir string
 }
 
+// NewMemoryStore creates a vector store held in memory: nothing survives the process.
 func NewMemoryStore() *internalvector.MemoryStore {
 	return internalvector.NewMemoryStore()
 }
 
+// NewStore opens the vector store that cfg describes. It returns an error when the database handle has no driver or DSN, or the store cannot be opened.
 func NewStore(ctx context.Context, cfg Config) (Store, error) {
 	coreHandle, err := openCoreDB(ctx, cfg.DB)
 	if err != nil {

@@ -17,8 +17,10 @@ const maxWait = 10 * time.Minute
 // unchanged. Parameters: seconds (int, required, 0 < seconds <= 600).
 type Wait struct{}
 
+// NewWait creates a Wait node.
 func NewWait() Wait { return Wait{} }
 
+// Description returns the catalog entry of the wait node: it pauses for a fixed number of seconds, then passes the items through unchanged.
 func (Wait) Description() dataflow.NodeDescription {
 	return dataflow.NodeDescription{Type: "wait", Name: "Wait", Category: "Control",
 		Description: "Pauses for a fixed duration, then passes items through unchanged. Blocks the whole graph run for that long — keep it short relative to the job's MaxDuration, if one is set. " +
@@ -29,6 +31,7 @@ func (Wait) Description() dataflow.NodeDescription {
 		}}
 }
 
+// ValidateParameters requires seconds to be a positive integer of at most 600.
 func (Wait) ValidateParameters(params map[string]any) error {
 	seconds := dataflow.IntParam(params, "seconds", 0)
 	if seconds <= 0 {
@@ -40,6 +43,7 @@ func (Wait) ValidateParameters(params map[string]any) error {
 	return nil
 }
 
+// Execute waits for the given number of seconds, or until ctx is cancelled, in which case it returns the error of the context, then passes the items through unchanged.
 func (Wait) Execute(ctx context.Context, _ *dataflow.Runtime, input []dataflow.Item, params map[string]any) (dataflow.Output, error) {
 	seconds := dataflow.IntParam(params, "seconds", 0)
 	select {

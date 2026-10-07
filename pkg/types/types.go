@@ -7,33 +7,62 @@ import (
 )
 
 type (
-	APIProvider           = internaltypes.APIProvider
-	APIRequest            = internaltypes.APIRequest
-	APIResponse           = internaltypes.APIResponse
-	APIChunkType          = internaltypes.APIChunkType
-	APIResponseChunk      = internaltypes.APIResponseChunk
-	ContentBlock          = internaltypes.ContentBlock
-	ExecutionOrigin       = internaltypes.ExecutionOrigin
-	ImageContent          = internaltypes.ImageContent
-	Message               = internaltypes.Message
-	ModelIdentifier       = internaltypes.ModelIdentifier
-	PermissionMode        = internaltypes.PermissionMode
-	PromptFn              = internaltypes.PromptFn
-	PromptOption          = internaltypes.PromptOption
-	PromptRequest         = internaltypes.PromptRequest
-	PromptResponse        = internaltypes.PromptResponse
-	PromptType            = internaltypes.PromptType
-	Role                  = internaltypes.Role
-	RuntimeEvent          = internaltypes.RuntimeEvent
-	RuntimeEventType      = internaltypes.RuntimeEventType
-	SessionID             = internaltypes.SessionID
-	TextContent           = internaltypes.TextContent
-	TokenUsage            = internaltypes.TokenUsage
-	ContextWindow         = internaltypes.ContextWindow
+	// APIProvider represents the API provider being used
+	APIProvider = internaltypes.APIProvider
+	// APIRequest represents a request to the API
+	APIRequest = internaltypes.APIRequest
+	// APIResponse represents a complete API response
+	APIResponse = internaltypes.APIResponse
+	// APIChunkType represents the type of chunk in a streaming response
+	APIChunkType = internaltypes.APIChunkType
+	// APIResponseChunk represents a chunk of a streaming API response
+	APIResponseChunk = internaltypes.APIResponseChunk
+	// ContentBlock represents a single block of content in a message
+	ContentBlock = internaltypes.ContentBlock
+	// ExecutionOrigin indicates whether a run is initiated by an interactive user flow
+	// or a future background automation.
+	ExecutionOrigin = internaltypes.ExecutionOrigin
+	// ImageContent represents an image content block
+	ImageContent = internaltypes.ImageContent
+	// Message represents a single message in the conversation
+	Message = internaltypes.Message
+	// ModelIdentifier uniquely identifies a model
+	ModelIdentifier = internaltypes.ModelIdentifier
+	// PermissionMode represents the mode of APPROVAL checking.
+	// This determines WHO approves actions (user, classifier, etc.)
+	PermissionMode = internaltypes.PermissionMode
+	// PromptFn is a function that can prompt the user
+	PromptFn = internaltypes.PromptFn
+	// PromptOption represents an option in a choice prompt
+	PromptOption = internaltypes.PromptOption
+	// PromptRequest represents a request to prompt the user
+	PromptRequest = internaltypes.PromptRequest
+	// PromptResponse represents a response from the user
+	PromptResponse = internaltypes.PromptResponse
+	// PromptType represents the type of prompt
+	PromptType = internaltypes.PromptType
+	// Role represents the role of a message sender
+	Role = internaltypes.Role
+	// RuntimeEvent is the structured event envelope emitted by the runtime.
+	RuntimeEvent = internaltypes.RuntimeEvent
+	// RuntimeEventType identifies a structured runtime event emitted during a turn.
+	RuntimeEventType = internaltypes.RuntimeEventType
+	// SessionID uniquely identifies a session
+	SessionID = internaltypes.SessionID
+	// TextContent represents a text content block
+	TextContent = internaltypes.TextContent
+	// TokenUsage represents token usage information
+	TokenUsage = internaltypes.TokenUsage
+	// ContextWindow represents the context window for a model
+	ContextWindow = internaltypes.ContextWindow
+	// ToolPermissionRequest represents a structured permission check request.
 	ToolPermissionRequest = internaltypes.ToolPermissionRequest
-	ToolResultContent     = internaltypes.ToolResultContent
-	ToolUseContent        = internaltypes.ToolUseContent
-	TurnID                = internaltypes.TurnID
+	// ToolResultContent represents a tool result content block
+	ToolResultContent = internaltypes.ToolResultContent
+	// ToolUseContent represents a tool use content block
+	ToolUseContent = internaltypes.ToolUseContent
+	// TurnID uniquely identifies a turn within a session
+	TurnID = internaltypes.TurnID
 )
 
 const (
@@ -86,30 +115,40 @@ const (
 
 var RuntimeEventEmitterKey = internaltypes.RuntimeEventEmitterKey
 
+// NormalizePermissionMode returns the permission mode that raw names, and false when raw is not a known mode.
 func NormalizePermissionMode(raw string) (PermissionMode, bool) {
 	return internaltypes.NormalizePermissionMode(raw)
 }
 
+// NormalizePermissionModeOrDefault returns mode when it is a known mode, otherwise fallback when that is known, otherwise the on-request mode.
 func NormalizePermissionModeOrDefault(mode PermissionMode, fallback PermissionMode) PermissionMode {
 	return internaltypes.NormalizePermissionModeOrDefault(mode, fallback)
 }
 
+// NormalizeExecutionOrigin returns the execution origin that raw names (automation or skill agent), and the interactive origin for anything else.
 func NormalizeExecutionOrigin(raw string) ExecutionOrigin {
 	return internaltypes.NormalizeExecutionOrigin(raw)
 }
 
+// WithAgentUserID returns a context carrying the authenticated user's ID.
 func WithAgentUserID(ctx context.Context, userID string) context.Context {
 	return internaltypes.WithAgentUserID(ctx, userID)
 }
 
+// AgentUserIDFromContext returns the user ID from ctx, or empty string if absent.
 func AgentUserIDFromContext(ctx context.Context) string {
 	return internaltypes.AgentUserIDFromContext(ctx)
 }
 
+// WithSubAgentMaxDepth returns a context carrying the user-configured sub-agent
+// depth limit. The agent tool reads this to override the server-wide default.
+// Pass 0 to clear any override and fall back to the server default.
 func WithSubAgentMaxDepth(ctx context.Context, depth int) context.Context {
 	return internaltypes.WithSubAgentMaxDepth(ctx, depth)
 }
 
+// SubAgentMaxDepthFromContext returns the configured depth limit from ctx,
+// or 0 if none was set (caller should then use the server default constant).
 func SubAgentMaxDepthFromContext(ctx context.Context) int {
 	return internaltypes.SubAgentMaxDepthFromContext(ctx)
 }
@@ -142,6 +181,9 @@ func WebSearchRunnerFromContext(ctx context.Context) any {
 	return internaltypes.WebSearchRunnerFromContext(ctx)
 }
 
+// GetContextWindow returns the context window for a model.
+// It consults the centralised model.Global registry first; if the model is
+// not found there it falls back to a conservative default (128k/4k).
 func GetContextWindow(model ModelIdentifier) ContextWindow {
 	return internaltypes.GetContextWindow(model)
 }

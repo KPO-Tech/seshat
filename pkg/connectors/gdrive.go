@@ -147,6 +147,7 @@ type GDriveConnector struct {
 	extractText TextExtractorFunc
 }
 
+// NewGDriveConnector creates a Google Drive connector that authenticates with the given OAuth configuration.
 func NewGDriveConnector(oauthConfig *oauth2.Config) *GDriveConnector {
 	return &GDriveConnector{oauthConfig: oauthConfig}
 }

@@ -32,6 +32,7 @@ func ExpandTilde(path string) string {
 	return filepath.Join(home, path[1:])
 }
 
+// ResolveRoot returns the runtime root: explicit when it is not blank, otherwise the SESHAT_RUNTIME_ROOT environment variable, otherwise ~/.config/seshat, and a seshat directory under the temporary directory when no home can be found. A leading "~" is expanded and the path is cleaned.
 func ResolveRoot(explicit string) string {
 	if trimmed := strings.TrimSpace(explicit); trimmed != "" {
 		return filepath.Clean(ExpandTilde(trimmed))
@@ -53,6 +54,7 @@ func ResolveRoot(explicit string) string {
 	return filepath.Join(os.TempDir(), "seshat")
 }
 
+// Join builds a path under the runtime root (ResolveRoot(root)) from the given parts.
 func Join(root string, parts ...string) string {
 	all := make([]string, 0, len(parts)+1)
 	all = append(all, ResolveRoot(root))
@@ -60,20 +62,28 @@ func Join(root string, parts ...string) string {
 	return filepath.Join(all...)
 }
 
+// DataDir is the directory of the data the runtime keeps (indexes, sessions, databases) under the runtime root.
 func DataDir(root string) string { return Join(root, "data") }
 
+// SkillsDir is the directory of the user's skills under the runtime root.
 func SkillsDir(root string) string { return Join(root, "skills") }
 
+// CacheDir is the directory of the caches under the runtime root.
 func CacheDir(root string) string { return Join(root, "cache") }
 
+// LogsDir is the directory of the logs under the runtime root.
 func LogsDir(root string) string { return Join(root, "logs") }
 
+// StorageDir is the directory of the local object storage under the runtime root.
 func StorageDir(root string) string { return Join(root, "storage") }
 
+// TmpDir is the directory of the temporary files of the runtime under the runtime root.
 func TmpDir(root string) string { return Join(root, "tmp") }
 
+// BackendDBPath is the path of the SQLite database of the runtime (seshat.db) under the runtime root.
 func BackendDBPath(root string) string { return Join(root, "seshat.db") }
 
+// HNSWDataDir is the directory of the HNSW vector indexes (data/hnsw) under the runtime root.
 func HNSWDataDir(root string) string { return Join(root, "data", "hnsw") }
 
 // DeepDocModelsDir holds the ONNX models (det.ort, rec.ort, layout.ort,
@@ -92,14 +102,19 @@ func TitleModelsDir(root string) string { return Join(root, "models", "title") }
 // did not build on Windows (before 1.2.73).
 func RAGSQLiteDBPath(root string) string { return Join(root, "data", "rag.sqlite3") }
 
+// SessionStoreDir is the directory of the persisted sessions (data/sessions) under the runtime root.
 func SessionStoreDir(root string) string { return Join(root, "data", "sessions") }
 
+// PlansDir is the directory of the plans under the runtime root.
 func PlansDir(root string) string { return Join(root, "plans") }
 
+// CompanionPath is the path of the companion state file (companion.json) under the runtime root.
 func CompanionPath(root string) string { return Join(root, "companion.json") }
 
+// TasksDir is the directory of the background task files (tmp/tasks) under the runtime root.
 func TasksDir(root string) string { return Join(root, "tmp", "tasks") }
 
+// BashTasksDir is the directory of the output files of background shell commands (tmp/bash-tasks) under the runtime root.
 func BashTasksDir(root string) string { return Join(root, "tmp", "bash-tasks") }
 
 // ─── Session-scoped directories ───────────────────────────────────────────────
@@ -146,6 +161,7 @@ func SessionsDir(root string) string { return WorkspacesDir(root) }
 // LegacySessionsDir is where per-session data lived before v1.2.59.
 func LegacySessionsDir(root string) string { return Join(root, legacyDirName) }
 
+// SessionDir is the directory of one session: the per-session directory under WorkspacesDir.
 func SessionDir(root, sessionID string) string {
 	return filepath.Join(ResolveRoot(root), workspacesDirName, sessionID)
 }
@@ -167,14 +183,17 @@ func SessionPastesDir(root, sessionID string) string {
 	return filepath.Join(SessionDir(root, sessionID), "pastes")
 }
 
+// SessionPastesTextDir is the directory of the text pastes of a session.
 func SessionPastesTextDir(root, sessionID string) string {
 	return filepath.Join(SessionPastesDir(root, sessionID), "text")
 }
 
+// SessionPastesImagesDir is the directory of the image pastes of a session.
 func SessionPastesImagesDir(root, sessionID string) string {
 	return filepath.Join(SessionPastesDir(root, sessionID), "images")
 }
 
+// SessionPastesOtherDir is the directory of the pastes of a session that are neither text nor images.
 func SessionPastesOtherDir(root, sessionID string) string {
 	return filepath.Join(SessionPastesDir(root, sessionID), "other")
 }

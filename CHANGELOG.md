@@ -9,6 +9,10 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Changed
+
+- **Every exported symbol of `pkg/` has a doc comment, and the test is strict.** The 511 that had none (680 before the generated protobuf code was left out, as linters do) are written: the facades (`pkg/sdk`, `pkg/rag`, `pkg/automation`, `pkg/types`, `pkg/skills`, `pkg/storage`, `pkg/mcp`...) say what they re-export, and `pkg/workflow`, `pkg/dataflow`, `pkg/connectors`, `pkg/msgraph`, `pkg/config`, `pkg/doctor`, `pkg/runtimepath` and the others describe their own behaviour, read from the code. `internal/archtest` fails on any new undocumented exported symbol; the tolerance list it used to hold is gone. No behaviour change.
+
 ### Fixed
 
 - **A PDF's page count was always 0, and PDF reads now stop with their context.** `ReadPDF` and `GetPDFPageCount` took the count from `pdfcpu.Read`, which leaves it at 0 (checked on pdfcpu 0.13 and 0.16): the "too many pages to read at once" check of the fallback readers never fired and a very large PDF went through whole as base64. The count comes from `api.PageCount` now. `ReadPDF`, `GetPDFPageCount`, `ExtractPDFPages`, the page reader and the decryption of an encrypted PDF take the context of the read (they handed pdfcpu a `context.Background()`), so a cancelled read stops parsing; `pkg/pdfsmart` keeps `Unlock` and gains `UnlockContext`. The local storage provider and the loading of MCP skills use the caller's context too.

@@ -32,10 +32,12 @@ type OneDriveConnector struct {
 	extractText TextExtractorFunc
 }
 
+// NewOneDriveConnector creates a OneDrive connector that authenticates with the given OAuth configuration.
 func NewOneDriveConnector(oauthConfig *oauth2.Config) *OneDriveConnector {
 	return &OneDriveConnector{oauthConfig: oauthConfig}
 }
 
+// WithTextExtractor sets the function that turns a downloaded binary file into text (see TextExtractorFunc) and returns the connector, for chaining.
 func (c *OneDriveConnector) WithTextExtractor(fn TextExtractorFunc) *OneDriveConnector {
 	c.extractText = fn
 	return c

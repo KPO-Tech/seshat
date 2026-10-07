@@ -19,6 +19,7 @@ import (
 // its config and its IsTrigger marker, not its Execute logic.
 type ScheduleTrigger struct{}
 
+// NewScheduleTrigger creates a ScheduleTrigger node.
 func NewScheduleTrigger() ScheduleTrigger { return ScheduleTrigger{} }
 
 const (
@@ -27,6 +28,7 @@ const (
 	ScheduleTriggerModeOnce     = "once"
 )
 
+// Description returns the catalog entry of the schedule trigger node: it starts the graph on a schedule, given as a cron expression, a fixed interval or a single future time.
 func (ScheduleTrigger) Description() dataflow.NodeDescription {
 	return dataflow.NodeDescription{Type: "schedule_trigger", Name: "Schedule Trigger", Category: "Trigger",
 		IsTrigger: true,
@@ -81,6 +83,7 @@ func (ScheduleTrigger) ValidateParameters(params map[string]any) error {
 	return nil
 }
 
+// Execute passes its input on unchanged: the schedule itself is handled by the automation that owns the graph.
 func (ScheduleTrigger) Execute(_ context.Context, _ *dataflow.Runtime, input []dataflow.Item, _ map[string]any) (dataflow.Output, error) {
 	return dataflow.Main(input), nil
 }

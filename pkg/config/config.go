@@ -389,10 +389,12 @@ func EffectiveSessionDBPath(config Config) string {
 	return EffectiveDBPath(config)
 }
 
+// EffectiveRuntimeRoot returns the runtime root of a configuration: its RuntimeRoot when it is not blank, otherwise the SESHAT_RUNTIME_ROOT environment variable, otherwise ~/.config/seshat (a seshat directory under the temporary directory when no home can be found). A leading "~" is expanded and the path is cleaned.
 func EffectiveRuntimeRoot(config Config) string {
 	return runtimepath.ResolveRoot(config.RuntimeRoot)
 }
 
+// EffectiveStorageLocalPath returns the directory of the local storage of a configuration: its StorageLocalPath when it is set, with a leading "~" expanded, otherwise the storage directory under the runtime root.
 func EffectiveStorageLocalPath(config Config) string {
 	if trimmed := strings.TrimSpace(config.StorageLocalPath); trimmed != "" {
 		return filepath.Clean(runtimepath.ExpandTilde(trimmed))

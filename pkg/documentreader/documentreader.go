@@ -3,13 +3,21 @@ package documentreader
 import internalreader "github.com/KPO-Tech/seshat/internal/documentreader"
 
 type (
-	APIError         = internalreader.APIError
+	// APIError is returned for non-2xx docling-serve responses.
+	APIError = internalreader.APIError
+	// ConversionResult is what we get back from docling-serve for a single file.
 	ConversionResult = internalreader.ConversionResult
-	Chunk            = internalreader.Chunk
-	ChunkOptions     = internalreader.ChunkOptions
-	ConvertOptions   = internalreader.ConvertOptions
-	ExtractedImage   = internalreader.ExtractedImage
-	RetryConfig      = internalreader.RetryConfig
+	// Chunk is one docling-serve document-aware chunk.
+	Chunk = internalreader.Chunk
+	// ChunkOptions tunes docling-serve's hybrid chunker.
+	ChunkOptions = internalreader.ChunkOptions
+	// ConvertOptions tunes docling-serve conversion. Zero values keep server
+	// defaults, which is the safest behavior across docling-serve versions.
+	ConvertOptions = internalreader.ConvertOptions
+	// ExtractedImage is one picture found inside the converted document.
+	ExtractedImage = internalreader.ExtractedImage
+	// RetryConfig controls best-effort retries for replayable docling-serve calls.
+	RetryConfig = internalreader.RetryConfig
 
 	// Converter is anything that can convert documents to
 	// markdown. See internalreader.Converter's own doc comment.
