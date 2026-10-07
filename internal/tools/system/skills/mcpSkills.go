@@ -26,7 +26,7 @@ func RegisterMCPSkillBuilder(builder MCPSkillBuilder) {
 	mcpSkillBuilders = append(mcpSkillBuilders, builder)
 }
 
-func LoadMCPSkills(serverName string) ([]Skill, error) {
+func LoadMCPSkills(ctx context.Context, serverName string) ([]Skill, error) {
 	if mcpManagerInstance == nil {
 		return []Skill{}, fmt.Errorf("MCP manager not initialized")
 	}
@@ -36,7 +36,6 @@ func LoadMCPSkills(serverName string) ([]Skill, error) {
 		return []Skill{}, fmt.Errorf("server '%s' not connected", serverName)
 	}
 
-	ctx := context.Background()
 	mcpTools, err := client.ListTools(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("failed to list tools from %s: %w", serverName, err)
@@ -88,7 +87,7 @@ func DiscoverMCPSkills(ctx context.Context) ([]Skill, error) {
 	var allMCPSkills []Skill
 
 	for _, serverName := range servers {
-		skills, err := LoadMCPSkills(serverName)
+		skills, err := LoadMCPSkills(ctx, serverName)
 		if err != nil {
 			slog.Warn("MCP skills: failed to load skills", "server", serverName, "err", err)
 			continue
