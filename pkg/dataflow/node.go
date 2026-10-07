@@ -77,6 +77,7 @@ const (
 	PropSecretRef NodePropertyType = "secretRef" // a named secret's value is resolved by the caller, never authored inline - see dataflow.SecretResolver
 )
 
+// NodePropertyOption is one choice offered for a node property that is picked from a list: the label shown and the value stored.
 type NodePropertyOption struct {
 	Label string `json:"label"`
 	Value string `json:"value"`
@@ -116,16 +117,19 @@ type Base struct {
 	description NodeDescription
 }
 
+// NewBase creates the Base of a node executor from its description, so that the executor only has to implement Execute (and ValidateParameters when a node has required parameters).
 func NewBase(description NodeDescription) Base {
 	return Base{description: description}
 }
 
+// Description returns the description the Base was created with.
 func (b Base) Description() NodeDescription { return b.description }
 
 // ValidateParameters is a no-op default; nodes with required parameters
 // should override it.
 func (b Base) ValidateParameters(map[string]any) error { return nil }
 
+// StringParam reads the string parameter name from params, or returns fallback when it is absent or not a string.
 func StringParam(params map[string]any, name, fallback string) string {
 	if v, ok := params[name].(string); ok {
 		return v
@@ -148,6 +152,7 @@ func AsString(v any) string {
 	return fmt.Sprint(v)
 }
 
+// IntParam reads the integer parameter name from params, accepting an int or a float64 (which is what JSON decoding produces), or returns fallback otherwise.
 func IntParam(params map[string]any, name string, fallback int) int {
 	switch v := params[name].(type) {
 	case int:
@@ -159,6 +164,7 @@ func IntParam(params map[string]any, name string, fallback int) int {
 	}
 }
 
+// BoolParam reads the boolean parameter name from params, or returns fallback when it is absent or not a boolean.
 func BoolParam(params map[string]any, name string, fallback bool) bool {
 	if v, ok := params[name].(bool); ok {
 		return v
@@ -199,16 +205,19 @@ type Registry struct {
 	executors map[string]NodeExecutor
 }
 
+// NewRegistry creates an empty registry of node executors, safe for concurrent use.
 func NewRegistry() *Registry {
 	return &Registry{executors: make(map[string]NodeExecutor)}
 }
 
+// Register adds executor for the node type nodeType, replacing the one that was registered for it.
 func (r *Registry) Register(nodeType string, executor NodeExecutor) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	r.executors[nodeType] = executor
 }
 
+// Get returns the executor registered for nodeType, or an error when there is none.
 func (r *Registry) Get(nodeType string) (NodeExecutor, error) {
 	r.mu.RLock()
 	defer r.mu.RUnlock()

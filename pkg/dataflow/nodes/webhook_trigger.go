@@ -18,6 +18,7 @@ import (
 // predecessors (this one included) with the run's input.
 type WebhookTrigger struct{}
 
+// NewWebhookTrigger creates a WebhookTrigger node.
 func NewWebhookTrigger() WebhookTrigger { return WebhookTrigger{} }
 
 var webhookTriggerMethods = []string{"GET", "POST", "PUT", "PATCH", "DELETE"}
@@ -27,6 +28,7 @@ const (
 	WebhookResponseModeWhenFinished = "whenFinished"
 )
 
+// Description returns the catalog entry of the webhook trigger node: it starts the graph when an external HTTP call reaches the webhook URL of the job, and gives the request body, headers and query to the graph under a "webhook" key.
 func (WebhookTrigger) Description() dataflow.NodeDescription {
 	options := make([]dataflow.NodePropertyOption, len(webhookTriggerMethods))
 	for i, m := range webhookTriggerMethods {
@@ -53,6 +55,7 @@ func (WebhookTrigger) Description() dataflow.NodeDescription {
 		}}
 }
 
+// ValidateParameters checks that method, when given, is one of GET, POST, PUT, PATCH or DELETE.
 func (WebhookTrigger) ValidateParameters(params map[string]any) error {
 	method := dataflow.StringParam(params, "method", "")
 	if method != "" {
@@ -75,6 +78,7 @@ func (WebhookTrigger) ValidateParameters(params map[string]any) error {
 	return nil
 }
 
+// Execute passes its input on unchanged: the request has already been turned into the input of the run.
 func (WebhookTrigger) Execute(_ context.Context, _ *dataflow.Runtime, input []dataflow.Item, _ map[string]any) (dataflow.Output, error) {
 	return dataflow.Main(input), nil
 }

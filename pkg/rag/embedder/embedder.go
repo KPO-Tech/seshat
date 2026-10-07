@@ -3,11 +3,15 @@ package embedder
 import internalembedder "github.com/KPO-Tech/seshat/internal/rag/embedder"
 
 type (
-	Config   = internalembedder.Config
+	// Config holds the configuration for a provider-backed embedder.
+	Config = internalembedder.Config
+	// Embedder calls a remote embedding API to produce dense float vectors.
 	Embedder = internalembedder.Embedder
+	// Provider selects which embedding API format to use.
 	Provider = internalembedder.Provider
 )
 
+// New creates an Embedder from an explicit Config.
 func New(cfg *Config) *Embedder {
 	return internalembedder.New(cfg)
 }
@@ -26,6 +30,7 @@ func NewFromEnv() *Embedder {
 	return internalembedder.NewFromEnv()
 }
 
+// DetectProviderPublic is the exported version of detectProvider for use outside this package.
 func DetectProviderPublic(baseURL string) Provider {
 	return internalembedder.DetectProviderPublic(baseURL)
 }

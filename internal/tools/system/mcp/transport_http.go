@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
 	"net/url"
 	"strings"
@@ -178,9 +179,14 @@ func (t *HTTPTransport) SendNotification(ctx context.Context, notification *JSON
 		httpReq.Header.Set(k, v)
 	}
 
-	// Send request (don't wait for response)
-	_, err = t.httpClient.Do(httpReq)
-	return err
+	// Send request (don't wait for the answer to a notification), but read what is sent back and close the body: left open,
+	// the connection is never given back to the pool.
+	resp, err := t.httpClient.Do(httpReq)
+	if err != nil {
+		return err
+	}
+	_, _ = io.Copy(io.Discard, io.LimitReader(resp.Body, 64<<10))
+	return resp.Body.Close()
 }
 
 // Close closes the HTTP transport

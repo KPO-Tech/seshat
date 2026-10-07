@@ -65,7 +65,7 @@ var pdfCache = struct {
 }{docs: map[pdfCacheKey]*pdfDocument{}}
 
 // pdfDocumentFor returns the remembered state of a PDF, starting it when the file is new or changed.
-func pdfDocumentFor(path string, info os.FileInfo, data []byte) (*pdfDocument, error) {
+func pdfDocumentFor(ctx context.Context, path string, info os.FileInfo, data []byte) (*pdfDocument, error) {
 	key := pdfCacheKey{path: path, size: info.Size(), modTime: info.ModTime()}
 	pdfCache.Lock()
 	if doc, ok := pdfCache.docs[key]; ok {
@@ -74,7 +74,7 @@ func pdfDocumentFor(path string, info os.FileInfo, data []byte) (*pdfDocument, e
 	}
 	pdfCache.Unlock()
 
-	count, err := pdfsmart.PageCount(data)
+	count, err := pdfsmart.PageCount(ctx, data)
 	if err != nil {
 		return nil, err
 	}
@@ -185,7 +185,7 @@ func (t *Tool) readPDFFile(
 	// An encrypted PDF is read from a decrypted copy (the last few are remembered, so a long document read in several
 	// calls is decrypted once). One that needs a password the reader was not given says so, which is more useful to
 	// the model than the encrypted file handed over as it is.
-	data, err = pdfsmart.Unlock(data, password)
+	data, err = pdfsmart.Unlock(ctx, data, password)
 	if err != nil {
 		if errors.Is(err, pdfsmart.ErrPasswordRequired) {
 			message := "this PDF is protected by a password."
@@ -196,7 +196,7 @@ func (t *Tool) readPDFFile(
 		}
 		return tool.NewErrorResult(fmt.Errorf("failed to read PDF: %w", err)), nil
 	}
-	doc, err := pdfDocumentFor(filePath, fileInfo, data)
+	doc, err := pdfDocumentFor(ctx, filePath, fileInfo, data)
 	if err != nil {
 		// Encrypted or malformed: nothing page-aware can be done, hand the file over as before.
 		return t.readPDFAsFile(ctx, filePath, fileInfo, pagesParam)

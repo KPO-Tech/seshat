@@ -7,6 +7,7 @@ import (
 	"encoding/base64"
 	"encoding/binary"
 	"encoding/json"
+	"errors"
 	"io"
 	"strings"
 
@@ -29,7 +30,7 @@ func streamSSEResponse(ctx context.Context, body io.ReadCloser, ch chan<- types.
 
 		line, err := reader.ReadString('\n')
 		if err != nil {
-			if err != io.EOF {
+			if !errors.Is(err, io.EOF) {
 				ch <- errChunk("stream read error", err)
 			}
 			return

@@ -3,6 +3,7 @@ package connectors
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -131,14 +132,14 @@ func (e *spGraphError) RetryAfter() (time.Duration, bool) {
 
 var _ RateLimited = (*spGraphError)(nil)
 
-func (c *spGraphClient) get(ctx context.Context, url string, out any) (*http.Response, error) {
+func (c *spGraphClient) get(ctx context.Context, url string, out any) error {
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
 	if err != nil {
-		return nil, err
+		return err
 	}
 	resp, err := c.http.Do(req)
 	if err != nil {
-		return nil, err
+		return err
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode >= 400 {
@@ -152,14 +153,14 @@ func (c *spGraphClient) get(ctx context.Context, url string, out any) (*http.Res
 				gerr.retryAfter = spGraphDefaultRateLimitBackoff
 			}
 		}
-		return resp, gerr
+		return gerr
 	}
 	if out != nil {
 		if err := json.NewDecoder(resp.Body).Decode(out); err != nil {
-			return resp, fmt.Errorf("decode graph response: %w", err)
+			return fmt.Errorf("decode graph response: %w", err)
 		}
 	}
-	return resp, nil
+	return nil
 }
 
 // listSites paginates GET /sites?search=* — a broad search matching every
@@ -169,7 +170,7 @@ func (c *spGraphClient) listSites(ctx context.Context) ([]spGraphSite, error) {
 	url := spGraphBaseURL + "/sites?search=*&$select=id"
 	for url != "" {
 		var page spSitesResponse
-		if _, err := c.get(ctx, url, &page); err != nil {
+		if err := c.get(ctx, url, &page); err != nil {
 			return nil, fmt.Errorf("list sites: %w", err)
 		}
 		sites = append(sites, page.Value...)
@@ -182,7 +183,7 @@ func (c *spGraphClient) listSites(ctx context.Context) ([]spGraphSite, error) {
 func (c *spGraphClient) listDrives(ctx context.Context, siteID string) ([]spGraphDrive, error) {
 	var page spDrivesResponse
 	url := spGraphBaseURL + "/sites/" + siteID + "/drives?$select=id"
-	if _, err := c.get(ctx, url, &page); err != nil {
+	if err := c.get(ctx, url, &page); err != nil {
 		return nil, fmt.Errorf("list drives for site %s: %w", siteID, err)
 	}
 	return page.Value, nil
@@ -194,7 +195,7 @@ func (c *spGraphClient) listDrives(ctx context.Context, siteID string) ([]spGrap
 // user's personal one, never a site's document library.
 func (c *spGraphClient) myDriveID(ctx context.Context) (string, error) {
 	var drive spGraphMyDrive
-	if _, err := c.get(ctx, spGraphBaseURL+"/me/drive?$select=id", &drive); err != nil {
+	if err := c.get(ctx, spGraphBaseURL+"/me/drive?$select=id", &drive); err != nil {
 		return "", fmt.Errorf("get my drive: %w", err)
 	}
 	if drive.ID == "" {
@@ -223,7 +224,7 @@ func (c *spGraphClient) deltaPage(ctx context.Context, driveID, deltaLink string
 	var items []spGraphDriveItem
 	for {
 		var page spDeltaResponse
-		_, err := c.get(ctx, url, &page)
+		err := c.get(ctx, url, &page)
 		if err != nil {
 			var gerr *spGraphError
 			if isSPGraphError(err, &gerr) && gerr.Status == http.StatusGone && gerr.Location != "" {
@@ -251,11 +252,7 @@ func (c *spGraphClient) deltaPage(ctx context.Context, driveID, deltaLink string
 }
 
 func isSPGraphError(err error, target **spGraphError) bool {
-	gerr, ok := err.(*spGraphError)
-	if ok {
-		*target = gerr
-	}
-	return ok
+	return errors.As(err, target)
 }
 
 // downloadContent fetches a DriveItem's raw bytes. Unlike Google Docs/
@@ -287,7 +284,7 @@ func (c *spGraphClient) downloadContent(ctx context.Context, driveID, itemID str
 func (c *spGraphClient) listPermissions(ctx context.Context, driveID, itemID string) ([]spGraphPermission, error) {
 	var page spPermissionsResponse
 	url := spGraphBaseURL + "/drives/" + driveID + "/items/" + itemID + "/permissions"
-	if _, err := c.get(ctx, url, &page); err != nil {
+	if err := c.get(ctx, url, &page); err != nil {
 		return nil, fmt.Errorf("list permissions for item %s: %w", itemID, err)
 	}
 	return page.Value, nil

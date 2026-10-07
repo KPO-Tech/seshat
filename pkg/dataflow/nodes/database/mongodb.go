@@ -23,8 +23,10 @@ import (
 // insertOne), update (map[string]any, for updateOne — wrapped in $set).
 type MongoDB struct{}
 
+// NewMongoDB creates a MongoDB node.
 func NewMongoDB() MongoDB { return MongoDB{} }
 
+// Description returns the catalog entry of the mongodb node: it runs one operation (find, insertOne, updateOne or deleteOne) on a collection. find returns one item per document found, the others one item that summarises the result. The connection URI is a reference to a dataflow secret.
 func (MongoDB) Description() dataflow.NodeDescription {
 	return dataflow.NodeDescription{Type: "mongodb", Name: "MongoDB", Category: "Database",
 		Description: "Runs one operation against a MongoDB collection. find returns one item per matched document; insertOne/updateOne/deleteOne return one item summarizing the result. " +
@@ -49,6 +51,7 @@ func (MongoDB) Description() dataflow.NodeDescription {
 
 var validMongoOps = map[string]bool{"find": true, "insertOne": true, "updateOne": true, "deleteOne": true}
 
+// ValidateParameters requires uriSecretRef, a database, a collection and a supported operation.
 func (MongoDB) ValidateParameters(params map[string]any) error {
 	if dataflow.StringParam(params, "uriSecretRef", "") == "" {
 		return errors.New("uriSecretRef is required")
@@ -82,6 +85,7 @@ func (MongoDB) TestConnection(ctx context.Context, rt *dataflow.Runtime, params 
 	return client.Ping(ctx, nil)
 }
 
+// Execute resolves the connection URI from the secrets of the run, connects, runs the operation and disconnects. It fails when the run has no secret resolver.
 func (MongoDB) Execute(ctx context.Context, rt *dataflow.Runtime, input []dataflow.Item, params map[string]any) (dataflow.Output, error) {
 	if rt == nil || rt.Secrets == nil {
 		return dataflow.Output{}, errors.New("dataflow: no SecretResolver configured on Runtime")

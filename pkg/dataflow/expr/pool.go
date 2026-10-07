@@ -34,6 +34,7 @@ type Pool struct {
 // already treats it: it must fail loudly rather than hang the graph.
 const DefaultTimeout = 2 * time.Second
 
+// NewPool creates a pool that keeps up to maxRuntimes JavaScript runtimes ready to evaluate expressions (8 when it is 0 or less) and caches the compiled programs.
 func NewPool(maxRuntimes int) *Pool {
 	if maxRuntimes <= 0 {
 		maxRuntimes = 8

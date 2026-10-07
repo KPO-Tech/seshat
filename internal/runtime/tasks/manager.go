@@ -3,6 +3,7 @@ package tasks
 import (
 	"bufio"
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"os/exec"
@@ -388,7 +389,7 @@ func exitCodeFromCmd(cmd *exec.Cmd, waitErr error) *int {
 }
 
 func errorsIsContext(err error) bool {
-	return err == context.Canceled || err == context.DeadlineExceeded
+	return errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded)
 }
 
 func cloneTask(task *Task) *Task {

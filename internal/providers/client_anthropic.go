@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"context"
 	"encoding/json"
+	"errors"
 	"io"
 	"net/http"
 	"strings"
@@ -28,7 +29,7 @@ func (c *Client) streamAnthropicResponse(ctx context.Context, resp *http.Respons
 		default:
 			line, err := reader.ReadString('\n')
 			if err != nil {
-				if err != io.EOF {
+				if !errors.Is(err, io.EOF) {
 					chunkChan <- types.APIResponseChunk{
 						Type:  types.APIChunkTypeError,
 						Error: types.WrapError(types.ErrCodeAPIResponse, "failed to read stream", err),

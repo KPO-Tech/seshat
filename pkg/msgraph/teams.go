@@ -33,10 +33,12 @@ type ChatMessage struct {
 	DeletedDateTime string           `json:"deletedDateTime,omitempty"`
 }
 
+// ChatMessageFrom is the sender of a Teams chat message: the user, when the message was sent by one.
 type ChatMessageFrom struct {
 	User *ChatMessageUser `json:"user,omitempty"`
 }
 
+// ChatMessageUser is the user who sent a Teams chat message: an identifier and a display name.
 type ChatMessageUser struct {
 	ID          string `json:"id"`
 	DisplayName string `json:"displayName"`

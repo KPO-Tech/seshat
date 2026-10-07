@@ -3,6 +3,7 @@ package glob
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 	"os/exec"
@@ -365,7 +366,8 @@ func (g *Tool) doGlob(ctx context.Context, searchDir string, pattern string) ([]
 			return nil, shared.RipgrepNotFoundError()
 		}
 		// If no matches found, that's ok - return empty results
-		if exitError, ok := err.(*exec.ExitError); ok && exitError.ExitCode() == 1 {
+		var exitError *exec.ExitError
+		if errors.As(err, &exitError) && exitError.ExitCode() == 1 {
 			// No files found
 			return []string{}, nil
 		}

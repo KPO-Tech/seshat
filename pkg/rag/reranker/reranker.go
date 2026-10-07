@@ -7,7 +7,13 @@ type (
 	// understood by self-hosted alternatives (HuggingFace TEI, vLLM).
 	// LangSearchReranker is HTTPReranker preconfigured for LangSearch's
 	// hosted API - both names refer to the same underlying type.
-	HTTPReranker       = internalreranker.HTTPReranker
+	HTTPReranker = internalreranker.HTTPReranker
+	// LangSearchReranker is HTTPReranker preconfigured for LangSearch's hosted
+	// rerank API (langsearch.com - no credit card required for the free tier).
+	// Kept as a distinct name for backward compatibility; for a fully free,
+	// self-hosted alternative requiring no API key, use New/NewFromEnv with a
+	// BaseURL pointing at a local TEI or vLLM instance instead - see
+	// reranker.go's package doc.
 	LangSearchReranker = internalreranker.LangSearchReranker
 
 	// Config configures an HTTPReranker: BaseURL, optional APIKey, and Model.

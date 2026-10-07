@@ -521,7 +521,7 @@ func (t *Tool) readPDFAsFile(
 			return tool.NewErrorResult(fmt.Errorf("file read cancelled")), nil
 		default:
 		}
-		extractResult, err := ExtractPDFPages(filePath, parsedRange)
+		extractResult, err := ExtractPDFPages(ctx, filePath, parsedRange)
 		if err != nil {
 			if ctx.Err() != nil {
 				return tool.NewErrorResult(fmt.Errorf("file read cancelled")), nil
@@ -540,7 +540,7 @@ func (t *Tool) readPDFAsFile(
 		return tool.NewTextResult(t.formatPDFExtractedResult(result)), nil
 	}
 
-	pageCount, err := GetPDFPageCount(filePath)
+	pageCount, err := GetPDFPageCount(ctx, filePath)
 	if err != nil {
 		return tool.NewErrorResult(fmt.Errorf("failed to get PDF page count: %w", err)), nil
 	}
@@ -548,7 +548,7 @@ func (t *Tool) readPDFAsFile(
 		return tool.NewErrorResult(fmt.Errorf("this PDF has %d pages, which is too many to read at once. Use the pages parameter to read specific page ranges (e.g., pages: \"1-5\"). Maximum %d pages per request.", pageCount, MaxPagesPerRead)), nil
 	}
 
-	pdfResult, err := ReadPDF(filePath)
+	pdfResult, err := ReadPDF(ctx, filePath)
 	if err != nil {
 		if ctx.Err() != nil {
 			return tool.NewErrorResult(fmt.Errorf("file read cancelled")), nil
@@ -573,14 +573,14 @@ func (t *Tool) readWholePDFFallback(ctx context.Context, filePath string, fileIn
 		return tool.NewErrorResult(fmt.Errorf("file read cancelled")), nil
 	default:
 	}
-	pageCount, err := GetPDFPageCount(filePath)
+	pageCount, err := GetPDFPageCount(ctx, filePath)
 	if err != nil {
 		return tool.NewErrorResult(fmt.Errorf("failed to get PDF page count after page extraction failed: %w", err)), nil
 	}
 	if pageCount > PDFATMentionInlineThreshold {
 		return tool.NewErrorResult(fmt.Errorf("%s The PDF has %d pages, which is too many to read at once. Try converting it with the configured document reader or use a smaller page range.", warning, pageCount)), nil
 	}
-	pdfResult, err := ReadPDF(filePath)
+	pdfResult, err := ReadPDF(ctx, filePath)
 	if err != nil {
 		return tool.NewErrorResult(fmt.Errorf("failed to read PDF after page extraction failed: %w", err)), nil
 	}

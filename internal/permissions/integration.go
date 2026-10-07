@@ -3,6 +3,7 @@ package permissions
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -128,45 +129,7 @@ func (i *Integrator) ResolverWithContext(
 				lookupKeys = append(lookupKeys, key)
 			}
 
-			// 1. Fast path: check in-memory map
-			i.mu.RLock()
-			hasSession := i.sessionTools != nil && i.sessionTools[requestSessionID] != nil
-			var allowed bool
-			if hasSession {
-				allowed = anyKeyAllowed(i.sessionTools[requestSessionID], lookupKeys) ||
-					anyKeyAllowed(i.sessionTools[requestSessionID], grantKeys)
-			}
-			if !allowed {
-				if turnMap := i.turnGrants[turnScopeKey{SessionID: requestSessionID, TurnID: requestTurnID}]; turnMap != nil {
-					allowed = anyKeyAllowed(turnMap, grantKeys)
-				}
-			}
-			i.mu.RUnlock()
-
-			// 2. Slow path: if session is not in memory, try to load from disk
-			if !hasSession {
-				i.mu.Lock()
-				// Double-check inside lock
-				if i.sessionTools == nil {
-					i.sessionTools = make(map[types.SessionID]map[string]bool)
-				}
-				if i.sessionTools[requestSessionID] == nil {
-					filePath := runtimepath.SessionPermissionsPath("", string(requestSessionID))
-					loadedMap := make(map[string]bool)
-					if data, err := os.ReadFile(filePath); err == nil {
-						_ = json.Unmarshal(data, &loadedMap)
-					}
-					i.sessionTools[requestSessionID] = loadedMap
-				}
-				allowed = anyKeyAllowed(i.sessionTools[requestSessionID], lookupKeys) ||
-					anyKeyAllowed(i.sessionTools[requestSessionID], grantKeys)
-				if !allowed {
-					if turnMap := i.turnGrants[turnScopeKey{SessionID: requestSessionID, TurnID: requestTurnID}]; turnMap != nil {
-						allowed = anyKeyAllowed(turnMap, grantKeys)
-					}
-				}
-				i.mu.Unlock()
-			}
+			allowed := i.sessionAllows(requestSessionID, requestTurnID, lookupKeys, grantKeys)
 
 			if allowed {
 				return types.AllowWithInputAndDecisionReason("auto-approved for session", utils.CloneInput(toolInput), &types.PermissionDecisionReason{
@@ -288,52 +251,10 @@ func (i *Integrator) ResolverWithContext(
 			})
 		}
 
-		var approved bool
-		var always bool
-		if b, ok := response.Value.(bool); ok {
-			approved = b
-		} else if s, ok := response.Value.(string); ok {
-			if s == "always" {
-				approved = true
-				always = true
-			}
-		}
+		approved, always := promptApproval(response.Value)
 
 		if approved {
-			reason := "user approved"
-			if always && requestSessionID != "" {
-				i.persistSessionApproval(requestSessionID, toolName)
-				reason = "always approved for session"
-			}
-			// request_permissions itself asked for scope=session — persist under
-			// its content-scoped key (not the plain tool name) regardless of
-			// whether the UI has an "always" concept, since the scope was
-			// declared by the model's own input, not a special user response.
-			grantScope, _ := metadata["grant_scope"].(string)
-			if grantScope == "session" && requestSessionID != "" {
-				if key := requestPermissionsSessionKey(toolName, toolInput); key != "" {
-					i.persistSessionApproval(requestSessionID, key)
-					reason = "approved for session (request_permissions scope=session)"
-				}
-			}
-			// The actual point of request_permissions: register the escalation
-			// itself so the operation it was requested FOR (write_file,
-			// edit_file, ...) finds it too, not just a repeat request_permissions
-			// call asking for the same thing (that's what the block above
-			// covers). scope="session" survives on disk across turns/restarts;
-			// the default scope="turn" stays in memory and only matches
-			// lookups within this same turn.
-			if toolName == requestPermissionsToolName && requestSessionID != "" {
-				if grantKeys := requestedFilesystemGrantKeys(toolInput); len(grantKeys) > 0 {
-					if grantScope == "session" {
-						for _, key := range grantKeys {
-							i.persistSessionApproval(requestSessionID, key)
-						}
-					} else {
-						i.grantForTurn(requestSessionID, requestTurnID, grantKeys)
-					}
-				}
-			}
+			reason := i.recordApproval(requestSessionID, requestTurnID, toolName, toolInput, metadata, always)
 			return types.AllowWithInputAndDecisionReason(reason, result.UpdatedInput, &types.PermissionDecisionReason{
 				Type:   types.PermissionDecisionReasonPrompt,
 				Source: "prompt",
@@ -341,18 +262,124 @@ func (i *Integrator) ResolverWithContext(
 			})
 		}
 
-		denyReason := "user denied"
-		if response.Metadata != nil {
-			if r, ok := response.Metadata["reason"].(string); ok && r != "" {
-				denyReason = r
-			}
-		}
+		denyReason := promptDenyReason(response)
 		return types.DenyWithDecisionReason(denyReason, &types.PermissionDecisionReason{
 			Type:   types.PermissionDecisionReasonPrompt,
 			Source: "prompt",
 			Reason: denyReason,
 		})
 	})
+}
+
+// sessionAllows reports whether the session already approved one of lookupKeys (a tool name, or the content-scoped key of a
+// request_permissions call), or whether one of grantKeys (what the request asks to do to a path) was granted for the session or, within
+// this turn, for the turn. The grants of a session are read from memory; a session that is not in memory is loaded from its permissions
+// file first.
+func (i *Integrator) sessionAllows(sessionID types.SessionID, turnID types.TurnID, lookupKeys, grantKeys []string) bool {
+	// 1. Fast path: check in-memory map
+	i.mu.RLock()
+	hasSession := i.sessionTools != nil && i.sessionTools[sessionID] != nil
+	var allowed bool
+	if hasSession {
+		allowed = anyKeyAllowed(i.sessionTools[sessionID], lookupKeys) ||
+			anyKeyAllowed(i.sessionTools[sessionID], grantKeys)
+	}
+	if !allowed {
+		if turnMap := i.turnGrants[turnScopeKey{SessionID: sessionID, TurnID: turnID}]; turnMap != nil {
+			allowed = anyKeyAllowed(turnMap, grantKeys)
+		}
+	}
+	i.mu.RUnlock()
+
+	// 2. Slow path: if session is not in memory, try to load from disk
+	if !hasSession {
+		i.mu.Lock()
+		// Double-check inside lock
+		if i.sessionTools == nil {
+			i.sessionTools = make(map[types.SessionID]map[string]bool)
+		}
+		if i.sessionTools[sessionID] == nil {
+			filePath := runtimepath.SessionPermissionsPath("", string(sessionID))
+			loadedMap := make(map[string]bool)
+			if data, err := os.ReadFile(filePath); err == nil {
+				_ = json.Unmarshal(data, &loadedMap)
+			}
+			i.sessionTools[sessionID] = loadedMap
+		}
+		allowed = anyKeyAllowed(i.sessionTools[sessionID], lookupKeys) ||
+			anyKeyAllowed(i.sessionTools[sessionID], grantKeys)
+		if !allowed {
+			if turnMap := i.turnGrants[turnScopeKey{SessionID: sessionID, TurnID: turnID}]; turnMap != nil {
+				allowed = anyKeyAllowed(turnMap, grantKeys)
+			}
+		}
+		i.mu.Unlock()
+	}
+	return allowed
+}
+
+// recordApproval remembers what the user just approved and returns the reason to give for the decision: "always" persists the tool for
+// the session, a request_permissions call with scope=session persists under its content-scoped key, and the filesystem escalation it
+// asked for is registered for the session or, by default, for the turn only.
+func (i *Integrator) recordApproval(sessionID types.SessionID, turnID types.TurnID, toolName string, toolInput, metadata map[string]any, always bool) string {
+	reason := "user approved"
+	if always && sessionID != "" {
+		i.persistSessionApproval(sessionID, toolName)
+		reason = "always approved for session"
+	}
+	// request_permissions itself asked for scope=session — persist under
+	// its content-scoped key (not the plain tool name) regardless of
+	// whether the UI has an "always" concept, since the scope was
+	// declared by the model's own input, not a special user response.
+	grantScope, _ := metadata["grant_scope"].(string)
+	if grantScope == "session" && sessionID != "" {
+		if key := requestPermissionsSessionKey(toolName, toolInput); key != "" {
+			i.persistSessionApproval(sessionID, key)
+			reason = "approved for session (request_permissions scope=session)"
+		}
+	}
+	// The actual point of request_permissions: register the escalation
+	// itself so the operation it was requested FOR (write_file,
+	// edit_file, ...) finds it too, not just a repeat request_permissions
+	// call asking for the same thing (that's what the block above
+	// covers). scope="session" survives on disk across turns/restarts;
+	// the default scope="turn" stays in memory and only matches
+	// lookups within this same turn.
+	if toolName == requestPermissionsToolName && sessionID != "" {
+		if grantKeys := requestedFilesystemGrantKeys(toolInput); len(grantKeys) > 0 {
+			if grantScope == "session" {
+				for _, key := range grantKeys {
+					i.persistSessionApproval(sessionID, key)
+				}
+			} else {
+				i.grantForTurn(sessionID, turnID, grantKeys)
+			}
+		}
+	}
+	return reason
+}
+
+// promptApproval reads the answer of the user to a permission prompt: a boolean is the decision itself, and the text "always" approves
+// and asks to remember the approval for the session. Anything else is a refusal.
+func promptApproval(value any) (approved, always bool) {
+	if b, ok := value.(bool); ok {
+		return b, false
+	}
+	if s, ok := value.(string); ok && s == "always" {
+		return true, true
+	}
+	return false, false
+}
+
+// promptDenyReason is the reason given when the user denies: the one in the metadata of the answer, or "user denied".
+func promptDenyReason(response types.PromptResponse) string {
+	denyReason := "user denied"
+	if response.Metadata != nil {
+		if r, ok := response.Metadata["reason"].(string); ok && r != "" {
+			denyReason = r
+		}
+	}
+	return denyReason
 }
 
 // CanUseTool creates a CanUseToolFn that integrates with the permission engine.
@@ -762,6 +789,6 @@ func (e *PermissionDeniedError) Error() string {
 
 // IsPermissionDenied returns true if an error is a permission denied error.
 func IsPermissionDenied(err error) bool {
-	_, ok := err.(*PermissionDeniedError)
-	return ok
+	var target *PermissionDeniedError
+	return errors.As(err, &target)
 }

@@ -17,6 +17,7 @@ import (
 
 	"github.com/KPO-Tech/seshat/internal/providers"
 	"github.com/KPO-Tech/seshat/internal/types"
+	"github.com/KPO-Tech/seshat/pkg/config"
 )
 
 func main() {
@@ -113,6 +114,9 @@ func generateProviderSection() string {
 		}
 		envVar := envVarMap[p]
 		if envVar == "" {
+			envVar = credentialEnvVar(p, info.AuthType)
+		}
+		if envVar == "" {
 			envVar = "—"
 		}
 		fmt.Fprintf(&sb, "| `%s` | %s | %s | %s | %s | `%s` |\n",
@@ -159,4 +163,14 @@ func formatTokens(n int) string {
 	default:
 		return fmt.Sprintf("%d", n)
 	}
+}
+
+// credentialEnvVar names the environment variables that carry the credentials of a provider that provider discovery has no entry for
+// (Foundry, Workers AI, OpenCode, Codex...): "OAuth" for a provider that signs in, otherwise the variables of the configuration, which
+// is where the runtime itself reads them.
+func credentialEnvVar(p types.APIProvider, authType string) string {
+	if authType == "oauth" {
+		return "OAuth"
+	}
+	return strings.Join(config.ProviderCredentialEnvVars(p), " or ")
 }

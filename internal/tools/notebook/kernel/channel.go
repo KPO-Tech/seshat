@@ -35,7 +35,9 @@ func dialChannel(ctx context.Context, cfg Config, kernelID string) (*Channel, er
 	}
 
 	dialer := websocket.Dialer{HandshakeTimeout: 10 * time.Second}
-	conn, _, err := dialer.DialContext(ctx, u, headers)
+	// The handshake response is not ours to close: gorilla/websocket closes it on success, and on failure its body is a bounded reader
+	// that "does not need to be closed by the application".
+	conn, _, err := dialer.DialContext(ctx, u, headers) //nolint:bodyclose // see above
 	if err != nil {
 		return nil, fmt.Errorf("websocket dial %s: %w", u, err)
 	}

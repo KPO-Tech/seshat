@@ -386,16 +386,14 @@ session.RegisterTool(&MyTool{})
 ## Hook lifecycle
 
 ```go
-// Events: HookEventPreTool, HookEventPostTool,
-//         HookEventSessionStart, HookEventSessionEnd,
-//         HookEventTurnStart, HookEventTurnEnd
-id := client.RegisterHook(sdk.HookEventPreTool, func(ctx context.Context, event sdk.HookEvent, data map[string]any) (sdk.HookResult, error) {
-    toolName, _ := data["tool_name"].(string)
-    fmt.Printf("about to call tool: %s\n", toolName)
-    return sdk.HookResult{Action: sdk.HookActionContinue}, nil
+// Events include HookEventPreToolUse, HookEventPostToolUse, HookEventSessionStart,
+// HookEventSessionEnd, HookEventTurnStart and HookEventTurnEnd.
+id := client.RegisterHook(sdk.HookEventPreToolUse, func(ctx context.Context, p sdk.HookProgress) (*sdk.HookResult, error) {
+    // Return nil, nil to continue, or a result with Action "deny" or "stop".
+    return nil, nil
 })
 
-client.HookRegistry().Unregister(id)
+client.HookRegistry().Remove(id)
 ```
 
 ---

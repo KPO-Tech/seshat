@@ -150,7 +150,7 @@ func (b *FilesystemBackend) LoadTranscript(sessionID types.SessionID) ([]types.T
 		}
 		var entry types.TranscriptEntry
 		if err := json.Unmarshal(line, &entry); err != nil {
-			return nil, fmt.Errorf("%w for session %s at line %d: %v", ErrMalformedTranscriptEntry, sessionID, lineNumber, err)
+			return nil, fmt.Errorf("%w for session %s at line %d: %w", ErrMalformedTranscriptEntry, sessionID, lineNumber, err)
 		}
 		entries = append(entries, entry)
 	}

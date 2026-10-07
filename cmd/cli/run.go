@@ -3,6 +3,7 @@ package main
 import (
 	"bufio"
 	"context"
+	"errors"
 	"flag"
 	"fmt"
 	"io"
@@ -187,17 +188,17 @@ func runChat(ctx context.Context, args []string, stdin io.Reader, stdout, stderr
 	for {
 		fmt.Fprint(stdout, "\n> ")
 		line, err := readLine(ctx, reader)
-		if err == io.EOF && strings.TrimSpace(line) == "" {
+		if errors.Is(err, io.EOF) && strings.TrimSpace(line) == "" {
 			fmt.Fprintln(stdout)
 			return nil
 		}
-		if err != nil && err != io.EOF {
+		if err != nil && !errors.Is(err, io.EOF) {
 			return err
 		}
 
 		prompt := strings.TrimSpace(line)
 		if prompt == "" {
-			if err == io.EOF {
+			if errors.Is(err, io.EOF) {
 				fmt.Fprintln(stdout)
 				return nil
 			}
@@ -234,7 +235,7 @@ func runChat(ctx context.Context, args []string, stdin io.Reader, stdout, stderr
 			}
 		}
 
-		if err == io.EOF {
+		if errors.Is(err, io.EOF) {
 			fmt.Fprintln(stdout)
 			return nil
 		}

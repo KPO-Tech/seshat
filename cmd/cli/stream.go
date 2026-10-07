@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"strings"
@@ -188,7 +189,7 @@ func readLine(ctx context.Context, reader *bufio.Reader) (string, error) {
 
 	select {
 	case result := <-ch:
-		if result.err != nil && result.err != io.EOF {
+		if result.err != nil && !errors.Is(result.err, io.EOF) {
 			return result.value, result.err
 		}
 		return result.value, result.err

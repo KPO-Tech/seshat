@@ -2,6 +2,7 @@ package storage
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"io/fs"
@@ -127,7 +128,7 @@ func (p *LocalProvider) OpenReader(ctx context.Context, key string) (io.ReadClos
 		_ = file.Close()
 		return nil, ObjectInfo{}, fmt.Errorf("failed to stat file: %w", err)
 	}
-	return file, p.objectInfoFor(key, info), nil
+	return file, p.objectInfoFor(ctx, key, info), nil
 }
 
 func (p *LocalProvider) Stat(ctx context.Context, key string) (ObjectInfo, error) {
@@ -140,7 +141,7 @@ func (p *LocalProvider) Stat(ctx context.Context, key string) (ObjectInfo, error
 		}
 		return ObjectInfo{}, fmt.Errorf("failed to stat file: %w", err)
 	}
-	return p.objectInfoFor(key, info), nil
+	return p.objectInfoFor(ctx, key, info), nil
 }
 
 func (p *LocalProvider) List(ctx context.Context, options ListOptions) ([]ObjectInfo, error) {
@@ -169,13 +170,13 @@ func (p *LocalProvider) List(ctx context.Context, options ListOptions) ([]Object
 		if err != nil {
 			return err
 		}
-		results = append(results, p.objectInfoFor(filepath.ToSlash(key), info))
+		results = append(results, p.objectInfoFor(ctx, filepath.ToSlash(key), info))
 		if options.Limit > 0 && len(results) >= options.Limit {
 			return fs.SkipAll
 		}
 		return nil
 	})
-	if err != nil && err != fs.SkipAll {
+	if err != nil && !errors.Is(err, fs.SkipAll) {
 		return nil, fmt.Errorf("failed to list files: %w", err)
 	}
 	sort.Slice(results, func(i, j int) bool {
@@ -184,8 +185,8 @@ func (p *LocalProvider) List(ctx context.Context, options ListOptions) ([]Object
 	return results, nil
 }
 
-func (p *LocalProvider) objectInfoFor(key string, info os.FileInfo) ObjectInfo {
-	url, _ := p.GetURL(context.Background(), key)
+func (p *LocalProvider) objectInfoFor(ctx context.Context, key string, info os.FileInfo) ObjectInfo {
+	url, _ := p.GetURL(ctx, key)
 	return ObjectInfo{
 		Key:         key,
 		URL:         url,

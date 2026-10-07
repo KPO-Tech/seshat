@@ -9,6 +9,32 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [1.3.1] - 2026-10-07
+
+### Changed
+
+- **The docs say what the code does.** `docs/memory.md` names the memory tools that exist (`memory_create_entities`, `memory_add_observations`, `memory_search_nodes`, `memory_open_nodes`) and the real compaction settings (85% of the usable window, about 50% afterwards, `ClientConfig.AutoCompact`); `docs/sdk.md` has the current hook API (`HookEventPreToolUse`, a handler that takes a `HookProgress`, `HookRegistry().Remove`); `docs/team.md` says that teams are internal packages not exposed through the CLI, the SDK or gRPC; `docs/rag.md` describes the three RAG tools and the `RAG_EMBEDDING_*` variables instead of a `seshat rag` command and a `RAGConfig` that do not exist. `docs/providers.md` is regenerated: new models and limits, the Kimi provider, and the environment variable of Codex, Foundry, Workers AI and OpenCode, which `scripts/gen_provider_docs.go` left blank because it read them only from provider discovery; it falls back to the credential variables of the configuration now.
+
+### Changed
+
+- **A function can no longer grow past a cyclomatic complexity of 30.** 37 functions already did (counted as `gocyclo` does, and the same numbers): the message switches of the terminal UI (`UI.Update` 168, `handleKeyPressMsg` 149, `handleDialogMsg` 96), and in the engine `ReadPages` (54), `RunAgent` (53), the `edit` tool (47) and a few others. `internal/archtest` lists them with their complexity: a new function above 30 fails the test, so does a listed one that gets more complex, and so does one that gets less complex until its number is lowered, so the list only shrinks. No behaviour change.
+
+### Security
+
+- **The `http_request` node of the workflow engine can no longer be sent to an internal address by a redirect or a DNS answer.** It checked the URL once, before the call, and then let the client follow up to 10 redirects without looking at them: a public server answering with a redirect to `http://169.254.169.254/` (or to any internal address) got the response through. It also resolved the name for the check and again to connect, so a name that answered a public address the first time and an internal one the second (DNS rebinding) got through. Every redirect is now checked against the guard (10 at most), and the address a connection is really made to is checked when it is made. The NAT64 range (`64:ff9b::/96`, which reaches IPv4 addresses through a gateway) is blocked too. The node connects directly and ignores the proxy variables of the environment, which would hide the destination from both checks.
+
+### Changed
+
+- **The documentation points to the website, and `SECURITY.md` says what the gRPC server does now.** The README header, the installation, quick start, CLI, gRPC and Go SDK sections, `docs/README.md`, `CONTRIBUTING.md` and the `pkg/sdk` package comment link to the pages of seshat-ai.com that cover them (installation, configuration, the SDK, the gRPC API, security and trust), with the canonical `/en/` addresses. `SECURITY.md` still said that the gRPC server had no authentication layer; it now describes the loopback default, the token, TLS, the stdio MCP switch, the environment of commands and the trust of a project.
+- **The permission resolver is split into steps.** `Integrator.ResolverWithContext` was one closure of 270 lines (cyclomatic complexity 52). Looking up what the session or the turn already granted, recording an approval, reading the user's answer and its refusal reason are now `sessionAllows`, `recordApproval`, `promptApproval` and `promptDenyReason`. The behaviour is unchanged (the existing resolver tests pass untouched); the two pure helpers get their own tests.
+- **Every exported symbol of `pkg/` has a doc comment, and the test is strict.** The 511 that had none (680 before the generated protobuf code was left out, as linters do) are written: the facades (`pkg/sdk`, `pkg/rag`, `pkg/automation`, `pkg/types`, `pkg/skills`, `pkg/storage`, `pkg/mcp`...) say what they re-export, and `pkg/workflow`, `pkg/dataflow`, `pkg/connectors`, `pkg/msgraph`, `pkg/config`, `pkg/doctor`, `pkg/runtimepath` and the others describe their own behaviour, read from the code. `internal/archtest` fails on any new undocumented exported symbol; the tolerance list it used to hold is gone. No behaviour change.
+
+### Fixed
+
+- **A PDF's page count was always 0, and PDF reads now stop with their context.** `ReadPDF` and `GetPDFPageCount` took the count from `pdfcpu.Read`, which leaves it at 0 (checked on pdfcpu 0.13 and 0.16): the "too many pages to read at once" check of the fallback readers never fired and a very large PDF went through whole as base64. The count comes from `api.PageCount` now. `ReadPDF`, `GetPDFPageCount`, `ExtractPDFPages`, the page reader and the decryption of an encrypted PDF take the context of the read (they handed pdfcpu a `context.Background()`), so a cancelled read stops parsing; `pkg/pdfsmart` keeps `Unlock` and gains `UnlockContext`. The local storage provider and the loading of MCP skills use the caller's context too.
+- **A connection that sent an MCP notification over HTTP is given back to the pool, and `bodyclose` checks it.** `HTTPTransport.SendNotification` discarded the response without reading or closing its body, so every notification held a socket open. The body is read (up to 64 KiB) and closed. The other 25 findings of the linter were a function that returned a response whose body it had already closed (`spGraphClient.get` now returns only the error), two cases that are not leaks (the response returned to the caller in the retry wrapper, the handshake response of a websocket) with the reason on the line, and the tests, which now close what they receive.
+- **Wrapped errors are recognised, and `errorlint` checks it.** 59 places compared an error with `==`/`!=` (`io.EOF`, `sql.ErrNoRows`, `context.Canceled`...), read it with a type assertion (`*exec.ExitError`, `*types.EngineError`, the circuit-breaker and permission errors) or wrapped it with `%v`; a wrapped error was then missed. The retry and recovery classification in the engine, the exit-code reading of commands and hooks, and the end-of-input handling now use `errors.Is` and `errors.As`, and the messages that hide their cause use `%w`. The linter is on, so a new one fails the build.
+
 ## [1.3.0] - 2026-10-06
 
 ### Security

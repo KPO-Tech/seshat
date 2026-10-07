@@ -56,7 +56,11 @@ seshat is a **local-first** runtime. By default:
 - Bash commands are sandboxed on Linux via **Landlock** (kernel-level filesystem isolation scoped to the working directory).
 - No telemetry is sent anywhere.
 - Credentials are read from environment variables or the local `~/.seshat/auth.json` store — never sent to external services except the configured LLM provider.
-- The gRPC server (`cmd/grpc`) has **no authentication layer** and is intended for local or trusted-network use only. Do not expose it publicly without adding your own auth proxy.
+- A command the model runs gets the environment of the process **without its secrets** (provider keys, database and cloud credentials): see [`docs/tools.md`](./docs/tools.md).
+- In the terminal UI, the parts of a project's configuration that start programs or choose who receives your API key (MCP servers, hooks, language servers, providers, allowed tools) are ignored until you run `seshat trust` in that project: see [`docs/project-trust.md`](./docs/project-trust.md). A `.env` file in the working directory cannot run a command or change where Seshat looks for its configuration.
+- The gRPC server (`cmd/grpc`) listens on the loopback (`127.0.0.1`) by default. On another address it refuses to start unless a shared token (`SESHAT_GRPC_AUTH_TOKEN`) is set or the operator accepts the risk with `SESHAT_GRPC_ALLOW_INSECURE_REMOTE`; TLS is available, and `ConnectMCP` does not start a stdio MCP server unless `SESHAT_GRPC_ALLOW_STDIO_MCP` is set. The token is shared, not per user: put the server behind your own gateway if callers must be told apart. See [`docs/transports.md`](./docs/transports.md).
+
+The model behind these defaults (permissions, sandbox, trust) is explained in [Security and trust](https://seshat-ai.com/en/docs/concepts/security-and-trust) on seshat-ai.com.
 
 When deploying as a shared service (for example via SeshatCloud), additional security controls (user auth, session isolation, encrypted credential storage) are the responsibility of the product layer.
 

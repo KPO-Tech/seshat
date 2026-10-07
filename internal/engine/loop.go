@@ -1242,7 +1242,8 @@ func (l *Loop) isRecoverableError(err error) bool {
 	if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
 		return false
 	}
-	if engineErr, ok := err.(*types.EngineError); ok {
+	var engineErr *types.EngineError
+	if errors.As(err, &engineErr) {
 		if engineErr.IsRetryable() {
 			return true
 		}
@@ -1327,7 +1328,8 @@ func (l *Loop) tryRecovery(ctx context.Context, state *MutableState, req RunRequ
 // (network errors, context cancellation, etc.) so the transition log stays
 // meaningful without relying on error message strings.
 func (l *Loop) recoveryLabel(err error) string {
-	if engineErr, ok := err.(*types.EngineError); ok {
+	var engineErr *types.EngineError
+	if errors.As(err, &engineErr) {
 		switch engineErr.Code {
 		case types.ErrCodeAPIRateLimit:
 			return "recoverable_rate_limit"

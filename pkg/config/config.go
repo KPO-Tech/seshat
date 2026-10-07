@@ -1,6 +1,7 @@
 package config
 
 import (
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -323,7 +324,8 @@ func LoadInto(config *Config) error {
 	v.SetDefault("enable_api_keys", true)
 
 	if err := v.ReadInConfig(); err != nil {
-		if _, ok := err.(viper.ConfigFileNotFoundError); ok {
+		var notFound viper.ConfigFileNotFoundError
+		if errors.As(err, &notFound) {
 			// Config not found — no fallback, config is optional.
 		} else {
 			return fmt.Errorf("failed to read config: %w", err)
@@ -387,10 +389,12 @@ func EffectiveSessionDBPath(config Config) string {
 	return EffectiveDBPath(config)
 }
 
+// EffectiveRuntimeRoot returns the runtime root of a configuration: its RuntimeRoot when it is not blank, otherwise the SESHAT_RUNTIME_ROOT environment variable, otherwise ~/.config/seshat (a seshat directory under the temporary directory when no home can be found). A leading "~" is expanded and the path is cleaned.
 func EffectiveRuntimeRoot(config Config) string {
 	return runtimepath.ResolveRoot(config.RuntimeRoot)
 }
 
+// EffectiveStorageLocalPath returns the directory of the local storage of a configuration: its StorageLocalPath when it is set, with a leading "~" expanded, otherwise the storage directory under the runtime root.
 func EffectiveStorageLocalPath(config Config) string {
 	if trimmed := strings.TrimSpace(config.StorageLocalPath); trimmed != "" {
 		return filepath.Clean(runtimepath.ExpandTilde(trimmed))
