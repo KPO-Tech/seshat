@@ -37,8 +37,10 @@ func logicBindings(rt *dataflow.Runtime, item dataflow.Item, itemIndex int) map[
 // instead of two.
 type Filter struct{ pool *expr.Pool }
 
+// NewFilter creates a Filter node that evaluates its expression with pool.
 func NewFilter(pool *expr.Pool) *Filter { return &Filter{pool: pool} }
 
+// Description returns the catalog entry of the filter node: it keeps only the items for which a boolean JS expression is true.
 func (n *Filter) Description() dataflow.NodeDescription {
 	return dataflow.NodeDescription{Type: "filter", Name: "Filter", Category: "Logic",
 		Description: "Keeps only items matching a boolean expression, dropping the rest — all kept items continue on the \"main\" port. " +
@@ -50,6 +52,7 @@ func (n *Filter) Description() dataflow.NodeDescription {
 		}}
 }
 
+// ValidateParameters requires the expression parameter.
 func (n *Filter) ValidateParameters(params map[string]any) error {
 	if dataflow.StringParam(params, "expression", "") == "" {
 		return errors.New("expression is required")
@@ -57,6 +60,7 @@ func (n *Filter) ValidateParameters(params map[string]any) error {
 	return nil
 }
 
+// Execute evaluates the expression for each item, with the item bound as $json, and passes on to the main port only the items for which it is true. An expression that fails to evaluate fails the node.
 func (n *Filter) Execute(ctx context.Context, rt *dataflow.Runtime, input []dataflow.Item, params map[string]any) (dataflow.Output, error) {
 	expression := dataflow.StringParam(params, "expression", "")
 	kept := make([]dataflow.Item, 0, len(input))
@@ -77,8 +81,10 @@ func (n *Filter) Execute(ctx context.Context, rt *dataflow.Runtime, input []data
 // branches are wired to different downstream nodes.
 type If struct{ pool *expr.Pool }
 
+// NewIf creates an If node that evaluates its expression with pool.
 func NewIf(pool *expr.Pool) *If { return &If{pool: pool} }
 
+// Description returns the catalog entry of the if node: it routes each item to the "true" or the "false" port according to a boolean JS expression.
 func (n *If) Description() dataflow.NodeDescription {
 	return dataflow.NodeDescription{Type: "if", Name: "If", Category: "Logic",
 		Description: "Routes each item to the \"true\" or \"false\" output port by a boolean expression — wire connections[\"true\"] and/or connections[\"false\"] to different downstream node ids to actually branch. " +
@@ -90,6 +96,7 @@ func (n *If) Description() dataflow.NodeDescription {
 		}}
 }
 
+// ValidateParameters requires the expression parameter.
 func (n *If) ValidateParameters(params map[string]any) error {
 	if dataflow.StringParam(params, "expression", "") == "" {
 		return errors.New("expression is required")
@@ -97,6 +104,7 @@ func (n *If) ValidateParameters(params map[string]any) error {
 	return nil
 }
 
+// Execute evaluates the expression for each item, with the item bound as $json, and sends the item to the "true" port when it is true and to the "false" port otherwise. An expression that fails to evaluate fails the node.
 func (n *If) Execute(ctx context.Context, rt *dataflow.Runtime, input []dataflow.Item, params map[string]any) (dataflow.Output, error) {
 	expression := dataflow.StringParam(params, "expression", "")
 	var trueItems, falseItems []dataflow.Item
@@ -121,8 +129,10 @@ func (n *If) Execute(ctx context.Context, rt *dataflow.Runtime, input []dataflow
 // wins). An item matching no case routes to the "default" port.
 type Switch struct{ pool *expr.Pool }
 
+// NewSwitch creates a Switch node that evaluates the expressions of its cases with pool.
 func NewSwitch(pool *expr.Pool) *Switch { return &Switch{pool: pool} }
 
+// Description returns the catalog entry of the switch node: it routes each item to the port of the first case whose expression is true, or to the "default" port when none is.
 func (n *Switch) Description() dataflow.NodeDescription {
 	return dataflow.NodeDescription{Type: "switch", Name: "Switch", Category: "Logic",
 		Description: "Routes each item to the port of the first matching case (evaluated in casesOrder), or to the \"default\" port if none match — wire connections[<case name>] and connections[\"default\"] to downstream node ids. " +
@@ -140,6 +150,7 @@ func (n *Switch) Description() dataflow.NodeDescription {
 		}}
 }
 
+// ValidateParameters requires a non-empty casesOrder and a cases map that holds an expression for every name listed in casesOrder.
 func (n *Switch) ValidateParameters(params map[string]any) error {
 	order, ok := params["casesOrder"].([]any)
 	if !ok || len(order) == 0 {
@@ -158,6 +169,7 @@ func (n *Switch) ValidateParameters(params map[string]any) error {
 	return nil
 }
 
+// Execute tries the cases in the order of casesOrder for each item, with the item bound as $json, and sends the item to the port of the first case whose expression is true, or to the "default" port when none is.
 func (n *Switch) Execute(ctx context.Context, rt *dataflow.Runtime, input []dataflow.Item, params map[string]any) (dataflow.Output, error) {
 	orderRaw, _ := params["casesOrder"].([]any)
 	cases, _ := params["cases"].(map[string]any)

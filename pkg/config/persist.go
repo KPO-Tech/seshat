@@ -9,14 +9,17 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
+// DefaultConfigPath returns the path of the configuration file, config.yaml, under the runtime root.
 func DefaultConfigPath() string {
 	return runtimepath.Join("", "config.yaml")
 }
 
+// Save writes config to the default configuration file.
 func Save(config Config) error {
 	return SaveAt(DefaultConfigPath(), config)
 }
 
+// SaveAt writes config as YAML to path, creating the directory if needed. The file is readable and writable by its owner only.
 func SaveAt(path string, config Config) error {
 	payload, err := yaml.Marshal(config)
 	if err != nil {

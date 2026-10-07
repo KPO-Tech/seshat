@@ -11,17 +11,38 @@ import (
 )
 
 type (
-	PageSource        = internalpdfsmart.PageSource
-	PageResult        = internalpdfsmart.PageResult
-	Result            = internalpdfsmart.Result
-	PageRenderer      = internalpdfsmart.PageRenderer
+	// PageSource identifies how a page's text was obtained.
+	PageSource = internalpdfsmart.PageSource
+	// PageResult is one page's contribution to a Result.
+	PageResult = internalpdfsmart.PageResult
+	// Result is the outcome of a page-aware PDF-to-markdown conversion.
+	Result = internalpdfsmart.Result
+	// PageRenderer renders a single PDF page to a raster image, feeding the
+	// vision-LLM fallback (see Convert's own doc comment for where this slots
+	// into the page-processing pipeline). It is an interface, like
+	// documentreader.Converter, so that this package does not depend on CGO or
+	// on the native document build tag.
+	PageRenderer = internalpdfsmart.PageRenderer
+	// VisionTranscriber sends a rendered page image to a vision-capable LLM and
+	// returns its transcription. Implementations must report IsAvailable=false
+	// (rather than attempting the call and failing) when the configured model
+	// isn't multimodal.
 	VisionTranscriber = internalpdfsmart.VisionTranscriber
-	VisionFallback    = internalpdfsmart.VisionFallback
+	// VisionFallback bundles the two collaborators the vision-LLM fallback
+	// stage needs. Both Renderer and Transcriber must be set (and Transcriber
+	// must report IsAvailable) for the fallback to actually run on a page - the
+	// zero value (or either field left nil) simply skips this stage, the same
+	// as a nil/unavailable docling client skips the docling stage. Passed as
+	// its own value rather than two more positional Convert parameters so a
+	// future fallback stage doesn't need another breaking signature change.
+	VisionFallback = internalpdfsmart.VisionFallback
 
 	// TableFinder is a document reader that can also locate and lay out the tables with no ruling lines on a PDF
 	// page, from a layout model (the native reader, with its models, is one). pdfsmart asks it for pages whose text
 	// is columnar and fills the cells it finds from the page's own text. TableStructure is what it answers with.
-	TableFinder    = internalpdfsmart.TableFinder
+	TableFinder = internalpdfsmart.TableFinder
+	// TableStructure is a table as the models saw it, in points measured from the top left corner of the page. Boxes are
+	// {x0, top, x1, bottom}; the models' boxes overlap a little and come in any order.
 	TableStructure = pdftext.TableStructure
 )
 

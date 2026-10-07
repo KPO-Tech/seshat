@@ -9,6 +9,10 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Changed
+
+- **Every exported symbol of `pkg/` has a doc comment, and the test is strict.** The 511 that had none (680 before the generated protobuf code was left out, as linters do) are written: the facades (`pkg/sdk`, `pkg/rag`, `pkg/automation`, `pkg/types`, `pkg/skills`, `pkg/storage`, `pkg/mcp`...) say what they re-export, and `pkg/workflow`, `pkg/dataflow`, `pkg/connectors`, `pkg/msgraph`, `pkg/config`, `pkg/doctor`, `pkg/runtimepath` and the others describe their own behaviour, read from the code. `internal/archtest` fails on any new undocumented exported symbol; the tolerance list it used to hold is gone. No behaviour change.
+
 ### Fixed
 
 - **Wrapped errors are recognised, and `errorlint` checks it.** 59 places compared an error with `==`/`!=` (`io.EOF`, `sql.ErrNoRows`, `context.Canceled`...), read it with a type assertion (`*exec.ExitError`, `*types.EngineError`, the circuit-breaker and permission errors) or wrapped it with `%v`; a wrapped error was then missed. The retry and recovery classification in the engine, the exit-code reading of commands and hooks, and the end-of-input handling now use `errors.Is` and `errors.As`, and the messages that hide their cause use `%w`. The linter is on, so a new one fails the build.
