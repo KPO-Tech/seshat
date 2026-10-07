@@ -27,7 +27,7 @@ var ErrPasswordRequired = errors.New("the PDF is protected by a password")
 //
 // With no password the empty user password is tried, which is what every viewer does first. A password that is
 // needed and not given, or wrong, gives ErrPasswordRequired.
-func Unlock(data []byte, password string) ([]byte, error) {
+func Unlock(ctx context.Context, data []byte, password string) ([]byte, error) {
 	if opens(data) {
 		return data, nil
 	}
@@ -39,7 +39,7 @@ func Unlock(data []byte, password string) ([]byte, error) {
 	if plain, ok := unlocked.get(key); ok {
 		return plain, nil
 	}
-	plain, err := decrypt(data, password)
+	plain, err := decrypt(ctx, data, password)
 	if err != nil {
 		return nil, err
 	}
@@ -57,7 +57,7 @@ func opens(data []byte) bool {
 // algorithm and however the encryption dictionary is written (some producers write it inline in the trailer).
 // pdfcpu takes a password, but only follows an encryption dictionary that is an indirect object, which is what
 // most producers write.
-func decrypt(data []byte, password string) ([]byte, error) {
+func decrypt(ctx context.Context, data []byte, password string) ([]byte, error) {
 	var lastErr error
 	if password == "" {
 		merged, err := gopdf.MergeBytes(data)
@@ -73,8 +73,7 @@ func decrypt(data []byte, password string) ([]byte, error) {
 	conf := pdfcpumodel.NewDefaultConfiguration()
 	conf.UserPW, conf.OwnerPW = password, password
 	var out bytes.Buffer
-	// Unlock is part of the public API without a context, and decrypting is a short computation on bytes already in memory.
-	err := api.Decrypt(context.Background(), bytes.NewReader(data), &out, conf)
+	err := api.Decrypt(ctx, bytes.NewReader(data), &out, conf)
 	if err == nil && opens(out.Bytes()) {
 		return out.Bytes(), nil
 	}

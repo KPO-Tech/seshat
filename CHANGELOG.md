@@ -9,6 +9,10 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Fixed
+
+- **A PDF's page count was always 0, and PDF reads now stop with their context.** `ReadPDF` and `GetPDFPageCount` took the count from `pdfcpu.Read`, which leaves it at 0 (checked on pdfcpu 0.13 and 0.16): the "too many pages to read at once" check of the fallback readers never fired and a very large PDF went through whole as base64. The count comes from `api.PageCount` now. `ReadPDF`, `GetPDFPageCount`, `ExtractPDFPages`, the page reader and the decryption of an encrypted PDF take the context of the read (they handed pdfcpu a `context.Background()`), so a cancelled read stops parsing; `pkg/pdfsmart` keeps `Unlock` and gains `UnlockContext`. The local storage provider and the loading of MCP skills use the caller's context too.
+
 ## [1.3.0] - 2026-10-06
 
 ### Security

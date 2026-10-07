@@ -9,7 +9,6 @@ import (
 	"strings"
 
 	"github.com/pdfcpu/pdfcpu/pkg/api"
-	"github.com/pdfcpu/pdfcpu/pkg/pdfcpu"
 	"github.com/pdfcpu/pdfcpu/pkg/pdfcpu/model"
 )
 
@@ -110,22 +109,19 @@ func IsPDFExtension(ext string) bool {
 	return strings.ToLower(ext) == ".pdf"
 }
 
-// ReadPDF reads a PDF file and returns base64-encoded data
-func ReadPDF(filePath string) (*PDFResult, error) {
+// ReadPDF reads a PDF file and returns base64-encoded data. Cancelling ctx stops the parsing.
+func ReadPDF(ctx context.Context, filePath string) (*PDFResult, error) {
 	// Read file
 	data, err := os.ReadFile(filePath)
 	if err != nil {
 		return nil, fmt.Errorf("failed to read PDF: %w", err)
 	}
 
-	// Validate PDF and get page count
-	ctx, err := pdfcpu.Read(context.Background(), bytes.NewReader(data), model.NewDefaultConfiguration())
+	// Validate PDF and get page count. pdfcpu.Read alone leaves XRefTable.PageCount at 0: the count comes from api.PageCount.
+	pageCount, err := api.PageCount(ctx, bytes.NewReader(data), model.NewDefaultConfiguration())
 	if err != nil {
 		return nil, fmt.Errorf("failed to parse PDF: %w", err)
 	}
-
-	// Get page count
-	pageCount := ctx.XRefTable.PageCount
 
 	// Encode to base64
 	base64Data := base64StdEncode(data)
@@ -138,25 +134,25 @@ func ReadPDF(filePath string) (*PDFResult, error) {
 	}, nil
 }
 
-// GetPDFPageCount returns the number of pages in a PDF file
-func GetPDFPageCount(filePath string) (int, error) {
+// GetPDFPageCount returns the number of pages in a PDF file. Cancelling ctx stops the parsing.
+func GetPDFPageCount(ctx context.Context, filePath string) (int, error) {
 	// Read file
 	data, err := os.ReadFile(filePath)
 	if err != nil {
 		return 0, fmt.Errorf("failed to read PDF: %w", err)
 	}
 
-	// Parse PDF
-	ctx, err := pdfcpu.Read(context.Background(), bytes.NewReader(data), model.NewDefaultConfiguration())
+	// pdfcpu.Read alone leaves XRefTable.PageCount at 0: the count comes from api.PageCount.
+	pageCount, err := api.PageCount(ctx, bytes.NewReader(data), model.NewDefaultConfiguration())
 	if err != nil {
 		return 0, fmt.Errorf("failed to parse PDF: %w", err)
 	}
 
-	return ctx.XRefTable.PageCount, nil
+	return pageCount, nil
 }
 
-// ExtractPDFPages extracts specific pages from a PDF and returns images
-func ExtractPDFPages(filePath string, pageRange *PDFPageRange) (*PDFExtractionResult, error) {
+// ExtractPDFPages extracts specific pages from a PDF and returns images. Cancelling ctx stops the extraction.
+func ExtractPDFPages(ctx context.Context, filePath string, pageRange *PDFPageRange) (*PDFExtractionResult, error) {
 	// Create temporary directory for output
 	outputDir, err := os.MkdirTemp("", "pdf_extract_*")
 	if err != nil {
@@ -183,7 +179,7 @@ func ExtractPDFPages(filePath string, pageRange *PDFPageRange) (*PDFExtractionRe
 
 	// Extract pages as separate PDFs
 	conf := model.NewDefaultConfiguration()
-	err = api.ExtractPagesFile(context.Background(), filePath, outputDir, pageRanges, conf)
+	err = api.ExtractPagesFile(ctx, filePath, outputDir, pageRanges, conf)
 	if err != nil {
 		os.RemoveAll(outputDir)
 		return nil, fmt.Errorf("failed to extract pages: %w", err)
