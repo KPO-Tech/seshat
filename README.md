@@ -1,8 +1,6 @@
 <p align="center">
-  <picture>
-    <source media="(prefers-color-scheme: dark)" srcset="docs/brand/on-dark.svg">
-    <img src="docs/brand/on-light.svg" alt="seshat" width="120">
-  </picture>
+  <img src="docs/brand/on-light.svg#gh-light-mode-only" alt="seshat" width="120">
+  <img src="docs/brand/on-dark.svg#gh-dark-mode-only" alt="seshat" width="120">
 </p>
 
 <h1 align="center">Seshat</h1>
