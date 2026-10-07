@@ -54,7 +54,12 @@ var ErrPasswordRequired = internalpdfsmart.ErrPasswordRequired
 // viewer tries first and opens a PDF whose owner password only limits printing and copying. Convert and the page
 // readers do this themselves with an empty password; call it with the user's password for a protected PDF.
 func Unlock(data []byte, password string) ([]byte, error) {
-	return internalpdfsmart.Unlock(data, password)
+	return internalpdfsmart.Unlock(context.Background(), data, password)
+}
+
+// UnlockContext is Unlock with a context: cancelling it stops the decryption of a large PDF.
+func UnlockContext(ctx context.Context, data []byte, password string) ([]byte, error) {
+	return internalpdfsmart.Unlock(ctx, data, password)
 }
 
 const (

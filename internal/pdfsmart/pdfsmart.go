@@ -201,8 +201,8 @@ type TableFinder interface {
 }
 
 // PageCount is the number of pages of a PDF, without reading any of them.
-func PageCount(data []byte) (int, error) {
-	data, err := Unlock(data, "")
+func PageCount(ctx context.Context, data []byte) (int, error) {
+	data, err := Unlock(ctx, data, "")
 	if err != nil {
 		return 0, err
 	}
@@ -225,7 +225,7 @@ func ReadPages(ctx context.Context, data []byte, pages []int, opts Options, docu
 
 	// An encrypted PDF is read from a decrypted copy, so everything below (the page reader, the image check, the
 	// engine, the layout models) sees the same plain file.
-	data, err := Unlock(data, opts.Password)
+	data, err := Unlock(ctx, data, opts.Password)
 	if err != nil {
 		return Result{}, false, err
 	}
