@@ -9,6 +9,10 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Security
+
+- **The `http_request` node of the workflow engine can no longer be sent to an internal address by a redirect or a DNS answer.** It checked the URL once, before the call, and then let the client follow up to 10 redirects without looking at them: a public server answering with a redirect to `http://169.254.169.254/` (or to any internal address) got the response through. It also resolved the name for the check and again to connect, so a name that answered a public address the first time and an internal one the second (DNS rebinding) got through. Every redirect is now checked against the guard (10 at most), and the address a connection is really made to is checked when it is made. The NAT64 range (`64:ff9b::/96`, which reaches IPv4 addresses through a gateway) is blocked too. The node connects directly and ignores the proxy variables of the environment, which would hide the destination from both checks.
+
 ### Changed
 
 - **Every exported symbol of `pkg/` has a doc comment, and the test is strict.** The 511 that had none (680 before the generated protobuf code was left out, as linters do) are written: the facades (`pkg/sdk`, `pkg/rag`, `pkg/automation`, `pkg/types`, `pkg/skills`, `pkg/storage`, `pkg/mcp`...) say what they re-export, and `pkg/workflow`, `pkg/dataflow`, `pkg/connectors`, `pkg/msgraph`, `pkg/config`, `pkg/doctor`, `pkg/runtimepath` and the others describe their own behaviour, read from the code. `internal/archtest` fails on any new undocumented exported symbol; the tolerance list it used to hold is gone. No behaviour change.
