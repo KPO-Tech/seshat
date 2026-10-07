@@ -12,6 +12,7 @@ import (
 	"github.com/KPO-Tech/seshat/pkg/runtimepath"
 )
 
+// Profile is the persona of the optional companion: whether it is enabled, its name, style, traits and instructions, and when it was created and last updated.
 type Profile struct {
 	Enabled      bool      `json:"enabled"`
 	Name         string    `json:"name"`
@@ -22,6 +23,7 @@ type Profile struct {
 	UpdatedAt    time.Time `json:"updated_at"`
 }
 
+// DefaultProfile returns the default companion: enabled, named Seshat, with a calm, capable and direct style and warm, precise and proactive traits.
 func DefaultProfile() Profile {
 	now := time.Now().UTC()
 	return Profile{
@@ -34,6 +36,7 @@ func DefaultProfile() Profile {
 	}
 }
 
+// Load reads the companion profile stored under the runtime root root. When there is none it returns the default profile with Enabled set to false.
 func Load(root string) (Profile, error) {
 	path := runtimepath.CompanionPath(root)
 	data, err := os.ReadFile(path)
@@ -52,6 +55,7 @@ func Load(root string) (Profile, error) {
 	return Normalize(profile), nil
 }
 
+// Save normalises the profile and writes it under the runtime root root, through a temporary file that replaces the old one, so a failure does not leave a half-written profile.
 func Save(root string, profile Profile) error {
 	profile = Normalize(profile)
 	path := runtimepath.CompanionPath(root)
@@ -73,6 +77,7 @@ func Save(root string, profile Profile) error {
 	return nil
 }
 
+// Normalize trims the text fields of a profile, gives a blank name the default one, drops empty traits, sets CreatedAt when it is zero and sets UpdatedAt to now.
 func Normalize(profile Profile) Profile {
 	now := time.Now().UTC()
 	if profile.Name = strings.TrimSpace(profile.Name); profile.Name == "" {
@@ -88,6 +93,7 @@ func Normalize(profile Profile) Profile {
 	return profile
 }
 
+// SystemPrompt renders the profile as a <companion> block for the system prompt (name, style, traits and instructions), or an empty string when the companion is disabled.
 func SystemPrompt(profile Profile) string {
 	profile = Normalize(profile)
 	if !profile.Enabled {

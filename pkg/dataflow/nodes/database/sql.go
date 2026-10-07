@@ -68,9 +68,14 @@ func (n *sqlNode) connFor(dsn string) (*sql.DB, error) {
 	return db, nil
 }
 
+// NewPostgres creates the postgres node, which runs queries against a PostgreSQL database.
 func NewPostgres() *sqlNode { return newSQLNode("postgres", "postgres") }
-func NewMySQL() *sqlNode    { return newSQLNode("mysql", "mysql") }
-func NewSQLite() *sqlNode   { return newSQLNode("sqlite", "sqlite") }
+
+// NewMySQL creates the mysql node, which runs queries against a MySQL database.
+func NewMySQL() *sqlNode { return newSQLNode("mysql", "mysql") }
+
+// NewSQLite creates the sqlite node, which runs queries against a SQLite database.
+func NewSQLite() *sqlNode { return newSQLNode("sqlite", "sqlite") }
 
 func (n *sqlNode) Description() dataflow.NodeDescription {
 	return dataflow.NodeDescription{Type: n.nodeType, Name: n.nodeType, Category: "Database",

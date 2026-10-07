@@ -15,16 +15,20 @@ import (
 // everything else is copied through as a literal.
 type Set struct{ pool *expr.Pool }
 
+// NewSet creates a Set node that evaluates its "="-prefixed field values with pool.
 func NewSet(pool *expr.Pool) *Set { return &Set{pool: pool} }
 
+// Description returns the catalog entry of the set node: it adds or overwrites fields on every item, a string value that starts with "=" being evaluated as a JS expression.
 func (n *Set) Description() dataflow.NodeDescription {
 	return dataflow.NodeDescription{Type: "set", Name: "Set", Category: "Data",
 		Description: "Adds or overwrites fields on every item, keeping existing fields not mentioned. " +
 			"Parameters: fields (object, required) — field name -> value; a string value starting with \"=\" is evaluated as a JS expression (current item bound as $json, e.g. \"=$json.n * 2\"), anything else (including a plain string) is used as a literal."}
 }
 
+// ValidateParameters accepts any parameters: without a fields object the items go through unchanged.
 func (n *Set) ValidateParameters(map[string]any) error { return nil }
 
+// Execute returns the items with the fields added or overwritten and the other fields kept. A field value that is a string starting with "=" is evaluated as a JS expression with the item bound as $json; any other value is used as it is.
 func (n *Set) Execute(ctx context.Context, rt *dataflow.Runtime, input []dataflow.Item, params map[string]any) (dataflow.Output, error) {
 	fields, _ := params["fields"].(map[string]any)
 	out := make([]dataflow.Item, 0, len(input))
@@ -70,16 +74,20 @@ func (n *Set) resolve(ctx context.Context, rt *dataflow.Runtime, raw any, item d
 // yet; add them here if/when a workflow actually needs one.
 type Merge struct{}
 
+// NewMerge creates a Merge node.
 func NewMerge() Merge { return Merge{} }
 
+// Description returns the catalog entry of the merge node: it joins the items of several upstream branches into one list.
 func (Merge) Description() dataflow.NodeDescription {
 	return dataflow.NodeDescription{Type: "merge", Name: "Merge", Category: "Data",
 		Description: "Joins items from multiple upstream branches into one list — connect two or more nodes' outputs to this node's id to combine them; it needs no parameters of its own, the engine already concatenates every input a node receives. Use it as an explicit join point when a graph branches then needs to reconverge. " +
 			"Parameters: none."}
 }
 
+// ValidateParameters accepts any parameters: the node has none.
 func (Merge) ValidateParameters(map[string]any) error { return nil }
 
+// Execute passes its input on unchanged, as the engine has already concatenated the items of the branches connected to the node.
 func (Merge) Execute(_ context.Context, _ *dataflow.Runtime, input []dataflow.Item, _ map[string]any) (dataflow.Output, error) {
 	return dataflow.Main(input), nil
 }

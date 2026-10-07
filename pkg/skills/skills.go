@@ -7,14 +7,18 @@ import (
 )
 
 type (
+	// Alias maps a skill name to the skill it stands for: using the Alias name runs the Target skill.
 	Alias = internalskills.SkillAlias
+	// Skill is a skill the model can use: its name and description, when to use it, the tools it may call, its arguments, the model and effort it asks for, whether the user or the model may invoke it, and the instructions it carries. Where it was loaded from is in Source and LoadedFrom.
 	Skill = internalskills.Skill
 )
 
+// All returns the skills available for the working directory cwd: those found in files, with the project's overriding the managed, user and built-in ones, then the bundled skills, which have the lowest priority.
 func All(cwd string) ([]Skill, error) {
 	return internalskills.GetAllSkills(cwd)
 }
 
+// AllForUser is All for a given user: it also reads the skills of that user's own directory.
 func AllForUser(cwd string, userID string) ([]Skill, error) {
 	return internalskills.GetAllSkillsForUser(cwd, userID)
 }
@@ -31,6 +35,7 @@ func MatchTrigger(userInput string, skills []Skill) *Skill {
 	return internalskills.MatchTrigger(userInput, skills)
 }
 
+// UserPath returns the directory of the skills of a user: the shared user directory when userID is blank, a directory of that user otherwise.
 func UserPath(userID string) string {
 	return internalskills.GetUserSkillsPathForUser(userID)
 }
@@ -41,22 +46,27 @@ func ReadEnabled(path string) bool {
 	return internalskills.ReadSkillEnabled(path)
 }
 
+// Bundled returns the skills that ship with the runtime.
 func Bundled() []Skill {
 	return internalskills.GetBundledSkills()
 }
 
+// DiscoverMCP returns the skills offered by the MCP servers that are connected: one per tool they expose. Cancelling ctx stops the listing.
 func DiscoverMCP(ctx context.Context) ([]Skill, error) {
 	return internalskills.DiscoverMCPSkills(ctx)
 }
 
+// MCPServers returns the names of the connected MCP servers, or an empty list when MCP is not initialised.
 func MCPServers() []string {
 	return internalskills.GetMCPServers()
 }
 
+// MCPHealth reports the state of MCP for the skills: "not initialized", or the number and the names of the connected servers.
 func MCPHealth() map[string]string {
 	return internalskills.GetMCPHealth()
 }
 
+// Aliases returns the skill aliases that were registered.
 func Aliases() []Alias {
 	return internalskills.GetSkillAliases()
 }

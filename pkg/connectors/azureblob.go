@@ -73,10 +73,12 @@ type AzureBlobConnector struct {
 	extractText TextExtractorFunc
 }
 
+// NewAzureBlobConnector creates an Azure Blob Storage connector.
 func NewAzureBlobConnector() *AzureBlobConnector {
 	return &AzureBlobConnector{}
 }
 
+// WithTextExtractor sets the function that turns a downloaded binary file into text (see TextExtractorFunc) and returns the connector, for chaining.
 func (c *AzureBlobConnector) WithTextExtractor(fn TextExtractorFunc) *AzureBlobConnector {
 	c.extractText = fn
 	return c

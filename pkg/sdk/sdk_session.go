@@ -12,6 +12,7 @@ type Session struct {
 	session *engine.Session
 }
 
+// SubmitMessage sends a plain-text user message and runs the turn it starts: the model answers, calls the tools it asks for, and the response (messages, tool uses and results, usage, stop reason) comes back when the turn ends. It streams through the callbacks and queues set on the session, and ctx cancels the turn.
 func (s *Session) SubmitMessage(ctx context.Context, content string) (*SessionResponse, error) {
 	response, err := s.session.SubmitMessage(ctx, content)
 	if err != nil {
@@ -32,6 +33,7 @@ func (s *Session) SubmitMessage(ctx context.Context, content string) (*SessionRe
 	}, nil
 }
 
+// SubmitMessageWithContent is SubmitMessage for a message that also carries images.
 func (s *Session) SubmitMessageWithContent(ctx context.Context, text string, images []ImageContent) (*SessionResponse, error) {
 	response, err := s.session.SubmitMessageWithContent(ctx, text, images)
 	if err != nil {
@@ -52,10 +54,12 @@ func (s *Session) SubmitMessageWithContent(ctx context.Context, text string, ima
 	}, nil
 }
 
+// RegisterTool makes tool available to the model in this session. It returns an error when the tool cannot be registered.
 func (s *Session) RegisterTool(tool Tool) error {
 	return s.session.RegisterTool(tool)
 }
 
+// UnregisterTool removes the tool called name from this session. It does nothing on a nil session.
 func (s *Session) UnregisterTool(name string) error {
 	if s == nil || s.session == nil {
 		return nil
@@ -63,22 +67,27 @@ func (s *Session) UnregisterTool(name string) error {
 	return s.session.UnregisterTool(name)
 }
 
+// GetID returns the identifier of the session.
 func (s *Session) GetID() SessionID {
 	return s.session.GetMetadata().ID
 }
 
+// GetMessages returns the conversation so far, in order.
 func (s *Session) GetMessages() []Message {
 	return s.session.GetMessages()
 }
 
+// Close ends the session: it cancels a turn that is running, persists the memory of the session and releases what it holds (the browser session, the event queues). It is idempotent.
 func (s *Session) Close() error {
 	return s.session.Close()
 }
 
+// Interrupt cancels the turn that is running and marks the session as interrupted. It can be called from another goroutine while SubmitMessage is waiting.
 func (s *Session) Interrupt() error {
 	return s.session.Interrupt()
 }
 
+// GetStatus returns the current status of the session, or an empty status when the session has no metadata.
 func (s *Session) GetStatus() SessionStatus {
 	metadata := s.session.GetMetadata()
 	if metadata == nil {
@@ -87,18 +96,22 @@ func (s *Session) GetStatus() SessionStatus {
 	return metadata.Status
 }
 
+// GetMetadata returns the metadata the session keeps about itself, its identifier and status among others.
 func (s *Session) GetMetadata() *SessionMetadata {
 	return s.session.GetMetadata()
 }
 
+// GetPermissionMode returns the permission mode of the session, which decides which tool calls are asked about.
 func (s *Session) GetPermissionMode() PermissionMode {
 	return s.session.GetPermissionMode()
 }
 
+// GetExecutionMode returns the execution mode of the session.
 func (s *Session) GetExecutionMode() ExecutionMode {
 	return ExecutionMode(s.session.GetExecutionMode())
 }
 
+// GetPermissionContext returns the permission context of the session: the mode and the rules its tool calls are checked against.
 func (s *Session) GetPermissionContext() *PermissionContext {
 	return s.session.GetPermissionContext()
 }
@@ -123,6 +136,7 @@ func (s *Session) ClearPlanMode() {
 	s.session.ClearPlanMode()
 }
 
+// SetPermissionMode changes the permission mode of the session from the next tool call on. It does nothing on a nil session.
 func (s *Session) SetPermissionMode(mode PermissionMode) {
 	if s == nil || s.session == nil {
 		return
@@ -130,6 +144,7 @@ func (s *Session) SetPermissionMode(mode PermissionMode) {
 	s.session.SetPermissionMode(mode)
 }
 
+// SetSystemPromptTemplate sets a template that fully replaces the default system prompt of this session. An empty text clears the override. It does nothing on a nil session.
 func (s *Session) SetSystemPromptTemplate(text string) {
 	if s == nil || s.session == nil {
 		return
@@ -137,6 +152,7 @@ func (s *Session) SetSystemPromptTemplate(text string) {
 	s.session.SetSystemPromptTemplate(text)
 }
 
+// SetAppendSystemPrompt sets text that is appended to the system prompt of this session. It does nothing on a nil session.
 func (s *Session) SetAppendSystemPrompt(text string) {
 	if s == nil || s.session == nil {
 		return
@@ -144,6 +160,7 @@ func (s *Session) SetAppendSystemPrompt(text string) {
 	s.session.SetAppendSystemPrompt(text)
 }
 
+// SetWorkingDirectory sets the directory the tools of the session work in (files, shell) from now on. It does nothing on a nil session.
 func (s *Session) SetWorkingDirectory(path string) {
 	if s == nil || s.session == nil {
 		return
@@ -151,6 +168,7 @@ func (s *Session) SetWorkingDirectory(path string) {
 	s.session.SetWorkingDirectory(path)
 }
 
+// GetTurnNumber returns the number of turns the session has run, or 0 on a nil session.
 func (s *Session) GetTurnNumber() int {
 	if s == nil || s.session == nil {
 		return 0
@@ -158,6 +176,7 @@ func (s *Session) GetTurnNumber() int {
 	return s.session.GetTurnNumber()
 }
 
+// GetTotalTokens returns the tokens the session has used so far, or 0 on a nil session.
 func (s *Session) GetTotalTokens() int {
 	if s == nil || s.session == nil {
 		return 0
@@ -165,6 +184,7 @@ func (s *Session) GetTotalTokens() int {
 	return s.session.GetTotalTokens()
 }
 
+// GetToolNames returns the names of the tools available in the session.
 func (s *Session) GetToolNames() []string {
 	if s == nil || s.session == nil {
 		return nil
@@ -172,6 +192,7 @@ func (s *Session) GetToolNames() []string {
 	return s.session.GetToolNames()
 }
 
+// SetProgressFn sets the function called with the progress of a running tool. It does nothing on a nil session.
 func (s *Session) SetProgressFn(progressFn func(ToolProgress)) {
 	if s == nil || s.session == nil {
 		return
@@ -179,6 +200,7 @@ func (s *Session) SetProgressFn(progressFn func(ToolProgress)) {
 	s.session.SetProgressCallback(progressFn)
 }
 
+// SetResponseChunkFn sets the function called with each chunk of the model's response as it streams in. It does nothing on a nil session.
 func (s *Session) SetResponseChunkFn(chunkFn func(ResponseChunk)) {
 	if s == nil || s.session == nil {
 		return
@@ -186,6 +208,7 @@ func (s *Session) SetResponseChunkFn(chunkFn func(ResponseChunk)) {
 	s.session.SetResponseChunkCallback(chunkFn)
 }
 
+// SetRuntimeEventFn sets the function called with each structured runtime event of the session. It does nothing on a nil session.
 func (s *Session) SetRuntimeEventFn(runtimeEventFn func(RuntimeEvent)) {
 	if s == nil || s.session == nil {
 		return
@@ -193,10 +216,12 @@ func (s *Session) SetRuntimeEventFn(runtimeEventFn func(RuntimeEvent)) {
 	s.session.SetRuntimeEventCallback(runtimeEventFn)
 }
 
+// GetEventQueue returns the streaming event queue of the session, which a caller can read instead of setting a callback.
 func (s *Session) GetEventQueue() *EventQueue {
 	return s.session.GetEventQueue()
 }
 
+// GetRuntimeEventQueue returns the structured runtime event queue of the session, which a caller can read instead of setting a callback.
 func (s *Session) GetRuntimeEventQueue() *RuntimeEventQueue {
 	return s.session.GetRuntimeEventQueue()
 }

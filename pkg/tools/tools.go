@@ -34,11 +34,17 @@ type (
 	// runtime state rather than being fixed at registration time.
 	Toolset = internalcontract.Toolset
 
-	Definition     = internalcontract.Definition
-	CallInput      = internalcontract.CallInput
-	CallResult     = internalcontract.CallResult
-	ContentType    = internalcontract.ContentType
+	// Definition defines a tool's metadata and schema
+	Definition = internalcontract.Definition
+	// CallInput represents the input to a tool call
+	CallInput = internalcontract.CallInput
+	// CallResult represents the result of a tool call
+	CallResult = internalcontract.CallResult
+	// ContentType represents the type of tool result
+	ContentType = internalcontract.ContentType
+	// ResultMetadata contains metadata about a tool result
 	ResultMetadata = internalcontract.ResultMetadata
+	// ToolUseContext provides context for tool execution.
 	ToolUseContext = internalcontract.ToolUseContext
 
 	// ContextModifier mutates the tool runtime context after a successful call.

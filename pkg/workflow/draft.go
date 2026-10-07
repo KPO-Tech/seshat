@@ -14,11 +14,13 @@ const (
 	DraftFormatJSON = "json"
 )
 
+// DraftOptions asks for a workflow definition to be normalised, validated and rendered. Format is "yaml" (the default, also "yml") or "json".
 type DraftOptions struct {
 	Definition Definition
 	Format     string
 }
 
+// DraftResult is a normalised definition and its rendering in Format. Diagnostics holds the reason when the definition is invalid or the format is not supported.
 type DraftResult struct {
 	Definition  Definition `json:"definition"`
 	Format      string     `json:"format"`
@@ -26,6 +28,7 @@ type DraftResult struct {
 	Diagnostics []string   `json:"diagnostics,omitempty"`
 }
 
+// Draft normalises and validates a definition, then renders it as YAML or JSON. When it fails, it returns the error together with a result whose Diagnostics holds its message.
 func Draft(options DraftOptions) (DraftResult, error) {
 	format, err := normalizeDraftFormat(options.Format)
 	if err != nil {
@@ -61,6 +64,7 @@ func Draft(options DraftOptions) (DraftResult, error) {
 	}, nil
 }
 
+// NormalizeDefinition trims the names, ids, kinds, agents, prompts and output formats of a definition, lower-cases the kinds, replaces a negative MaxTurns by 0, and cleans the lists of needs and routes.
 func NormalizeDefinition(def Definition) Definition {
 	def.Name = strings.TrimSpace(def.Name)
 	def.Description = strings.TrimSpace(def.Description)

@@ -12,6 +12,7 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 ### Changed
 
 - **The documentation points to the website, and `SECURITY.md` says what the gRPC server does now.** The README header, the installation, quick start, CLI, gRPC and Go SDK sections, `docs/README.md`, `CONTRIBUTING.md` and the `pkg/sdk` package comment link to the pages of seshat-ai.com that cover them (installation, configuration, the SDK, the gRPC API, security and trust), with the canonical `/en/` addresses. `SECURITY.md` still said that the gRPC server had no authentication layer; it now describes the loopback default, the token, TLS, the stdio MCP switch, the environment of commands and the trust of a project.
+- **Every exported symbol of `pkg/` has a doc comment, and the test is strict.** The 511 that had none (680 before the generated protobuf code was left out, as linters do) are written: the facades (`pkg/sdk`, `pkg/rag`, `pkg/automation`, `pkg/types`, `pkg/skills`, `pkg/storage`, `pkg/mcp`...) say what they re-export, and `pkg/workflow`, `pkg/dataflow`, `pkg/connectors`, `pkg/msgraph`, `pkg/config`, `pkg/doctor`, `pkg/runtimepath` and the others describe their own behaviour, read from the code. `internal/archtest` fails on any new undocumented exported symbol; the tolerance list it used to hold is gone. No behaviour change.
 
 ### Fixed
 

@@ -15,12 +15,14 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
+// Definition is a workflow: a named set of nodes, each one a prompt for an agent, linked by the nodes they need. It is read from YAML or JSON (see LoadFile).
 type Definition struct {
 	Name        string `json:"name" yaml:"name"`
 	Description string `json:"description,omitempty" yaml:"description,omitempty"`
 	Nodes       []Node `json:"nodes" yaml:"nodes"`
 }
 
+// Node is one step of a workflow: a prompt for an agent, run once the nodes listed in Needs have succeeded, and whose output is given to the nodes that need it.\nKind gives the node a role: "agent" (or empty) for a plain step, "verifier", "critic", or "router", a node that chooses among the nodes listed in Routes (at least one is required). MaxTurns is the number of turns the executor should allow the agent of the node, 0 leaving it to the executor, and OutputFormat describes the form the output should take.
 type Node struct {
 	ID           string   `json:"id" yaml:"id"`
 	Kind         string   `json:"kind,omitempty" yaml:"kind,omitempty"`
@@ -32,6 +34,7 @@ type Node struct {
 	OutputFormat string   `json:"output_format,omitempty" yaml:"output_format,omitempty"`
 }
 
+// NodeResult is the outcome of one node: whether it succeeded, its output or its error, and when it ran.
 type NodeResult struct {
 	ID        string        `json:"id"`
 	Agent     string        `json:"agent,omitempty"`
@@ -43,6 +46,7 @@ type NodeResult struct {
 	Duration  time.Duration `json:"duration"`
 }
 
+// Result is the outcome of a workflow run: whether every node succeeded, the result of each node by id, and the order in which the nodes that ran finished. A node that did not run because a dependency failed has a result with Success false and no entry in Order.
 type Result struct {
 	Name      string                `json:"name"`
 	Success   bool                  `json:"success"`
@@ -53,20 +57,25 @@ type Result struct {
 	Order     []string              `json:"order"`
 }
 
+// Executor runs one node of a workflow. inputs holds the results of the nodes it needs; it returns the output of the node, or an error that makes the node fail.
 type Executor interface {
 	ExecuteNode(ctx context.Context, node Node, inputs map[string]NodeResult) (string, error)
 }
 
+// ExecutorFunc is a function used as an Executor.
 type ExecutorFunc func(ctx context.Context, node Node, inputs map[string]NodeResult) (string, error)
 
+// ExecuteNode calls f.
 func (f ExecutorFunc) ExecuteNode(ctx context.Context, node Node, inputs map[string]NodeResult) (string, error) {
 	return f(ctx, node, inputs)
 }
 
+// Options tunes a workflow run. MaxParallel bounds how many nodes of the same level run at once; a value of 0 or less means 4.
 type Options struct {
 	MaxParallel int
 }
 
+// LoadFile reads a workflow definition from a file: JSON when the extension is .json, YAML otherwise.
 func LoadFile(path string) (Definition, error) {
 	data, err := os.ReadFile(path)
 	if err != nil {
@@ -85,6 +94,7 @@ func LoadFile(path string) (Definition, error) {
 	return def, nil
 }
 
+// Validate checks a definition: it has at least one node, every node has a unique id and a prompt and a supported kind, a router declares routes, the nodes it needs and routes to exist (a router cannot route to itself), and the dependencies contain no cycle.
 func Validate(def Definition) error {
 	if len(def.Nodes) == 0 {
 		return errors.New("workflow must contain at least one node")
@@ -126,6 +136,7 @@ func Validate(def Definition) error {
 	return nil
 }
 
+// Run executes the workflow with executor: the nodes are grouped in levels by their dependencies, the levels run one after the other and the nodes of a level in parallel, at most Options.MaxParallel at a time. A node whose dependency failed is not run. The returned error reports an invalid definition or a missing executor; a failing node shows in the Result, not in the error.
 func Run(ctx context.Context, def Definition, executor Executor, options Options) (Result, error) {
 	if executor == nil {
 		return Result{}, errors.New("workflow executor is required")
@@ -218,6 +229,7 @@ func Run(ctx context.Context, def Definition, executor Executor, options Options
 	return result, nil
 }
 
+// BuildNodePrompt builds the prompt of a node for its agent: the role of its kind (verifier, critic, router), the outputs of the nodes it needs, the prompt of the node and its output format.
 func BuildNodePrompt(node Node, inputs map[string]NodeResult) string {
 	var b strings.Builder
 	writeNodeRolePrompt(&b, node)

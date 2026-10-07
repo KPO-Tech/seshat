@@ -69,10 +69,12 @@ type SharePointConnector struct {
 	extractText TextExtractorFunc
 }
 
+// NewSharePointConnector creates a SharePoint connector that authenticates with the given OAuth configuration.
 func NewSharePointConnector(oauthConfig *oauth2.Config) *SharePointConnector {
 	return &SharePointConnector{oauthConfig: oauthConfig}
 }
 
+// WithTextExtractor sets the function that turns a downloaded binary file into text (see TextExtractorFunc) and returns the connector, for chaining.
 func (c *SharePointConnector) WithTextExtractor(fn TextExtractorFunc) *SharePointConnector {
 	c.extractText = fn
 	return c
@@ -96,6 +98,7 @@ func (c *SharePointConnector) client(ctx context.Context, secret Secret) (*spGra
 // to know its shape beyond encoding/decoding it as a plain string.
 type SPDriveCursor map[string]string
 
+// DecodeSPDriveCursor parses a cursor produced by Encode. An empty or invalid string gives an empty cursor.
 func DecodeSPDriveCursor(raw string) SPDriveCursor {
 	cursor := SPDriveCursor{}
 	if raw == "" {
@@ -105,6 +108,7 @@ func DecodeSPDriveCursor(raw string) SPDriveCursor {
 	return cursor
 }
 
+// Encode returns the cursor as the JSON string a caller persists between syncs, or an empty JSON object when it cannot be encoded.
 func (c SPDriveCursor) Encode() string {
 	data, err := json.Marshal(c)
 	if err != nil {

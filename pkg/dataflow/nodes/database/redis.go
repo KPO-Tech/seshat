@@ -20,8 +20,10 @@ import (
 // rpush), key, value (for set/hset/lpush/rpush), field (for hget/hset).
 type Redis struct{}
 
+// NewRedis creates a Redis node.
 func NewRedis() Redis { return Redis{} }
 
+// Description returns the catalog entry of the redis node: it runs one Redis command (get, set, del, keys, hget, hset, lpush or rpush) and returns one item with the result. The address and the password are given as references to dataflow secrets.
 func (Redis) Description() dataflow.NodeDescription {
 	return dataflow.NodeDescription{Type: "redis", Name: "Redis", Category: "Database",
 		Description: "Runs one Redis command, returning one item with the result. " +
@@ -44,6 +46,7 @@ func (Redis) Description() dataflow.NodeDescription {
 
 var validRedisOps = map[string]bool{"get": true, "set": true, "del": true, "keys": true, "hget": true, "hset": true, "lpush": true, "rpush": true}
 
+// ValidateParameters requires addrSecretRef, a supported operation and a key.
 func (Redis) ValidateParameters(params map[string]any) error {
 	if dataflow.StringParam(params, "addrSecretRef", "") == "" {
 		return errors.New("addrSecretRef is required")
@@ -80,6 +83,7 @@ func (Redis) TestConnection(ctx context.Context, rt *dataflow.Runtime, params ma
 	return client.Ping(ctx).Err()
 }
 
+// Execute resolves the address (and the password, when given) from the secrets of the run, connects, runs the operation and returns one item with its result. It fails when the run has no secret resolver.
 func (Redis) Execute(ctx context.Context, rt *dataflow.Runtime, input []dataflow.Item, params map[string]any) (dataflow.Output, error) {
 	if rt == nil || rt.Secrets == nil {
 		return dataflow.Output{}, errors.New("dataflow: no SecretResolver configured on Runtime")

@@ -25,10 +25,12 @@ import (
 // index), query (map[string]any, ES query DSL body, for search).
 type Elasticsearch struct{ client *http.Client }
 
+// NewElasticsearch creates an Elasticsearch node with a 30-second timeout.
 func NewElasticsearch() *Elasticsearch {
 	return &Elasticsearch{client: &http.Client{Timeout: 30 * time.Second}}
 }
 
+// Description returns the catalog entry of the elasticsearch node: it runs one operation (search, index, get or delete) on an index. search returns one item per hit, the others one item with the raw response. The base URL is a reference to a dataflow secret.
 func (n *Elasticsearch) Description() dataflow.NodeDescription {
 	return dataflow.NodeDescription{Type: "elasticsearch", Name: "Elasticsearch", Category: "Database",
 		Description: "Runs one operation against an Elasticsearch index. search returns one item per hit (with _id/_score merged with the source fields); index/get/delete return one item with the raw response. " +
@@ -52,6 +54,7 @@ func (n *Elasticsearch) Description() dataflow.NodeDescription {
 
 var validESOps = map[string]bool{"search": true, "index": true, "get": true, "delete": true}
 
+// ValidateParameters requires baseURLSecretRef, an index and a supported operation, and a document id for get and delete.
 func (n *Elasticsearch) ValidateParameters(params map[string]any) error {
 	if dataflow.StringParam(params, "baseURLSecretRef", "") == "" {
 		return errors.New("baseURLSecretRef is required")
@@ -98,6 +101,7 @@ func (n *Elasticsearch) TestConnection(ctx context.Context, rt *dataflow.Runtime
 	return nil
 }
 
+// Execute resolves the base URL from the secrets of the run, sends the request for the operation and returns the items described by Description. It fails when the run has no secret resolver.
 func (n *Elasticsearch) Execute(ctx context.Context, rt *dataflow.Runtime, input []dataflow.Item, params map[string]any) (dataflow.Output, error) {
 	if rt == nil || rt.Secrets == nil {
 		return dataflow.Output{}, errors.New("dataflow: no SecretResolver configured on Runtime")
