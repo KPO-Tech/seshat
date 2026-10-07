@@ -32,7 +32,7 @@ func (ec *ExpressionCalculator) Evaluate(req ExpressionRequest) (CalculationResu
 
 	expr, err := govaluate.NewEvaluableExpressionWithFunctions(req.Expression, ec.mathFunctions())
 	if err != nil {
-		return CalculationResult{}, fmt.Errorf("invalid expression: %v", err)
+		return CalculationResult{}, fmt.Errorf("invalid expression: %w", err)
 	}
 
 	parameters := map[string]interface{}{
@@ -56,7 +56,7 @@ func (ec *ExpressionCalculator) Evaluate(req ExpressionRequest) (CalculationResu
 
 	result, err := expr.Evaluate(parameters)
 	if err != nil {
-		return CalculationResult{}, fmt.Errorf("evaluation error: %v", err)
+		return CalculationResult{}, fmt.Errorf("evaluation error: %w", err)
 	}
 
 	var floatResult float64

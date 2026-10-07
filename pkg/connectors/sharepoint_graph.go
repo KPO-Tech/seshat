@@ -3,6 +3,7 @@ package connectors
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -251,11 +252,7 @@ func (c *spGraphClient) deltaPage(ctx context.Context, driveID, deltaLink string
 }
 
 func isSPGraphError(err error, target **spGraphError) bool {
-	gerr, ok := err.(*spGraphError)
-	if ok {
-		*target = gerr
-	}
-	return ok
+	return errors.As(err, target)
 }
 
 // downloadContent fetches a DriveItem's raw bytes. Unlike Google Docs/

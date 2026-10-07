@@ -9,6 +9,10 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Fixed
+
+- **Wrapped errors are recognised, and `errorlint` checks it.** 59 places compared an error with `==`/`!=` (`io.EOF`, `sql.ErrNoRows`, `context.Canceled`...), read it with a type assertion (`*exec.ExitError`, `*types.EngineError`, the circuit-breaker and permission errors) or wrapped it with `%v`; a wrapped error was then missed. The retry and recovery classification in the engine, the exit-code reading of commands and hooks, and the end-of-input handling now use `errors.Is` and `errors.As`, and the messages that hide their cause use `%w`. The linter is on, so a new one fails the build.
+
 ## [1.3.0] - 2026-10-06
 
 ### Security

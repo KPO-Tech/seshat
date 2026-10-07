@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -426,7 +427,7 @@ func (c *Client) handleMessages() {
 			case <-c.readDone:
 				return
 			default:
-				if err == io.EOF || err == io.ErrUnexpectedEOF {
+				if errors.Is(err, io.EOF) || errors.Is(err, io.ErrUnexpectedEOF) {
 					return
 				}
 				continue

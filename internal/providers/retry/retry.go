@@ -2,6 +2,7 @@ package retry
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"math/rand"
 	"net/http"
@@ -217,7 +218,8 @@ func shouldRetryWithStrategy(err error, _ *RetryState) bool {
 	if err == nil {
 		return false
 	}
-	if engineErr, ok := err.(*types.EngineError); ok {
+	var engineErr *types.EngineError
+	if errors.As(err, &engineErr) {
 		return !engineErr.IsPermanent()
 	}
 	return true

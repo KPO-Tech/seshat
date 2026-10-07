@@ -425,14 +425,14 @@ func (e *CircuitBreakerTimeoutError) Error() string {
 
 // IsCircuitBreakerOpenError checks if an error is a circuit breaker open error
 func IsCircuitBreakerOpenError(err error) bool {
-	_, ok := err.(*CircuitBreakerOpenError)
-	return ok
+	var target *CircuitBreakerOpenError
+	return errors.As(err, &target)
 }
 
 // IsCircuitBreakerTimeoutError checks if an error is a circuit breaker timeout error
 func IsCircuitBreakerTimeoutError(err error) bool {
-	_, ok := err.(*CircuitBreakerTimeoutError)
-	return ok
+	var target *CircuitBreakerTimeoutError
+	return errors.As(err, &target)
 }
 
 // RecordSuccess records a successful call (compatibility method for engine integration)

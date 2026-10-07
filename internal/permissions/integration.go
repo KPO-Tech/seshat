@@ -3,6 +3,7 @@ package permissions
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -762,6 +763,6 @@ func (e *PermissionDeniedError) Error() string {
 
 // IsPermissionDenied returns true if an error is a permission denied error.
 func IsPermissionDenied(err error) bool {
-	_, ok := err.(*PermissionDeniedError)
-	return ok
+	var target *PermissionDeniedError
+	return errors.As(err, &target)
 }

@@ -6,6 +6,7 @@ import (
 	"crypto/sha256"
 	"database/sql"
 	"encoding/hex"
+	"errors"
 	"fmt"
 	"time"
 )
@@ -69,7 +70,7 @@ func (db *DB) GetAutomationAPIKeyByHash(ctx context.Context, hash string) (*Auto
 		WHERE key_hash = ? AND enabled = 1 AND (expires_at = 0 OR expires_at > ?)`,
 		hash, now)
 	r, err := scanAutomationAPIKeyRow(row)
-	if err == sql.ErrNoRows {
+	if errors.Is(err, sql.ErrNoRows) {
 		return nil, nil
 	}
 	return r, err
