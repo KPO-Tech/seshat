@@ -87,6 +87,7 @@ See [`docs/team.md`](./docs/team.md) for the full multi-agent system documentati
 - Always pass `context.Context` as the first parameter for any function that may do I/O.
 - Use `errors.Is` / `errors.As` for error comparisons — never string matching on `err.Error()`.
 - Prefer table-driven tests (`[]struct{ name, input, want }`).
+- Keep functions under a cyclomatic complexity of 30: `internal/archtest/complexity_test.go` lists the 37 that are above it and fails on a new one or on one that grows.
 - Avoid global mutable state outside of init-once singletons.
 - No `interface{}` — use `any` (Go 1.18+).
 - Struct fields that are interfaces: use pointer receivers consistently within the same type.
