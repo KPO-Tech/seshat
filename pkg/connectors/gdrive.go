@@ -379,7 +379,8 @@ func (c *GDriveConnector) RefreshPermissions(ctx context.Context, secret Secret,
 			// A non-rate-limit per-ID error (e.g. a deleted file, 404) is
 			// still swallowed and simply omitted from the result, per this
 			// method's documented contract above.
-			if wrapped := wrapGDriveRateLimit(listErr); wrapped != listErr {
+			var rateLimited RateLimited
+			if wrapped := wrapGDriveRateLimit(listErr); errors.As(wrapped, &rateLimited) {
 				return nil, wrapped
 			}
 			continue

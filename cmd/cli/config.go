@@ -3,6 +3,7 @@ package main
 import (
 	"bufio"
 	"context"
+	"errors"
 	"flag"
 	"fmt"
 	"io"
@@ -205,7 +206,7 @@ func configureSearchKeys(reader *bufio.Reader, stdout io.Writer, database *db.DB
 		}
 
 		val, err := readLine(context.Background(), reader)
-		if err != nil && err != io.EOF {
+		if err != nil && !errors.Is(err, io.EOF) {
 			return err
 		}
 		val = strings.TrimSpace(val)
@@ -304,7 +305,7 @@ func promptProvider(reader *bufio.Reader, stdout io.Writer, current sdk.APIProvi
 	for {
 		fmt.Fprintf(stdout, "provider [%d]: ", defaultIndex)
 		value, err := readLine(context.Background(), reader)
-		if err != nil && err != io.EOF {
+		if err != nil && !errors.Is(err, io.EOF) {
 			return "", err
 		}
 		if strings.TrimSpace(value) == "" {
@@ -337,7 +338,7 @@ func promptModel(reader *bufio.Reader, stdout io.Writer, provider engineconfig.P
 
 	fmt.Fprintf(stdout, "model [%s]: ", defaultModel)
 	value, err := readLine(context.Background(), reader)
-	if err != nil && err != io.EOF {
+	if err != nil && !errors.Is(err, io.EOF) {
 		return "", err
 	}
 	if strings.TrimSpace(value) == "" {
@@ -370,7 +371,7 @@ func promptField(reader *bufio.Reader, stdout io.Writer, field engineconfig.Prov
 		}
 
 		value, err := readLine(context.Background(), reader)
-		if err != nil && err != io.EOF {
+		if err != nil && !errors.Is(err, io.EOF) {
 			return "", err
 		}
 		value = strings.TrimSpace(value)

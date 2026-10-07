@@ -108,7 +108,7 @@ func (t *SkillTool) Call(ctx context.Context, input contract.CallInput, permissi
 
 	skill, err := t.lookupSkill(skillName)
 	if err != nil {
-		return contract.NewErrorResult(fmt.Errorf("failed to load skill: %v", err)), nil
+		return contract.NewErrorResult(fmt.Errorf("failed to load skill: %w", err)), nil
 	}
 
 	if skill == nil {
@@ -129,7 +129,7 @@ func (t *SkillTool) Call(ctx context.Context, input contract.CallInput, permissi
 	}
 
 	if err != nil {
-		return contract.NewErrorResult(fmt.Errorf("skill execution failed: %v", err)), nil
+		return contract.NewErrorResult(fmt.Errorf("skill execution failed: %w", err)), nil
 	}
 
 	var promptText string

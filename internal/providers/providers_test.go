@@ -496,6 +496,9 @@ func TestAdvancedRetryIntegration(t *testing.T) {
 
 	startTime := time.Now()
 	resp, err := client.sendMessageWithRetry(ctx, req)
+	if resp != nil {
+		defer resp.Body.Close()
+	}
 	duration := time.Since(startTime)
 
 	// Should eventually succeed
@@ -555,6 +558,9 @@ func TestAdvancedRetryWithRateLimit(t *testing.T) {
 	}
 
 	resp, err := client.sendMessageWithRetry(ctx, req)
+	if resp != nil {
+		defer resp.Body.Close()
+	}
 
 	// Should succeed after rate limit retry
 	assert.NoError(t, err)
@@ -597,6 +603,9 @@ func TestAdvancedRetryNoClientErrors(t *testing.T) {
 	}
 
 	resp, err := client.sendMessageWithRetry(ctx, req)
+	if resp != nil {
+		defer resp.Body.Close()
+	}
 
 	// Should fail immediately without retries for client errors
 	assert.Error(t, err)
@@ -648,6 +657,9 @@ func TestAdvancedRetryWithCircuitBreaker(t *testing.T) {
 	}
 
 	resp, err := client.sendMessageWithRetry(ctx, req)
+	if resp != nil {
+		defer resp.Body.Close()
+	}
 
 	// Should fail due to circuit breaker
 	assert.Error(t, err)
@@ -722,6 +734,9 @@ func TestAdvancedRetryMaxAttempts(t *testing.T) {
 	}
 
 	resp, err := client.sendMessageWithRetry(ctx, req)
+	if resp != nil {
+		defer resp.Body.Close()
+	}
 
 	// Should fail after max attempts
 	assert.Error(t, err)
@@ -784,7 +799,10 @@ func TestAdvancedRetryConcurrent(t *testing.T) {
 				Messages:  []types.Message{},
 				MaxTokens: 100,
 			}
-			_, err := client.sendMessageWithRetry(ctx, req)
+			resp, err := client.sendMessageWithRetry(ctx, req)
+			if resp != nil {
+				resp.Body.Close()
+			}
 			resultsMu.Lock()
 			errResults = append(errResults, err)
 			resultsMu.Unlock()
@@ -864,6 +882,9 @@ func TestAdvancedRetryWithMonitoring(t *testing.T) {
 	}
 
 	resp, err := client.sendMessageWithRetry(ctx, req)
+	if resp != nil {
+		defer resp.Body.Close()
+	}
 
 	// Check final stats
 	assert.NoError(t, err)
@@ -930,6 +951,9 @@ func TestCircuitBreakerIntegration(t *testing.T) {
 		}
 
 		resp, err := client.sendMessageWithRetry(ctx, req)
+		if resp != nil {
+			defer resp.Body.Close()
+		}
 
 		if err != nil {
 			if IsCircuitBreakerOpenError(err) {
@@ -1001,7 +1025,9 @@ func TestCircuitBreakerIntegrationAutoReset(t *testing.T) {
 			MaxTokens: 100,
 		}
 
-		_, _ = client.sendMessageWithRetry(ctx, req)
+		if r, _ := client.sendMessageWithRetry(ctx, req); r != nil {
+			r.Body.Close()
+		}
 		time.Sleep(50 * time.Millisecond)
 	}
 
@@ -1024,6 +1050,9 @@ func TestCircuitBreakerIntegrationAutoReset(t *testing.T) {
 	}
 
 	resp, err := client.sendMessageWithRetry(ctx, req)
+	if resp != nil {
+		defer resp.Body.Close()
+	}
 	assert.NoError(t, err)
 	assert.NotNil(t, resp)
 	assert.Equal(t, http.StatusOK, resp.StatusCode)
@@ -1092,7 +1121,10 @@ func TestCircuitBreakerIntegrationWithRetry(t *testing.T) {
 		MaxTokens: 100,
 	}
 
-	_, err := client.sendMessageWithRetry(ctx, req)
+	resp, err := client.sendMessageWithRetry(ctx, req)
+	if resp != nil {
+		resp.Body.Close()
+	}
 
 	// Should fail due to circuit breaker (not just HTTP errors)
 	assert.Error(t, err)
@@ -1134,7 +1166,9 @@ func TestCircuitBreakerIntegrationManualReset(t *testing.T) {
 			Messages:  []types.Message{},
 			MaxTokens: 100,
 		}
-		_, _ = client.sendMessageWithRetry(ctx, req)
+		if r, _ := client.sendMessageWithRetry(ctx, req); r != nil {
+			r.Body.Close()
+		}
 		time.Sleep(50 * time.Millisecond)
 	}
 
@@ -1159,6 +1193,9 @@ func TestCircuitBreakerIntegrationManualReset(t *testing.T) {
 	}
 
 	resp, err := client.sendMessageWithRetry(ctx, req)
+	if resp != nil {
+		defer resp.Body.Close()
+	}
 	assert.Error(t, err)
 	assert.Nil(t, resp)
 }
@@ -1196,6 +1233,9 @@ func TestCircuitBreakerIntegrationNoCircuitBreaker(t *testing.T) {
 
 	// Request should succeed normally
 	resp, err := client.sendMessageWithRetry(ctx, req)
+	if resp != nil {
+		defer resp.Body.Close()
+	}
 	assert.NoError(t, err)
 	assert.NotNil(t, resp)
 	assert.Equal(t, http.StatusOK, resp.StatusCode)
@@ -1255,6 +1295,9 @@ func TestCircuitBreakerIntegrationConcurrent(t *testing.T) {
 				MaxTokens: 100,
 			}
 			resp, err := client.sendMessageWithRetry(ctx, req)
+			if resp != nil {
+				defer resp.Body.Close()
+			}
 			if err != nil && !IsCircuitBreakerOpenError(err) {
 				requestErrors[idx] = err
 			} else if resp != nil && resp.StatusCode != http.StatusOK {
@@ -1674,7 +1717,10 @@ func TestCircuitBreakerExecuteWithTimeout(t *testing.T) {
 
 	assert.Error(t, err)
 	assert.True(t, IsCircuitBreakerTimeoutError(err))
-	assert.Equal(t, 100*time.Millisecond, err.(*CircuitBreakerTimeoutError).Timeout)
+	var timeoutErr *CircuitBreakerTimeoutError
+	if assert.True(t, errors.As(err, &timeoutErr)) {
+		assert.Equal(t, 100*time.Millisecond, timeoutErr.Timeout)
+	}
 	assert.Equal(t, CircuitStateOpen, cb.State()) // Should have tripped
 }
 

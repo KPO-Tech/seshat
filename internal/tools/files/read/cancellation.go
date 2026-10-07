@@ -3,6 +3,7 @@ package read
 import (
 	"bufio"
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"strings"
@@ -81,7 +82,7 @@ func ReadFileInRange(
 	}
 
 	if err := scanner.Err(); err != nil {
-		if err == context.Canceled {
+		if errors.Is(err, context.Canceled) {
 			return "", 0, 0, 0, 0, 0, fmt.Errorf("file read cancelled: %w", ctx.Err())
 		}
 		return "", 0, 0, 0, 0, 0, fmt.Errorf("error reading file: %w", err)

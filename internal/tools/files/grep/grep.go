@@ -3,6 +3,7 @@ package grep
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 	"os/exec"
@@ -364,7 +365,8 @@ func (g *Tool) doGrep(
 			return nil, shared.RipgrepNotFoundError()
 		}
 		// If no matches found, that's ok - return empty results
-		if exitError, ok := err.(*exec.ExitError); ok && exitError.ExitCode() == 1 {
+		var exitError *exec.ExitError
+		if errors.As(err, &exitError) && exitError.ExitCode() == 1 {
 			// No matches found
 			return g.formatEmptyResults(outputMode), nil
 		}

@@ -95,7 +95,7 @@ func (r *referencesTool) Name() string {
 func find(ctx context.Context, lspManager *lsp.Manager, symbol string, match grepMatch) ([]protocol.Location, error) {
 	absPath, err := filepath.Abs(match.path)
 	if err != nil {
-		return nil, fmt.Errorf("failed to get absolute path: %s", err)
+		return nil, fmt.Errorf("failed to get absolute path: %w", err)
 	}
 
 	var client *lsp.Client

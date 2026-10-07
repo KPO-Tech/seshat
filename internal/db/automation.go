@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"time"
 )
@@ -83,7 +84,7 @@ func (db *DB) GetAutomationJob(ctx context.Context, id string) (*AutomationJobRo
 		       created_at, updated_at
 		FROM automation_jobs WHERE id = ?`, id)
 	r, err := scanAutomationJobRow(row)
-	if err == sql.ErrNoRows {
+	if errors.Is(err, sql.ErrNoRows) {
 		return nil, nil
 	}
 	return r, err
@@ -235,7 +236,7 @@ func (db *DB) GetAutomationRun(ctx context.Context, id string) (*AutomationRunRo
 		SELECT id, job_id, started_at, ended_at, status, output, error, created_at
 		FROM automation_runs WHERE id = ?`, id)
 	r, err := scanAutomationRunRow(row)
-	if err == sql.ErrNoRows {
+	if errors.Is(err, sql.ErrNoRows) {
 		return nil, nil
 	}
 	return r, err

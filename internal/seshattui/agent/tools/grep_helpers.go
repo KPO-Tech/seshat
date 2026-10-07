@@ -9,6 +9,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"io"
 	"net/http"
 	"os"
@@ -84,7 +85,8 @@ func searchWithRipgrep(ctx context.Context, pattern, path, include string) ([]gr
 	}
 	output, err := cmd.Output()
 	if err != nil {
-		if exitErr, ok := err.(*exec.ExitError); ok && exitErr.ExitCode() == 1 {
+		var exitErr *exec.ExitError
+		if errors.As(err, &exitErr) && exitErr.ExitCode() == 1 {
 			return []grepMatch{}, nil
 		}
 		return nil, err
@@ -206,7 +208,7 @@ func isTextFile(path string) bool {
 	defer f.Close()
 	buf := make([]byte, 512)
 	n, err := f.Read(buf)
-	if err != nil && err != io.EOF {
+	if err != nil && !errors.Is(err, io.EOF) {
 		return false
 	}
 	ct := http.DetectContentType(buf[:n])
