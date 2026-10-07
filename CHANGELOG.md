@@ -15,6 +15,7 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Changed
 
+- **The permission resolver is split into steps.** `Integrator.ResolverWithContext` was one closure of 270 lines (cyclomatic complexity 52). Looking up what the session or the turn already granted, recording an approval, reading the user's answer and its refusal reason are now `sessionAllows`, `recordApproval`, `promptApproval` and `promptDenyReason`. The behaviour is unchanged (the existing resolver tests pass untouched); the two pure helpers get their own tests.
 - **Every exported symbol of `pkg/` has a doc comment, and the test is strict.** The 511 that had none (680 before the generated protobuf code was left out, as linters do) are written: the facades (`pkg/sdk`, `pkg/rag`, `pkg/automation`, `pkg/types`, `pkg/skills`, `pkg/storage`, `pkg/mcp`...) say what they re-export, and `pkg/workflow`, `pkg/dataflow`, `pkg/connectors`, `pkg/msgraph`, `pkg/config`, `pkg/doctor`, `pkg/runtimepath` and the others describe their own behaviour, read from the code. `internal/archtest` fails on any new undocumented exported symbol; the tolerance list it used to hold is gone. No behaviour change.
 
 ### Fixed
