@@ -17,6 +17,7 @@ import (
 
 const DefaultTokenBudget = 2048
 
+// Options configures a repository map: the directory to map (the working directory when empty), the budget in tokens of the rendered map, and the files and symbols that the ranking should favour.
 type Options struct {
 	Root         string
 	TokenBudget  int
@@ -24,6 +25,7 @@ type Options struct {
 	FocusSymbols []string
 }
 
+// Map is a ranked outline of a repository: how many files were scanned and how many were mapped, and the entries, best ranked first.
 type Map struct {
 	Root          string
 	FilesScanned  int
@@ -31,6 +33,7 @@ type Map struct {
 	Entries       []Entry
 }
 
+// Entry is one file of the map: its path, language and package, what it imports, the symbols it declares, and the rank score that orders it.
 type Entry struct {
 	Path      string
 	Language  string
@@ -40,6 +43,7 @@ type Entry struct {
 	RankScore float64
 }
 
+// Symbol is a declaration found in a file: its kind, name and signature, whether it is exported, and its line.
 type Symbol struct {
 	Kind      string
 	Name      string
@@ -48,6 +52,7 @@ type Symbol struct {
 	Line      int
 }
 
+// Build scans the repository under opts.Root, keeps the Go source files (not the tests nor the generated files) that declare or import something, ranks them, favouring opts.FocusFiles and opts.FocusSymbols, and returns the map. Cancelling ctx stops the scan.
 func Build(ctx context.Context, opts Options) (*Map, error) {
 	root := strings.TrimSpace(opts.Root)
 	if root == "" {
@@ -94,6 +99,7 @@ func Build(ctx context.Context, opts Options) (*Map, error) {
 	return &Map{Root: root, FilesScanned: len(files), FilesIncluded: len(entries), Entries: entries}, nil
 }
 
+// Render writes a map as text for a prompt: a header, then the entries in rank order until the budget of tokenBudget tokens (about four characters each, DefaultTokenBudget when it is 0 or less) is reached. A nil map renders as an empty string.
 func Render(m *Map, tokenBudget int) string {
 	if m == nil {
 		return ""

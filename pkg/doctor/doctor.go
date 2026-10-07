@@ -17,6 +17,7 @@ import (
 	"github.com/KPO-Tech/seshat/pkg/sdk"
 )
 
+// Status is the outcome of a check: ok, warn, fail or skipped.
 type Status string
 
 const (
@@ -26,6 +27,7 @@ const (
 	StatusSkipped Status = "skipped"
 )
 
+// Check is one line of the doctor's report: what was checked, its Status, a Detail that says what was found, the Advice to fix it, and the Section it belongs to.
 type Check struct {
 	Name    string `json:"name"`
 	Status  Status `json:"status"`
@@ -34,6 +36,7 @@ type Check struct {
 	Section string `json:"section,omitempty"`
 }
 
+// Report is the result of a doctor run: the version, the platform, the runtime root and configuration path, and every Check.
 type Report struct {
 	Version     string  `json:"version"`
 	OS          string  `json:"os"`
@@ -43,6 +46,7 @@ type Report struct {
 	Checks      []Check `json:"checks"`
 }
 
+// HasFailures reports whether any check of the report has failed. Warnings do not count.
 func (r Report) HasFailures() bool {
 	for _, check := range r.Checks {
 		if check.Status == StatusFail {
@@ -52,6 +56,7 @@ func (r Report) HasFailures() bool {
 	return false
 }
 
+// PrintText writes the report as plain text: a header with the version, the platform and the runtime root, then the checks grouped by section with their status label, detail and advice.
 func PrintText(out io.Writer, report Report) {
 	fmt.Fprintln(out, "Seshat doctor")
 	fmt.Fprintln(out, "-------------")
@@ -76,6 +81,7 @@ func PrintText(out io.Writer, report Report) {
 	}
 }
 
+// StatusLabel returns the fixed-width label printed before a check in the text report: [ok], [warn], [fail], or [skip] for any other status.
 func StatusLabel(status Status) string {
 	switch status {
 	case StatusOK:
@@ -89,11 +95,13 @@ func StatusLabel(status Status) string {
 	}
 }
 
+// Options configures a doctor run: the version to show and the configuration to check.
 type Options struct {
 	Version string
 	Config  config.Config
 }
 
+// Run performs the checks (the runtime directories and the configuration, the model and the credential of the provider, and the tools the runtime relies on, git and uv) and returns the report.
 func Run(ctx context.Context, opts Options) Report {
 	cfg := opts.Config
 	report := Report{

@@ -9,11 +9,19 @@ package model
 import internalmodel "github.com/KPO-Tech/seshat/internal/model"
 
 type (
-	Capabilities  = internalmodel.Capabilities
-	Pricing       = internalmodel.Pricing
+	// Capabilities describes what a specific model variant can do.
+	Capabilities = internalmodel.Capabilities
+	// Pricing holds per-token costs in USD per 1 million tokens (MTok).
+	// Zero values mean pricing is unknown or not applicable.
+	Pricing = internalmodel.Pricing
+	// ContextWindow describes the token budget for a model.
 	ContextWindow = internalmodel.ContextWindow
-	Metadata      = internalmodel.Metadata
-	Registry      = internalmodel.Registry
+	// Metadata aggregates all model-level metadata.
+	Metadata = internalmodel.Metadata
+	// Registry is a lookup table from (provider, modelID) → Metadata.
+	// It is safe for concurrent reads; writes happen only at init time via
+	// Register or the package-level Global variable.
+	Registry = internalmodel.Registry
 )
 
 // NewRegistry creates an empty registry.

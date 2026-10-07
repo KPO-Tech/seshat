@@ -102,6 +102,7 @@ type HTTPRequest struct {
 // maxRedirects bounds the redirects the node follows, each of them checked against the guard.
 const maxRedirects = 10
 
+// NewHTTPRequest creates an HTTP Request node with a 30-second timeout that refuses private, internal and cloud metadata addresses, also when a redirect or a DNS answer leads to one.
 func NewHTTPRequest() *HTTPRequest {
 	n := &HTTPRequest{checkSSRF: validateURLForSSRF}
 	n.client = n.guardedClient(true)
@@ -157,6 +158,7 @@ func refuseBlockedAddress(_, address string, _ syscall.RawConn) error {
 	return nil
 }
 
+// Description returns the catalog entry of the http_request node: it makes a single HTTP call and returns the response as one item.
 func (n *HTTPRequest) Description() dataflow.NodeDescription {
 	return dataflow.NodeDescription{Type: "http_request", Name: "HTTP Request", Category: "Network",
 		Description: "Makes a single HTTP call and returns the response as one item (fields \"status\", \"headers\", and \"json\" or \"body\"). Private/internal/cloud-metadata addresses are blocked. " +
@@ -172,6 +174,7 @@ func (n *HTTPRequest) Description() dataflow.NodeDescription {
 		}}
 }
 
+// ValidateParameters requires a url and refuses one that points at a private, internal or cloud metadata address.
 func (n *HTTPRequest) ValidateParameters(params map[string]any) error {
 	if dataflow.StringParam(params, "url", "") == "" {
 		return errors.New("url is required")
@@ -179,6 +182,7 @@ func (n *HTTPRequest) ValidateParameters(params map[string]any) error {
 	return n.checkSSRF(dataflow.StringParam(params, "url", ""))
 }
 
+// Execute makes the call described by url, method, headers and body, whose values may be expressions resolved against the first input item, and returns one item with the status, the headers and either the parsed JSON ("json") or the text ("body") of the response, which is read up to 10 MB.
 func (n *HTTPRequest) Execute(ctx context.Context, rt *dataflow.Runtime, input []dataflow.Item, params map[string]any) (dataflow.Output, error) {
 	// http_request makes one call per Run, not per item (see the type's own
 	// doc comment) - so expressions resolve against the first input item
