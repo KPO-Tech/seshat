@@ -52,6 +52,8 @@ feature branches on top of a diverged `dev`.
 
 ## Development setup
 
+This section is for building seshat from source to change it. To use it, follow the [installation guide](https://seshat-ai.com/en/docs/getting-started/installation) on seshat-ai.com instead.
+
 ### Requirements
 
 - Go 1.25+

@@ -13,7 +13,9 @@
 </p>
 
 <p align="center">
-  <a href="https://seshat-ai.com"><b>🌐 Website</b></a> ·
+  <a href="https://seshat-ai.com/en"><b>🌐 Website</b></a> ·
+  <a href="https://seshat-ai.com/en/docs"><b>📚 Documentation</b></a> ·
+  <a href="https://seshat-ai.com/en/docs/getting-started/installation"><b>⬇️ Installation</b></a> ·
   <a href="https://github.com/KPO-Tech/seshat/discussions"><b>💬 Discussions</b></a> ·
   <a href="https://github.com/KPO-Tech/seshat/issues"><b>🐛 Issues</b></a> ·
   <a href="https://github.com/KPO-Tech/SeshatOS"><b>🖥️ SeshatOS</b></a>
@@ -60,9 +62,10 @@ Seshat is not only about making one strong solo agent. The longer-term direction
 
 That larger vision belongs in the docs and in open-source discussion because contributors need the map, not only the current feature list.
 
-- Product and runtime direction: https://seshat-ai.com/docs/learn/vision
-- Runtime concepts and architecture: https://seshat-ai.com/docs/concepts/what-is-seshat
-- Technical bets behind the project: https://seshat-ai.com/docs/learn/technical-hypotheses
+- Product and runtime direction: https://seshat-ai.com/en/docs/learn/vision
+- Runtime concepts and architecture: https://seshat-ai.com/en/docs/concepts/what-is-seshat
+- Technical bets behind the project: https://seshat-ai.com/en/docs/learn/technical-hypotheses
+- Why the runtime is written in Go: https://seshat-ai.com/en/docs/learn/why-go
 
 ## Runtime First, Platform Above It
 
@@ -156,6 +159,8 @@ The engine is intentionally kept minimal and fast. If you need something from th
 
 ### 📦 Installation
 
+The full guide is on the website: [Installation — seshat-ai.com](https://seshat-ai.com/en/docs/getting-started/installation). It covers the install script and what it does, its options, the Go toolchain, building from source and using Seshat as a library. The commands below are the short version.
+
 **End users — one command, fully configured:**
 
 ```bash
@@ -188,7 +193,7 @@ go get github.com/KPO-Tech/seshat@latest
 
 ### 1. 💻 CLI — `seshat`
 
-An AI agent in your terminal. Multi-provider, local-first, skills-aware.
+An AI agent in your terminal. Multi-provider, local-first, skills-aware. Guide: [Using the CLI](https://seshat-ai.com/en/docs/guides/cli).
 
 **Install**
 
@@ -226,7 +231,7 @@ Sessions are persisted locally in SQLite. Skills are loaded from `.seshat/skills
 
 ### 2. 🌐 gRPC Server
 
-Run seshat as a gRPC service and generate clients for any language.
+Run seshat as a gRPC service and generate clients for any language. Reference: [gRPC API](https://seshat-ai.com/en/docs/sdk/grpc-api).
 
 ```bash
 # Development
@@ -252,7 +257,7 @@ One runtime. Every language.
 
 ### 3. 📦 Go SDK
 
-Embed the full runtime in your own Go application.
+Embed the full runtime in your own Go application. Reference: [Go SDK](https://seshat-ai.com/en/docs/sdk/go-sdk), with the [events and hooks](https://seshat-ai.com/en/docs/sdk/events-and-hooks) and the [integration guide](https://seshat-ai.com/en/docs/sdk/integration).
 
 ```bash
 go get github.com/KPO-Tech/seshat/pkg/sdk
@@ -394,6 +399,8 @@ seshat run "list all TODO comments in this codebase"  # one-shot task
 > (requires [Ollama](https://ollama.com) running locally)
 
 > **Developers building from source:** see the [Development](#️-development) section below.
+
+The same steps are on seshat-ai.com: the [Quick start](https://seshat-ai.com/en/docs/getting-started/quick-start) (resuming a session, the shortcuts of the terminal interface), [Configuration](https://seshat-ai.com/en/docs/getting-started/configuration) (the command line, the environment variables, the providers) and [Your first agent](https://seshat-ai.com/en/docs/getting-started/first-agent) (running a task, adding a skill, calling the runtime from your own code).
 
 ---
 

@@ -9,6 +9,10 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Changed
+
+- **The documentation points to the website, and `SECURITY.md` says what the gRPC server does now.** The README header, the installation, quick start, CLI, gRPC and Go SDK sections, `docs/README.md`, `CONTRIBUTING.md` and the `pkg/sdk` package comment link to the pages of seshat-ai.com that cover them (installation, configuration, the SDK, the gRPC API, security and trust), with the canonical `/en/` addresses. `SECURITY.md` still said that the gRPC server had no authentication layer; it now describes the loopback default, the token, TLS, the stdio MCP switch, the environment of commands and the trust of a project.
+
 ### Fixed
 
 - **A PDF's page count was always 0, and PDF reads now stop with their context.** `ReadPDF` and `GetPDFPageCount` took the count from `pdfcpu.Read`, which leaves it at 0 (checked on pdfcpu 0.13 and 0.16): the "too many pages to read at once" check of the fallback readers never fired and a very large PDF went through whole as base64. The count comes from `api.PageCount` now. `ReadPDF`, `GetPDFPageCount`, `ExtractPDFPages`, the page reader and the decryption of an encrypted PDF take the context of the read (they handed pdfcpu a `context.Background()`), so a cancelled read stops parsing; `pkg/pdfsmart` keeps `Unlock` and gains `UnlockContext`. The local storage provider and the loading of MCP skills use the caller's context too.
