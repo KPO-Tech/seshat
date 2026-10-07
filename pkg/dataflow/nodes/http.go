@@ -11,6 +11,7 @@ import (
 	"net/http"
 	"net/url"
 	"strings"
+	"syscall"
 	"time"
 
 	"github.com/KPO-Tech/seshat/pkg/dataflow"
@@ -29,6 +30,8 @@ var blockedNetworks = mustParseCIDRs(
 	"192.0.0.0/24", "192.0.2.0/24", "198.51.100.0/24", "203.0.113.0/24",
 	"224.0.0.0/4", "240.0.0.0/4", "255.255.255.255/32",
 	"::1/128", "fc00::/7", "fe80::/10", "ff00::/8",
+	// NAT64 (RFC 6052) embeds an IPv4 address in the last 32 bits: 64:ff9b::7f00:1 reaches 127.0.0.1 through a gateway.
+	"64:ff9b::/96",
 )
 
 var blockedHosts = map[string]bool{
@@ -96,9 +99,63 @@ type HTTPRequest struct {
 	checkSSRF func(string) error
 }
 
-// NewHTTPRequest creates an HTTP Request node with a 30-second timeout that refuses private, internal and cloud metadata addresses.
+// maxRedirects bounds the redirects the node follows, each of them checked against the guard.
+const maxRedirects = 10
+
+// NewHTTPRequest creates an HTTP Request node with a 30-second timeout that refuses private, internal and cloud metadata addresses, also when a redirect or a DNS answer leads to one.
 func NewHTTPRequest() *HTTPRequest {
-	return &HTTPRequest{client: &http.Client{Timeout: 30 * time.Second}, checkSSRF: validateURLForSSRF}
+	n := &HTTPRequest{checkSSRF: validateURLForSSRF}
+	n.client = n.guardedClient(true)
+	return n
+}
+
+// guardedClient builds the client of the node. Two things keep a call from reaching an internal address after the URL passed the check:
+// every redirect is checked again (a public server can answer with a redirect to http://169.254.169.254/), and, with guardDial, the
+// address a connection is made to is checked when it is made (a name can resolve to a public address when the URL is validated and to an
+// internal one when the connection is opened). The node connects directly, never through a proxy of the environment: a proxy would
+// hide the real destination from both checks.
+func (n *HTTPRequest) guardedClient(guardDial bool) *http.Client {
+	var transport *http.Transport
+	if base, ok := http.DefaultTransport.(*http.Transport); ok {
+		transport = base.Clone()
+	} else {
+		transport = &http.Transport{}
+	}
+	transport.Proxy = nil
+	dialer := &net.Dialer{Timeout: 10 * time.Second, KeepAlive: 30 * time.Second}
+	if guardDial {
+		dialer.Control = refuseBlockedAddress
+	}
+	transport.DialContext = dialer.DialContext
+	return &http.Client{
+		Timeout:   30 * time.Second,
+		Transport: transport,
+		CheckRedirect: func(req *http.Request, via []*http.Request) error {
+			if len(via) >= maxRedirects {
+				return fmt.Errorf("stopped after %d redirects", maxRedirects)
+			}
+			return n.checkSSRF(req.URL.String())
+		},
+	}
+}
+
+// refuseBlockedAddress is the Control hook of the dialer of the node. It runs after the name has been resolved, with the address the
+// connection is about to be made to, and refuses a private, loopback, link-local or cloud-metadata one.
+func refuseBlockedAddress(_, address string, _ syscall.RawConn) error {
+	host, _, err := net.SplitHostPort(address)
+	if err != nil {
+		return err
+	}
+	ip := net.ParseIP(host)
+	if ip == nil {
+		return fmt.Errorf("access to %q is blocked: not an IP address", host)
+	}
+	for _, blocked := range blockedNetworks {
+		if blocked.Contains(ip) {
+			return fmt.Errorf("access to %s (inside %s) is blocked", host, blocked.String())
+		}
+	}
+	return nil
 }
 
 // Description returns the catalog entry of the http_request node: it makes a single HTTP call and returns the response as one item.

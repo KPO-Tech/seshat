@@ -9,6 +9,10 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Security
+
+- **The `http_request` node of the workflow engine can no longer be sent to an internal address by a redirect or a DNS answer.** It checked the URL once, before the call, and then let the client follow up to 10 redirects without looking at them: a public server answering with a redirect to `http://169.254.169.254/` (or to any internal address) got the response through. It also resolved the name for the check and again to connect, so a name that answered a public address the first time and an internal one the second (DNS rebinding) got through. Every redirect is now checked against the guard (10 at most), and the address a connection is really made to is checked when it is made. The NAT64 range (`64:ff9b::/96`, which reaches IPv4 addresses through a gateway) is blocked too. The node connects directly and ignores the proxy variables of the environment, which would hide the destination from both checks.
+
 ### Changed
 
 - **The permission resolver is split into steps.** `Integrator.ResolverWithContext` was one closure of 270 lines (cyclomatic complexity 52). Looking up what the session or the turn already granted, recording an approval, reading the user's answer and its refusal reason are now `sessionAllows`, `recordApproval`, `promptApproval` and `promptDenyReason`. The behaviour is unchanged (the existing resolver tests pass untouched); the two pure helpers get their own tests.
