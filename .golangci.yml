@@ -16,6 +16,8 @@ linters:
     - nolintlint
     # An HTTP request must carry the context of its caller, so that cancelling the call cancels the request.
     - noctx
+    # The body of an HTTP response is closed, so that the connection goes back to the pool.
+    - bodyclose
 
 linters-settings:
   nolintlint:
