@@ -1,5 +1,7 @@
 # Multi-Agent Teams
 
+> **Status:** the agent profiles, mailbox, dispatcher and team bus described here are internal packages (`internal/agent`, `internal/mailbox`, `internal/team`). They are not exposed through the CLI, the SDK or the gRPC server, and the mailbox tools are not registered in the runtime today. For delegation that works now, see the `agent` tool and the `spawn_agent` family (sub-agents).
+
 Seshat supports running **teams of persistent agents** that communicate asynchronously through a mailbox system. Each agent has a named identity, a role, and a system prompt — and can send tasks, replies, and broadcasts to other agents without being co-located or running at the same time.
 
 ---
