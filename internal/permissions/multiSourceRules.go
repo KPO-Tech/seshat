@@ -10,7 +10,8 @@ import (
 // Higher priority sources override lower priority sources.
 // Aligned with OpenClaude's SETTING_SOURCES order (permissions.ts:109-114).
 var RuleSourcePriority = map[types.PermissionRuleSource]int{
-	types.PermissionSourceCliArg:          100, // CLI args have highest priority
+	types.PermissionSourceManaged:         200, // imposed by the organization, nothing outranks it
+	types.PermissionSourceCliArg:          100, // CLI args have high priority
 	types.PermissionSourceSession:         90,  // Session-specific rules
 	types.PermissionSourceProjectSettings: 80,  // Project-level settings
 	types.PermissionSourceUserSettings:    70,  // User-level settings

@@ -136,6 +136,7 @@ type ClientConfig struct {
     // ── Prompt customization ──────────────────────────────────────────────
     SystemPromptTemplate string       // replace default system prompt
     PromptConfig         *PromptConfig // stage overlays, tool hints, append text
+    ManagedPolicy        *ManagedPolicy // what an organization imposes on every agent: text to follow, tools never to use
 
     // Document conversion
     DocumentReaderURL string // optional document-reader base URL for PDF/document conversion
@@ -185,6 +186,23 @@ client, _ := sdk.NewClient(&sdk.ClientConfig{
 ```
 
 ---
+
+## ManagedPolicy
+
+A host that serves an organization (SeshatCloud does) imposes rules on every agent through `ClientConfig.ManagedPolicy`. Set it from an administrator's configuration, never from the end user's own settings.
+
+```go
+client, _ := sdk.NewClient(&sdk.ClientConfig{
+    APIKey: os.Getenv("ANTHROPIC_API_KEY"),
+    ManagedPolicy: &sdk.ManagedPolicy{
+        Instructions:   "Never send customer data outside the company.",
+        ForbiddenTools: []string{"bash", "mcp__crm__delete_contact"},
+    },
+})
+```
+
+- `Instructions` is appended to the system prompt, after everything else including a per-session append prompt, so a session cannot replace or drop it. It is a soft guarantee: a model follows it very reliably, not absolutely.
+- `ForbiddenTools` is a hard guarantee, applied by the program: the tools are removed from the list the model sees, and a deny rule that outranks every other permission rule refuses a call to them anyway, in every permission mode, `bypass` included. A name matches the tool and its aliases; an MCP tool is named like `mcp__server__tool`.
 
 ## Streaming
 

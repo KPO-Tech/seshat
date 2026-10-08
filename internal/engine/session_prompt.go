@@ -51,6 +51,7 @@ func (s *Session) buildAPIRequestForRuntimeTools(ctx context.Context, runtimeToo
 	if s.appendSystemPromptOverride != nil {
 		appendPrompt = s.appendSystemPromptOverride
 	}
+	appendPrompt = withManagedInstructions(appendPrompt, s.config.ManagedInstructions)
 	workingDirectory := s.workingDirectory()
 
 	stage := s.config.PromptStage
@@ -129,4 +130,18 @@ func envTruthy(value string) bool {
 	default:
 		return false
 	}
+}
+
+// withManagedInstructions appends the organization's instructions after whatever append prompt the
+// session has, so they come last and a per-session override cannot remove them.
+func withManagedInstructions(appendPrompt *string, managed string) *string {
+	managed = strings.TrimSpace(managed)
+	if managed == "" {
+		return appendPrompt
+	}
+	joined := managed
+	if appendPrompt != nil && strings.TrimSpace(*appendPrompt) != "" {
+		joined = strings.TrimSpace(*appendPrompt) + "\n\n" + managed
+	}
+	return &joined
 }

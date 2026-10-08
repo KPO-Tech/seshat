@@ -2,6 +2,7 @@ package sdk
 
 import (
 	"context"
+	"fmt"
 	"log"
 	"strings"
 
@@ -12,6 +13,7 @@ import (
 	imageproviders "github.com/KPO-Tech/seshat/internal/image/providers"
 	"github.com/KPO-Tech/seshat/internal/memory"
 	"github.com/KPO-Tech/seshat/internal/monitoring"
+	"github.com/KPO-Tech/seshat/internal/permissions"
 	"github.com/KPO-Tech/seshat/internal/storage"
 	"github.com/KPO-Tech/seshat/internal/tools/builtin"
 	"github.com/KPO-Tech/seshat/internal/tools/registry"
@@ -123,8 +125,21 @@ func initMonitoringSystem(config *ClientConfig) *monitoring.System {
 	return monitoring.NewSystem(nil)
 }
 
+// newPermissionEngine builds the permission engine of a client: the default rules, then the deny
+// rules of the organization's managed policy, which outrank every other rule.
+func newPermissionEngine(config *ClientConfig) (*permissions.Engine, error) {
+	engine := permissions.NewEngine()
+	if err := engine.AddRules(permissions.NewDefaultRules()); err != nil {
+		return nil, fmt.Errorf("add default permission rules: %w", err)
+	}
+	if err := engine.AddRules(managedDenyRules(config.ManagedPolicy)); err != nil {
+		return nil, fmt.Errorf("add managed deny rules: %w", err)
+	}
+	return engine, nil
+}
+
 func initBuiltinRegistry(config *ClientConfig, browserManager browsercore.Manager, artifactStore ArtifactStore) (*registry.Registry, error) {
-	return builtin.NewBuiltinRegistryWithConfig(&builtin.Config{
+	reg, err := builtin.NewBuiltinRegistryWithConfig(&builtin.Config{
 		WorkingDir:                 config.WorkingDir,
 		PromptFn:                   config.PromptFn,
 		EnablePromptReaderFallback: config.EnablePromptReaderFallback,
@@ -147,6 +162,12 @@ func initBuiltinRegistry(config *ClientConfig, browserManager browsercore.Manage
 		SandboxKind:                config.SandboxKind,
 		SandboxDocker:              config.SandboxDocker,
 	})
+	if err != nil {
+		return nil, err
+	}
+	// The model should not even see a tool the organization forbids; its deny rule covers the rest.
+	hideForbiddenTools(config.ManagedPolicy, reg)
+	return reg, nil
 }
 
 func initImageGenerator(config *ClientConfig) image.Generation {

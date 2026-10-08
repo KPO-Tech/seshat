@@ -119,15 +119,16 @@ func NewClient(config *ClientConfig) (*Client, error) {
 	compactor := compact.NewEngine(apiClient, compact.DefaultConfig())
 	promptAssembler := prompt.NewAssembler()
 	promptAssembler.SetDefaultSections(prompt.DefaultSystemPromptSections())
-	permissionEngine := permissions.NewEngine()
-	if err := permissionEngine.AddRules(permissions.NewDefaultRules()); err != nil {
-		return nil, fmt.Errorf("add default permission rules: %w", err)
+	permissionEngine, err := newPermissionEngine(config)
+	if err != nil {
+		return nil, err
 	}
 	permissionIntegrator := permissions.NewIntegrator(permissionEngine)
 	permissionIntegrator.SetAutoModeProviderClient(apiClient, config.Model)
 
 	// Engine config
 	queryConfig := buildEngineConfig(config)
+	queryConfig.ManagedInstructions = managedInstructionsText(config.ManagedPolicy)
 	queryConfig.BrowserManager = browserManager
 
 	// Tool registry
