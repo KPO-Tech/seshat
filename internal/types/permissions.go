@@ -554,6 +554,9 @@ const (
 	PermissionSourceProjectSettings PermissionRuleSource = "projectSettings"
 	PermissionSourceCliArg          PermissionRuleSource = "cliArg"
 	PermissionSourceSession         PermissionRuleSource = "session"
+	// PermissionSourceManaged marks a rule imposed by whoever runs the host (an
+	// organization): it outranks every other source and a user cannot change it.
+	PermissionSourceManaged PermissionRuleSource = "managed"
 )
 
 // POWERSHELL_TOOL_NAME is the constant name for the PowerShell tool.
