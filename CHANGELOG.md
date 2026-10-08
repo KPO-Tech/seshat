@@ -9,6 +9,12 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [1.3.2] - 2026-10-08
+
+### Added
+
+- **The Google Drive connector can talk to another server.** `GDriveConnector.WithEndpoint` replaces the Drive API base URL, so the connector can be tested end to end against a fake or recorded Drive, or run behind a Google-compatible proxy. Without it nothing changes: the connector still talks to Google.
+
 ## [1.3.1] - 2026-10-07
 
 ### Changed

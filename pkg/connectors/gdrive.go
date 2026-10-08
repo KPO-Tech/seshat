@@ -145,6 +145,8 @@ const maxGDriveFileBytes = 20 * 1024 * 1024 // 20MB
 type GDriveConnector struct {
 	oauthConfig *oauth2.Config
 	extractText TextExtractorFunc
+	// endpoint, when set, replaces the Drive API base URL - see WithEndpoint.
+	endpoint string
 }
 
 // NewGDriveConnector creates a Google Drive connector that authenticates with the given OAuth configuration.
@@ -160,6 +162,16 @@ func (c *GDriveConnector) WithTextExtractor(fn TextExtractorFunc) *GDriveConnect
 	return c
 }
 
+// WithEndpoint points the Drive client at another server instead of Google,
+// so the connector can be exercised against a recorded or fake Drive, or a
+// Google-compatible proxy. baseURL is the whole API base, including the
+// version path (for example "http://127.0.0.1:8080/drive/v3/"). Returns the
+// receiver so it can be chained onto NewGDriveConnector.
+func (c *GDriveConnector) WithEndpoint(baseURL string) *GDriveConnector {
+	c.endpoint = baseURL
+	return c
+}
+
 func (c *GDriveConnector) client(ctx context.Context, secret Secret) (*drive.Service, error) {
 	if c.oauthConfig == nil {
 		return nil, fmt.Errorf("google drive oauth is not configured")
@@ -170,7 +182,11 @@ func (c *GDriveConnector) client(ctx context.Context, secret Secret) (*drive.Ser
 		Expiry:       secret.ExpiresAt,
 	}
 	ts := c.oauthConfig.TokenSource(ctx, token)
-	return drive.NewService(ctx, option.WithTokenSource(ts))
+	opts := []option.ClientOption{option.WithTokenSource(ts)}
+	if c.endpoint != "" {
+		opts = append(opts, option.WithEndpoint(c.endpoint))
+	}
+	return drive.NewService(ctx, opts...)
 }
 
 // Discover lists files in the account's Drive without fetching their
