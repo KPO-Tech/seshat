@@ -9,6 +9,8 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [1.3.3] - 2026-10-08
+
 ### Added
 
 - **A connectivity diagnostics package, `pkg/netdiag`.** It checks one target layer by layer (DNS, TCP, TLS, HTTP), so a failure says which layer is broken; `ProbeHTTP` goes through all four, `ProbeTCP` stops at TCP for a service that does not speak HTTP. SeshatOS and SeshatCloud each carried their own copy, which had already diverged (only one had `ProbeTCP`); both will import this one.
