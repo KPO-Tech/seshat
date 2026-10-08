@@ -62,7 +62,7 @@ require (
 	github.com/opensearch-project/opensearch-go/v5 v5.0.0
 	github.com/pdfcpu/pdfcpu v0.16.0
 	github.com/pkg/browser v0.0.0-20240102092130-5ac0b6a4141c
-	github.com/posthog/posthog-go v1.15.0
+	github.com/posthog/posthog-go v1.32.0
 	github.com/qdrant/go-client v1.18.3
 	github.com/qjebbs/go-jsons v1.0.0-alpha.5
 	github.com/razvandimescu/gopdf v0.11.2
@@ -109,6 +109,7 @@ require (
 	git.sr.ht/~jackmordaunt/go-toast v1.1.2 // indirect
 	github.com/Azure/azure-sdk-for-go/sdk/azcore v1.23.1 // indirect
 	github.com/Azure/azure-sdk-for-go/sdk/internal v1.12.0 // indirect
+	github.com/andybalholm/brotli v1.2.2 // indirect
 	github.com/andybalholm/cascadia v1.3.3 // indirect
 	github.com/apache/arrow-go/v18 v18.7.0 // indirect
 	github.com/araddon/dateparse v0.0.0-20210429162001-6b43995a97de // indirect
