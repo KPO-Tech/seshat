@@ -1,6 +1,6 @@
 module github.com/KPO-Tech/seshat
 
-go 1.26.6
+go 1.26.9
 
 require (
 	charm.land/bubbles/v2 v2.2.1
@@ -84,7 +84,7 @@ require (
 	go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracegrpc v1.46.0
 	go.opentelemetry.io/otel/sdk v1.46.0
 	go.opentelemetry.io/otel/trace v1.46.0
-	golang.org/x/net v0.59.0
+	golang.org/x/net v0.60.0
 	golang.org/x/oauth2 v0.36.0
 	golang.org/x/sys v0.48.0
 	golang.org/x/text v0.42.0

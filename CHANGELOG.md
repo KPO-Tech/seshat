@@ -9,6 +9,12 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [1.3.5] - 2026-10-09
+
+### Added
+
+- **An automation runner can carry the organization's rules, with `RunnerConfig.ManagedPolicy`.** Every agent a job's runner builds gets the same instructions and forbidden tools as an interactive client with `ClientConfig.ManagedPolicy`.
+
 ## [1.3.4] - 2026-10-09
 
 ### Added

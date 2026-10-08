@@ -65,6 +65,9 @@ type RunnerConfig struct {
 	// execution), where an LLM-issued shell command must never run
 	// unconfined on the shared host.
 	RequireSandbox bool
+	// ManagedPolicy is what the host imposes on every agent this runner builds, same as
+	// sdk.ClientConfig.ManagedPolicy. A multi-tenant host sets the rules of the job's organization.
+	ManagedPolicy *sdk.ManagedPolicy
 	// NodeRegistry, when set, enables Job.Graph execution — a job with a
 	// non-nil Graph fails clearly (not silently) if this is nil. Left
 	// unset by default: registering pkg/dataflow/nodes/database's node
@@ -173,6 +176,7 @@ func (r *Runner) buildClientConfig(model sdk.ModelIdentifier) *sdk.ClientConfig 
 		ArtifactStore:          r.cfg.ArtifactStore,
 		MCPServers:             r.cfg.MCPServers,
 		RequireSandbox:         r.cfg.RequireSandbox,
+		ManagedPolicy:          r.cfg.ManagedPolicy,
 	}
 }
 
