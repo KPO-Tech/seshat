@@ -9,6 +9,8 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [1.3.4] - 2026-10-09
+
 ### Added
 
 - **A host can impose rules on every agent, with `ClientConfig.ManagedPolicy`.** It carries a text that is appended to the system prompt after everything else (a session cannot replace it) and a list of forbidden tools that are removed from what the model sees and denied by a rule that outranks every other, in every permission mode including `bypass`. It is how an organization's server (SeshatCloud) says what all its agents must or must never do. See `docs/sdk.md`.
