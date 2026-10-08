@@ -56,6 +56,11 @@ type Config struct {
 	// AppendSystemPrompt is appended to the system prompt after all other sections.
 	AppendSystemPrompt string `json:"append_system_prompt,omitempty"`
 
+	// ManagedInstructions is text imposed by whoever runs the host (an organization).
+	// It is appended after everything else, including a per-session append prompt,
+	// so a session setter cannot replace or drop it.
+	ManagedInstructions string `json:"-"`
+
 	// BrowserManager manages native browser sessions for browser tools.
 	BrowserManager browsercore.Manager `json:"-"`
 

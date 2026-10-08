@@ -191,6 +191,11 @@ type ClientConfig struct {
 	PromptConfig         *PromptConfig      `json:"-"`
 	Companion            *companion.Profile `json:"companion,omitempty"`
 
+	// ManagedPolicy is what the organization that runs the host imposes on every agent: a text to
+	// follow and tools never to use. Set it from an administrator's configuration, not from the end
+	// user's. See ManagedPolicy.
+	ManagedPolicy *ManagedPolicy `json:"-"`
+
 	// Stop hooks
 	StopHooks []StopHook `json:"-"`
 
