@@ -78,3 +78,15 @@ func TestBuildClientConfigDefaultsMCPServersToNil(t *testing.T) {
 		t.Fatalf("expected no MCP servers for a single-user embedding, matching today's behavior, got %+v", cfg.MCPServers)
 	}
 }
+
+func TestBuildClientConfigPropagatesManagedPolicy(t *testing.T) {
+	policy := &sdk.ManagedPolicy{Instructions: "No customer data outside.", ForbiddenTools: []string{"bash"}}
+	runner, err := NewRunner(RunnerConfig{ProviderConfig: &providers.Config{APIKey: "test-key"}, MaxTokens: 1024, ManagedPolicy: policy})
+	if err != nil {
+		t.Fatalf("new runner: %v", err)
+	}
+	cfg := runner.buildClientConfig(sdk.ModelIdentifier{Provider: "anthropic", Model: "claude-sonnet-5"})
+	if cfg.ManagedPolicy != policy {
+		t.Fatal("RunnerConfig.ManagedPolicy must reach sdk.ClientConfig.ManagedPolicy")
+	}
+}
