@@ -1,0 +1,198 @@
+# TODO: bugs to fix (important)
+
+**These are errors, not wishes.** They were found by reading the code on 2026-10-09 (branch `dev`, commit `a1eee2f`, rechecked on `dea175c`) while documenting the runtime for the website. Each one is either a behavior that does not match what the code is supposed to do, a security gap, or a feature that exists in the code but is never connected, so it never runs.
+
+Status of each item: **verified** means the code was read and the problem reproduced by reading the call sites. **candidate** means a scan found a name that is never referenced; check before deleting or wiring it.
+
+When you fix one, move it to a "Fixed" section at the bottom with the PR number, and update the website page named in the item (docs are in the `seshat-ai` repository, `website/src/content/docs/en`).
+
+---
+
+## High
+
+### H1. Compaction summary always uses an Anthropic model (verified)
+
+`internal/engine/factory.go:38` and `pkg/sdk/client.go:119` build the compactor with `compact.DefaultConfig()`. Its `SummaryModel` is hardcoded to `claude-3-5-haiku-20241022` on the Anthropic provider (`internal/runtime/memory/config.go:25`), whatever provider the session uses.
+
+**Effect:** a session on OpenAI, DeepSeek, Ollama or any non-Anthropic provider, without an Anthropic key, fails when it needs a summary. `maybeAutoCompact` then returns an error and the turn ends with `auto_compact_error`. Compaction only needs a summary when micro-compaction (trimming tool results) is not enough, so it shows up on long sessions.
+
+**Fix:** use the session model (or a configurable summary model) and expose the compaction settings (threshold, target, summary model) in `ClientConfig`. Add a test with a non-Anthropic provider.
+
+### H2. Compaction circuit breaker can never trip (verified)
+
+`AutoCompact` stops trying after `MaxConsecutiveFailures` (3) failures (`internal/runtime/memory/engine.go:166`). But the counter lives in the per-turn state (`state.AutoCompactFailureCount`, `internal/engine/state.go:578`), which `initializeState` recreates at the start of every `Loop.Run`. A failed compaction also ends the turn at once (`loop.go:293`), so the counter never goes above 1.
+
+**Effect:** a session whose summary call keeps failing fails again on every turn. The protection is dead code.
+
+**Fix:** keep the count on the session (or loop) across turns, reset it on success, and decide whether a failed compaction should still end the turn. A task for this is already open. Website page: `concepts/memory`.
+
+### H3. Project instruction files bypass project trust (verified, security)
+
+`readProjectInstructions` (`internal/engine/project_instructions.go`) reads `SESHAT.md`, `AGENTS.md` or `.seshat/instructions.md` from the working directory and `session_prompt.go:61` injects it into the system prompt, with a repo map appended. There is no trust check. `docs/project-trust.md` says a project's configuration is ignored until `seshat trust`, and lists `context_paths` and `skills_paths` as guarded, but these files are not.
+
+**Effect:** a repository you just cloned can place instructions in the model's prompt. This is the same class of problem the 1.3.0 audit closed for `.seshat.json`.
+
+**Fix:** gate the file behind the same trust, or show it to the user for approval on first use (hash-based, like the other project files). Document the decision in `docs/project-trust.md`. Website pages: `sdk/prompt`, `concepts/security-and-trust`.
+
+### H4. Hook events are defined and exported, but most are never emitted (verified)
+
+`internal/types/hooks.go` defines 40 events and `pkg/sdk/types.go` re-exports them. The runtime only fires these through the hook executor: `query_start`, `iteration_start`, `iteration_stop`, `iteration_continue`, `iteration_complete`, `tool_uses_start`, `tool_uses_complete`, `query_complete` (`internal/engine/loop.go`), and `subagent_start`, `subagent_stop`, `on_error` (`internal/agent/runner.go`).
+
+Never fired: `session_start`, `session_end`, `turn_start`, `turn_end`, `turn_stop`, `stop_failure`, `pre_tool_use`, `post_tool_use`, `post_tool_use_fail`, `pre_compact`, `post_compact`, `pre_api_call`, `post_api_call`, `user_prompt_submit`, `permission_request`, `permission_denied`, `notification`, `setup`, `config_change`, `teammate_idle`, `task_created`, `task_completed`, `elicitation`, `elicitation_result`, `worktree_create`, `worktree_remove`, `instructions_loaded`, `cwd_changed`, `file_changed`.
+
+**Effect:** `client.RegisterHook(sdk.HookEventPreToolUse, ...)` compiles, returns an id and never runs. Nothing warns.
+
+Also, for the events that do fire, only `iteration_start` and `tool_uses_start` can stop the turn. The other results are ignored. The `modify` and `retry` actions and a `deny` message are only logged (`executeHookWithResult`, `loop.go:1504`): nothing applies `UpdatedInput`, retries, or sends the message to the model.
+
+**Fix:** either emit the events that make sense (at minimum `pre_tool_use`, `post_tool_use`, `pre_compact`, `post_compact`, `session_start`, `session_end`, `turn_start`, `turn_end`) or stop exporting the others, and make `RegisterHook` return an error for an event that is never fired. Implement or remove the `modify`, `retry` and `deny` message semantics. Website page: `sdk/events-and-hooks`.
+
+### H5. `AddToolHook` cannot be used from outside the module (verified)
+
+`pkg/sdk` exposes `Client.AddToolHook(ToolHook)` and aliases `ToolHook`, `ToolHookInput`, `ToolHookStage`, but not the type that `ToolHook.Execute` returns (`ToolHookResult`, with `ToolHookStop`). A host in another module cannot name that type, so it cannot write a tool hook. Only the shell hooks (`PreToolHooks`) work. A task for this is already open.
+
+**Fix:** alias `ToolHookResult` and `ToolHookStop` in `pkg/sdk/types.go` and add an external test.
+
+### H6. Four runtime event types are defined and never emitted (verified)
+
+`tool.permission_required`, `prompt.request`, `turn.stage`, `plan.status_changed` (`internal/types/runtime_events.go`). Nothing emits them. Permission questions only reach a host through the prompt function (`SetPromptFn`), so an interface that listens to runtime events to show an approval dialog never gets one.
+
+**Fix:** emit them where the corresponding thing happens, or delete the names. Website page: `sdk/events-and-hooks`.
+
+### H7. MCP servers are silently skipped when `Transport` is not set (verified)
+
+`mcp.NewClient` (`internal/tools/system/mcp/client.go:24`) switches on `config.Transport` and returns `unsupported transport type:` for an empty value. `ServerConfig.Transport` has no default, and `IntegrateMCPServersWithOptions` only logs the error and moves on. The example in the root `README.md`, in `docs/sdk.md` and in `docs/mcp.md` sets `Name`, `Command` and `Args` but no `Transport`, so a host that copies it connects no MCP server and gets no error.
+
+Checked by calling `mcp.NewClient` with a stdio config and with a URL config, both without `Transport`: both fail.
+
+**Fix:** infer the transport (`Command` set means stdio, `URL` set means http), or return an error from `NewClient` of the SDK client when a configured server fails. Fix the three documents either way. Also note that `websocket` is accepted by the switch but uses the HTTP transport. Website page: `concepts/skills-and-mcp`.
+
+### H8. Skills in `.seshat/skills` are listed by the terminal interface but the agent cannot load them (verified)
+
+There are two skill systems. The runtime loader (`internal/tools/system/skills/loader.go`) reads `.claude/skills` in the project, `.seshat/commands`, and the user, managed, builtin and repos folders under the runtime root. `NewFileSkillLoader("")` defaults its directory to `.seshat/skills` (line 71) but `GetSkillDirCommandsForUser` never uses it, so that folder is not read. The terminal interface (`internal/seshattui/skills`) discovers skills in `.agents/skills`, `.seshat/skills`, `.claude/skills` and `.cursor/skills` and shows them in its catalog, but nothing feeds them to the agent: `ToPromptXML` is never called and `SeshatWorkspace.ReadSkill` returns nothing.
+
+**Effect:** a skill put in `.seshat/skills/` (the folder the old documentation recommended) is visible in the interface and unusable by the model.
+
+**Fix:** make the terminal interface and the runtime read the same folders, from one list. Website page: `concepts/skills-and-mcp`.
+
+---
+
+## Medium
+
+### M1. The blocking limit of compaction is never enforced (verified)
+
+`BlockingLimitTokens` and `ManualCompactBufferTokens` (`internal/runtime/memory/engine.go:91`, `config.go`) are never used. Nothing checks that a request fits the window before it is sent, and the error codes `ErrCodeCompactFailed` and `ErrCodeCompactFull` (`internal/types/errors.go`) are never returned. A request that does not fit fails at the provider.
+
+**Fix:** check before sending, return a typed error, or remove the dead settings.
+
+### M2. The auto-mode classifier ignores project instructions and keeps no transcript (verified)
+
+`SetSeshatMdProvider` (`internal/permissions/auto/seshat_md.go`) is never called, so the classifier never sees the user's `SESHAT.md` preferences. `BuildTranscriptForClassifier`, `LogParseFailure`, `BuildSystemPromptWithSeshatMd` and `ExtractSeshatMdRules` are never called, and `internal/permissions/engine.go` still carries the comment "Track classifier transcript for debug, not yet implemented".
+
+Also, when no classifier is configured, auto mode allows every call, including destructive ones (`checkGlobalPermission`, step 4.5). A classifier is normally wired (`SetAutoModeProviderClient`), so this is the fallback, but it fails open.
+
+**Fix:** wire the provider (and decide how it relates to H3), or remove the code. Consider failing closed (ask) when no classifier is available.
+
+### M3. Default limits disagree (verified)
+
+`engine.DefaultConfig()` sets `MaxTurns` to 100 (`internal/engine/config.go:71`), the loop defaults to 200 (`loop.go:86`), and the SDK default is 100. The comment on `Config.MaxIterations` says "0 = loop default (10)" but the loop default is 100. Pick one source of truth and fix the comments.
+
+### M4. MCP features that exist but are not connected (candidate)
+
+Never called: `ConnectWithOAuth`, `RemoveMcpServer`, `SetMcpServerEnabled`, `RegisterPluginMcpServer`, `GetPluginMcpServers` and `ExpandEnvVars` (`internal/tools/system/mcp/config.go`). So OAuth-protected MCP servers, enabling, disabling and removing a server at runtime, plugin servers and `${VAR}` expansion in MCP configs are not reachable. Check what the CLI and the SDK do instead, then wire or delete. Website page: `concepts/skills-and-mcp`.
+
+### M5. Skill features that exist but are not connected (candidate)
+
+Never called: `ActivateConditionalSkillsForPaths`, `DiscoverSkillDirsForPaths`, `RegisterMCPSkillBuilder`, `InvalidateSkillCache`, `ClearSkillCaches`, `OnSkillChange`, `NotifySkillChange`, `RegisterSkillAlias`, `ResolveSkillAlias` (`internal/tools/system/skills`). Skills that depend on file paths, skills coming from MCP servers, and live reload are therefore not active. Wire them or delete them.
+
+### M5b. Skill header fields that are read and never applied (verified)
+
+In the runtime path (the `skill` tool calls `ExecuteSkillPrompt` and returns the body): `allowed-tools` and `model` are ignored (they only matter for a skill that also has an `agent:` field, which `internal/agent/registry.go` turns into a sub-agent type); `context: fork` sets a field nobody reads (`ExecutionContextFork`); `shell` and `hooks` are parsed and never executed; `when_to_use` is not part of the list the model sees (`FormatSkillsList` shows name, description and triggers); `disable-model-invocation` is not checked there. `arguments` only reads a list of names or a comma-separated string, so the structured form documented in `docs/skills.md` (name, description, default) gives no argument names. `MatchTrigger` and `GetSkillsForContext` (triggers and `paths`) are only exposed through `pkg/skills`, nothing in the runtime calls them.
+
+**Fix:** apply these fields (run the skill in a sub-agent for `fork`, restrict tools, run the shell commands) or stop parsing them, and correct `docs/skills.md`. Website page: `concepts/skills-and-mcp`.
+
+### M5c. Sub-agents always run in `bypass` mode, and two built-in types do not match their name (verified)
+
+`agent_tool.go` (lines 441, 795, 935) starts every sub-agent with `PermissionMode: types.PermissionModeBypass`. After one approval to start it, a `general-purpose` sub-agent has every tool, including the shell, with no further question (deny rules and the safety check still apply). That may be the intent for headless runs, but it should be a decision: the parent's mode is not inherited, and `never` or `onRequest` in the parent does not constrain the child.
+
+The `plan` type has `write_file` and `edit_file` (`internal/agent/loader.go`), so it is not read-only. The `verify` type is not a general "check the result" reviewer: it validates agent definitions, security constraints and tool permissions, read-only. Rename it, or give the type a prompt that matches what users expect. Website page: `concepts/agents-and-delegation`.
+
+### M5d. Configuration: keys in clear text, missing variable, stale comments (verified)
+
+The terminal interface saves a provider key typed in its providers screen as `providers.<id>.api_key` in `seshat.json` (`internal/seshattui/config/store.go:322`), in clear text with owner-only permissions. `seshat config` stores its keys encrypted (AES-GCM, `internal/db/credentials.go`). The two paths protect keys differently, and the interface never offers the encrypted store.
+
+`providerEnvVars` in `pkg/sdk/auth.go:294` has no case for Kimi, so it returns the generic `API_KEY`, while `pkg/config/provider_catalog.go:146` accepts `MOONSHOT_API_KEY` and `KIMI_API_KEY`. Two lists of provider variables exist (`providerEnvVars`, `ProviderCredentialEnvVars`) and they disagree for Kimi and in order for Z.ai and Codex.
+
+Code comments still say `.seshat.yaml` (`pkg/config/config.go:150`, `internal/hooks/hook.go:69`) but the file read is `config.yaml` (viper, `pkg/config/config.go:230`). `docs/` and the CLI help should be checked for the same name. Also, `cmd/cli/appdir/appdir.go` documents `~/.config/seshat-tui/` while `main.go` sets `seshat-cli`: three names for the runtime folder.
+
+`generate_image`, `text_to_speech` and `speech_to_text` stay inactive unless a provider is set in the `image_generation`, `text_to_speech` or `speech_to_text` section: with only `OPENAI_API_KEY` set, nothing happens and nothing says why. Website page: `getting-started/configuration`.
+
+### M5e. Plan mode is not enforced, and other modes and fields that do nothing (verified)
+
+Plan mode (`ForcePlanMode`, `enter_plan_mode`) only changes instructions and the permission context. No tool is blocked by it: the comment on `ExecutionModePlan` says "tools are described but not executed", which is not what happens. Worse, `write_file` and `edit_file` auto-allow writes inside the working directory when `ExecutionMode == "plan"` (`internal/tools/files/write/write.go:495`, `edit/edit.go:411`), so a plan-mode session asks fewer questions about writing files than a normal one. Decide: enforce read-only in plan mode (deny writes except the plan file), or rename the mode and fix the comments.
+
+`ExecutionModePairProgramming` has helper functions and setters (`internal/modes/execution/pair_programming.go`) but nothing reads it except a label in the terminal interface. Implement it or remove it. Comments in `contract/context.go` and `types/permissions.go` mention a `browse` execution mode that does not exist.
+
+Workflows (`pkg/workflow/workflow.go`): a `router` node never routes, because `Run` executes every node whose dependencies succeeded, and a `verifier` that answers FAIL is still a success. The default executor in `pkg/sdk/workflow.go` ignores `agent` and `max_turns`. A level also waits for the whole previous level. Decide whether kinds should control the flow, and implement it or document them as prompt roles only (the website now says so). Website pages: `sdk/workflows`, `concepts/runtime-modes`.
+
+### M5f. The default Anthropic routing falls back to OpenAI (verified, privacy)
+
+`internal/providers/config.go:53` gives the Anthropic provider `FallbackProviders: [openai]`. A session that selected Anthropic can silently continue on OpenAI, if an OpenAI key is present and Anthropic fails. For a product whose promise is that data stays where the user put it, the default should be no cross-vendor fallback, or an explicit opt-in. Website page: `sdk/providers-and-auth`.
+
+### M5g. `sdk.SandboxAvailable()` only reports Landlock (verified)
+
+It calls `bashTool.SandboxAvailable()` which returns `landlockAvailable()`. A host with a working Docker sandbox still gets `false` on macOS and Windows. Add a function that reports the sandbox actually in use, or document it.
+
+### M6. Automation API keys cannot be created or revoked (candidate)
+
+The tables and migrations exist (`internal/db/automation_daemon_migrations.go`), but `CreateAutomationAPIKey`, `ListAutomationAPIKeys`, `RevokeAutomationAPIKey` and `DeleteAutomationAPIKey` (`internal/db/automation_apikeys.go`) are never called. Check what authenticates the automation daemon API today, and wire key management or remove the schema.
+
+### M7. The tweet tool is never registered (candidate)
+
+`twitter.NewTweetTool` exists but nothing registers it (the search tools are registered, and the Reddit tools were wired by recent commits). It posts to a public account, so leaving it out may be deliberate (it is also left out of the always-safe list on purpose). Decide: register it behind credentials, or delete it.
+
+### M8. Compaction transcript helpers are never called (candidate)
+
+In `internal/types/message.go`: `MessagesFromTranscriptEntries`, `FilterCanonicalTranscriptEntries`, `LastCompactionMessage`, `BuildCompactionMetadata`, `WithoutCompactionMetadata`, `IsTranscriptCompactionEntry`, `IsTranscriptSystemEntry`, `MessageTranscriptMetadataSignature`, `CountCompactionArtifacts`, `CountPreservedTail*`. Resuming a session after compaction may use another path. Check, then delete or wire.
+
+---
+
+## Low
+
+### L0. Repository documents that describe things the code does not do (verified)
+
+`README.md`, `docs/sdk.md` and `docs/mcp.md` (MCP examples without `Transport`, see H7). `docs/skills.md` (structured `arguments`, `allowed-tools` and `model` as if they applied to every skill, `context: fork`, `shell`, project folders). Fix them with the code, or before.
+
+### L1. Dead functions and methods (candidate)
+
+| Where | What |
+|---|---|
+| `internal/engine/loop.go` | `Loop.sendAPIRequest` |
+| `internal/execution/streaming_executor.go` | `SubmitToolUseChunk`, `GetCompletedResults`, `GetPendingCount` |
+| `internal/providers` | `Client.buildURL`, `Client.calculateNextBackoff`, `Client.waitDuration` (is retry backoff implemented twice?) |
+| `internal/tools/special/tool_search` | `IsToolSearchEnabled`, `GetDeferredTools`, `GetNonDeferredTools`, `GetAutoToolSearchCharThreshold`, `ModelSupportsToolReference`, `ExtractDiscoveredToolNames`, `DefaultToolSearchToolConfig` |
+| `internal/modes/execution` | many getters and setters of plan and pair-programming state |
+| `internal/storage` | `StorePDF`, `StoreScreenshot`, `StoreDocument`, `LoadDocument`, `GetFileURL`, `StatFile`, `ListFiles`, `OpenFileReader`, `ReadFileMetadata`, `RunGarbageCollection`, `MoveFile`, `DownloadFile`, `PDFKey`, `DocumentKey` |
+| `internal/nativedoc` | `dlaRecordPostUnclip`, `dlaFlushPostUnclip`, `math_min`, `math_max` |
+| `internal/utils/git.go` | `GetCachedDefaultBranch`, `GetCachedRemoteUrl`, `DirIsInGitRepo`, `IsAtGitRoot`, `GetGitExe` |
+| `internal/tools/task` | `StatusToString`, `FormatTaskOutput`, `cloneRuntimeTask`, `sortRuntimeTasks` |
+| `internal/tools/bash/security.go` | `isWorkspaceWriteCommand` |
+| `internal/tools/files` | `edit.normalizedBaseName`, `glob.encodeOutput`, `glob.decodeOutput` |
+| `internal/web` | `screenshotKey`, `downloadKey`, `readPageTitle`, `GetCurrentMode`, `truncatePreview` |
+
+### L2. Unused constants (candidate)
+
+Error codes (`ErrCodeToolExecution`, `ErrCodeToolPermission`, `ErrCodeToolTimeout`, `ErrCodePermissionError`, `ErrCodeSession*`, `ErrCodeNotSupported`), `HookStagePost`, `HookStageAround`, `SessionStatusIdle`, `SectionTypeUser`, `SectionTypeSystem`, `SectionTypeAppend`, `EnvironmentWorktree`, `EnvironmentUnknown`, `AccessNetwork`, `ToolSurfaceProfileSkillAgent`, `MetricTypeTimer`, `AgentSourceProject`, `AgentEventTurnUpdate`, `AgentEventToolUse`, `StatusUsageLimited`, `APIProviderGoogle`, `APIProviderAzure`, `APIProviderZAI`, `TokenTypeID`. Unused error codes mean failures are reported with generic errors, so callers cannot tell them apart.
+
+### L3. Old default model identifiers (candidate)
+
+The engine, the SDK and the compaction defaults name `claude-3-5-sonnet-20241022` and `claude-3-5-haiku-20241022`. These are 2024 identifiers. Check they still resolve, and move the defaults to one place.
+
+---
+
+## Already corrected in the documentation
+
+The website pages were fixed on 2026-10-09 to match the code (see the `seshat-ai` repository, pull requests 139 and 140): hook events, runtime events, the permission order, the `bypass` and `auto` modes, the blocking limit, and the default number of turns. Fixing the code does not need the pages to change before, but the pages must be updated when an item above is fixed.
+
+## How this list was made, and its limits
+
+Hand reading of `internal/engine`, `internal/runtime/memory`, `internal/permissions`, `internal/execution`, `internal/prompt`, `pkg/sdk` and the hook and event definitions, then a scan of `internal/`, `pkg/` and `cmd/` (excluding the `seshattui` fork and generated protobuf code) for functions, methods and constants whose name is referenced nowhere else. A name that appears anywhere counts as used, so the scan misses dead code that shares a name with live code: the real amount is probably larger. Items marked candidate have not been checked by hand. A static tool such as `deadcode` or `staticcheck` (U1000) would give a more exact list and could run in CI.
