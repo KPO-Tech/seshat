@@ -10,6 +10,12 @@ seshat is an open-source Go AI agent runtime. It has no concept of users, organi
 
 ---
 
+## Known bugs to fix first
+
+[TODO.md](TODO.md) lists errors found by reading the code: behavior that is wrong, security gaps, and features that exist but are never connected. Read it before touching compaction, hooks, runtime events, project instructions or the auto-mode classifier, and do not build on top of an item that is listed there without fixing or noting it.
+
+---
+
 ## Build and test
 
 Always run these before finishing:
