@@ -58,6 +58,22 @@ Also, for the events that do fire, only `iteration_start` and `tool_uses_start` 
 
 **Fix:** emit them where the corresponding thing happens, or delete the names. Website page: `sdk/events-and-hooks`.
 
+### H7. MCP servers are silently skipped when `Transport` is not set (verified)
+
+`mcp.NewClient` (`internal/tools/system/mcp/client.go:24`) switches on `config.Transport` and returns `unsupported transport type:` for an empty value. `ServerConfig.Transport` has no default, and `IntegrateMCPServersWithOptions` only logs the error and moves on. The example in the root `README.md`, in `docs/sdk.md` and in `docs/mcp.md` sets `Name`, `Command` and `Args` but no `Transport`, so a host that copies it connects no MCP server and gets no error.
+
+Checked by calling `mcp.NewClient` with a stdio config and with a URL config, both without `Transport`: both fail.
+
+**Fix:** infer the transport (`Command` set means stdio, `URL` set means http), or return an error from `NewClient` of the SDK client when a configured server fails. Fix the three documents either way. Also note that `websocket` is accepted by the switch but uses the HTTP transport. Website page: `concepts/skills-and-mcp`.
+
+### H8. Skills in `.seshat/skills` are listed by the terminal interface but the agent cannot load them (verified)
+
+There are two skill systems. The runtime loader (`internal/tools/system/skills/loader.go`) reads `.claude/skills` in the project, `.seshat/commands`, and the user, managed, builtin and repos folders under the runtime root. `NewFileSkillLoader("")` defaults its directory to `.seshat/skills` (line 71) but `GetSkillDirCommandsForUser` never uses it, so that folder is not read. The terminal interface (`internal/seshattui/skills`) discovers skills in `.agents/skills`, `.seshat/skills`, `.claude/skills` and `.cursor/skills` and shows them in its catalog, but nothing feeds them to the agent: `ToPromptXML` is never called and `SeshatWorkspace.ReadSkill` returns nothing.
+
+**Effect:** a skill put in `.seshat/skills/` (the folder the old documentation recommended) is visible in the interface and unusable by the model.
+
+**Fix:** make the terminal interface and the runtime read the same folders, from one list. Website page: `concepts/skills-and-mcp`.
+
 ---
 
 ## Medium
@@ -88,6 +104,12 @@ Never called: `ConnectWithOAuth`, `RemoveMcpServer`, `SetMcpServerEnabled`, `Reg
 
 Never called: `ActivateConditionalSkillsForPaths`, `DiscoverSkillDirsForPaths`, `RegisterMCPSkillBuilder`, `InvalidateSkillCache`, `ClearSkillCaches`, `OnSkillChange`, `NotifySkillChange`, `RegisterSkillAlias`, `ResolveSkillAlias` (`internal/tools/system/skills`). Skills that depend on file paths, skills coming from MCP servers, and live reload are therefore not active. Wire them or delete them.
 
+### M5b. Skill header fields that are read and never applied (verified)
+
+In the runtime path (the `skill` tool calls `ExecuteSkillPrompt` and returns the body): `allowed-tools` and `model` are ignored (they only matter for a skill that also has an `agent:` field, which `internal/agent/registry.go` turns into a sub-agent type); `context: fork` sets a field nobody reads (`ExecutionContextFork`); `shell` and `hooks` are parsed and never executed; `when_to_use` is not part of the list the model sees (`FormatSkillsList` shows name, description and triggers); `disable-model-invocation` is not checked there. `arguments` only reads a list of names or a comma-separated string, so the structured form documented in `docs/skills.md` (name, description, default) gives no argument names. `MatchTrigger` and `GetSkillsForContext` (triggers and `paths`) are only exposed through `pkg/skills`, nothing in the runtime calls them.
+
+**Fix:** apply these fields (run the skill in a sub-agent for `fork`, restrict tools, run the shell commands) or stop parsing them, and correct `docs/skills.md`. Website page: `concepts/skills-and-mcp`.
+
 ### M6. Automation API keys cannot be created or revoked (candidate)
 
 The tables and migrations exist (`internal/db/automation_daemon_migrations.go`), but `CreateAutomationAPIKey`, `ListAutomationAPIKeys`, `RevokeAutomationAPIKey` and `DeleteAutomationAPIKey` (`internal/db/automation_apikeys.go`) are never called. Check what authenticates the automation daemon API today, and wire key management or remove the schema.
@@ -103,6 +125,10 @@ In `internal/types/message.go`: `MessagesFromTranscriptEntries`, `FilterCanonica
 ---
 
 ## Low
+
+### L0. Repository documents that describe things the code does not do (verified)
+
+`README.md`, `docs/sdk.md` and `docs/mcp.md` (MCP examples without `Transport`, see H7). `docs/skills.md` (structured `arguments`, `allowed-tools` and `model` as if they applied to every skill, `context: fork`, `shell`, project folders). Fix them with the code, or before.
 
 ### L1. Dead functions and methods (candidate)
 
