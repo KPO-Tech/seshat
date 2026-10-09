@@ -126,6 +126,22 @@ Code comments still say `.seshat.yaml` (`pkg/config/config.go:150`, `internal/ho
 
 `generate_image`, `text_to_speech` and `speech_to_text` stay inactive unless a provider is set in the `image_generation`, `text_to_speech` or `speech_to_text` section: with only `OPENAI_API_KEY` set, nothing happens and nothing says why. Website page: `getting-started/configuration`.
 
+### M5e. Plan mode is not enforced, and other modes and fields that do nothing (verified)
+
+Plan mode (`ForcePlanMode`, `enter_plan_mode`) only changes instructions and the permission context. No tool is blocked by it: the comment on `ExecutionModePlan` says "tools are described but not executed", which is not what happens. Worse, `write_file` and `edit_file` auto-allow writes inside the working directory when `ExecutionMode == "plan"` (`internal/tools/files/write/write.go:495`, `edit/edit.go:411`), so a plan-mode session asks fewer questions about writing files than a normal one. Decide: enforce read-only in plan mode (deny writes except the plan file), or rename the mode and fix the comments.
+
+`ExecutionModePairProgramming` has helper functions and setters (`internal/modes/execution/pair_programming.go`) but nothing reads it except a label in the terminal interface. Implement it or remove it. Comments in `contract/context.go` and `types/permissions.go` mention a `browse` execution mode that does not exist.
+
+Workflows (`pkg/workflow/workflow.go`): a `router` node never routes, because `Run` executes every node whose dependencies succeeded, and a `verifier` that answers FAIL is still a success. The default executor in `pkg/sdk/workflow.go` ignores `agent` and `max_turns`. A level also waits for the whole previous level. Decide whether kinds should control the flow, and implement it or document them as prompt roles only (the website now says so). Website pages: `sdk/workflows`, `concepts/runtime-modes`.
+
+### M5f. The default Anthropic routing falls back to OpenAI (verified, privacy)
+
+`internal/providers/config.go:53` gives the Anthropic provider `FallbackProviders: [openai]`. A session that selected Anthropic can silently continue on OpenAI, if an OpenAI key is present and Anthropic fails. For a product whose promise is that data stays where the user put it, the default should be no cross-vendor fallback, or an explicit opt-in. Website page: `sdk/providers-and-auth`.
+
+### M5g. `sdk.SandboxAvailable()` only reports Landlock (verified)
+
+It calls `bashTool.SandboxAvailable()` which returns `landlockAvailable()`. A host with a working Docker sandbox still gets `false` on macOS and Windows. Add a function that reports the sandbox actually in use, or document it.
+
 ### M6. Automation API keys cannot be created or revoked (candidate)
 
 The tables and migrations exist (`internal/db/automation_daemon_migrations.go`), but `CreateAutomationAPIKey`, `ListAutomationAPIKeys`, `RevokeAutomationAPIKey` and `DeleteAutomationAPIKey` (`internal/db/automation_apikeys.go`) are never called. Check what authenticates the automation daemon API today, and wire key management or remove the schema.
