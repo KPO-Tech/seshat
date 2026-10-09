@@ -110,6 +110,12 @@ In the runtime path (the `skill` tool calls `ExecuteSkillPrompt` and returns the
 
 **Fix:** apply these fields (run the skill in a sub-agent for `fork`, restrict tools, run the shell commands) or stop parsing them, and correct `docs/skills.md`. Website page: `concepts/skills-and-mcp`.
 
+### M5c. Sub-agents always run in `bypass` mode, and two built-in types do not match their name (verified)
+
+`agent_tool.go` (lines 441, 795, 935) starts every sub-agent with `PermissionMode: types.PermissionModeBypass`. After one approval to start it, a `general-purpose` sub-agent has every tool, including the shell, with no further question (deny rules and the safety check still apply). That may be the intent for headless runs, but it should be a decision: the parent's mode is not inherited, and `never` or `onRequest` in the parent does not constrain the child.
+
+The `plan` type has `write_file` and `edit_file` (`internal/agent/loader.go`), so it is not read-only. The `verify` type is not a general "check the result" reviewer: it validates agent definitions, security constraints and tool permissions, read-only. Rename it, or give the type a prompt that matches what users expect. Website page: `concepts/agents-and-delegation`.
+
 ### M6. Automation API keys cannot be created or revoked (candidate)
 
 The tables and migrations exist (`internal/db/automation_daemon_migrations.go`), but `CreateAutomationAPIKey`, `ListAutomationAPIKeys`, `RevokeAutomationAPIKey` and `DeleteAutomationAPIKey` (`internal/db/automation_apikeys.go`) are never called. Check what authenticates the automation daemon API today, and wire key management or remove the schema.
