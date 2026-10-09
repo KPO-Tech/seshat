@@ -187,10 +187,31 @@ Tools for community and developer platforms. Read-only tools require no credenti
 | `devto_feed` | ✅ live | Browse dev.to articles by tag, popularity, or date. |
 | `devto_article` | ✅ live | Fetch a single dev.to article by ID or URL. |
 | `devto_publish` | ✅ live | Publish or update a dev.to article (requires `DEV_TO_API_KEY`). |
-| `reddit_search` | stub | Search Reddit posts and comments (requires `REDDIT_CLIENT_ID`). |
-| `reddit_posts` | stub | Browse subreddit posts by sort (hot/new/top). |
 | `twitter_search` | stub | Search tweets (requires `TWITTER_BEARER_TOKEN`). |
 | `twitter_tweet` | stub | Post a tweet (requires OAuth 1.0a). |
+
+---
+
+### Research tools (`internal/tools/research/`)
+
+Tools for market studies, product comparisons and the analysis of customer reviews. Each reads one official API and
+returns readable text with the source, link, author and date of every item. A tool whose keys are missing is not
+offered to the model. On a shared server the keys are given to each run (`ClientConfig.ResearchKeys`) and the process
+environment is never read; on a single-user host the environment variables below are used.
+
+| Tool | Needs | Description |
+|---|---|---|
+| `appstore_search` | nothing | Find apps in the Apple App Store: id, developer, rating, number of ratings. |
+| `appstore_reviews` | nothing | Customer reviews of an app, per country. Apple's public feed serves at most 50 per sort and country (usually the first page), sometimes none for one sort, so both sorts are read and merged. |
+| `reddit_search` | `REDDIT_CLIENT_ID`, `REDDIT_CLIENT_SECRET` | Search public Reddit posts, across Reddit or in one subreddit. |
+| `reddit_posts` | same | List posts of a subreddit (hot, new, top, rising). |
+| `reddit_post` | same | One post with its comments, indented by reply depth. |
+| `youtube_search` | `YOUTUBE_API_KEY` | Search videos, with views, likes and comment counts (100 quota units per call). |
+| `youtube_comments` | `YOUTUBE_API_KEY` | Comments under a video, with the first replies. |
+| `places_search` | `GOOGLE_PLACES_API_KEY` | Find businesses and places on Google Maps (billed by Google). |
+| `places_reviews` | `GOOGLE_PLACES_API_KEY` | A place's rating and its reviews (Google returns at most 5 per place). |
+| `trustpilot_company` | `TRUSTPILOT_API_KEY` | A company's TrustScore and review count, found by its domain. |
+| `trustpilot_reviews` | `TRUSTPILOT_API_KEY` | A company's public reviews, filtered by stars, language and order. |
 
 ---
 

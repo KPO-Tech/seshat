@@ -155,6 +155,7 @@ func initBuiltinRegistry(config *ClientConfig, browserManager browsercore.Manage
 		AutomationServiceURL:       config.AutomationServiceURL,
 		AutomationAPIKey:           config.AutomationAPIKey,
 		WebSearchKeys:              config.WebSearchKeys,
+		ResearchKeys:               config.ResearchKeys,
 		ImageGenerator:             initImageGenerator(config),
 		TTSGenerator:               initTextToSpeechGenerator(config),
 		STTTranscriber:             initSpeechToTextTranscriber(config),

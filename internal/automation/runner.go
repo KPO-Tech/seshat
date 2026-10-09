@@ -23,6 +23,9 @@ type RunnerConfig struct {
 	// When set, the web_search tool uses these keys instead of reading from the
 	// process environment — required for safe multi-tenant execution.
 	WebSearchKeys map[string]string
+	// ResearchKeys provides per-owner credentials for the research tools, with the same meaning as
+	// sdk.ClientConfig.ResearchKeys.
+	ResearchKeys map[string]string
 	// RAGService enables the rag_search/rag_ingest tools for this
 	// execution when set. Callers embedding automation in a multi-tenant
 	// host (e.g. seshat-ai/seshat-server) are expected to build one scoped
@@ -170,6 +173,7 @@ func (r *Runner) buildClientConfig(model sdk.ModelIdentifier) *sdk.ClientConfig 
 		EnableMonitoring:       false,
 		ProviderConfig:         r.cfg.ProviderConfig,
 		WebSearchKeys:          r.cfg.WebSearchKeys,
+		ResearchKeys:           r.cfg.ResearchKeys,
 		RAGService:             r.cfg.RAGService,
 		DocumentReaderURL:      r.cfg.DocumentReaderURL,
 		DocumentConverter:      r.cfg.DocumentConverter,
