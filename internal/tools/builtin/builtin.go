@@ -32,6 +32,7 @@ import (
 	telegramTool "github.com/KPO-Tech/seshat/internal/tools/notifications/telegram"
 	whatsappTool "github.com/KPO-Tech/seshat/internal/tools/notifications/whatsapp"
 	tool "github.com/KPO-Tech/seshat/internal/tools/registry"
+	researchTools "github.com/KPO-Tech/seshat/internal/tools/research"
 	devtoTool "github.com/KPO-Tech/seshat/internal/tools/social/devto"
 	hnTool "github.com/KPO-Tech/seshat/internal/tools/social/hackernews"
 	askUserQuestionTool "github.com/KPO-Tech/seshat/internal/tools/special/ask_user"
@@ -219,8 +220,11 @@ func RegisterBuiltinToolsWithConfig(reg *tool.Registry, config *Config) error {
 		devtoTool.NewFeedTool(),
 		devtoTool.NewArticleTool(),
 		devtoTool.NewPublishTool(),
-		// Reddit, Twitter, LinkedIn, WhatsApp: stubs disabled until implemented (IsEnabled=false)
+		// Twitter, LinkedIn, WhatsApp: stubs disabled until implemented (IsEnabled=false)
 	}
+	// Research tools (app store reviews, Reddit, YouTube, Google Places, Trustpilot): a tool whose keys
+	// are missing reports itself disabled, so the model is never offered what it cannot use.
+	tools = append(tools, researchTools.Tools(researchTools.NewKeys(config.ResearchKeys))...)
 
 	for _, builtinTool := range tools {
 		if builtinTool == nil {

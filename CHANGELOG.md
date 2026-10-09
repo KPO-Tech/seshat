@@ -9,6 +9,20 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [1.3.6] - 2026-10-09
+
+### Added
+
+- **Research tools for market studies, product comparisons and customer reviews.** An agent can now read the Apple App Store
+  (`appstore_search`, `appstore_reviews`, no key), Reddit (`reddit_search`, `reddit_posts`, `reddit_post`, replacing the
+  disabled stubs), YouTube (`youtube_search`, `youtube_comments`), Google Places (`places_search`, `places_reviews`) and
+  Trustpilot (`trustpilot_company`, `trustpilot_reviews`), through their official APIs. A tool whose keys are missing is not
+  offered to the model. A host that serves several people gives each run its own keys with `ClientConfig.ResearchKeys` (and
+  `automation.RunnerConfig.ResearchKeys`), and the process environment is then never read; a single-user host uses the
+  `REDDIT_CLIENT_ID`, `REDDIT_CLIENT_SECRET`, `YOUTUBE_API_KEY`, `GOOGLE_PLACES_API_KEY` and `TRUSTPILOT_API_KEY` variables.
+  The App Store tools were checked against the real service, which showed that Apple's review feed serves nothing for some
+  combinations of app, country and sort and that its text is mis-encoded, so both sorts are read and the text is repaired.
+
 ## [1.3.5] - 2026-10-09
 
 ### Added
