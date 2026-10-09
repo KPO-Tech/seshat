@@ -9,6 +9,8 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [1.3.6] - 2026-10-09
+
 ### Added
 
 - **Research tools for market studies, product comparisons and customer reviews.** An agent can now read the Apple App Store
