@@ -116,6 +116,16 @@ In the runtime path (the `skill` tool calls `ExecuteSkillPrompt` and returns the
 
 The `plan` type has `write_file` and `edit_file` (`internal/agent/loader.go`), so it is not read-only. The `verify` type is not a general "check the result" reviewer: it validates agent definitions, security constraints and tool permissions, read-only. Rename it, or give the type a prompt that matches what users expect. Website page: `concepts/agents-and-delegation`.
 
+### M5d. Configuration: keys in clear text, missing variable, stale comments (verified)
+
+The terminal interface saves a provider key typed in its providers screen as `providers.<id>.api_key` in `seshat.json` (`internal/seshattui/config/store.go:322`), in clear text with owner-only permissions. `seshat config` stores its keys encrypted (AES-GCM, `internal/db/credentials.go`). The two paths protect keys differently, and the interface never offers the encrypted store.
+
+`providerEnvVars` in `pkg/sdk/auth.go:294` has no case for Kimi, so it returns the generic `API_KEY`, while `pkg/config/provider_catalog.go:146` accepts `MOONSHOT_API_KEY` and `KIMI_API_KEY`. Two lists of provider variables exist (`providerEnvVars`, `ProviderCredentialEnvVars`) and they disagree for Kimi and in order for Z.ai and Codex.
+
+Code comments still say `.seshat.yaml` (`pkg/config/config.go:150`, `internal/hooks/hook.go:69`) but the file read is `config.yaml` (viper, `pkg/config/config.go:230`). `docs/` and the CLI help should be checked for the same name. Also, `cmd/cli/appdir/appdir.go` documents `~/.config/seshat-tui/` while `main.go` sets `seshat-cli`: three names for the runtime folder.
+
+`generate_image`, `text_to_speech` and `speech_to_text` stay inactive unless a provider is set in the `image_generation`, `text_to_speech` or `speech_to_text` section: with only `OPENAI_API_KEY` set, nothing happens and nothing says why. Website page: `getting-started/configuration`.
+
 ### M6. Automation API keys cannot be created or revoked (candidate)
 
 The tables and migrations exist (`internal/db/automation_daemon_migrations.go`), but `CreateAutomationAPIKey`, `ListAutomationAPIKeys`, `RevokeAutomationAPIKey` and `DeleteAutomationAPIKey` (`internal/db/automation_apikeys.go`) are never called. Check what authenticates the automation daemon API today, and wire key management or remove the schema.
