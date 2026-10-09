@@ -95,6 +95,12 @@ type Config struct {
 	// "tavily", "exa", "jina", "langsearch".
 	WebSearchKeys map[string]string
 
+	// ResearchKeys provides per-execution credentials for the research tools (Reddit, YouTube, Google
+	// Places, Trustpilot). When set, only these keys are used and the process environment is not read,
+	// so one organization's key cannot reach another's run. Keys are named reddit_client_id,
+	// reddit_client_secret, youtube_api_key, google_places_api_key and trustpilot_api_key.
+	ResearchKeys map[string]string
+
 	// RequireSandbox makes the bash tool refuse to run commands when no
 	// OS-level sandbox (currently: Landlock, Linux-only) is available on the
 	// host, instead of silently falling back to unconfined execution.

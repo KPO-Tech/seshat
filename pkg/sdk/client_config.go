@@ -251,6 +251,13 @@ type ClientConfig struct {
 	// Keys are keyed by provider name: "tavily", "exa", "jina", "langsearch".
 	WebSearchKeys map[string]string `json:"-"`
 
+	// ResearchKeys provides per-execution credentials for the research tools: reddit_client_id,
+	// reddit_client_secret, youtube_api_key, google_places_api_key, trustpilot_api_key. When set, only
+	// these are used and the process environment is not read, preventing key leakage across concurrent
+	// sessions of a shared server. Without them the environment variables of the same names (upper case)
+	// are used, which suits a single-user host. A research tool without its keys is not offered to the model.
+	ResearchKeys map[string]string `json:"-"`
+
 	// Optional capability-specific providers for multimodal built-in tools.
 	ImageGeneration *ImageGenerationConfig `json:"image_generation,omitempty"`
 	TextToSpeech    *TextToSpeechConfig    `json:"text_to_speech,omitempty"`

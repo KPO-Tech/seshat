@@ -1062,7 +1062,10 @@ func isAlwaysSafeTool(name string) bool {
 		// tweet - are deliberately absent; only the read/search/fetch tools
 		// belong here)
 		"devto_feed", "devto_article", "hn_stories", "hn_item", "hn_search",
-		"reddit_search", "reddit_posts", "twitter_search",
+		"reddit_search", "reddit_posts", "reddit_post", "twitter_search",
+		// Research: read-only calls to official APIs, whose keys the organization chose to hold
+		"appstore_search", "appstore_reviews", "youtube_search", "youtube_comments",
+		"places_search", "places_reviews", "trustpilot_company", "trustpilot_reviews",
 		// MCP read-only
 		"mcp_list_resources", "mcp_read_resource",
 		// Utility / introspection - all verified IsReadOnly:true,
