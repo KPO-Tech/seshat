@@ -137,7 +137,18 @@ func (l *FileSkillLoader) GetSkillDirCommandsForUser(cwd string, userID string) 
 	builtinSkills := NewFileSkillLoaderWithSource(GetBuiltinSkillsPath(), SettingSourceProjectSettings)
 	legacyCommands := NewFileSkillLoaderWithSource(filepath.Join(cwd, DefaultCommandsDirectory), SettingSourceProjectSettings)
 
-	sources := []SkillLoader{projectSkills, managedSkills, userSkills, builtinSkills, legacyCommands}
+	// l.Directory defaults to DefaultSkillDirectory (".seshat/skills" - see
+	// NewFileSkillLoader) but this method used to ignore the receiver
+	// entirely, so that folder - the one the old documentation recommended -
+	// was never read (H8 in TODO.md). Resolve it relative to cwd exactly like
+	// the other project-relative sources above.
+	legacySkillsDir := l.Directory
+	if legacySkillsDir != "" && !filepath.IsAbs(legacySkillsDir) {
+		legacySkillsDir = filepath.Join(cwd, legacySkillsDir)
+	}
+	legacySkills := NewFileSkillLoaderWithSource(legacySkillsDir, SettingSourceProjectSettings)
+
+	sources := []SkillLoader{projectSkills, legacySkills, managedSkills, userSkills, builtinSkills, legacyCommands}
 
 	// Add any cloned skill repo collections (e.g. paperasse).
 	// Each repo root is a skill collection: every subdirectory containing a SKILL.md
