@@ -286,7 +286,10 @@ func NewBuiltinRegistry() (*tool.Registry, error) {
 
 // NewBuiltinRegistryWithConfig creates a new registry with all built-in tools registered for a host runtime.
 func NewBuiltinRegistryWithConfig(config *Config) (*tool.Registry, error) {
-	reg := tool.NewRegistry()
+	config = normalizeConfig(config)
+	regConfig := tool.DefaultRegistryConfig()
+	regConfig.EnableToolSearch = config.EnableToolSearch
+	reg := tool.NewRegistryWithConfig(regConfig)
 	if err := RegisterBuiltinToolsWithConfig(reg, config); err != nil {
 		return nil, err
 	}

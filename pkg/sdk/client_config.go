@@ -294,6 +294,17 @@ type ClientConfig struct {
 	// is SandboxKindDocker. Zero value uses sane, security-conscious
 	// defaults (see sandbox.DefaultDockerConfig).
 	SandboxDocker SandboxDockerConfig `json:"-"`
+
+	// EnableToolSearch keeps deferred tools (MCP tools, and any built-in
+	// tool registering with ShouldDefer, e.g. skill) out of the model's
+	// initial tool list - the model calls the tool_search tool to discover
+	// and use them instead. False (the default) leaves the
+	// ENABLE_TOOL_SEARCH environment variable as the decider (so existing
+	// deployments setting it keep working); true enables it regardless of
+	// that variable. There is no way to force it off through this field
+	// alone if the environment variable is also set - unset that variable
+	// too for a host that wants this field to be the single source of truth.
+	EnableToolSearch bool `json:"enable_tool_search,omitempty"`
 }
 
 // PreToolHookConfig is a single shell hook that runs before a tool call.

@@ -162,6 +162,7 @@ func initBuiltinRegistry(config *ClientConfig, browserManager browsercore.Manage
 		RequireSandbox:             config.RequireSandbox,
 		SandboxKind:                config.SandboxKind,
 		SandboxDocker:              config.SandboxDocker,
+		EnableToolSearch:           config.EnableToolSearch,
 	})
 	if err != nil {
 		return nil, err
