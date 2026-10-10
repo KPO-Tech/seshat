@@ -9,6 +9,15 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Changed
+
+- **Plan mode no longer auto-allows file writes/edits.** `write_file`/`edit_file` used to fall into the same AcceptEdits-style auto-allow as `PermissionModeAcceptEdits` whenever `ExecutionMode == "plan"`, so a plan-mode session asked fewer questions about writing files than a normal session would - the opposite of "tools are described but not executed." Both now deny outright in plan mode; the plan's own content never went through these tools (`exit_plan_mode` takes it as a parameter).
+- **`workflow.Node`'s `Agent`/`MaxTurns` fields are honored by the default executor.** `Client.RunWorkflow`'s built-in executor now runs a node through `Client.RunAgentTask` (a new public method) when `Agent` is set, instead of always calling `Ask` with no agent type or turn limit.
+
+### Removed
+
+- **`pair_programming` execution mode**, including `sdk.ExecutionModePairProgramming`. It had no entry point anywhere (no tool, no command - unlike plan mode's `enter_plan_mode`/`exit_plan_mode`) and no execution-time effect beyond a TUI status label that could never actually display. Removed rather than left as unreachable scaffolding for a collaborative-suggestions feature nothing builds toward today.
+
 ## [1.3.6] - 2026-10-09
 
 ### Added

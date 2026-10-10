@@ -129,6 +129,27 @@ func TestEditTool_CheckPermissions_NormalPathPassthrough(t *testing.T) {
 }
 
 // ---------------------------------------------------------------------------
+// Plan mode is read-only: edits are denied, not auto-allowed (see write_test.go's
+// matching tests and TODO.md M5e for the full reasoning).
+// ---------------------------------------------------------------------------
+
+func TestEditTool_CheckPermissions_PlanMode_DeniesEdit(t *testing.T) {
+	e := NewEditTool("/project")
+	ctx := tool.NewToolUseContext("test-session", "test-turn", "test-use", types.PermissionModeOnRequest)
+	ctx.ExecutionMode = "plan"
+
+	got := e.CheckPermissions(context.Background(), map[string]any{
+		"file_path":  "/project/main.go",
+		"old_string": "foo",
+		"new_string": "bar",
+	}, ctx)
+
+	if got.Behavior != types.PermissionBehaviorDeny {
+		t.Fatalf("expected Deny in plan mode, got %v (reason: %s)", got.Behavior, got.Reason)
+	}
+}
+
+// ---------------------------------------------------------------------------
 // ValidateInput schema checks
 // ---------------------------------------------------------------------------
 

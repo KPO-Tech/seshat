@@ -152,9 +152,8 @@ const (
 	APIProviderZAi        = types.APIProviderZAi
 	APIProviderKimi       = types.APIProviderKimi
 
-	ExecutionModeExecute         = modes.ExecutionModeExecute
-	ExecutionModePlan            = modes.ExecutionModePlan
-	ExecutionModePairProgramming = modes.ExecutionModePairProgramming
+	ExecutionModeExecute = modes.ExecutionModeExecute
+	ExecutionModePlan    = modes.ExecutionModePlan
 
 	PermissionModeAuto        = types.PermissionModeAuto
 	PermissionModeBypass      = types.PermissionModeBypass

@@ -432,6 +432,33 @@ func (c *Client) Ask(ctx context.Context, prompt string, tools []Tool) (*AskResp
 	}, nil
 }
 
+// RunAgentTask runs task as agentType (a built-in agent type, e.g.
+// AgentTypeGeneralPurpose) for up to maxTurns autonomous turns - 0 means a
+// single turn, same as Ask - and returns its final text output. Used by
+// RunWorkflow's default executor when a workflow.Node declares Agent/
+// MaxTurns; exposed publicly so a custom Executor can reuse the same
+// mechanism instead of reimplementing it.
+func (c *Client) RunAgentTask(ctx context.Context, agentType, task string, maxTurns int) (string, error) {
+	if c.queryEngine == nil {
+		return "", fmt.Errorf("engine not available")
+	}
+	result, err := coreagent.RunAgent(&coreagent.RunConfig{
+		AgentType:      agentType,
+		Task:           task,
+		Engine:         c.queryEngine,
+		Context:        ctx,
+		MaxTurns:       maxTurns,
+		PermissionMode: types.PermissionModeBypass,
+	})
+	if err != nil {
+		return "", err
+	}
+	if !result.Success {
+		return "", fmt.Errorf("agent task failed: %s", result.Error)
+	}
+	return result.Output, nil
+}
+
 // CreateSession creates a new session for multi-turn conversations.
 // The session is assigned a sequential human-readable title of the form
 // "untitled_session_N" where N is 1 + the highest N already in use.

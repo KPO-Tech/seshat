@@ -56,7 +56,11 @@ func (c *Client) RunWorkflow(ctx context.Context, def WorkflowDefinition, option
 	executor := options.Executor
 	if executor == nil {
 		executor = workflow.ExecutorFunc(func(execCtx context.Context, node workflow.Node, inputs map[string]workflow.NodeResult) (string, error) {
-			response, err := c.Ask(execCtx, workflow.BuildNodePrompt(node, inputs), options.Tools)
+			prompt := workflow.BuildNodePrompt(node, inputs)
+			if node.Agent != "" {
+				return c.RunAgentTask(execCtx, node.Agent, prompt, node.MaxTurns)
+			}
+			response, err := c.Ask(execCtx, prompt, options.Tools)
 			if err != nil {
 				return "", err
 			}

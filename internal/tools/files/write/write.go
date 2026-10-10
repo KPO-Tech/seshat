@@ -489,11 +489,23 @@ func (w *Tool) CheckPermissions(ctx context.Context, input map[string]any, toolC
 		return w.checkAcceptEditsPermissions(ctx, absolutePath, content, w.effectiveWorkingDir(toolCtx))
 	}
 
-	// Plan mode: auto-allow file writes in working directory so the agent can
-	// produce its output (reports, code, etc.) without blocking on a permission
-	// dialog while the plan review dialog is open or the user is away.
+	// Plan mode is a read-only exploration/design phase (see
+	// modes.ExecutionModePlan's doc comment and enter_plan_mode's own
+	// instructions to the model, which already say not to write files here).
+	// Deny rather than the AcceptEdits-style auto-allow this used to fall
+	// into - that made a plan-mode session ask fewer questions about writes
+	// than a normal session would, the opposite of what "plan" promises.
+	// The plan's own content never goes through this tool: exit_plan_mode
+	// takes it as a parameter and persists it internally (execution.SetPlan).
 	if toolCtx.ExecutionMode == "plan" {
-		return w.checkAcceptEditsPermissions(ctx, absolutePath, content, w.effectiveWorkingDir(toolCtx))
+		return types.DenyWithDecisionReason(
+			fmt.Sprintf("file writes are not allowed in plan mode: %s", absolutePath),
+			&types.PermissionDecisionReason{
+				Type:   types.PermissionDecisionReasonMode,
+				Source: "plan",
+				Reason: "plan mode is read-only - call exit_plan_mode first",
+			},
+		)
 	}
 
 	if err := shared.ValidateSensitivePath(absolutePath, "writeTool", content); err != nil {
