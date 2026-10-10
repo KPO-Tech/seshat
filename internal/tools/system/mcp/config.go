@@ -523,60 +523,6 @@ func ConnectMcpServers(ctx context.Context, manager *MCPClientManager, cwd strin
 	return nil
 }
 
-type MCPOAuthConfig struct {
-	ClientID     string
-	ClientSecret string
-	AuthURL      string
-	TokenURL     string
-	Scopes       []string
-}
-
-func GetOAuthConfig() *MCPOAuthConfig {
-	return &MCPOAuthConfig{
-		ClientID:     os.Getenv("SESHAT_MCP_CLIENT_ID"),
-		ClientSecret: os.Getenv("SESHAT_MCP_CLIENT_SECRET"),
-		AuthURL:      os.Getenv("SESHAT_MCP_AUTH_URL"),
-		TokenURL:     os.Getenv("SESHAT_MCP_TOKEN_URL"),
-		Scopes:       strings.Split(os.Getenv("SESHAT_MCP_SCOPES"), ","),
-	}
-}
-
-func ShouldUseOAuth() bool {
-	cfg := GetOAuthConfig()
-	return cfg.ClientID != "" && cfg.AuthURL != ""
-}
-
-func (m *MCPClientManager) ConnectWithOAuth(ctx context.Context, config ConnectServerConfig) error {
-	if !ShouldUseOAuth() {
-		return m.Connect(ctx, config)
-	}
-
-	oauthCfg := GetOAuthConfig()
-	slog.Info("MCP OAuth: authenticating", "server", config.Name, "client_id", oauthCfg.ClientID)
-
-	return m.Connect(ctx, config)
-}
-
-type PluginMcpServer struct {
-	Name   string
-	Source string
-	Config McpServerConfig
-}
-
-var pluginMcpServers []PluginMcpServer
-
-func RegisterPluginMcpServer(name string, source string, config McpServerConfig) {
-	pluginMcpServers = append(pluginMcpServers, PluginMcpServer{
-		Name:   fmt.Sprintf("plugin:%s:%s", source, name),
-		Source: source,
-		Config: config,
-	})
-}
-
-func GetPluginMcpServers() []PluginMcpServer {
-	return pluginMcpServers
-}
-
 type MCPServerStatus struct {
 	Name        string       `json:"name"`
 	Status      ClientStatus `json:"status"`

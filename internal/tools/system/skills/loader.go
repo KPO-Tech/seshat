@@ -445,6 +445,7 @@ func CreateSkillFromFrontmatter(frontmatter FrontmatterData, markdownContent str
 	capturedBaseDir := baseDir
 	capturedTier := preambleTier
 	capturedRequires := requires
+	capturedShell := shell
 
 	return Skill{
 		Name:                        skillName,
@@ -482,6 +483,9 @@ func CreateSkillFromFrontmatter(frontmatter FrontmatterData, markdownContent str
 			expanded = applyPreamble(expanded, capturedBaseDir, capturedTier)
 			if preflight := buildPreflightSection(capturedRequires, capturedBaseDir); preflight != "" {
 				expanded = preflight + "\n\n---\n\n" + expanded
+			}
+			if before := buildShellBeforeSection(capturedShell); before != "" {
+				expanded = before + "\n\n---\n\n" + expanded
 			}
 			return []ContentBlock{{Type: "text", Text: expanded}}, nil
 		},
@@ -523,6 +527,33 @@ func buildPreflightSection(reqs []SkillRequirement, skillDir string) string {
 			installCmd := strings.ReplaceAll(r.InstallCmd, "${SESHAT_SKILL_DIR}", skillDir)
 			b.WriteString(fmt.Sprintf("- **Install** (only with user permission): `%s`\n", installCmd))
 		}
+	}
+	return b.String()
+}
+
+// buildShellBeforeSection generates a setup block instructing the agent to run
+// a skill's shell.before commands through its own Bash tool call before doing
+// the skill's work - the same prompt-injection pattern buildPreflightSection
+// already uses for SkillRequirement.InstallCmd, so these commands go through
+// the normal permission system (ask by default) instead of a new, separate
+// execution path that would bypass it.
+//
+// Only "before" is implemented. "after"/"on_error"/"on_complete" need to know
+// when the skill's own work actually finished or failed - there is no such
+// lifecycle signal today (the skill tool returns this prompt once and the
+// conversation just continues), so injecting instructions for them here would
+// describe behavior that cannot actually happen. Left unimplemented rather
+// than faked; see TODO.md's M5b entry.
+func buildShellBeforeSection(shell *FrontmatterShell) string {
+	if shell == nil || len(shell.Before) == 0 {
+		return ""
+	}
+	var b strings.Builder
+	b.WriteString("## Setup: Shell Commands\n\n")
+	b.WriteString("Before starting this skill's task, run each command below using Bash, in order.\n")
+	b.WriteString("Ask for explicit permission first unless it has already been granted. If a command fails, tell the user and stop rather than continuing the skill in a broken environment.\n\n")
+	for _, cmd := range shell.Before {
+		b.WriteString(fmt.Sprintf("- `%s`\n", cmd))
 	}
 	return b.String()
 }

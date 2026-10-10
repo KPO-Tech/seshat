@@ -172,9 +172,7 @@ Only takes effect through the public `pkg/skills.GetSkillsForContext` API, which
 
 ### `shell`
 
-**Not yet implemented** - parsed into the skill definition but never executed. Treat the field and example below as a design sketch, not working behaviour, until a security/scope decision (running shell commands with no model confirmation step needs to go through the permission system, not around it) lands.
-
-Intended to be shell commands executed at lifecycle points **before** the agent is invoked. Useful for setup/teardown.
+Shell commands executed at lifecycle points around the skill. Useful for setup/teardown.
 
 ```yaml
 shell:
@@ -189,25 +187,13 @@ shell:
     - "echo 'Skill completed'"
 ```
 
+**Only `before` runs**, and not as a separate execution path: the skill's prompt gets a setup section telling the agent to run each `before` command itself, through its own Bash tool call, asking for permission first unless already granted - the same way `requires.install-cmd` already works. This goes through the normal permission system instead of bypassing it, which is why no raw shell-exec code was added here.
+
+`after`, `on_error` and `on_complete` are parsed but **not yet implemented** - they would need to fire once the skill's work is actually done or has failed, and there is no such signal today: the skill tool returns this prompt once and the conversation just continues, with nothing tracking when "the skill" itself finishes. Implementing them needs that lifecycle tracking built first, not just more prompt text.
+
 ### `hooks`
 
-**Not yet implemented** - parsed into the skill definition but never executed, for the same reason as `shell` above (scope is undefined: session-wide vs skill-scoped, and it overlaps the existing, separate hooks system in `internal/hooks`).
-
-Intended to attach other skills at lifecycle events of this skill.
-
-```yaml
-hooks:
-  before_tool:
-    - "validate-workspace"
-  after_tool:
-    - "audit-log"
-  on_error:
-    - "notify-slack"
-  on_complete:
-    - "cleanup-temp"
-```
-
-Available hook events: `before`, `after`, `before_tool`, `after_tool`, `on_error`, `on_cancel`, `on_complete`, `tool_allowed`, `tool_denied`.
+**Not implemented, and not planned as a separate system.** `hooks:` would attach other skills to lifecycle events of this skill, but it overlaps the existing, separate hook system in `internal/hooks` (see [`docs/`](./) for that system's own docs) that the engine already runs real `pre_tool_use`/`post_tool_use`/`session_start`/etc. events through. Adding a second, skill-scoped hook mechanism alongside it would mean two ways to do the same thing with no clear rule for which one fires when. If you need to react to tool use or session lifecycle events, use `internal/hooks` directly rather than this field - it is parsed into the skill definition for forward compatibility but has no effect.
 
 ---
 
@@ -230,7 +216,7 @@ Project skills override personal skills with the same name.
 
 ## Complete examples
 
-Examples 2 and 4 below use `shell`/`hooks`, which are not yet executed (see those fields' reference entries above) - everything else in each example works as shown.
+Example 2 below uses `shell.before`, which runs as described (via the agent's own Bash tool call). Example 4 uses `hooks`, which has no effect (see that field's reference entry above) - everything else in each example works as shown.
 
 ### 1. Code formatter
 
@@ -339,8 +325,8 @@ Report findings as a Markdown checklist. Mark each item ✓ (safe) or ✗ (risk)
 
 ## Tips
 
-- **Keep skills focused.** One skill per task. `hooks:` is intended for composing skills instead of writing monolithic ones, once it's implemented (see above).
+- **Keep skills focused.** One skill per task. `hooks:` is not implemented and not planned as a separate system (see above) - compose skills some other way.
 - **Use `context: fork`** for anything destructive or long-running to avoid polluting the main session history.
 - **Restrict tools** with `allowed-tools:`, using real tool names (`read_file`, not `read`) — the principle of least privilege applies to agents too.
-- `shell:` and `disable-model-invocation:` are not executed yet - don't rely on them for setup/teardown today.
+- **Use `shell.before`** for setup the agent should run before starting the skill's task; it still asks for permission like any other Bash call. `shell.after`/`on_error`/`on_complete` and `disable-model-invocation:` are not executed yet.
 - **Commit project skills** (`.claude/skills/`) to your repository so the whole team benefits.
