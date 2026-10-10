@@ -269,8 +269,16 @@ func buildEngineConfig(config *ClientConfig) *engine.Config {
 	if maxTokens == 0 {
 		maxTokens = 8192
 	}
+	maxTurns := config.MaxTurns
+	if maxTurns <= 0 {
+		// Matches engine.DefaultConfig()'s MaxTurns - without this, a host
+		// that builds ClientConfig directly (bypassing engine.DefaultConfig)
+		// got no session-turn limit at all instead of the intended default
+		// (M3 in TODO.md).
+		maxTurns = 100
+	}
 	qc := &engine.Config{
-		MaxTurns:                 config.MaxTurns,
+		MaxTurns:                 maxTurns,
 		AutoCompact:              config.AutoCompact,
 		PermissionMode:           config.PermissionMode,
 		Model:                    config.Model,

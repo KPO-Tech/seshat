@@ -80,6 +80,16 @@ func AddServer(name string, config McpServerConfig, scope ConfigScope) error {
 	return internalmcp.AddMcpServer(name, config, scope)
 }
 
+// RemoveServer deletes the named server's entry from the configuration file of the given scope. It errors if no server of that name is configured in that scope.
+func RemoveServer(name string, scope ConfigScope) error {
+	return internalmcp.RemoveMcpServer(name, scope)
+}
+
+// SetServerEnabled enables or disables the named server in the project configuration found for cwd, without removing its configuration.
+func SetServerEnabled(name string, enabled bool, cwd string) error {
+	return internalmcp.SetMcpServerEnabled(name, enabled, cwd)
+}
+
 // ReconnectServer disconnects the named server from manager and connects it again with the configuration found for cwd. It returns an error when no server of that name is configured.
 func ReconnectServer(ctx context.Context, manager *Manager, serverName string, cwd string) error {
 	return internalmcp.ReconnectMcpServer(ctx, manager, serverName, cwd)

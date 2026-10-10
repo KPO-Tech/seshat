@@ -33,7 +33,9 @@ type Config struct {
 	EnableMemory             bool                                   `json:"enable_memory"`
 	EnableMonitoring         bool                                   `json:"enable_monitoring"`
 
-	// MaxIterations caps model→tool→model cycles per turn. 0 = loop default (10).
+	// MaxIterations caps model→tool→model cycles per turn. 0 = loop default
+	// (100 - see DefaultLoopConfig; this comment previously said 10, which
+	// was never the actual default - M3 in TODO.md).
 	MaxIterations int `json:"max_iterations"`
 
 	// TurnTokenBudget enables token-budget continuation when > 0.

@@ -50,8 +50,12 @@ func DefaultConfigs() map[types.APIProvider]*Config {
 					{Provider: types.APIProviderAnthropic, Model: "claude-3-5-sonnet-20241022"},
 					{Provider: types.APIProviderAnthropic, Model: "claude-3-5-haiku-20241022"},
 				},
-				FallbackProviders: []types.APIProvider{types.APIProviderOpenAI},
-				CircuitBreaker:    DefaultCircuitBreakerConfig(),
+				// No default FallbackProviders: a session that picked
+				// Anthropic must not silently continue on a different
+				// vendor just because an OpenAI key happens to be present
+				// (M5f in TODO.md, privacy) - cross-vendor fallback is
+				// opt-in only, via ProviderConfig.Routing.FallbackProviders.
+				CircuitBreaker: DefaultCircuitBreakerConfig(),
 			},
 		},
 		types.APIProviderOpenAI: {

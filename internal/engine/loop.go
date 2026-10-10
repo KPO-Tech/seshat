@@ -50,8 +50,12 @@ type Loop struct {
 
 // LoopConfig represents the loop configuration.
 type LoopConfig struct {
-	MaxIterations                int        `json:"max_iterations"`
-	AutoCompact                  bool       `json:"auto_compact"`
+	MaxIterations int  `json:"max_iterations"`
+	AutoCompact   bool `json:"auto_compact"`
+	// MaxTurns is currently dead weight: nothing in this file reads it. The
+	// live session-turn limit is engine.Config.MaxTurns, enforced by
+	// Session.enforceMaxTurns (M3 in TODO.md - its default used to disagree
+	// with this one, 200 vs 100, despite neither mattering here).
 	MaxTurns                     int        `json:"max_turns"`
 	EnableStreaming              bool       `json:"enable_streaming"`
 	MaxOutputTokensRecoveryLimit int        `json:"max_output_tokens_recovery_limit"`
@@ -83,7 +87,7 @@ func DefaultLoopConfig() *LoopConfig {
 	return normalizeLoopConfig(&LoopConfig{
 		MaxIterations:                100,
 		AutoCompact:                  true,
-		MaxTurns:                     200,
+		MaxTurns:                     100,
 		EnableStreaming:              true,
 		MaxOutputTokensRecoveryLimit: 3,
 		ContinuationNudgeLimit:       3,
@@ -98,7 +102,7 @@ func normalizeLoopConfig(config *LoopConfig) *LoopConfig {
 		config.MaxIterations = 100
 	}
 	if config.MaxTurns <= 0 {
-		config.MaxTurns = 200
+		config.MaxTurns = 100
 	}
 	if !config.EnableStreaming {
 		config.EnableStreaming = true
@@ -787,6 +791,14 @@ func (l *Loop) maybeAutoCompact(ctx context.Context, state *MutableState, req Ru
 		"pre_tokens":  result.PreCompactTokens,
 		"post_tokens": result.PostCompactTokens,
 	})
+
+	// Even after compaction, the request may still not fit (e.g. a single
+	// huge tool result, or compaction itself failing to shrink enough).
+	// Fail locally with a typed error instead of letting the provider reject
+	// an oversized request (M1 in TODO.md).
+	if err := l.compactor.CheckBlockingLimit(req.SystemPrompt, state.Messages, req.Model); err != nil {
+		return err
+	}
 	return nil
 }
 

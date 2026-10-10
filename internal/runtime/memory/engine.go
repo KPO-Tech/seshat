@@ -93,6 +93,19 @@ func (e *Engine) BlockingLimitTokens(model types.ModelIdentifier) int {
 	return effective - e.config.ManualCompactBufferTokens
 }
 
+// CheckBlockingLimit implements CompactionStrategy.CheckBlockingLimit.
+func (e *Engine) CheckBlockingLimit(systemPrompt string, messages []types.Message, model types.ModelIdentifier) error {
+	used := e.CalculateUsage(systemPrompt, messages)
+	limit := e.BlockingLimitTokens(model)
+	if used > limit {
+		return types.NewError(types.ErrCodeCompactFull, fmt.Sprintf(
+			"request needs %d tokens but the hard blocking limit for %s is %d, even after compaction",
+			used, model, limit,
+		))
+	}
+	return nil
+}
+
 // TargetTokens returns the post-compaction target token count.
 func (e *Engine) TargetTokens(model types.ModelIdentifier) int {
 	effective := e.EffectiveContextWindow(model)

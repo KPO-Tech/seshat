@@ -2733,6 +2733,12 @@ func (f *fakeCompactionStrategy) AutoCompact(
 	}, nil
 }
 
+// CheckBlockingLimit always reports the request fits - these tests exercise
+// AutoCompact's own behavior, not the M1 blocking-limit guard.
+func (f *fakeCompactionStrategy) CheckBlockingLimit(systemPrompt string, messages []types.Message, model types.ModelIdentifier) error {
+	return nil
+}
+
 // TestMaybeAutoCompactInvalidatesPreviousResponseID guards the defensive
 // invalidation in maybeAutoCompact itself. In practice state.PreviousResponseID
 // is never populated now (see TestRecordPreviousResponseNeverCapturesForCodex),
@@ -2839,6 +2845,12 @@ func (f *fakeFailingCompactionStrategy) AutoCompact(
 	return compact.CompactionResult{ConsecutiveFailures: current}, fmt.Errorf("summary call failed")
 }
 
+// CheckBlockingLimit always reports the request fits - these tests exercise
+// the circuit breaker, not the M1 blocking-limit guard.
+func (f *fakeFailingCompactionStrategy) CheckBlockingLimit(systemPrompt string, messages []types.Message, model types.ModelIdentifier) error {
+	return nil
+}
+
 // TestAutoCompactFailureCountPersistsAcrossRuns guards the H2 fix: the
 // auto-compact circuit breaker's failure count must survive across separate
 // Loop.Run calls (one per turn), the same way Session.SubmitMessage threads
@@ -2921,6 +2933,12 @@ func (c *countingCompactionStrategy) AutoCompact(
 ) (compact.CompactionResult, error) {
 	c.calls++
 	return compact.CompactionResult{DidCompact: c.didCompact}, nil
+}
+
+// CheckBlockingLimit always reports the request fits - these tests exercise
+// pre_compact/post_compact hooks, not the M1 blocking-limit guard.
+func (c *countingCompactionStrategy) CheckBlockingLimit(systemPrompt string, messages []types.Message, model types.ModelIdentifier) error {
+	return nil
 }
 
 func TestPreCompactHookDenyPreventsCompaction(t *testing.T) {
@@ -3133,6 +3151,63 @@ func TestPostToolUseHookDenyStopsTurnAfterExecution(t *testing.T) {
 	}
 	if !transcriptContains(result.Messages, "stop after tool") {
 		t.Error("expected the post_tool_use hook's deny message to appear in the transcript")
+	}
+}
+
+// blockingLimitExceededCompactor simulates a compactor that has already
+// tried to compact (or decided not to) and still reports the request does
+// not fit the hard blocking limit.
+type blockingLimitExceededCompactor struct{}
+
+func (blockingLimitExceededCompactor) AutoCompact(
+	ctx context.Context,
+	systemPrompt string,
+	messages []types.Message,
+	model types.ModelIdentifier,
+	sessionID types.SessionID,
+	turnID types.TurnID,
+	tracking *compact.TrackingState,
+) (compact.CompactionResult, error) {
+	return compact.CompactionResult{Messages: messages, DidCompact: false}, nil
+}
+
+func (blockingLimitExceededCompactor) CheckBlockingLimit(systemPrompt string, messages []types.Message, model types.ModelIdentifier) error {
+	return types.NewError(types.ErrCodeCompactFull, "request too big even after compaction")
+}
+
+// TestMaybeAutoCompact_BlockingLimitExceeded_EndsTurnWithoutCallingModel
+// guards the M1 wiring in loop.go: when CheckBlockingLimit reports the
+// request still doesn't fit, the turn must end with that typed error before
+// ever calling the model - not fail later at the provider.
+func TestMaybeAutoCompact_BlockingLimitExceeded_EndsTurnWithoutCallingModel(t *testing.T) {
+	loop := NewLoop(nil, nil, blockingLimitExceededCompactor{}, nil, permissions.NewIntegrator(permissions.NewEngine()), nil,
+		&LoopConfig{MaxIterations: 5, AutoCompact: true, EnableStreaming: false}, nil)
+
+	callCount := 0
+	loop.callModelFn = func(ctx context.Context, state *MutableState, req RunRequest) (*types.APIResponse, error) {
+		callCount++
+		return &types.APIResponse{Role: types.RoleAssistant, Content: []types.ContentBlock{types.TextContent{Text: "should never happen"}}, StopReason: types.StopReasonEndTurn, Model: req.Model, ID: "r1"}, nil
+	}
+
+	result := loop.Run(context.Background(), RunRequest{
+		Messages:  []types.Message{types.UserMessage("m1", "hi")},
+		SessionID: types.SessionID("s1"),
+		TurnID:    types.TurnID("t1"),
+		Model:     types.ModelIdentifier{Provider: types.APIProviderAnthropic, Model: "claude-3-5-sonnet-20241022"},
+	})
+
+	if result.Error == nil {
+		t.Fatal("expected an error when the blocking limit is exceeded")
+	}
+	var engineErr *types.EngineError
+	if !errors.As(result.Error, &engineErr) {
+		t.Fatalf("expected a *types.EngineError, got %T: %v", result.Error, result.Error)
+	}
+	if engineErr.Code != types.ErrCodeCompactFull {
+		t.Errorf("expected code %q, got %q", types.ErrCodeCompactFull, engineErr.Code)
+	}
+	if callCount != 0 {
+		t.Fatalf("expected the model to never be called, got %d calls", callCount)
 	}
 }
 
