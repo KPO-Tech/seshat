@@ -770,52 +770,57 @@ func (l *Loop) maybeAutoCompact(ctx context.Context, state *MutableState, req Ru
 		return nil
 	}
 
+	hookDenied := false
 	if preResult := l.executeHookWithResult(ctx, types.HookEventPreCompact, map[string]any{
 		"session_id": req.SessionID,
 		"turn_id":    req.TurnID,
 	}); preResult != nil && (preResult.Action == types.HookActionStop || preResult.Action == types.HookActionDeny) {
 		// A hook denied this round's compaction attempt - not a failure,
 		// just skip it this turn, exactly like ShouldCompact deciding
-		// compaction isn't needed yet (H4 in TODO.md).
+		// compaction isn't needed yet (H4 in TODO.md). Still falls through to
+		// the blocking-limit check below (M1): a denied compaction must not
+		// let an oversized request reach the provider silently.
 		appendSystemNoteFromHook(state, types.HookEventPreCompact, preResult.Message)
-		return nil
+		hookDenied = true
 	}
 
-	result, err := l.compactor.AutoCompact(
-		ctx,
-		req.SystemPrompt,
-		state.Messages,
-		req.Model,
-		req.SessionID,
-		req.TurnID,
-		&compact.TrackingState{ConsecutiveFailures: state.AutoCompactFailureCount},
-	)
-	if err != nil {
+	if !hookDenied {
+		result, err := l.compactor.AutoCompact(
+			ctx,
+			req.SystemPrompt,
+			state.Messages,
+			req.Model,
+			req.SessionID,
+			req.TurnID,
+			&compact.TrackingState{ConsecutiveFailures: state.AutoCompactFailureCount},
+		)
+		if err != nil {
+			state.AutoCompactFailureCount = result.ConsecutiveFailures
+			return fmt.Errorf("auto-compact failed: %w", err)
+		}
 		state.AutoCompactFailureCount = result.ConsecutiveFailures
-		return fmt.Errorf("auto-compact failed: %w", err)
+		if result.DidCompact {
+			state.Messages = result.Messages
+			state.Compacted = true
+			state.CompactPreTokens = result.PreCompactTokens
+			state.CompactPostTokens = result.PostCompactTokens
+			// Compaction rewrote Messages, so any previously recorded Codex
+			// continuation reference no longer describes a valid prefix of it -
+			// see recordPreviousResponse/buildAPIRequest.
+			state.PreviousResponseID = ""
+			state.PreviousResponseMessageCount = 0
+		}
+		// Post-compact notification, like every other *_complete hook in this
+		// file: fire-and-forget, not stop-capable (there is nothing left to gate
+		// once compaction already ran).
+		l.executeHook(ctx, types.HookEventPostCompact, map[string]any{
+			"session_id":  req.SessionID,
+			"turn_id":     req.TurnID,
+			"did_compact": result.DidCompact,
+			"pre_tokens":  result.PreCompactTokens,
+			"post_tokens": result.PostCompactTokens,
+		})
 	}
-	state.AutoCompactFailureCount = result.ConsecutiveFailures
-	if result.DidCompact {
-		state.Messages = result.Messages
-		state.Compacted = true
-		state.CompactPreTokens = result.PreCompactTokens
-		state.CompactPostTokens = result.PostCompactTokens
-		// Compaction rewrote Messages, so any previously recorded Codex
-		// continuation reference no longer describes a valid prefix of it -
-		// see recordPreviousResponse/buildAPIRequest.
-		state.PreviousResponseID = ""
-		state.PreviousResponseMessageCount = 0
-	}
-	// Post-compact notification, like every other *_complete hook in this
-	// file: fire-and-forget, not stop-capable (there is nothing left to gate
-	// once compaction already ran).
-	l.executeHook(ctx, types.HookEventPostCompact, map[string]any{
-		"session_id":  req.SessionID,
-		"turn_id":     req.TurnID,
-		"did_compact": result.DidCompact,
-		"pre_tokens":  result.PreCompactTokens,
-		"post_tokens": result.PostCompactTokens,
-	})
 
 	// Even after compaction, the request may still not fit (e.g. a single
 	// huge tool result, or compaction itself failing to shrink enough).

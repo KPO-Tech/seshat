@@ -6,22 +6,25 @@ import (
 	"testing"
 
 	"github.com/KPO-Tech/seshat/internal/tools/contract"
+	"github.com/KPO-Tech/seshat/internal/types"
 )
 
 type mockForkRunner struct {
-	gotSkillName    string
-	gotTask         string
-	gotAllowedTools []string
-	gotModel        string
-	output          string
-	err             error
+	gotSkillName      string
+	gotTask           string
+	gotAllowedTools   []string
+	gotModel          string
+	gotPermissionMode types.PermissionMode
+	output            string
+	err               error
 }
 
-func (m *mockForkRunner) RunForkedSkill(ctx context.Context, skillName, task string, allowedTools []string, model string) (string, error) {
+func (m *mockForkRunner) RunForkedSkill(ctx context.Context, skillName, task string, allowedTools []string, model string, parentPermissionMode types.PermissionMode) (string, error) {
 	m.gotSkillName = skillName
 	m.gotTask = task
 	m.gotAllowedTools = allowedTools
 	m.gotModel = model
+	m.gotPermissionMode = parentPermissionMode
 	if m.err != nil {
 		return "", m.err
 	}
@@ -47,7 +50,8 @@ func TestSkillTool_ForkSkill_UsesForkRunnerWithFrontmatterFields(t *testing.T) {
 	tool.SetForkRunner(runner)
 
 	result, err := tool.Call(context.Background(), contract.CallInput{
-		Parsed: map[string]any{"skill": "forked-skill", "args": "do-it"},
+		Parsed:      map[string]any{"skill": "forked-skill", "args": "do-it"},
+		ToolContext: &contract.ToolUseContext{PermissionMode: types.PermissionModeNever},
 	}, nil)
 	if err != nil {
 		t.Fatalf("Call returned error: %v", err)
@@ -56,6 +60,9 @@ func TestSkillTool_ForkSkill_UsesForkRunnerWithFrontmatterFields(t *testing.T) {
 		t.Fatalf("Call returned result error: %v", result.Error)
 	}
 
+	if runner.gotPermissionMode != types.PermissionModeNever {
+		t.Errorf("expected forkRunner to receive the parent's permission mode %q, got %q", types.PermissionModeNever, runner.gotPermissionMode)
+	}
 	if runner.gotSkillName != "forked-skill" {
 		t.Errorf("expected forkRunner to receive skill name %q, got %q", "forked-skill", runner.gotSkillName)
 	}

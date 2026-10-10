@@ -21,10 +21,10 @@ All data lives under `~/.config/seshat-cli/` (or `$SESHAT_RUNTIME_ROOT`).
 └── workspaces/
     └── {session_id}/         ← the one directory of a session (also the backend's workspace)
         ├── uploads/          ← files the user attached (seshat-backend)
-        ├── screenshots/      ← browser screenshots
         ├── plans/            ← plan-mode markdown files
         ├── tools/            ← browser downloads
         └── artifacts/
+            ├── screenshots/  ← browser screenshots
             ├── web/          ← web-scraped / fetched content
             ├── images/       ← AI-generated images
             └── audio/        ← TTS / STT audio files
@@ -48,22 +48,18 @@ Each key builder returns a deterministic path string that encodes the session, t
 
 | Function | Output path | Use for |
 |---|---|---|
-| `ScreenshotKey(sessionID, pageID, now)` | `workspaces/{id}/screenshots/{page}/{date}/{ts}-screenshot.png` | Browser screenshots |
 | `DownloadKey(sessionID, pageID, filename, now)` | `workspaces/{id}/tools/{page}/{date}/{ts}-{file}` | Browser downloads |
 | `WebArtifactKey(sessionID, filename, now)` | `workspaces/{id}/artifacts/web/{date}/{ts}-{file}` | Web-fetched content |
 | `GeneratedImageKey(sessionID, filename, now)` | `workspaces/{id}/artifacts/images/{date}/{ts}-{file}` | AI-generated images |
 | `AudioKey(sessionID, filename, now)` | `workspaces/{id}/artifacts/audio/{date}/{ts}-{file}` | TTS / STT audio |
-| `PDFKey(title, now)` | `documents/{date}/{ts}-{title}.pdf` | Global PDF documents |
-| `DocumentKey(filename, now)` | `documents/{date}/{ts}-{file}` | Global user documents |
+
+Browser screenshots are keyed through `BuildArtifactKey` with `NamespaceBrowserScreenshots` directly (see `store.PutArtifact`), not a dedicated key-builder function - there was one (`ScreenshotKey`), but nothing called it; it had drifted into an unused, parallel path kept in sync with the real one only by convention, and was removed. `PDFKey`/`DocumentKey` (global, non-session PDFs/documents under `NamespaceDocuments`) were removed the same way, with no live replacement - nothing in this repo currently stores a document that way; add a caller through `store.PutArtifact` with `NamespaceDocuments` directly if you need one.
 
 ### Store helpers (`internal/storage/artifacts.go`)
 
 Higher-level wrappers that pick the right key and call `store.Put` for you:
 
 ```go
-// Browser screenshots — called by the browser tool internally.
-StoreScreenshotRef(ctx, store, data, sessionID, pageID string) (ArtifactRef, error)
-
 // Web-fetched binary content — called by the fetch service internally.
 StoreWebArtifactRef(ctx, store, data []byte, sessionID, filename, contentType string) (ArtifactRef, error)
 
@@ -72,10 +68,9 @@ StoreGeneratedImageRef(ctx, store, data []byte, sessionID, filename, contentType
 
 // TTS/STT audio — call this from your audio tool.
 StoreAudioRef(ctx, store, data []byte, sessionID, filename, contentType string) (ArtifactRef, error)
-
-// Global PDFs (not session-scoped).
-StorePDFRef(ctx, store, data []byte, title string) (ArtifactRef, error)
 ```
+
+Browser screenshots are captured directly in `internal/web/browser` via `store.PutArtifact` with `NamespaceBrowserScreenshots` - there is no `StoreScreenshotRef` wrapper (removed; nothing called it). There is likewise no `StorePDFRef` for global PDFs - removed for the same reason, see the key-builders note above.
 
 Pass `nil` as `store` and the default process-wide store is used automatically.
 

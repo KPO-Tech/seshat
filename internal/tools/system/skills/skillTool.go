@@ -56,7 +56,12 @@ type SkillTool struct {
 // interface and wires it in via SkillTool.SetForkRunner. See
 // internal/tools/agents.SkillForkRunner for the real implementation.
 type ForkRunner interface {
-	RunForkedSkill(ctx context.Context, skillName, task string, allowedTools []string, model string) (string, error)
+	// parentPermissionMode is the forking session's current permission
+	// mode, passed through unresolved so the implementation (which has
+	// access to the same sub-agent permission-inheritance policy every
+	// other sub-agent spawn path uses) decides what the forked skill
+	// actually runs under, instead of this package hardcoding a choice.
+	RunForkedSkill(ctx context.Context, skillName, task string, allowedTools []string, model string, parentPermissionMode types.PermissionMode) (string, error)
 }
 
 // SetForkRunner wires the sub-agent infrastructure a `context: fork` skill
@@ -197,7 +202,7 @@ func (t *SkillTool) Call(ctx context.Context, input contract.CallInput, permissi
 		if t.forkRunner == nil {
 			return contract.NewErrorResult(fmt.Errorf("skill '%s' declares context: fork, but no fork runner is configured for this host", skillName)), nil
 		}
-		output, err := t.forkRunner.RunForkedSkill(ctx, skill.Name, promptText, skill.AllowedTools, skill.Model)
+		output, err := t.forkRunner.RunForkedSkill(ctx, skill.Name, promptText, skill.AllowedTools, skill.Model, input.ToolContextValue().PermissionMode)
 		if err != nil {
 			return contract.NewErrorResult(fmt.Errorf("skill '%s' fork failed: %w", skillName, err)), nil
 		}

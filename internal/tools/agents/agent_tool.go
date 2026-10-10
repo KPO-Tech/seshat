@@ -458,6 +458,7 @@ func (t *AgentTool) runAgent(ctx context.Context, agentType, task string, maxTur
 		Callback:       nil,
 		ToolFilter:     filteredToolPatterns,
 		PermissionMode: permMode,
+		ForkRunner:     NewSkillForkRunner(eng),
 		EventFn:        eventFn,
 		Registry:       t.registry,
 		ContinuationMessage: func(_ int, _ string) string {
@@ -812,6 +813,7 @@ func (t *AgentTool) runForkAgent(ctx context.Context, agentType, task string, ma
 		ForkFromMessages: forkMessages,
 		Callback:         nil,
 		PermissionMode:   permMode,
+		ForkRunner:       NewSkillForkRunner(eng),
 		EventFn:          eventFn,
 		Registry:         t.registry,
 		ContinuationMessage: func(_ int, _ string) string {
@@ -952,6 +954,7 @@ func (t *AgentTool) runAgentInWorktree(ctx context.Context, agentType, task stri
 		WorktreeDir:    session.WorktreePath,
 		Callback:       nil,
 		PermissionMode: permMode,
+		ForkRunner:     NewSkillForkRunner(eng),
 		EventFn:        eventFn,
 		Registry:       t.registry,
 	}

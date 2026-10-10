@@ -3211,6 +3211,49 @@ func TestMaybeAutoCompact_BlockingLimitExceeded_EndsTurnWithoutCallingModel(t *t
 	}
 }
 
+// TestMaybeAutoCompact_PreCompactHookDeny_StillChecksBlockingLimit guards
+// against a regression where a pre_compact hook's Deny returned early,
+// before CheckBlockingLimit ever ran - silently reopening the M1 bug
+// (an oversized request reaching the provider instead of failing locally)
+// whenever a hook denied compaction on a turn that was actually over the
+// limit. A denied compaction must still be checked against the blocking
+// limit, exactly like a completed one.
+func TestMaybeAutoCompact_PreCompactHookDeny_StillChecksBlockingLimit(t *testing.T) {
+	registry := hooks.NewRegistry()
+	registry.Add(denyHook("deny-compact", types.HookEventPreCompact, "not now"))
+	executor := hooks.NewExecutor(registry)
+
+	loop := NewLoop(nil, nil, blockingLimitExceededCompactor{}, nil, permissions.NewIntegrator(permissions.NewEngine()), executor,
+		&LoopConfig{MaxIterations: 5, AutoCompact: true, EnableStreaming: false}, nil)
+
+	callCount := 0
+	loop.callModelFn = func(ctx context.Context, state *MutableState, req RunRequest) (*types.APIResponse, error) {
+		callCount++
+		return &types.APIResponse{Role: types.RoleAssistant, Content: []types.ContentBlock{types.TextContent{Text: "should never happen"}}, StopReason: types.StopReasonEndTurn, Model: req.Model, ID: "r1"}, nil
+	}
+
+	result := loop.Run(context.Background(), RunRequest{
+		Messages:  []types.Message{types.UserMessage("m1", "hi")},
+		SessionID: types.SessionID("s1"),
+		TurnID:    types.TurnID("t1"),
+		Model:     types.ModelIdentifier{Provider: types.APIProviderAnthropic, Model: "claude-3-5-sonnet-20241022"},
+	})
+
+	if result.Error == nil {
+		t.Fatal("expected an error when the blocking limit is exceeded, even with compaction denied by a hook")
+	}
+	var engineErr *types.EngineError
+	if !errors.As(result.Error, &engineErr) {
+		t.Fatalf("expected a *types.EngineError, got %T: %v", result.Error, result.Error)
+	}
+	if engineErr.Code != types.ErrCodeCompactFull {
+		t.Errorf("expected code %q, got %q", types.ErrCodeCompactFull, engineErr.Code)
+	}
+	if callCount != 0 {
+		t.Fatalf("expected the model to never be called, got %d calls", callCount)
+	}
+}
+
 // TestSessionStartAndEndHooksFire guards the new session_start/session_end
 // emission points (Engine.NewSessionFromState / Session.Close).
 func TestSessionStartAndEndHooksFire(t *testing.T) {

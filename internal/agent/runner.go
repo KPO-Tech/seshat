@@ -145,6 +145,17 @@ type RunConfig struct {
 	// the parent is itself in never mode (see that function's doc comment).
 	PermissionMode types.PermissionMode
 
+	// ForkRunner, when set, is wired into the sub-agent session's skill tool
+	// if restrictSessionSkillsIfDeclared swaps it for a restricted one
+	// (AgentDefinition.Skills non-empty). Without this, a sub-agent that
+	// preloads a Skills list loses the ability to run any context: fork
+	// skill entirely, even though its parent session had one - the
+	// restricted tool RestrictSessionSkills builds is otherwise a bare
+	// NewSkillTool(nil) with no fork runner of its own. Callers in
+	// internal/tools/agents construct this from the same engine/package
+	// that already builds SkillForkRunner for the top-level skill tool.
+	ForkRunner skilltool.ForkRunner
+
 	// ResumeFromSessionID, when set, opens an existing persisted session instead
 	// of creating a new one. The first message sent to the resumed session is
 	// config.Task, continuing where the previous run left off.
@@ -233,7 +244,7 @@ func RunAgent(config *RunConfig) (*RunResult, error) {
 		}
 	}
 
-	restrictSessionSkillsIfDeclared(session, agentDef, ctx)
+	restrictSessionSkillsIfDeclared(session, agentDef, ctx, config.ForkRunner)
 
 	// Apply permission mode override (e.g. bypass for headless background agents).
 	if config.PermissionMode != "" {
@@ -496,9 +507,9 @@ func matchesPattern(name string, patterns []string) bool {
 // restrictSessionSkillsIfDeclared calls RestrictSessionSkills when agentDef
 // names specific skills to preload, split out of RunAgent to keep that
 // function's own branch count down rather than inlining the check there.
-func restrictSessionSkillsIfDeclared(session *engine.Session, agentDef *AgentDefinition, ctx context.Context) {
+func restrictSessionSkillsIfDeclared(session *engine.Session, agentDef *AgentDefinition, ctx context.Context, forkRunner skilltool.ForkRunner) {
 	if len(agentDef.Skills) > 0 {
-		RestrictSessionSkills(session, agentDef.Skills, ctx)
+		RestrictSessionSkills(session, agentDef.Skills, ctx, forkRunner)
 	}
 }
 
@@ -508,7 +519,12 @@ func restrictSessionSkillsIfDeclared(session *engine.Session, agentDef *AgentDef
 // session that does not expose the skill tool under its surface profile has
 // nothing to swap; UnregisterTool's error is treated as "nothing to do" and
 // not a failure.
-func RestrictSessionSkills(session *engine.Session, allowed []string, ctx context.Context) {
+//
+// forkRunner, when non-nil, is wired into the replacement tool so a
+// restricted sub-agent can still run a context: fork skill from its allowed
+// list - the fresh NewSkillTool(nil) this builds otherwise has none, even if
+// the tool it just unregistered did.
+func RestrictSessionSkills(session *engine.Session, allowed []string, ctx context.Context, forkRunner skilltool.ForkRunner) {
 	if err := session.UnregisterTool(skilltool.SkillToolName); err != nil {
 		return
 	}
@@ -516,6 +532,9 @@ func RestrictSessionSkills(session *engine.Session, allowed []string, ctx contex
 	restricted.SetCwd(session.GetMetadata().RootPath)
 	restricted.SetUserID(types.AgentUserIDFromContext(ctx))
 	restricted.SetAllowedSkills(allowed)
+	if forkRunner != nil {
+		restricted.SetForkRunner(forkRunner)
+	}
 	if err := session.RegisterTool(restricted); err != nil {
 		slog.Warn("failed to register restricted skill tool for sub-agent", "error", err)
 	}

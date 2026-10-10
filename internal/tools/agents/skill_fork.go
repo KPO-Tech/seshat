@@ -12,9 +12,10 @@ import (
 
 // SkillForkRunner implements skills.ForkRunner: it runs a `context: fork`
 // skill's rendered prompt as an isolated sub-agent, reusing the same
-// spawn-depth guard, wall-clock timeout, and bypass permission mode every
-// other sub-agent path in this package already uses, rather than inventing
-// a second, divergent execution policy for skills specifically.
+// spawn-depth guard, wall-clock timeout, and permission-mode inheritance
+// policy (subAgentPermissionMode) every other sub-agent path in this
+// package already uses, rather than inventing a second, divergent
+// execution policy for skills specifically.
 type SkillForkRunner struct {
 	engine *engine.Engine
 }
@@ -32,7 +33,7 @@ func NewSkillForkRunner(eng *engine.Engine) *SkillForkRunner {
 // both straight from the skill's own frontmatter (AllowedTools/Model),
 // which have no effect on the default, non-forked execution path. Returns
 // the sub-agent's final text output.
-func (r *SkillForkRunner) RunForkedSkill(ctx context.Context, skillName, task string, allowedTools []string, model string) (string, error) {
+func (r *SkillForkRunner) RunForkedSkill(ctx context.Context, skillName, task string, allowedTools []string, model string, parentPermissionMode types.PermissionMode) (string, error) {
 	if r == nil || r.engine == nil {
 		return "", fmt.Errorf("skill fork unavailable: no engine configured")
 	}
@@ -73,7 +74,7 @@ func (r *SkillForkRunner) RunForkedSkill(ctx context.Context, skillName, task st
 		Context:        subCtx,
 		MaxTurns:       coreagent.DefaultSubAgentMaxTurns,
 		Registry:       tempRegistry,
-		PermissionMode: types.PermissionModeBypass,
+		PermissionMode: subAgentPermissionMode(parentPermissionMode),
 	})
 	if err != nil {
 		return "", err

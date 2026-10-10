@@ -9,6 +9,7 @@ import (
 	"github.com/KPO-Tech/seshat/internal/agent"
 	"github.com/KPO-Tech/seshat/internal/engine"
 	"github.com/KPO-Tech/seshat/internal/mailbox"
+	agentsTool "github.com/KPO-Tech/seshat/internal/tools/agents"
 	tool "github.com/KPO-Tech/seshat/internal/tools/registry"
 )
 
@@ -57,7 +58,7 @@ func NewSessionHandler(eng *engine.Engine, toolFactory AgentToolFactory, profile
 		defer session.Close()
 
 		if len(profile.Skills) > 0 {
-			agent.RestrictSessionSkills(session, profile.Skills, ctx)
+			agent.RestrictSessionSkills(session, profile.Skills, ctx, agentsTool.NewSkillForkRunner(eng))
 		}
 
 		if toolFactory != nil {

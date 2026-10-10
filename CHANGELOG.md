@@ -17,6 +17,11 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - **A skill's `shell.before` commands are no longer silently ignored.** The skill's prompt now tells the agent to run them through its own Bash tool call before starting the task, asking for permission first unless already granted - the same prompt-injection pattern already used for `requires.install-cmd`. `shell.after`/`on_error`/`on_complete` and `hooks` are still not executed (the latter is not planned as a separate system - use `internal/hooks` instead).
 - **Several `ErrCode*` constants are now actually used** on tool-execution-failed, tool-not-found, permission-check-failed, tool-permission-denied, and session-closed errors, so callers can tell these failures apart by `(*types.EngineError).Code` instead of only by message text.
 
+### Fixed
+
+- **A `context: fork` skill, or a sub-agent with a restricted `Skills` list, could still escalate past a `never`-mode parent session.** The `never`-mode inheritance fix above only covered `agent_tool.go`'s three direct spawn sites; `SkillForkRunner.RunForkedSkill` (the fork-skill path) and `RestrictSessionSkills` (which handed a skill-restricted sub-agent a fork-less skill tool, breaking `context: fork` for it entirely) were missed because one didn't exist yet when that fix landed. Found by a post-session audit and fixed the same way.
+- **A `pre_compact` hook that denied compaction skipped the request-too-large check entirely**, so a turn whose transcript was already over the provider's limit could reach the provider instead of failing locally with a typed `ErrCodeCompactFull` error (M1 in TODO.md), just not on this one path. Found by the same audit.
+
 ### Removed
 
 - **`pair_programming` execution mode**, including `sdk.ExecutionModePairProgramming`. It had no entry point anywhere (no tool, no command - unlike plan mode's `enter_plan_mode`/`exit_plan_mode`) and no execution-time effect beyond a TUI status label that could never actually display. Removed rather than left as unreachable scaffolding for a collaborative-suggestions feature nothing builds toward today.

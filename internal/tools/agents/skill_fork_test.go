@@ -95,7 +95,7 @@ func TestSkillForkRunner_RunForkedSkill_ReturnsSubAgentOutput(t *testing.T) {
 	runtimeEngine := newSkillForkTestEngine(t, "forked skill completed successfully")
 	runner := NewSkillForkRunner(runtimeEngine)
 
-	output, err := runner.RunForkedSkill(context.Background(), "my-skill", "do the thing", []string{"read_file"}, "")
+	output, err := runner.RunForkedSkill(context.Background(), "my-skill", "do the thing", []string{"read_file"}, "", types.PermissionModeOnRequest)
 	if err != nil {
 		t.Fatalf("RunForkedSkill: %v", err)
 	}
@@ -107,7 +107,7 @@ func TestSkillForkRunner_RunForkedSkill_ReturnsSubAgentOutput(t *testing.T) {
 func TestSkillForkRunner_RunForkedSkill_NilEngine_ReturnsError(t *testing.T) {
 	runner := NewSkillForkRunner(nil)
 
-	_, err := runner.RunForkedSkill(context.Background(), "my-skill", "do the thing", nil, "")
+	_, err := runner.RunForkedSkill(context.Background(), "my-skill", "do the thing", nil, "", types.PermissionModeOnRequest)
 	if err == nil {
 		t.Fatal("expected an error when no engine is configured")
 	}
@@ -124,7 +124,7 @@ func TestSkillForkRunner_RunForkedSkill_RespectsDepthGuard(t *testing.T) {
 		ctx = withSubAgentDepth(ctx)
 	}
 
-	_, err := runner.RunForkedSkill(ctx, "my-skill", "do the thing", nil, "")
+	_, err := runner.RunForkedSkill(ctx, "my-skill", "do the thing", nil, "", types.PermissionModeOnRequest)
 	if err == nil {
 		t.Fatal("expected a depth-guard rejection at or past the max sub-agent depth")
 	}
