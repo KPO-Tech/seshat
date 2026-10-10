@@ -775,55 +775,6 @@ func MatchTrigger(userInput string, skills []Skill) *Skill {
 	return nil
 }
 
-// Skill change detection state
-var (
-	skillCacheValid   bool = true
-	conditionalSkills map[string]Skill
-	dynamicSkills     map[string]Skill
-)
-
-func init() {
-	conditionalSkills = make(map[string]Skill)
-	dynamicSkills = make(map[string]Skill)
-}
-
-func InvalidateSkillCache() {
-	skillCacheValid = false
-}
-
-func ClearSkillCaches() {
-	skillCacheValid = false
-	conditionalSkills = make(map[string]Skill)
-	dynamicSkills = make(map[string]Skill)
-}
-
-func ActivateConditionalSkillsForPaths(filePaths []string, cwd string) []string {
-	var activated []string
-
-	for name, skill := range conditionalSkills {
-		if len(skill.Paths) == 0 {
-			continue
-		}
-
-		for _, filePath := range filePaths {
-			for _, pattern := range skill.Paths {
-				if matchesPathPattern(filePath, pattern, cwd) {
-					dynamicSkills[name] = skill
-					activated = append(activated, name)
-					delete(conditionalSkills, name)
-					break
-				}
-			}
-		}
-	}
-
-	if len(activated) > 0 {
-		skillCacheValid = false
-	}
-
-	return activated
-}
-
 func matchesPathPattern(filePath string, pattern string, cwd string) bool {
 	relPath := filePath
 	if !isAbs(pattern) && len(cwd) > 0 {

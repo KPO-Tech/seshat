@@ -154,6 +154,13 @@ func (t *SkillTool) lookupSkill(name string) (*Skill, error) {
 			return &all[i], nil
 		}
 	}
+	if resolved := ResolveSkillAlias(name); resolved != name {
+		for i := range all {
+			if all[i].Name == resolved || all[i].DisplayName == resolved {
+				return &all[i], nil
+			}
+		}
+	}
 	return nil, nil
 }
 

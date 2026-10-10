@@ -15,17 +15,6 @@ func SetMCPManager(manager *mcp.MCPClientManager) {
 	mcpManagerInstance = manager
 }
 
-type MCPSkillBuilder struct {
-	CreateSkillCommand     func() interface{}
-	ParseFrontmatterFields func(interface{}, string, string) interface{}
-}
-
-var mcpSkillBuilders []MCPSkillBuilder
-
-func RegisterMCPSkillBuilder(builder MCPSkillBuilder) {
-	mcpSkillBuilders = append(mcpSkillBuilders, builder)
-}
-
 func LoadMCPSkills(ctx context.Context, serverName string) ([]Skill, error) {
 	if mcpManagerInstance == nil {
 		return []Skill{}, fmt.Errorf("MCP manager not initialized")
@@ -164,22 +153,6 @@ func GetMCPHealth() map[string]string {
 	health["servers"] = strings.Join(servers, ", ")
 
 	return health
-}
-
-// --- Skill Change Detection ---
-
-type SkillChangeCallback func(added []string, removed []string)
-
-var skillChangeCallbacks []SkillChangeCallback
-
-func OnSkillChange(callback SkillChangeCallback) {
-	skillChangeCallbacks = append(skillChangeCallbacks, callback)
-}
-
-func NotifySkillChange(added []string, removed []string) {
-	for _, callback := range skillChangeCallbacks {
-		callback(added, removed)
-	}
 }
 
 // --- Skill Path Validation ---
