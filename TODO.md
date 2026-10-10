@@ -10,62 +10,6 @@ When you fix one, move it to a "Fixed" section at the bottom with the PR number,
 
 ## High
 
-### H1. Compaction summary always uses an Anthropic model (verified)
-
-`internal/engine/factory.go:38` and `pkg/sdk/client.go:119` build the compactor with `compact.DefaultConfig()`. Its `SummaryModel` is hardcoded to `claude-3-5-haiku-20241022` on the Anthropic provider (`internal/runtime/memory/config.go:25`), whatever provider the session uses.
-
-**Effect:** a session on OpenAI, DeepSeek, Ollama or any non-Anthropic provider, without an Anthropic key, fails when it needs a summary. `maybeAutoCompact` then returns an error and the turn ends with `auto_compact_error`. Compaction only needs a summary when micro-compaction (trimming tool results) is not enough, so it shows up on long sessions.
-
-**Fix:** use the session model (or a configurable summary model) and expose the compaction settings (threshold, target, summary model) in `ClientConfig`. Add a test with a non-Anthropic provider.
-
-### H2. Compaction circuit breaker can never trip (verified)
-
-`AutoCompact` stops trying after `MaxConsecutiveFailures` (3) failures (`internal/runtime/memory/engine.go:166`). But the counter lives in the per-turn state (`state.AutoCompactFailureCount`, `internal/engine/state.go:578`), which `initializeState` recreates at the start of every `Loop.Run`. A failed compaction also ends the turn at once (`loop.go:293`), so the counter never goes above 1.
-
-**Effect:** a session whose summary call keeps failing fails again on every turn. The protection is dead code.
-
-**Fix:** keep the count on the session (or loop) across turns, reset it on success, and decide whether a failed compaction should still end the turn. A task for this is already open. Website page: `concepts/memory`.
-
-### H3. Project instruction files bypass project trust (verified, security)
-
-`readProjectInstructions` (`internal/engine/project_instructions.go`) reads `SESHAT.md`, `AGENTS.md` or `.seshat/instructions.md` from the working directory and `session_prompt.go:61` injects it into the system prompt, with a repo map appended. There is no trust check. `docs/project-trust.md` says a project's configuration is ignored until `seshat trust`, and lists `context_paths` and `skills_paths` as guarded, but these files are not.
-
-**Effect:** a repository you just cloned can place instructions in the model's prompt. This is the same class of problem the 1.3.0 audit closed for `.seshat.json`.
-
-**Fix:** gate the file behind the same trust, or show it to the user for approval on first use (hash-based, like the other project files). Document the decision in `docs/project-trust.md`. Website pages: `sdk/prompt`, `concepts/security-and-trust`.
-
-### H4. Hook events are defined and exported, but most are never emitted (verified)
-
-`internal/types/hooks.go` defines 40 events and `pkg/sdk/types.go` re-exports them. The runtime only fires these through the hook executor: `query_start`, `iteration_start`, `iteration_stop`, `iteration_continue`, `iteration_complete`, `tool_uses_start`, `tool_uses_complete`, `query_complete` (`internal/engine/loop.go`), and `subagent_start`, `subagent_stop`, `on_error` (`internal/agent/runner.go`).
-
-Never fired: `session_start`, `session_end`, `turn_start`, `turn_end`, `turn_stop`, `stop_failure`, `pre_tool_use`, `post_tool_use`, `post_tool_use_fail`, `pre_compact`, `post_compact`, `pre_api_call`, `post_api_call`, `user_prompt_submit`, `permission_request`, `permission_denied`, `notification`, `setup`, `config_change`, `teammate_idle`, `task_created`, `task_completed`, `elicitation`, `elicitation_result`, `worktree_create`, `worktree_remove`, `instructions_loaded`, `cwd_changed`, `file_changed`.
-
-**Effect:** `client.RegisterHook(sdk.HookEventPreToolUse, ...)` compiles, returns an id and never runs. Nothing warns.
-
-Also, for the events that do fire, only `iteration_start` and `tool_uses_start` can stop the turn. The other results are ignored. The `modify` and `retry` actions and a `deny` message are only logged (`executeHookWithResult`, `loop.go:1504`): nothing applies `UpdatedInput`, retries, or sends the message to the model.
-
-**Fix:** either emit the events that make sense (at minimum `pre_tool_use`, `post_tool_use`, `pre_compact`, `post_compact`, `session_start`, `session_end`, `turn_start`, `turn_end`) or stop exporting the others, and make `RegisterHook` return an error for an event that is never fired. Implement or remove the `modify`, `retry` and `deny` message semantics. Website page: `sdk/events-and-hooks`.
-
-### H5. `AddToolHook` cannot be used from outside the module (verified)
-
-`pkg/sdk` exposes `Client.AddToolHook(ToolHook)` and aliases `ToolHook`, `ToolHookInput`, `ToolHookStage`, but not the type that `ToolHook.Execute` returns (`ToolHookResult`, with `ToolHookStop`). A host in another module cannot name that type, so it cannot write a tool hook. Only the shell hooks (`PreToolHooks`) work. A task for this is already open.
-
-**Fix:** alias `ToolHookResult` and `ToolHookStop` in `pkg/sdk/types.go` and add an external test.
-
-### H6. Four runtime event types are defined and never emitted (verified)
-
-`tool.permission_required`, `prompt.request`, `turn.stage`, `plan.status_changed` (`internal/types/runtime_events.go`). Nothing emits them. Permission questions only reach a host through the prompt function (`SetPromptFn`), so an interface that listens to runtime events to show an approval dialog never gets one.
-
-**Fix:** emit them where the corresponding thing happens, or delete the names. Website page: `sdk/events-and-hooks`.
-
-### H7. MCP servers are silently skipped when `Transport` is not set (verified)
-
-`mcp.NewClient` (`internal/tools/system/mcp/client.go:24`) switches on `config.Transport` and returns `unsupported transport type:` for an empty value. `ServerConfig.Transport` has no default, and `IntegrateMCPServersWithOptions` only logs the error and moves on. The example in the root `README.md`, in `docs/sdk.md` and in `docs/mcp.md` sets `Name`, `Command` and `Args` but no `Transport`, so a host that copies it connects no MCP server and gets no error.
-
-Checked by calling `mcp.NewClient` with a stdio config and with a URL config, both without `Transport`: both fail.
-
-**Fix:** infer the transport (`Command` set means stdio, `URL` set means http), or return an error from `NewClient` of the SDK client when a configured server fails. Fix the three documents either way. Also note that `websocket` is accepted by the switch but uses the HTTP transport. Website page: `concepts/skills-and-mcp`.
-
 ### H8. Skills in `.seshat/skills` are listed by the terminal interface but the agent cannot load them (verified)
 
 There are two skill systems. The runtime loader (`internal/tools/system/skills/loader.go`) reads `.claude/skills` in the project, `.seshat/commands`, and the user, managed, builtin and repos folders under the runtime root. `NewFileSkillLoader("")` defaults its directory to `.seshat/skills` (line 71) but `GetSkillDirCommandsForUser` never uses it, so that folder is not read. The terminal interface (`internal/seshattui/skills`) discovers skills in `.agents/skills`, `.seshat/skills`, `.claude/skills` and `.cursor/skills` and shows them in its catalog, but nothing feeds them to the agent: `ToPromptXML` is never called and `SeshatWorkspace.ReadSkill` returns nothing.
@@ -188,6 +132,20 @@ Error codes (`ErrCodeToolExecution`, `ErrCodeToolPermission`, `ErrCodeToolTimeou
 The engine, the SDK and the compaction defaults name `claude-3-5-sonnet-20241022` and `claude-3-5-haiku-20241022`. These are 2024 identifiers. Check they still resolve, and move the defaults to one place.
 
 ---
+
+## Fixed
+
+Fixed on 2026-10-10, on branch `docs/todo-bugs`, not yet merged (no PR number - review/commit pending). Build, `go vet`, `golangci-lint` and `go test -race` all pass for every changed package (`internal/engine`, `internal/runtime/memory`, `pkg/sdk`, `internal/types`, `internal/seshattui/config`, `internal/seshattui/workspace`, `cmd/cli`). The website pages for these items still need the matching update in the `seshat-ai` repository.
+
+- **H1** (compaction summary always used an Anthropic model): `generateSummary` now defaults to the session's own model (`internal/runtime/memory/engine.go`), with an explicit override exposed as `ClientConfig.CompactSummaryModel` / `engine.Config.CompactSummaryModel`. Tests: `TestGenerateSummary_NonAnthropicProvider`, `TestGenerateSummary_ExplicitOverrideWins` (`internal/runtime/memory/summary_test.go`).
+- **H2** (compaction circuit breaker could never trip): `AutoCompactFailureCount` moved from `MutableState` (per-turn, reset every `Loop.Run`) to `SessionState` (persists across turns), threaded through new `RunRequest`/`RunResult.AutoCompactFailureCount` fields and `Session.submitWithMessage`. Test: `TestAutoCompactFailureCountPersistsAcrossRuns` (`internal/engine/engine_test.go`).
+- **H3** (project instruction files bypassed project trust): `SESHAT.md`/`AGENTS.md`/`.seshat/instructions.md` now gated behind the same hash-based trust store as the other project configuration files (`internal/seshattui/config/trust.go`'s `IsTrustedProjectFile`, `TrustProject`/`UntrustProject`/`ProjectConfigStatus` extended to cover them). New `engine.Config.TrustProjectInstructions` / `ClientConfig.TrustProjectInstructions` callback, nil-fails-closed by default; wired in `cmd/cli/runtime.go` and `seshat_workspace.go` to preserve existing behavior for trusted projects. `docs/project-trust.md` updated. Tests: `TestReadTrustedProjectInstructions_*` (`internal/engine/engine_test.go`), `TestUntrustedProjectInstructionsAreNotTrusted`, `TestTrustProjectIncludesInstructionFiles`, `TestTrustProjectIgnoresAbsentInstructionFiles` (`internal/seshattui/config/trust_instructions_test.go`).
+- **H4** (most hook events never emitted): added `session_start`/`session_end` (`Engine.NewSessionFromState`/`Session.Close`), `turn_start`/`turn_end` (`Session.submitWithMessage`), `pre_tool_use`/`post_tool_use` (per tool call in `Loop.Run`), `pre_compact`/`post_compact` (`Loop.maybeAutoCompact`). `pre_tool_use` Modify rewrites the tool's input before execution; every stop-capable hook (`iteration_start`, `tool_uses_start`, `turn_start`, `pre_tool_use`, `post_tool_use`, `pre_compact`) now appends the hook's deny `Message` to the transcript instead of only logging it (`appendSystemNoteFromHook`/`appendHookDenialAndStop` in `loop.go`). `Retry` is still a documented no-op (needs a rework of the batched tool-execution pipeline - out of scope here). `sdk.Client.RegisterHook` now returns `(string, error)` and rejects any event not in the new `types.ImplementedHookEvents` - a breaking change, with zero in-repo callers to migrate. Tests: `TestPreCompactHookDenyPreventsCompaction`, `TestPostCompactHookFiresWithDidCompact`, `TestPreToolUseHookModifiesInput`, `TestPreToolUseHookDenyStopsTurnBeforeExecution`, `TestPostToolUseHookDenyStopsTurnAfterExecution`, `TestSessionStartAndEndHooksFire`, `TestTurnStartHookCanDenyTurn` (`internal/engine/engine_test.go`), `TestRegisterHook_RejectsUnimplementedEvent`, `TestRegisterHook_AcceptsImplementedEvent` (`pkg/sdk/client_sessions_test.go`).
+- **H5** (`AddToolHook` unusable from outside the module): aliased `ToolHookResult`/`ToolHookStop` in `pkg/sdk/types.go`, next to the existing `ToolHook`/`ToolHookInput`/`ToolHookStage`. Test: `TestAddToolHook_UsableFromOutsideModule` (`pkg/sdk/tool_hook_external_test.go`, package `sdk_test` - proves it compiles and runs with only the public API).
+- **H6** (4 runtime event types never emitted): implemented `tool.permission_required` (`internal/permissions/integration.go`, right before the `PromptFn` ask-approval call), `prompt.request` (`internal/tools/special/ask_user/askUserQuestionTool.go`, both prompt call sites), and `turn.stage` (`Session.submitWithMessage`, one `"preparing_turn"` stage before `buildAPIRequest`). Deleted `plan.status_changed` instead of implementing it: `PlanStore.SetStatus` (the only thing that could mutate a plan's status) has zero callers anywhere in the codebase, so the event described a feature that does not exist - implementing it would have meant inventing a plan-approval workflow, out of scope for a bug fix. Tests: `TestResolverEmitsToolPermissionRequiredBeforePrompting`, `TestResolverNoRuntimeEventWithoutEmitter` (`internal/permissions/runtime_event_test.go`), `TestAskQuestionsEmitsPromptRequiredEvent` (`internal/tools/special/ask_user/runtime_event_test.go`), `TestTurnStageEventFiresBeforeBuildingRequest` (`internal/engine/engine_test.go`).
+- **H7** (MCP servers silently skipped without `Transport`): `mcp.NewClient` now infers `Transport` from `Command` (stdio) or `URL` (http) when unset, matching every example in `README.md`/`docs/sdk.md`/`docs/mcp.md` - those examples now work instead of silently connecting nothing. Added a note to `docs/mcp.md` documenting the inference and the pre-existing `websocket`-uses-HTTP-transport nuance. Tests: `TestNewClient_InfersStdioTransportFromCommand`, `TestNewClient_InfersHTTPTransportFromURL`, `TestNewClient_ExplicitTransportNotOverridden`, `TestNewClient_NeitherCommandNorURLStillErrors` (`internal/tools/system/mcp/transport_inference_test.go`).
+
+**Side-finding (not fixed, not yet in this list):** while investigating H6's `plan.status_changed`, found that `PlanStore.SetStatus` (`internal/tools/builtin/config.go`) - the interface method for marking a plan document pending/validated/rejected - has no caller anywhere in the codebase either. `SeshatWorkspace.ApprovePlan` only exits plan mode; it never calls `SetStatus`. This looks like an abandoned/incomplete plan-approval feature, separate from H8's skill-loading gap. Worth its own TODO item if the feature is still wanted.
 
 ## Already corrected in the documentation
 

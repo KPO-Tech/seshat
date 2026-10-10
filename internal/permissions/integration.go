@@ -10,6 +10,7 @@ import (
 	"sort"
 	"strings"
 	"sync"
+	"time"
 
 	automode "github.com/KPO-Tech/seshat/internal/permissions/auto"
 	"github.com/KPO-Tech/seshat/internal/providers"
@@ -221,6 +222,21 @@ func (i *Integrator) ResolverWithContext(
 		promptFn := i.effectivePromptFn(ctx)
 		if promptFn == nil {
 			return result
+		}
+
+		// Emit tool.permission_required before prompting, so a host that
+		// only listens on the runtime-event channel (not PromptFn) can show
+		// its own approval UI too - this event existed but nothing ever
+		// constructed it (H6 in TODO.md).
+		if emitter, ok := ctx.Value(types.RuntimeEventEmitterKey).(func(types.RuntimeEvent)); ok && emitter != nil {
+			reqCopy := request
+			emitter(types.RuntimeEvent{
+				Type:              types.RuntimeEventTypeToolPermissionRequired,
+				SessionID:         requestSessionID,
+				TurnID:            requestTurnID,
+				Timestamp:         time.Now(),
+				PermissionRequest: &reqCopy,
+			})
 		}
 
 		promptReq := types.PromptRequest{

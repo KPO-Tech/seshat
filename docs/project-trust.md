@@ -16,6 +16,8 @@ Some of what they say runs something or sends something somewhere, so it is **ig
 
 The rest (models, display options, disabled tools...) applies as before. The user's own configuration is never restricted.
 
+A project can also carry `SESHAT.md`, `AGENTS.md`, or `.seshat/instructions.md` in its working directory: the engine puts the first one it finds directly into the model's system prompt. Unlike the sections above, there is no partial application for these — the whole file is either trusted or ignored. They share the same hash-based trust store as the configuration files: `seshat trust` covers both in one action, `seshat trust --status` lists them alongside the configuration files, and a host embedding the SDK directly (not through this terminal interface) must wire `sdk.ClientConfig.TrustProjectInstructions` itself or these files are never injected at all — the default is to fail closed, not to apply them unconditionally like before.
+
 When something is ignored, the interface shows a warning at startup and the log says which file and which sections.
 
 ## Trusting a project

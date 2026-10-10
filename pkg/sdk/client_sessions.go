@@ -201,11 +201,18 @@ func (c *Client) HookRegistry() *HookRegistry {
 	return c.queryEngine.HookRegistry()
 }
 
-// RegisterHook registers a handler for a single lifecycle event.
-func (c *Client) RegisterHook(event HookEvent, handler HookHandler) string {
+// RegisterHook registers a handler for a single lifecycle event. It returns
+// an error for an event the runtime never fires (types.ImplementedHookEvents)
+// instead of silently accepting a handler that will never run - see H4 in
+// TODO.md. This is a breaking change: RegisterHook used to always return a
+// bare id.
+func (c *Client) RegisterHook(event HookEvent, handler HookHandler) (string, error) {
+	if !types.IsHookEventImplemented(event) {
+		return "", fmt.Errorf("sdk: hook event %q is never emitted by the runtime (see types.ImplementedHookEvents)", event)
+	}
 	r := c.HookRegistry()
 	if r == nil {
-		return ""
+		return "", fmt.Errorf("sdk: hook registry is not available")
 	}
 	id := fmt.Sprintf("hook-%d", time.Now().UnixNano())
 	r.Add(HookRegistration{
@@ -214,7 +221,7 @@ func (c *Client) RegisterHook(event HookEvent, handler HookHandler) string {
 		Handler: handler,
 		State:   HookStateActive,
 	})
-	return id
+	return id, nil
 }
 
 // AutoModeAvailable reports whether the permission integrator has an AI-backed

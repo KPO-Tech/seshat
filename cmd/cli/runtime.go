@@ -16,6 +16,7 @@ import (
 	internalrag "github.com/KPO-Tech/seshat/internal/rag"
 	"github.com/KPO-Tech/seshat/internal/rag/embedder"
 	"github.com/KPO-Tech/seshat/internal/rag/reranker"
+	tuiconfig "github.com/KPO-Tech/seshat/internal/seshattui/config"
 	"github.com/KPO-Tech/seshat/internal/storage"
 	"github.com/KPO-Tech/seshat/internal/vector"
 	"github.com/KPO-Tech/seshat/pkg/companion"
@@ -209,37 +210,38 @@ func newClient(
 	// options.Monitoring (the TUI file logger) instead of short-circuiting.
 	enableMonitoring := options.Monitoring != nil
 	client, err := sdk.NewClient(&sdk.ClientConfig{
-		APIKey:                  options.APIKey,
-		Model:                   options.Model,
-		PermissionMode:          options.PermissionMode,
-		AutoCompact:             true,
-		PersistSessions:         true,
-		SessionSQLitePath:       options.SQLitePath,
-		PromptFn:                promptFn,
-		ProgressFn:              progressFn,
-		ResponseChunkFn:         chunkFn,
-		RuntimeEventFn:          runtimeEventFn,
-		OnSessionTitled:         titledFn,
-		WorkingDir:              options.WorkingDir,
-		BrowserRemoteControlURL: options.BrowserRemoteControlURL,
-		BrowserExecutablePath:   options.BrowserExecutablePath,
-		DocumentReaderURL:       options.DocumentReaderURL,
-		StorageGCEnabled:        options.StorageGCEnabled,
-		StorageGCInterval:       options.StorageGCInterval,
-		StorageGCLimit:          options.StorageGCLimit,
-		StorageGCNamespaces:     options.StorageGCNamespaces,
-		PreToolHooks:            preToolHooks,
-		EnableMonitoring:        enableMonitoring,
-		Monitoring:              options.Monitoring,
-		RAGService:              options.RAGService,
-		ProviderConfig:          providerConfig,
-		PlanStore:               planStore,
-		LongTermMemory:          ltMemory,
-		MCPServers:              options.MCPServers,
-		ImageGeneration:         options.ImageGeneration,
-		TextToSpeech:            options.TextToSpeech,
-		SpeechToText:            options.SpeechToText,
-		Companion:               options.Companion,
+		APIKey:                   options.APIKey,
+		Model:                    options.Model,
+		PermissionMode:           options.PermissionMode,
+		AutoCompact:              true,
+		PersistSessions:          true,
+		SessionSQLitePath:        options.SQLitePath,
+		PromptFn:                 promptFn,
+		ProgressFn:               progressFn,
+		ResponseChunkFn:          chunkFn,
+		RuntimeEventFn:           runtimeEventFn,
+		OnSessionTitled:          titledFn,
+		WorkingDir:               options.WorkingDir,
+		BrowserRemoteControlURL:  options.BrowserRemoteControlURL,
+		BrowserExecutablePath:    options.BrowserExecutablePath,
+		DocumentReaderURL:        options.DocumentReaderURL,
+		StorageGCEnabled:         options.StorageGCEnabled,
+		StorageGCInterval:        options.StorageGCInterval,
+		StorageGCLimit:           options.StorageGCLimit,
+		StorageGCNamespaces:      options.StorageGCNamespaces,
+		PreToolHooks:             preToolHooks,
+		EnableMonitoring:         enableMonitoring,
+		Monitoring:               options.Monitoring,
+		RAGService:               options.RAGService,
+		ProviderConfig:           providerConfig,
+		PlanStore:                planStore,
+		LongTermMemory:           ltMemory,
+		MCPServers:               options.MCPServers,
+		ImageGeneration:          options.ImageGeneration,
+		TextToSpeech:             options.TextToSpeech,
+		SpeechToText:             options.SpeechToText,
+		Companion:                options.Companion,
+		TrustProjectInstructions: tuiconfig.IsTrustedProjectFile,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("create SDK client: %w", err)

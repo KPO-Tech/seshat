@@ -136,7 +136,7 @@ func (e *Engine) Compact(
 		}, nil
 	}
 
-	summary, err := e.generateSummary(ctx, microCompacted, sessionID, turnID)
+	summary, err := e.generateSummary(ctx, microCompacted, model, sessionID, turnID)
 	if err != nil {
 		return CompactionResult{}, fmt.Errorf("failed to generate summary: %w", err)
 	}
@@ -225,12 +225,19 @@ func (e *Engine) microCompact(messages []types.Message) []types.Message {
 func (e *Engine) generateSummary(
 	ctx context.Context,
 	messages []types.Message,
+	model types.ModelIdentifier,
 	sessionID types.SessionID,
 	turnID types.TurnID,
 ) (string, error) {
+	summaryModel := e.config.SummaryModel
+	if summaryModel.Model == "" {
+		// No override configured: summarize with the session's own model so
+		// compaction never needs a key for a provider the session isn't using.
+		summaryModel = model
+	}
 	prompt := e.buildSummaryPrompt(messages)
 	resp, err := e.apiClient.CreateMessage(ctx, types.APIRequest{
-		Model:     e.config.SummaryModel,
+		Model:     summaryModel,
 		Messages:  []types.Message{types.UserMessage("compact_summary_request", prompt)},
 		MaxTokens: e.config.MaxSummaryTokens,
 	})

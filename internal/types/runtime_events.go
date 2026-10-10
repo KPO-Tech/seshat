@@ -19,13 +19,8 @@ const (
 	RuntimeEventTypeToolPermissionRequired RuntimeEventType = "tool.permission_required"
 	RuntimeEventTypePromptRequired         RuntimeEventType = "prompt.request"
 	RuntimeEventTypePlanSubmitted          RuntimeEventType = "plan.submitted"
-	// RuntimeEventTypePlanStatusChanged is reserved for a future plan-status
-	// transition (e.g. approved/rejected after submission) but nothing in the
-	// engine constructs it yet — plan.Status is set once at submission and
-	// never mutated post-creation. Do not rely on receiving this event today.
-	RuntimeEventTypePlanStatusChanged    RuntimeEventType = "plan.status_changed"
-	RuntimeEventTypeExecutionModeChanged RuntimeEventType = "execution_mode.changed"
-	RuntimeEventTypeTaskChanged          RuntimeEventType = "task.changed"
+	RuntimeEventTypeExecutionModeChanged   RuntimeEventType = "execution_mode.changed"
+	RuntimeEventTypeTaskChanged            RuntimeEventType = "task.changed"
 
 	// RuntimeEventTypeStage marks a named phase of pre-generation turn setup
 	// (loading tools, resuming a session, searching knowledge) so a client can

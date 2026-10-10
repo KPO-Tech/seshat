@@ -116,7 +116,9 @@ func NewClient(config *ClientConfig) (*Client, error) {
 
 	// Core subsystems
 	orchestrator := execution.NewOrchestrator()
-	compactor := compact.NewEngine(apiClient, compact.DefaultConfig())
+	compactConfig := compact.DefaultConfig()
+	compactConfig.SummaryModel = config.CompactSummaryModel
+	compactor := compact.NewEngine(apiClient, compactConfig)
 	promptAssembler := prompt.NewAssembler()
 	promptAssembler.SetDefaultSections(prompt.DefaultSystemPromptSections())
 	permissionEngine, err := newPermissionEngine(config)
@@ -268,23 +270,25 @@ func buildEngineConfig(config *ClientConfig) *engine.Config {
 		maxTokens = 8192
 	}
 	qc := &engine.Config{
-		MaxTurns:                config.MaxTurns,
-		AutoCompact:             config.AutoCompact,
-		PermissionMode:          config.PermissionMode,
-		Model:                   config.Model,
-		TitleModel:              config.TitleModel,
-		MaxTokens:               maxTokens,
-		WorkingDirectory:        config.WorkingDir,
-		SystemPromptTemplate:    config.SystemPromptTemplate,
-		MCPServers:              config.MCPServers,
-		EnableMemory:            config.EnableMemory,
-		EnableMonitoring:        config.EnableMonitoring,
-		MaxIterations:           config.MaxIterations,
-		TurnTokenBudget:         config.TurnTokenBudget,
-		BudgetContinuationLimit: config.BudgetContinuationLimit,
-		ContinuationNudgeLimit:  config.ContinuationNudgeLimit,
-		StopHooks:               config.StopHooks,
-		MaxConsecutiveDenials:   config.MaxConsecutiveDenials,
+		MaxTurns:                 config.MaxTurns,
+		AutoCompact:              config.AutoCompact,
+		PermissionMode:           config.PermissionMode,
+		Model:                    config.Model,
+		TitleModel:               config.TitleModel,
+		CompactSummaryModel:      config.CompactSummaryModel,
+		TrustProjectInstructions: config.TrustProjectInstructions,
+		MaxTokens:                maxTokens,
+		WorkingDirectory:         config.WorkingDir,
+		SystemPromptTemplate:     config.SystemPromptTemplate,
+		MCPServers:               config.MCPServers,
+		EnableMemory:             config.EnableMemory,
+		EnableMonitoring:         config.EnableMonitoring,
+		MaxIterations:            config.MaxIterations,
+		TurnTokenBudget:          config.TurnTokenBudget,
+		BudgetContinuationLimit:  config.BudgetContinuationLimit,
+		ContinuationNudgeLimit:   config.ContinuationNudgeLimit,
+		StopHooks:                config.StopHooks,
+		MaxConsecutiveDenials:    config.MaxConsecutiveDenials,
 	}
 	if pc := config.PromptConfig; pc != nil {
 		if pc.SystemPrompt != nil {

@@ -99,6 +99,35 @@ func isTrustedProjectFile(path string, data []byte) bool {
 	return loadTrustStore().Files[trustKey(path)] == contentSum(data)
 }
 
+// IsTrustedProjectFile is isTrustedProjectFile, exported for hosts outside this package that need
+// the same hash-based trust check on a single file: the engine's project instruction files
+// (SESHAT.md, AGENTS.md, .seshat/instructions.md - see instructionFileNames) use this directly,
+// since unlike the JSON configuration files above, their entire content is either trusted or not -
+// there is no restrictedSections notion for free-form prose. Wire this into
+// sdk.ClientConfig.TrustProjectInstructions from a host that already uses this trust store (see
+// cmd/cli/runtime.go and internal/seshattui/workspace/seshat_workspace.go).
+func IsTrustedProjectFile(path string, data []byte) bool {
+	return isTrustedProjectFile(path, data)
+}
+
+// instructionFileNames are the project instruction files the engine looks for in the working
+// directory, in priority order (see internal/engine/project_instructions.go's
+// candidateInstructionFiles, which this must stay in sync with). They share this package's trust
+// store with the JSON configuration files: one `seshat trust` covers both.
+var instructionFileNames = []string{"SESHAT.md", "AGENTS.md", filepath.Join(".seshat", "instructions.md")}
+
+// projectInstructionFiles lists the instruction files of workingDir that exist.
+func projectInstructionFiles(workingDir string) []string {
+	var files []string
+	for _, name := range instructionFileNames {
+		path := filepath.Join(workingDir, name)
+		if _, err := os.Stat(path); err == nil {
+			files = append(files, path)
+		}
+	}
+	return files
+}
+
 // restrictedIn lists the restricted sections that a configuration holds.
 func restrictedIn(data []byte) []string {
 	var found []string
@@ -201,16 +230,29 @@ func ProjectConfigStatus(workingDir string) []ProjectFileStatus {
 		}
 		out = append(out, ProjectFileStatus{Path: path, Trusted: isTrustedProjectFile(path, data), Restricted: restrictedIn(data)})
 	}
+	for _, path := range projectInstructionFiles(workingDir) {
+		data, err := os.ReadFile(path)
+		if err != nil {
+			continue
+		}
+		trusted := isTrustedProjectFile(path, data)
+		var restricted []string
+		if !trusted {
+			restricted = []string{"instructions"}
+		}
+		out = append(out, ProjectFileStatus{Path: path, Trusted: trusted, Restricted: restricted})
+	}
 	return out
 }
 
-// TrustProject records the content of every configuration file of the project of workingDir as trusted, and returns the files.
+// TrustProject records the content of every configuration and instruction file of the project of
+// workingDir as trusted, and returns the files.
 func TrustProject(workingDir string) ([]string, error) {
 	trustMu.Lock()
 	defer trustMu.Unlock()
 	store := loadTrustStore()
 	var trusted []string
-	for _, path := range projectConfigFiles(workingDir) {
+	for _, path := range append(projectConfigFiles(workingDir), projectInstructionFiles(workingDir)...) {
 		data, err := os.ReadFile(path)
 		if err != nil {
 			continue
@@ -224,13 +266,14 @@ func TrustProject(workingDir string) ([]string, error) {
 	return trusted, nil
 }
 
-// UntrustProject removes the trust recorded for the configuration files of the project of workingDir, and returns the files.
+// UntrustProject removes the trust recorded for the configuration and instruction files of the
+// project of workingDir, and returns the files.
 func UntrustProject(workingDir string) ([]string, error) {
 	trustMu.Lock()
 	defer trustMu.Unlock()
 	store := loadTrustStore()
 	var removed []string
-	for _, path := range projectConfigFiles(workingDir) {
+	for _, path := range append(projectConfigFiles(workingDir), projectInstructionFiles(workingDir)...) {
 		if _, ok := store.Files[trustKey(path)]; ok {
 			delete(store.Files, trustKey(path))
 			removed = append(removed, path)

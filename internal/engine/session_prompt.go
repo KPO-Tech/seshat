@@ -59,7 +59,7 @@ func (s *Session) buildAPIRequestForRuntimeTools(ctx context.Context, runtimeToo
 		stage = detectedStage
 	}
 
-	projectInstructions := readProjectInstructions(workingDirectory)
+	projectInstructions := readTrustedProjectInstructions(workingDirectory, s.config.TrustProjectInstructions)
 	if repoMap := s.repoMapContext(ctx, workingDirectory); repoMap != "" {
 		projectInstructions = strings.TrimSpace(projectInstructions + "\n\n" + repoMap)
 	}

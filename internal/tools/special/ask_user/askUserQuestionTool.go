@@ -553,6 +553,23 @@ func (t *Tool) effectivePromptFn(ctx context.Context) types.PromptFn {
 	return t.promptFn
 }
 
+// emitPromptRequiredEvent emits prompt.request right before a PromptFn call,
+// so a host that only listens on the runtime-event channel (not PromptFn
+// itself) can also observe prompts this tool issues. This event existed but
+// nothing ever constructed it (H6 in TODO.md).
+func emitPromptRequiredEvent(ctx context.Context, req types.PromptRequest) {
+	emitter, ok := ctx.Value(types.RuntimeEventEmitterKey).(func(types.RuntimeEvent))
+	if !ok || emitter == nil {
+		return
+	}
+	reqCopy := req
+	emitter(types.RuntimeEvent{
+		Type:          types.RuntimeEventTypePromptRequired,
+		Timestamp:     time.Now(),
+		PromptRequest: &reqCopy,
+	})
+}
+
 func (t *Tool) askWithPromptFn(ctx context.Context, promptFn types.PromptFn, question Question, allQuestions []Question, questionIndex int, toolUseID string) (string, Annotation, error) {
 	options := make([]types.PromptOption, 0, len(question.Options)+1)
 	for _, option := range question.Options {
@@ -577,12 +594,14 @@ func (t *Tool) askWithPromptFn(ctx context.Context, promptFn types.PromptFn, que
 		}
 	}
 
-	response, err := promptFn(ctx, types.PromptRequest{
+	promptReq := types.PromptRequest{
 		Type:     types.PromptTypeChoice,
 		Message:  question.Question,
 		Options:  options,
 		Metadata: metadata,
-	})
+	}
+	emitPromptRequiredEvent(ctx, promptReq)
+	response, err := promptFn(ctx, promptReq)
 	if err != nil {
 		return "", Annotation{}, err
 	}
@@ -649,7 +668,7 @@ func (t *Tool) askCustomText(ctx context.Context, promptFn types.PromptFn, quest
 		return "", fmt.Errorf("no prompt function available for custom text input")
 	}
 
-	response, err := promptFn(ctx, types.PromptRequest{
+	promptReq := types.PromptRequest{
 		Type:    types.PromptTypeText,
 		Message: fmt.Sprintf("%s (custom answer)", question.Question),
 		Metadata: map[string]any{
@@ -657,7 +676,9 @@ func (t *Tool) askCustomText(ctx context.Context, promptFn types.PromptFn, quest
 			"tool_name":   ToolName,
 			"tool_use_id": toolUseID,
 		},
-	})
+	}
+	emitPromptRequiredEvent(ctx, promptReq)
+	response, err := promptFn(ctx, promptReq)
 	if err != nil {
 		return "", err
 	}

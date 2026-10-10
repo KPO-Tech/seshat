@@ -97,12 +97,26 @@ type TitleGenerator interface {
 
 // ClientConfig represents the client configuration.
 type ClientConfig struct {
-	APIKey         string          `json:"api_key"`
-	Model          ModelIdentifier `json:"model"`
-	TitleModel     ModelIdentifier `json:"title_model,omitempty"`
-	PermissionMode PermissionMode  `json:"permission_mode"`
-	MaxTurns       int             `json:"max_turns"`
-	AutoCompact    bool            `json:"auto_compact"`
+	APIKey     string          `json:"api_key"`
+	Model      ModelIdentifier `json:"model"`
+	TitleModel ModelIdentifier `json:"title_model,omitempty"`
+	// CompactSummaryModel overrides which model generates compaction summaries.
+	// Zero value means "use Model" (the session's own model), so compaction
+	// works on any provider without needing an Anthropic key.
+	CompactSummaryModel ModelIdentifier `json:"compact_summary_model,omitempty"`
+
+	// TrustProjectInstructions gates SESHAT.md/AGENTS.md/.seshat/instructions.md
+	// found in WorkingDir behind project trust before they are injected into
+	// the system prompt (see docs/project-trust.md). It is called with the
+	// file's exact path and content; return true to trust and inject it. nil
+	// fails closed - no project you didn't write or explicitly trust can put
+	// its own instructions in the model's prompt. A host that already trusts
+	// projects for other configuration (the terminal interface's `seshat
+	// trust`) should wire this to the same hash-based check.
+	TrustProjectInstructions func(path string, content []byte) bool `json:"-"`
+	PermissionMode           PermissionMode                         `json:"permission_mode"`
+	MaxTurns                 int                                    `json:"max_turns"`
+	AutoCompact              bool                                   `json:"auto_compact"`
 
 	// Session persistence
 	PersistSessions   bool           `json:"persist_sessions"`
