@@ -685,17 +685,44 @@ func discoverNestedSkillDirs(cwd string) []string {
 	return dirs
 }
 
+// SubstituteArguments fills ${argument:name} and ${name} placeholders in
+// content from args. With a single declared name, the whole args string
+// fills it - the common case, matching a single-placeholder ArgumentHint
+// like "<file>". With more than one name, args is split on whitespace
+// positionally (first word to the first name, and so on), with the LAST
+// name absorbing everything remaining so a trailing multi-word value (a
+// sentence, a path with spaces) isn't cut up. A name with nothing left to
+// fill it gets substituted with "", not the whole string - unlike every
+// other name getting the same full value, which is what every placeholder
+// did before this function distinguished them.
 func SubstituteArguments(content string, args string, argumentNames []string) string {
 	if args == "" || len(argumentNames) == 0 {
 		return content
 	}
 
+	values := make([]string, len(argumentNames))
+	if len(argumentNames) == 1 {
+		values[0] = args
+	} else {
+		fields := strings.Fields(args)
+		for i := range argumentNames {
+			if i >= len(fields) {
+				break
+			}
+			if i == len(argumentNames)-1 {
+				values[i] = strings.Join(fields[i:], " ")
+			} else {
+				values[i] = fields[i]
+			}
+		}
+	}
+
 	result := content
 
-	for _, argName := range argumentNames {
+	for i, argName := range argumentNames {
 		placeholder := "${argument:" + argName + "}"
-		result = strings.ReplaceAll(result, placeholder, args)
-		result = strings.ReplaceAll(result, "${"+argName+"}", args)
+		result = strings.ReplaceAll(result, placeholder, values[i])
+		result = strings.ReplaceAll(result, "${"+argName+"}", values[i])
 	}
 
 	return result

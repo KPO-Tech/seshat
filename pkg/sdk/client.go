@@ -27,6 +27,7 @@ import (
 	bashTool "github.com/KPO-Tech/seshat/internal/tools/bash"
 	"github.com/KPO-Tech/seshat/internal/tools/registry"
 	"github.com/KPO-Tech/seshat/internal/tools/system/mcp"
+	skillTool "github.com/KPO-Tech/seshat/internal/tools/system/skills"
 	taskTool "github.com/KPO-Tech/seshat/internal/tools/task"
 	"github.com/KPO-Tech/seshat/internal/types"
 	browsercore "github.com/KPO-Tech/seshat/internal/web/browser"
@@ -202,6 +203,17 @@ func NewClient(config *ClientConfig) (*Client, error) {
 	}
 	if err := reg.Register(agentToolInstance); err != nil {
 		return nil, fmt.Errorf("failed to register agent tool: %w", err)
+	}
+
+	// The skill tool is constructed inside builtin.go, before this engine
+	// exists, so - like agentToolInstance.SetEngine above - its own
+	// engine-dependent piece (running a `context: fork` skill as a
+	// sub-agent) is injected after the fact by looking the already
+	// registered instance back up.
+	if resolved, ok := reg.Get(skillTool.SkillToolName); ok {
+		if skill, ok := resolved.(*skillTool.SkillTool); ok {
+			skill.SetForkRunner(agentTool.NewSkillForkRunner(queryEngine))
+		}
 	}
 
 	// spawn_agent and resume_agent need the live engine instance — registered here, not in builtin.go.

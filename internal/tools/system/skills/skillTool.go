@@ -38,8 +38,33 @@ type SkillTool struct {
 	cwd           string
 	userID        string
 	allowedSkills []string
+	forkRunner    ForkRunner
 	defCacheMu    sync.Mutex
 	defCache      *skillDefCache
+}
+
+// ForkRunner runs a skill declared with `context: fork` as an isolated
+// sub-agent instead of inlining its prompt into the current conversation,
+// and returns that sub-agent's final text output. allowedTools and model
+// come straight from the skill's own frontmatter (Skill.AllowedTools,
+// Skill.Model) - they only mean anything in this forked path, never in the
+// default inline one.
+//
+// internal/agent already imports this package (for RestrictSessionSkills),
+// so this package cannot import internal/agent back without a cycle: a
+// host that can reach the agent-running infrastructure implements this
+// interface and wires it in via SkillTool.SetForkRunner. See
+// internal/tools/agents.SkillForkRunner for the real implementation.
+type ForkRunner interface {
+	RunForkedSkill(ctx context.Context, skillName, task string, allowedTools []string, model string) (string, error)
+}
+
+// SetForkRunner wires the sub-agent infrastructure a `context: fork` skill
+// needs. A skill tool built by NewSkillTool has none set: calling such a
+// skill returns an error naming the missing runner instead of silently
+// running inline.
+func (t *SkillTool) SetForkRunner(runner ForkRunner) {
+	t.forkRunner = runner
 }
 
 func NewSkillTool(loader SkillLoader) *SkillTool {
@@ -168,6 +193,17 @@ func (t *SkillTool) Call(ctx context.Context, input contract.CallInput, permissi
 		promptText += block.Text + "\n"
 	}
 
+	if skill.Context == ExecutionContextFork {
+		if t.forkRunner == nil {
+			return contract.NewErrorResult(fmt.Errorf("skill '%s' declares context: fork, but no fork runner is configured for this host", skillName)), nil
+		}
+		output, err := t.forkRunner.RunForkedSkill(ctx, skill.Name, promptText, skill.AllowedTools, skill.Model)
+		if err != nil {
+			return contract.NewErrorResult(fmt.Errorf("skill '%s' fork failed: %w", skillName, err)), nil
+		}
+		return contract.NewTextResult(fmt.Sprintf("Skill '%s' invoked (forked) with args: '%s'\n\n%s", skillName, args, output)), nil
+	}
+
 	return contract.NewTextResult(fmt.Sprintf("Skill '%s' invoked with args: '%s'\n\n%s", skillName, args, promptText)), nil
 }
 
@@ -267,6 +303,9 @@ func FormatSkillsList(skills []Skill) string {
 			continue
 		}
 		line := "- " + skill.Name + ": " + skill.Description
+		if skill.WhenToUse != "" {
+			line += " (use when: " + skill.WhenToUse + ")"
+		}
 		if len(skill.Triggers) > 0 {
 			line += " [auto-activates when user says: " + strings.Join(skill.Triggers, " / ") + "]"
 		}

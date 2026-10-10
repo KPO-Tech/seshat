@@ -125,8 +125,17 @@ func ParseArgumentNames(value interface{}) []string {
 	case []interface{}:
 		result := make([]string, 0, len(v))
 		for _, item := range v {
-			if s, ok := item.(string); ok {
-				result = append(result, s)
+			switch entry := item.(type) {
+			case string:
+				result = append(result, entry)
+			case map[string]interface{}:
+				// The documented structured form: {name, description, default}
+				// (docs/skills.md). Only the name feeds argument substitution
+				// today - description is for human/model documentation, and
+				// there is nowhere yet to apply a default.
+				if name, ok := entry["name"].(string); ok && name != "" {
+					result = append(result, name)
+				}
 			}
 		}
 		return result
