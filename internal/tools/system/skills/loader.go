@@ -3,12 +3,16 @@ package skills
 import (
 	"context"
 	"fmt"
+	"io/fs"
 	"log/slog"
 	"os"
 	"path/filepath"
 	"sort"
 	"strings"
+	"sync"
+	"time"
 
+	shared "github.com/KPO-Tech/seshat/internal/tools/files/shared"
 	"github.com/KPO-Tech/seshat/pkg/runtimepath"
 )
 
@@ -149,6 +153,12 @@ func (l *FileSkillLoader) GetSkillDirCommandsForUser(cwd string, userID string) 
 	legacySkills := NewFileSkillLoaderWithSource(legacySkillsDir, SettingSourceProjectSettings)
 
 	sources := []SkillLoader{projectSkills, legacySkills, managedSkills, userSkills, builtinSkills, legacyCommands}
+
+	// A monorepo keeps skills next to the package they belong to, not only at
+	// cwd's own .claude/skills (already covered by projectSkills above).
+	for _, nested := range cachedNestedSkillDirs(cwd) {
+		sources = append(sources, NewFileSkillLoaderWithSource(nested, SettingSourceProjectSettings))
+	}
 
 	// Add any cloned skill repo collections (e.g. paperasse).
 	// Each repo root is a skill collection: every subdirectory containing a SKILL.md
@@ -590,6 +600,89 @@ func DiscoverSkillDirsForPaths(filePaths []string, cwd string) []string {
 	})
 
 	return newDirs
+}
+
+// maxNestedSkillDirDepth caps how far cachedNestedSkillDirs descends below
+// cwd, so one call cannot run away in a very deep tree.
+const maxNestedSkillDirDepth = 6
+
+// nestedSkillDirsCacheTTL mirrors skillDefCacheTTL (skillTool.go): long
+// enough that a tool-list rebuild mid-session doesn't re-walk the whole
+// project tree, short enough that a newly added skills/ directory shows up
+// without restarting.
+const nestedSkillDirsCacheTTL = 10 * time.Second
+
+var nestedSkillDirsCache struct {
+	mu   sync.Mutex
+	cwd  string
+	dirs []string
+	at   time.Time
+}
+
+// cachedNestedSkillDirs memoizes discoverNestedSkillDirs for
+// nestedSkillDirsCacheTTL, keyed by cwd: GetSkillDirCommandsForUser calls it
+// on every lookup (skillTool.go's lookupSkill/Call/Description have no cache
+// of their own), and a raw, uncached os.WalkDir of the whole project tree on
+// every single skill lookup is exactly the per-request filesystem scan a
+// prior perf investigation already flagged above (the "users" directory
+// comment) as adding ~1s per chat turn.
+func cachedNestedSkillDirs(cwd string) []string {
+	nestedSkillDirsCache.mu.Lock()
+	defer nestedSkillDirsCache.mu.Unlock()
+	if nestedSkillDirsCache.cwd == cwd && time.Since(nestedSkillDirsCache.at) < nestedSkillDirsCacheTTL {
+		return nestedSkillDirsCache.dirs
+	}
+	dirs := discoverNestedSkillDirs(cwd)
+	nestedSkillDirsCache.cwd = cwd
+	nestedSkillDirsCache.dirs = dirs
+	nestedSkillDirsCache.at = time.Now()
+	return dirs
+}
+
+// discoverNestedSkillDirs walks cwd, bounded to maxNestedSkillDirDepth and
+// skipping VCS, dependency and build directories (and any other dotted
+// directory), for .claude/skills directories below the top level - the one
+// GetProjectSkillsPath already covers directly without this walk.
+func discoverNestedSkillDirs(cwd string) []string {
+	cwd = strings.TrimSpace(cwd)
+	if cwd == "" {
+		return nil
+	}
+
+	skip := make(map[string]bool)
+	for _, name := range shared.GetFileReadIgnorePatterns(context.Background()) {
+		skip[name] = true
+	}
+	for _, name := range shared.GetVCSDirectoriesToExclude() {
+		skip[name] = true
+	}
+	// Not in the shared ignore list (which is about reading file content, not
+	// directory traversal), but a dependency directory a skill walk has no
+	// business entering either.
+	skip["vendor"] = true
+
+	rootDepth := strings.Count(filepath.Clean(cwd), string(filepath.Separator))
+	var dirs []string
+	_ = filepath.WalkDir(cwd, func(path string, d fs.DirEntry, err error) error {
+		if err != nil {
+			return nil //nolint:nilerr // best-effort discovery; an unreadable subtree is just skipped
+		}
+		if !d.IsDir() || path == cwd {
+			return nil
+		}
+		name := d.Name()
+		if skip[name] || strings.HasPrefix(name, ".") {
+			return filepath.SkipDir
+		}
+		if depth := strings.Count(filepath.Clean(path), string(filepath.Separator)) - rootDepth; depth > maxNestedSkillDirDepth {
+			return filepath.SkipDir
+		}
+		if info, statErr := os.Stat(filepath.Join(path, ".claude", "skills")); statErr == nil && info.IsDir() {
+			dirs = append(dirs, filepath.Join(path, ".claude", "skills"))
+		}
+		return nil
+	})
+	return dirs
 }
 
 func SubstituteArguments(content string, args string, argumentNames []string) string {

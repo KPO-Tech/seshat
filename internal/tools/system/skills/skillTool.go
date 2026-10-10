@@ -34,11 +34,12 @@ type skillDefCache struct {
 }
 
 type SkillTool struct {
-	loader     SkillLoader
-	cwd        string
-	userID     string
-	defCacheMu sync.Mutex
-	defCache   *skillDefCache
+	loader        SkillLoader
+	cwd           string
+	userID        string
+	allowedSkills []string
+	defCacheMu    sync.Mutex
+	defCache      *skillDefCache
 }
 
 func NewSkillTool(loader SkillLoader) *SkillTool {
@@ -57,6 +58,34 @@ func (t *SkillTool) SetUserID(userID string) {
 	t.userID = userID
 }
 
+// SetAllowedSkills restricts this tool to the given skill names (matched
+// against Skill.Name or Skill.DisplayName): every other skill behaves as if
+// it did not exist, in the tool's own description and in lookups alike. A
+// nil or empty list means no restriction (every skill stays visible), which
+// is also the default for a tool built by NewSkillTool.
+func (t *SkillTool) SetAllowedSkills(names []string) {
+	t.allowedSkills = names
+}
+
+// filterAllowed narrows all down to SetAllowedSkills's list, or returns all
+// unchanged when no restriction was set.
+func (t *SkillTool) filterAllowed(all []Skill) []Skill {
+	if len(t.allowedSkills) == 0 {
+		return all
+	}
+	allowed := make(map[string]bool, len(t.allowedSkills))
+	for _, name := range t.allowedSkills {
+		allowed[name] = true
+	}
+	result := make([]Skill, 0, len(all))
+	for _, sk := range all {
+		if allowed[sk.Name] || allowed[sk.DisplayName] {
+			result = append(result, sk)
+		}
+	}
+	return result
+}
+
 func (t *SkillTool) Definition() contract.Definition {
 	t.defCacheMu.Lock()
 	defer t.defCacheMu.Unlock()
@@ -64,7 +93,8 @@ func (t *SkillTool) Definition() contract.Definition {
 		return t.defCache.def
 	}
 
-	skills, _ := t.loader.GetSkillDirCommands(t.cwd)
+	skills, _ := GetAllSkillsForUser(t.cwd, t.userID)
+	skills = t.filterAllowed(skills)
 	skillList := FormatSkillsList(skills)
 
 	def := contract.Definition{
@@ -113,6 +143,7 @@ func (t *SkillTool) Call(ctx context.Context, input contract.CallInput, permissi
 
 	if skill == nil {
 		all, _ := GetAllSkillsForUser(t.cwd, t.userID)
+		all = t.filterAllowed(all)
 		var available []string
 		for _, s := range all {
 			available = append(available, s.Name)
@@ -149,6 +180,7 @@ func (t *SkillTool) lookupSkill(name string) (*Skill, error) {
 	if err != nil {
 		return nil, err
 	}
+	all = t.filterAllowed(all)
 	for i := range all {
 		if all[i].Name == name || all[i].DisplayName == name {
 			return &all[i], nil
@@ -165,7 +197,8 @@ func (t *SkillTool) lookupSkill(name string) (*Skill, error) {
 }
 
 func (t *SkillTool) Description(ctx context.Context) (string, error) {
-	skills, _ := GetAllSkills(t.cwd)
+	skills, _ := GetAllSkillsForUser(t.cwd, t.userID)
+	skills = t.filterAllowed(skills)
 	return GetPromptWithSkills(FormatSkillsList(skills)), nil
 }
 

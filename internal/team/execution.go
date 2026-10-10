@@ -56,6 +56,10 @@ func NewSessionHandler(eng *engine.Engine, toolFactory AgentToolFactory, profile
 		}
 		defer session.Close()
 
+		if len(profile.Skills) > 0 {
+			agent.RestrictSessionSkills(session, profile.Skills, ctx)
+		}
+
 		if toolFactory != nil {
 			for _, t := range toolFactory(profile.ID) {
 				if regErr := session.RegisterTool(t); regErr != nil {

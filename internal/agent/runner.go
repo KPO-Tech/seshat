@@ -11,6 +11,7 @@ import (
 	"github.com/KPO-Tech/seshat/internal/engine"
 	"github.com/KPO-Tech/seshat/internal/hooks"
 	tool "github.com/KPO-Tech/seshat/internal/tools/registry"
+	skilltool "github.com/KPO-Tech/seshat/internal/tools/system/skills"
 	"github.com/KPO-Tech/seshat/internal/types"
 )
 
@@ -228,6 +229,13 @@ func RunAgent(config *RunConfig) (*RunResult, error) {
 				Error:     fmt.Sprintf("failed to create session: %v", err),
 			}, nil
 		}
+	}
+
+	// Agent types that name specific skills to preload get a skill tool
+	// scoped to exactly those skills, instead of the full catalog every
+	// other sub-agent sees.
+	if len(agentDef.Skills) > 0 {
+		RestrictSessionSkills(session, agentDef.Skills, ctx)
 	}
 
 	// Apply permission mode override (e.g. bypass for headless background agents).
@@ -486,6 +494,25 @@ func matchesPattern(name string, patterns []string) bool {
 		}
 	}
 	return false
+}
+
+// RestrictSessionSkills replaces the session's skill tool with one scoped to
+// exactly allowed, so the sub-agent's own skill list and lookups only ever
+// see those skills - every other skill behaves as if it did not exist. A
+// session that does not expose the skill tool under its surface profile has
+// nothing to swap; UnregisterTool's error is treated as "nothing to do" and
+// not a failure.
+func RestrictSessionSkills(session *engine.Session, allowed []string, ctx context.Context) {
+	if err := session.UnregisterTool(skilltool.SkillToolName); err != nil {
+		return
+	}
+	restricted := skilltool.NewSkillTool(nil)
+	restricted.SetCwd(session.GetMetadata().RootPath)
+	restricted.SetUserID(types.AgentUserIDFromContext(ctx))
+	restricted.SetAllowedSkills(allowed)
+	if err := session.RegisterTool(restricted); err != nil {
+		slog.Warn("failed to register restricted skill tool for sub-agent", "error", err)
+	}
 }
 
 // filterToolsByPatterns filters tools by allowed patterns
