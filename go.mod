@@ -60,7 +60,7 @@ require (
 	github.com/mattn/go-isatty v0.0.24
 	github.com/modelcontextprotocol/go-sdk v1.8.0
 	github.com/opensearch-project/opensearch-go/v5 v5.0.0
-	github.com/pdfcpu/pdfcpu v0.16.0
+	github.com/pdfcpu/pdfcpu v0.16.1
 	github.com/pkg/browser v0.0.0-20240102092130-5ac0b6a4141c
 	github.com/posthog/posthog-go v1.15.0
 	github.com/qdrant/go-client v1.18.3
@@ -162,7 +162,7 @@ require (
 	github.com/gorilla/css v1.0.1 // indirect
 	github.com/grpc-ecosystem/grpc-gateway/v2 v2.30.0 // indirect
 	github.com/hashicorp/golang-lru/v2 v2.0.7 // indirect
-	github.com/hhrutter/tiff v1.0.6 // indirect
+	github.com/hhrutter/tiff v1.0.7 // indirect
 	github.com/itchyny/timefmt-go v0.1.8 // indirect
 	github.com/jackc/pgpassfile v1.0.0 // indirect
 	github.com/jackc/pgservicefile v0.0.0-20240606120523-5a60cdf6a761 // indirect
