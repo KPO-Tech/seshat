@@ -34,7 +34,12 @@ type Classification struct {
 
 // ModeConfig holds configuration for auto mode behavior.
 type ModeConfig struct {
-	FailClosed bool // When true, classifier errors result in deny (fail-closed)
+	// FailClosed governs a classifier that is configured but errors at
+	// classification time: true denies, false asks. It does not apply when
+	// no classifier was ever configured at all - that case always asks (or
+	// denies in a headless context, which cannot show the prompt); see
+	// Mode.Classify.
+	FailClosed bool
 }
 
 // DefaultModeConfig is the default configuration for auto mode.
@@ -175,7 +180,8 @@ func (m *Mode) SetAdvancedClassifier(classifier AdvancedClassifierInterface) {
 // It implements several fast-paths aligned with OpenClaude:
 //   - PowerShell special handling: always requires explicit permission
 //   - Safe-tool allowlist: read-only tools skip the classifier
-//   - Classifier fallback: handles classifier errors based on FailClosed
+//   - No classifier configured: asks (denies if headless)
+//   - Classifier configured but erroring: handled per FailClosed
 //   - Denial tracking: tracks consecutive/total denials for fallback
 //
 // Returns a PermissionResult indicating allow/deny/ask behavior.
@@ -251,25 +257,32 @@ func (m *Mode) Classify(ctx context.Context, pctx *ClassifierContext) (types.Per
 		}, nil
 	}
 
-	// Check classifier availability
-	// If no classifier is available, fail based on config
+	// No classifier was ever configured (as opposed to one that is
+	// configured but erroring below, which FailClosed still governs): ask a
+	// human rather than silently allow (see TODO.md M2) or silently deny
+	// (which would make auto mode a dead end for every tool not already on
+	// the safe-tool/safe-workflow allowlists, with no way to proceed). A
+	// headless/background agent cannot show that prompt, so it denies
+	// instead - same rule the PowerShell and request_permissions fast paths
+	// above already apply, and unlike those, this result returns directly
+	// from checkGlobalPermission's Step 4 without passing through
+	// applyModeTransformations' headless-ask-to-deny conversion, so it must
+	// decide this itself rather than relying on that.
 	if m.classifier == nil && m.advancedClassifier == nil {
-		if m.config.FailClosed {
-			// Fail-closed: deny when classifier is unavailable (secure default)
+		if pctx.ShouldAvoidPermissionPrompts {
 			return types.DenyWithDecisionReason(
-				fmt.Sprintf("permission to use %s denied: classifier unavailable", pctx.ToolName),
+				fmt.Sprintf("permission to use %s denied: no classifier configured and permission prompts are not available in this context", pctx.ToolName),
 				&types.PermissionDecisionReason{
-					Type:   types.PermissionDecisionReasonMode,
+					Type:   types.PermissionDecisionReasonAsyncAgent,
 					Source: "classifier",
-					Reason: "auto mode but no classifier available",
+					Reason: "auto mode but no classifier configured, and this is a headless context",
 				},
 			), nil
 		}
-		// Fail-open: fall back to ask when classifier is unavailable
-		return types.AskWithDecisionReason("auto mode but no classifier available", &types.PermissionDecisionReason{
+		return types.AskWithDecisionReason("auto mode but no classifier configured", &types.PermissionDecisionReason{
 			Type:   types.PermissionDecisionReasonMode,
-			Source: string(pctx.Mode),
-			Reason: "auto mode but no classifier available",
+			Source: "classifier",
+			Reason: "auto mode but no classifier configured",
 		}), nil
 	}
 

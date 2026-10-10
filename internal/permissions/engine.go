@@ -171,11 +171,18 @@ type PermissionContext struct {
 
 // NewEngine creates a new permission engine.
 func NewEngine() *Engine {
-	return &Engine{
+	e := &Engine{
 		rules:      make([]PermissionRule, 0),
 		hooks:      make([]Hook, 0),
 		FailClosed: true,
 	}
+	// Initialize autoMode immediately, with no classifier yet, so that auto
+	// mode's own already-correct FailClosed handling (auto.Mode.Classify)
+	// governs the "no classifier configured" case from the start, instead of
+	// checkGlobalPermission's step 4.5 ever seeing a nil autoMode and taking
+	// its unconditional-allow fallback (see TODO.md M2).
+	e.ensureAutoMode()
+	return e
 }
 
 // SetClassifier sets the classifier and initializes autoMode.
@@ -433,25 +440,19 @@ func (e *Engine) checkGlobalPermission(ctx context.Context, pctx *PermissionCont
 			return types.PermissionResult{}, err
 		}
 
-		// Track classifier transcript for debug — not yet implemented.
-
 		if err := e.RunPostPermissionHooks(ctx, pctx, &result); err != nil {
 			return types.PermissionResult{}, err
 		}
 		return result, nil
 	}
 
-	// Step 4.5: Auto mode fallback (no ML classifier configured).
-	// Without a classifier, auto mode approves all tool calls — safe workflow
-	// tools (agent, task_*, etc.) and all others including destructive tools.
-	// This matches the user expectation: orange shield = "just run, don't ask".
-	if pctx.Mode == types.PermissionModeAuto {
-		result := heuristicAllowResult(pctx.ToolName, "auto mode (no classifier)", pctx.ToolInput)
-		if err := e.RunPostPermissionHooks(ctx, pctx, &result); err != nil {
-			return types.PermissionResult{}, err
-		}
-		return result, nil
-	}
+	// Step 4.5 used to fall back to an unconditional allow (including
+	// destructive tools) whenever pctx.Mode == PermissionModeAuto and
+	// e.autoMode was nil - "no classifier configured" failing open. NewEngine
+	// now initializes autoMode unconditionally (with no classifier), so Step
+	// 4 above always runs instead, and auto.Mode.Classify's own FailClosed
+	// handling (deny by default, ask when FailClosed is explicitly set to
+	// false) decides this case correctly. See TODO.md M2.
 
 	// Step 4.6: onRequest mode — additionally auto-allow safe workflow tools
 	// (agent, task management, plan mode) so they don't interrupt the flow.
