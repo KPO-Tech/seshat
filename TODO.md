@@ -103,9 +103,11 @@ The `verify` type was never a general "check the result" reviewer - it validates
 
 ## Low
 
-### L0. Repository documents that describe things the code does not do (verified)
+### L0. Repository documents that describe things the code does not do - fixed (verified)
 
 `README.md`, `docs/sdk.md` and `docs/mcp.md` (MCP examples without `Transport`, see H7). `docs/skills.md` (structured `arguments`, `allowed-tools` and `model` as if they applied to every skill, `context: fork`, `shell`, project folders). Fix them with the code, or before.
+
+**Fixed (2026-10-10):** the MCP `Transport`-inference complaint is now moot - `docs/mcp.md` already documents the H7 fix (same session), and README.md/docs/sdk.md's `Transport`-less examples are correct as a result; no edit needed there. `context: fork`, structured `arguments`, and `allowed-tools` are now genuinely implemented (M5b, same session) so `docs/skills.md` describing them as working is accurate - except the `allowed-tools` example and its "available tool names" line still named `read`/`write`/`mcp`/`think`, none of which are real registered tool names (exact-or-glob matching only, no alias table) - corrected to `read_file`/`write_file`/etc, with `mcp__<server>__<tool>` noted for MCP tools, in both the reference section and all three "Complete examples" that used `read`. Added "not yet implemented"/"not yet applied" notes, rather than removing the fields, for `shell`, `hooks`, `disable-model-invocation` (depends on `shell`/`hooks`), `model` (reaches a forked agent's definition but nothing consumes it), `arguments.default` (parsed, never applied), and `paths` (only takes effect through the public `pkg/skills.GetSkillsForContext`, which nothing in the live runtime calls automatically - M5b's own already-known gap). Fixed the "project folders" table too: it listed `~/.seshat/skills/user|managed/` and `~/.seshat/bundled-skills/`, but the real, actually-loaded paths are `~/.config/seshat/skills/user|managed|builtin/` (respecting `SESHAT_RUNTIME_ROOT`); also documented that a `.claude/skills/` directory below the project root is discovered automatically (M5's nested-dir fix), which the table didn't mention at all.
 
 ### L1. Dead functions and methods (candidate)
 
