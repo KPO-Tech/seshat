@@ -56,6 +56,24 @@ func withSubAgentDepth(ctx context.Context) context.Context {
 	return context.WithValue(ctx, subAgentDepthKey{}, subAgentDepth(ctx)+1)
 }
 
+// subAgentPermissionMode derives the permission mode a spawned sub-agent
+// should run under from its parent session's current mode.
+//
+// Sub-agents are headless and synchronous: there is no UI to show an
+// interactive prompt to, so onRequest/auto/acceptEdits/bypass/granular in the
+// parent all collapse to bypass for the child, same as before this existed.
+// The one exception is PermissionModeNever, whose own contract (see its doc
+// comment) is "used for headless/background agents that cannot display UI
+// prompts" - a sub-agent is exactly that, so a parent in never mode (asking
+// for nothing to be escalated, failing closed instead) must not let a child
+// escalate into bypass; the child stays in never too.
+func subAgentPermissionMode(parentMode types.PermissionMode) types.PermissionMode {
+	if parentMode == types.PermissionModeNever {
+		return types.PermissionModeNever
+	}
+	return types.PermissionModeBypass
+}
+
 // Config for Agent tool
 type AgentToolConfig struct {
 	Enabled bool
@@ -271,6 +289,7 @@ func (t *AgentTool) Call(
 	}
 
 	fullPrompt := buildAgentTaskPrompt(agentDef, task)
+	permMode := subAgentPermissionMode(input.ToolContextValue().PermissionMode)
 
 	// Build a sub-agent event emitter that tags every forwarded event with this tool use ID,
 	// so the frontend can route streaming events to the correct sub-agent card.
@@ -284,7 +303,7 @@ func (t *AgentTool) Call(
 	}
 
 	if isolationMode == "worktree" {
-		result, err := t.runAgentInWorktree(ctx, agentType, fullPrompt, maxTurns, allowedTools, parsedInput, agentEventFn)
+		result, err := t.runAgentInWorktree(ctx, agentType, fullPrompt, maxTurns, allowedTools, parsedInput, agentEventFn, permMode)
 		if err != nil {
 			return tool.CallResult{Data: map[string]any{"error": err.Error()}, Content: err.Error()}, nil
 		}
@@ -322,7 +341,7 @@ func (t *AgentTool) Call(
 
 	if forkMode {
 		forkMessages := extractForkMessagesFromInput(input, parsedInput)
-		result := t.runForkAgent(ctx, agentType, task, maxTurns, allowedTools, forkMessages, agentEventFn)
+		result := t.runForkAgent(ctx, agentType, task, maxTurns, allowedTools, forkMessages, agentEventFn, permMode)
 		if !result.Success {
 			return tool.CallResult{
 				Data:    map[string]any{"error": result.Error, "agentType": agentType},
@@ -343,7 +362,7 @@ func (t *AgentTool) Call(
 		return tool.CallResult{Data: forkData, Content: result.Output}, nil
 	}
 
-	result := t.runAgent(ctx, agentType, task, maxTurns, allowedTools, agentEventFn)
+	result := t.runAgent(ctx, agentType, task, maxTurns, allowedTools, agentEventFn, permMode)
 	if !result.Success {
 		return tool.CallResult{
 			Data:    map[string]any{"error": result.Error, "agentType": agentType},
@@ -372,7 +391,7 @@ func (t *AgentTool) Call(
 //     DefaultSubAgentTimeout so a stalled LLM cannot block the parent forever.
 //  3. MaxTurns reduction — sub-agents default to DefaultSubAgentMaxTurns
 //     (lower than the top-level DefaultMaxTurns) to limit token consumption.
-func (t *AgentTool) runAgent(ctx context.Context, agentType, task string, maxTurns int, allowedTools []string, eventFn func(types.RuntimeEvent)) *coreagent.RunResult {
+func (t *AgentTool) runAgent(ctx context.Context, agentType, task string, maxTurns int, allowedTools []string, eventFn func(types.RuntimeEvent), permMode types.PermissionMode) *coreagent.RunResult {
 	// ── 1. Spawn depth guard ────────────────────────────────────────────────
 	depth := subAgentDepth(ctx)
 	maxDepth := effectiveMaxDepth(ctx)
@@ -438,7 +457,7 @@ func (t *AgentTool) runAgent(ctx context.Context, agentType, task string, maxTur
 		Tools:          nil,
 		Callback:       nil,
 		ToolFilter:     filteredToolPatterns,
-		PermissionMode: types.PermissionModeBypass,
+		PermissionMode: permMode,
 		EventFn:        eventFn,
 		Registry:       t.registry,
 		ContinuationMessage: func(_ int, _ string) string {
@@ -734,7 +753,7 @@ func extractForkMessagesFromInput(callInput tool.CallInput, input map[string]any
 
 // runForkAgent runs an agent in fork mode (inherits parent's messages).
 // Applies the same depth and timeout guards as runAgent.
-func (t *AgentTool) runForkAgent(ctx context.Context, agentType, task string, maxTurns int, allowedTools []string, forkMessages []types.Message, eventFn func(types.RuntimeEvent)) *coreagent.RunResult {
+func (t *AgentTool) runForkAgent(ctx context.Context, agentType, task string, maxTurns int, allowedTools []string, forkMessages []types.Message, eventFn func(types.RuntimeEvent), permMode types.PermissionMode) *coreagent.RunResult {
 	depth := subAgentDepth(ctx)
 	maxDepth := effectiveMaxDepth(ctx)
 	if depth >= maxDepth {
@@ -792,7 +811,7 @@ func (t *AgentTool) runForkAgent(ctx context.Context, agentType, task string, ma
 		ToolFilter:       filterToolPatterns(allowedTools, agentDef.GetToolPatterns()),
 		ForkFromMessages: forkMessages,
 		Callback:         nil,
-		PermissionMode:   types.PermissionModeBypass,
+		PermissionMode:   permMode,
 		EventFn:          eventFn,
 		Registry:         t.registry,
 		ContinuationMessage: func(_ int, _ string) string {
@@ -872,7 +891,7 @@ func (t *AgentTool) executeRunConfig(ctx context.Context, config *coreagent.RunC
 }
 
 // runAgentInWorktree runs an agent in an isolated git worktree
-func (t *AgentTool) runAgentInWorktree(ctx context.Context, agentType, task string, maxTurns int, allowedTools []string, input map[string]any, eventFn func(types.RuntimeEvent)) (*coreagent.RunResult, error) {
+func (t *AgentTool) runAgentInWorktree(ctx context.Context, agentType, task string, maxTurns int, allowedTools []string, input map[string]any, eventFn func(types.RuntimeEvent), permMode types.PermissionMode) (*coreagent.RunResult, error) {
 	worktreeManager := worktreeTool.NewWorktreeManager(worktreeTool.WorktreeConfig{
 		UseGitWorktree:  true,
 		WorktreeBaseDir: ".worktrees",
@@ -932,7 +951,7 @@ func (t *AgentTool) runAgentInWorktree(ctx context.Context, agentType, task stri
 		ToolFilter:     filterToolPatterns(allowedTools, agentDef.GetToolPatterns()),
 		WorktreeDir:    session.WorktreePath,
 		Callback:       nil,
-		PermissionMode: types.PermissionModeBypass,
+		PermissionMode: permMode,
 		EventFn:        eventFn,
 		Registry:       t.registry,
 	}

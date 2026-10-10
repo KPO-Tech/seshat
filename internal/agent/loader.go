@@ -118,12 +118,13 @@ Guidelines:
 	PlanAgent = BuiltInAgentDefinition{
 		AgentType: AgentTypePlan,
 		WhenToUse: "Create detailed implementation plans with step-by-step instructions for features or bug fixes.",
-		Tools:     []string{"read_file", "glob", "grep", "write_file", "edit_file"},
+		Tools:     []string{"read_file", "glob", "grep"},
 		Source:    AgentSourceBuiltIn,
 		BaseDir:   "built-in",
 		GetSystemPrompt: func() string {
 			return `You are a Plan agent for Seshat. Your role is to create detailed implementation plans.
 Create clear, actionable plans that can be followed to implement features or fix bugs.
+YOU NEVER MAKE CHANGES - you only read and investigate, then write the plan into your final answer.
 
 Your task is to:
 - Analyze requirements and understand what needs to be built

@@ -139,8 +139,10 @@ type RunConfig struct {
 	GoalSessionID string
 
 	// PermissionMode, when non-empty, overrides the session's permission mode.
-	// Set to types.PermissionModeBypass for headless background agents so they
-	// can execute tools without waiting for interactive prompts.
+	// Headless sub-agents cannot display interactive prompts, so callers
+	// derive this from the parent session's mode via subAgentPermissionMode:
+	// normally types.PermissionModeBypass, or types.PermissionModeNever when
+	// the parent is itself in never mode (see that function's doc comment).
 	PermissionMode types.PermissionMode
 
 	// ResumeFromSessionID, when set, opens an existing persisted session instead
