@@ -349,71 +349,13 @@ func (l *Loop) Run(ctx context.Context, req RunRequest) RunResult {
 
 		toolUses := l.extractToolUses(apiResp.Content)
 		if len(toolUses) > 0 {
-			// Execute tool uses start hook
-			if l.executeHookAndStop(ctx, state, types.HookEventToolUsesStart, map[string]any{
-				"iteration":  state.Iterations,
-				"tool_count": len(toolUses),
-				"session_id": req.SessionID,
-				"turn_id":    req.TurnID,
-			}) {
-				l.setTransition(state, Terminate("hook_stop", types.StopReasonEndTurn))
+			outcome := l.handleToolUsesIteration(ctx, state, &req, toolUses)
+			if outcome.result != nil {
+				return *outcome.result
+			}
+			if outcome.shouldBreak {
 				break
 			}
-
-			if l.applyPreToolUseHooks(ctx, state, req, toolUses) {
-				l.setTransition(state, Terminate("hook_stop", types.StopReasonEndTurn))
-				break
-			}
-
-			state.ToolUses = append(state.ToolUses, toolUses...)
-
-			transcriptBeforeCurrentAction := append([]types.Message(nil), state.Messages[:len(state.Messages)-1]...)
-			execResult, execErr := l.executeToolsForResponse(ctx, toolUses, req, state, transcriptBeforeCurrentAction)
-
-			if execErr != nil {
-				l.setTransition(state, Terminate("tool_execution_error", types.StopReasonEndTurn))
-				return RunResult{Messages: state.Messages, StopReason: types.StopReasonEndTurn, Iterations: state.Iterations, Error: fmt.Errorf("tool execution failed: %w", execErr), RecoveryContext: state.RecoveryContext, AutoCompactFailureCount: state.AutoCompactFailureCount}
-			}
-
-			state.PermissionContext = permissionContextFromToolContext(state.PermissionContext, execResult.FinalToolContext)
-			if state.PermissionContext != nil {
-				state.PermissionMode = state.PermissionContext.Mode
-			}
-
-			state.Messages = append(state.Messages, execResult.Messages...)
-			state.ToolResults = append(state.ToolResults, execResult.Results...)
-
-			// Execute post tool use hook. Fires after the merge above so a
-			// hook that stops the turn here still leaves a well-formed
-			// transcript - the tool already ran and its results are already
-			// recorded (H4 in TODO.md).
-			if l.applyPostToolUseHooks(ctx, state, req, toolUses, execResult) {
-				l.setTransition(state, Terminate("hook_stop", types.StopReasonEndTurn))
-				break
-			}
-
-			// Execute tool uses complete hook
-			l.executeHook(ctx, types.HookEventToolUsesComplete, map[string]any{
-				"iteration":      state.Iterations,
-				"tool_count":     len(toolUses),
-				"success_count":  len(execResult.Results),
-				"error_count":    len(execResult.Errors),
-				"session_id":     req.SessionID,
-				"turn_id":        req.TurnID,
-				"total_duration": execResult.TotalDuration,
-			})
-
-			discovery := l.integrateDiscoveredDeferredTools(ctx, state, &req, toolUses, execResult.Results)
-			if recoveryMessage := toolLoopRecoveryMessage(discovery); recoveryMessage != "" {
-				state.Messages = append(state.Messages, newContinuationMessage(req.TurnID, recoveryMessage))
-				state.ContinuationNudgeCount = 0
-				state.MaxOutputTokensRecoveryCount = 0
-				l.setTransition(state, ContinueWithRecovery("tool_loop_recovery", RecoveryTypeContinuationNudge))
-				continue
-			}
-			state.ContinuationNudgeCount = 0
-			state.MaxOutputTokensRecoveryCount = 0
-			l.setTransition(state, Continue("tool_results_appended"))
 			continue
 		}
 
@@ -503,6 +445,89 @@ func (l *Loop) Run(ctx context.Context, req RunRequest) RunResult {
 		RecoveryContext:         state.RecoveryContext,
 		AutoCompactFailureCount: state.AutoCompactFailureCount,
 	}
+}
+
+// toolUsesOutcome tells Run's main loop what to do after one iteration's
+// tool uses have been handled: return result immediately when non-nil,
+// otherwise break the loop when shouldBreak, otherwise continue it.
+type toolUsesOutcome struct {
+	result      *RunResult
+	shouldBreak bool
+}
+
+// handleToolUsesIteration runs the hooks, tool execution, and deferred-tool
+// discovery for one iteration's tool uses - split out of Run to keep that
+// function's own branch count down. req is a pointer because
+// integrateDiscoveredDeferredTools mutates it (e.g. appending newly
+// discovered deferred tools) and Run's own req must see that update on its
+// next iteration; every other call here only reads req, so it gets *req.
+func (l *Loop) handleToolUsesIteration(ctx context.Context, state *MutableState, req *RunRequest, toolUses []types.ToolUseContent) toolUsesOutcome {
+	// Execute tool uses start hook
+	if l.executeHookAndStop(ctx, state, types.HookEventToolUsesStart, map[string]any{
+		"iteration":  state.Iterations,
+		"tool_count": len(toolUses),
+		"session_id": req.SessionID,
+		"turn_id":    req.TurnID,
+	}) {
+		l.setTransition(state, Terminate("hook_stop", types.StopReasonEndTurn))
+		return toolUsesOutcome{shouldBreak: true}
+	}
+
+	if l.applyPreToolUseHooks(ctx, state, *req, toolUses) {
+		l.setTransition(state, Terminate("hook_stop", types.StopReasonEndTurn))
+		return toolUsesOutcome{shouldBreak: true}
+	}
+
+	state.ToolUses = append(state.ToolUses, toolUses...)
+
+	transcriptBeforeCurrentAction := append([]types.Message(nil), state.Messages[:len(state.Messages)-1]...)
+	execResult, execErr := l.executeToolsForResponse(ctx, toolUses, *req, state, transcriptBeforeCurrentAction)
+
+	if execErr != nil {
+		l.setTransition(state, Terminate("tool_execution_error", types.StopReasonEndTurn))
+		return toolUsesOutcome{result: &RunResult{Messages: state.Messages, StopReason: types.StopReasonEndTurn, Iterations: state.Iterations, Error: fmt.Errorf("tool execution failed: %w", execErr), RecoveryContext: state.RecoveryContext, AutoCompactFailureCount: state.AutoCompactFailureCount}}
+	}
+
+	state.PermissionContext = permissionContextFromToolContext(state.PermissionContext, execResult.FinalToolContext)
+	if state.PermissionContext != nil {
+		state.PermissionMode = state.PermissionContext.Mode
+	}
+
+	state.Messages = append(state.Messages, execResult.Messages...)
+	state.ToolResults = append(state.ToolResults, execResult.Results...)
+
+	// Execute post tool use hook. Fires after the merge above so a
+	// hook that stops the turn here still leaves a well-formed
+	// transcript - the tool already ran and its results are already
+	// recorded (H4 in TODO.md).
+	if l.applyPostToolUseHooks(ctx, state, *req, toolUses, execResult) {
+		l.setTransition(state, Terminate("hook_stop", types.StopReasonEndTurn))
+		return toolUsesOutcome{shouldBreak: true}
+	}
+
+	// Execute tool uses complete hook
+	l.executeHook(ctx, types.HookEventToolUsesComplete, map[string]any{
+		"iteration":      state.Iterations,
+		"tool_count":     len(toolUses),
+		"success_count":  len(execResult.Results),
+		"error_count":    len(execResult.Errors),
+		"session_id":     req.SessionID,
+		"turn_id":        req.TurnID,
+		"total_duration": execResult.TotalDuration,
+	})
+
+	discovery := l.integrateDiscoveredDeferredTools(ctx, state, req, toolUses, execResult.Results)
+	if recoveryMessage := toolLoopRecoveryMessage(discovery); recoveryMessage != "" {
+		state.Messages = append(state.Messages, newContinuationMessage(req.TurnID, recoveryMessage))
+		state.ContinuationNudgeCount = 0
+		state.MaxOutputTokensRecoveryCount = 0
+		l.setTransition(state, ContinueWithRecovery("tool_loop_recovery", RecoveryTypeContinuationNudge))
+		return toolUsesOutcome{}
+	}
+	state.ContinuationNudgeCount = 0
+	state.MaxOutputTokensRecoveryCount = 0
+	l.setTransition(state, Continue("tool_results_appended"))
+	return toolUsesOutcome{}
 }
 
 func (l *Loop) setTransition(state *MutableState, transition Transition) {

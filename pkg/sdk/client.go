@@ -205,16 +205,7 @@ func NewClient(config *ClientConfig) (*Client, error) {
 		return nil, fmt.Errorf("failed to register agent tool: %w", err)
 	}
 
-	// The skill tool is constructed inside builtin.go, before this engine
-	// exists, so - like agentToolInstance.SetEngine above - its own
-	// engine-dependent piece (running a `context: fork` skill as a
-	// sub-agent) is injected after the fact by looking the already
-	// registered instance back up.
-	if resolved, ok := reg.Get(skillTool.SkillToolName); ok {
-		if skill, ok := resolved.(*skillTool.SkillTool); ok {
-			skill.SetForkRunner(agentTool.NewSkillForkRunner(queryEngine))
-		}
-	}
+	wireSkillForkRunner(reg, queryEngine)
 
 	// spawn_agent and resume_agent need the live engine instance — registered here, not in builtin.go.
 	// nil tools → sub-agent inherits all tools from the engine registry at call time.
@@ -273,6 +264,24 @@ func NewClient(config *ClientConfig) (*Client, error) {
 		registryMs, mcpMs, len(config.MCPServers), storeMs, memMs, time.Since(newClientStart).Milliseconds())
 
 	return client, nil
+}
+
+// wireSkillForkRunner injects the engine-dependent piece of the skill tool
+// (running a `context: fork` skill as a sub-agent) after the fact: the tool
+// itself is constructed inside builtin.go, before this engine exists, so -
+// like agentToolInstance.SetEngine in NewClient - there is nothing to inject
+// into until the registered instance is looked back up. Split out of
+// NewClient to keep that function's own branch count down.
+func wireSkillForkRunner(reg *registry.Registry, queryEngine *engine.Engine) {
+	resolved, ok := reg.Get(skillTool.SkillToolName)
+	if !ok {
+		return
+	}
+	skill, ok := resolved.(*skillTool.SkillTool)
+	if !ok {
+		return
+	}
+	skill.SetForkRunner(agentTool.NewSkillForkRunner(queryEngine))
 }
 
 // buildEngineConfig converts ClientConfig into engine.Config.

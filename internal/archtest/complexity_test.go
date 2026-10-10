@@ -27,7 +27,6 @@ var knownComplex = map[string]int{
 	"internal/pdfsmart/pdfsmart.go ReadPages":                                         54,
 	"internal/pdftext/layout.go plainLine":                                            37,
 	"internal/pdftext/rulings.go collectRulings":                                      41,
-	"internal/permissions/engine.go Engine.checkGlobalPermission":                     32,
 	"internal/providers/client_codex.go parseCodexSSEStream":                          33,
 	"internal/rag/markdown_chunker.go markdownChunker.split":                          38,
 	"internal/rag/service.go Service.Ingest":                                          35,

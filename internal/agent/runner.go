@@ -231,12 +231,7 @@ func RunAgent(config *RunConfig) (*RunResult, error) {
 		}
 	}
 
-	// Agent types that name specific skills to preload get a skill tool
-	// scoped to exactly those skills, instead of the full catalog every
-	// other sub-agent sees.
-	if len(agentDef.Skills) > 0 {
-		RestrictSessionSkills(session, agentDef.Skills, ctx)
-	}
+	restrictSessionSkillsIfDeclared(session, agentDef, ctx)
 
 	// Apply permission mode override (e.g. bypass for headless background agents).
 	if config.PermissionMode != "" {
@@ -494,6 +489,15 @@ func matchesPattern(name string, patterns []string) bool {
 		}
 	}
 	return false
+}
+
+// restrictSessionSkillsIfDeclared calls RestrictSessionSkills when agentDef
+// names specific skills to preload, split out of RunAgent to keep that
+// function's own branch count down rather than inlining the check there.
+func restrictSessionSkillsIfDeclared(session *engine.Session, agentDef *AgentDefinition, ctx context.Context) {
+	if len(agentDef.Skills) > 0 {
+		RestrictSessionSkills(session, agentDef.Skills, ctx)
+	}
 }
 
 // RestrictSessionSkills replaces the session's skill tool with one scoped to
