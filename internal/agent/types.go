@@ -10,7 +10,6 @@ type AgentSource string
 const (
 	AgentSourceBuiltIn AgentSource = "built-in"
 	AgentSourceUser    AgentSource = "user"
-	AgentSourceProject AgentSource = "project"
 )
 
 // AgentDefinition defines an agent

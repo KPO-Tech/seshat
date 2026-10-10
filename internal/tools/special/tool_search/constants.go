@@ -40,7 +40,3 @@ Some tools are not loaded upfront to keep the context window small. Use this too
 type ToolSearchConfig struct {
 	Registry *registry.Registry
 }
-
-func DefaultToolSearchToolConfig(reg *registry.Registry) *ToolSearchConfig {
-	return &ToolSearchConfig{Registry: reg}
-}

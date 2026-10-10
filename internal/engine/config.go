@@ -2,6 +2,7 @@ package engine
 
 import (
 	"github.com/KPO-Tech/seshat/internal/prompt"
+	"github.com/KPO-Tech/seshat/internal/providers"
 	"github.com/KPO-Tech/seshat/internal/tools/system/mcp"
 	"github.com/KPO-Tech/seshat/internal/types"
 	browsercore "github.com/KPO-Tech/seshat/internal/web/browser"
@@ -92,7 +93,7 @@ func DefaultConfig() *Config {
 		PermissionMode: types.PermissionModeOnRequest,
 		Model: types.ModelIdentifier{
 			Provider: types.APIProviderAnthropic,
-			Model:    "claude-3-5-sonnet-20241022",
+			Model:    providers.DefaultLegacySonnetModel,
 		},
 		MaxTokens:            8192,
 		SystemPromptTemplate: "",

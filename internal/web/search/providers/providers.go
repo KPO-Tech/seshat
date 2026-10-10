@@ -65,10 +65,6 @@ func ProviderDebugInfo() map[string]bool {
 }
 
 // GetProviderMode returns the current provider mode.
-func GetCurrentMode() ProviderMode {
-	return ProviderModeFromEnv()
-}
-
 // IsProviderAvailable checks if any provider is configured.
 func IsProviderAvailable() bool {
 	return len(GetConfiguredProviders()) > 0

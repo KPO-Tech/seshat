@@ -409,7 +409,7 @@ func (s *Session) beginTurn() error {
 	defer s.mu.Unlock()
 	switch s.phase {
 	case sessionPhaseClosed:
-		return fmt.Errorf("session is closed")
+		return types.NewError(types.ErrCodeSessionClosed, "session is closed")
 	case sessionPhaseRunning:
 		return fmt.Errorf("session is busy: a turn is already in progress")
 	}

@@ -375,15 +375,6 @@ func cleanPathToken(raw string) string {
 	return strings.Trim(token, "\"'")
 }
 
-func isWorkspaceWriteCommand(cmd string) bool {
-	switch filepath.Base(cmd) {
-	case "rm", "rmdir", "mv", "cp", "mkdir", "touch", "chmod",
-		"chown", "chgrp", "ln", "tee", "dd", "truncate", "install", "rename":
-		return true
-	}
-	return false
-}
-
 func isProtectedWritePath(path string) bool {
 	clean := filepath.Clean(path)
 	for _, root := range protectedWritePaths {

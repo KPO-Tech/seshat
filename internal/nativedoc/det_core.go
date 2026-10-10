@@ -248,32 +248,6 @@ func dlaFlushCandidates() {
 	dlaCandidates = nil
 }
 
-// S2 diagnostic: collect each contour's post-unclip min-area rect (quad2, in
-// resized coordinates, before scaling to source). Comparing this against the
-// deepdoc oracle's post-unclip quad isolates whether the residual DET error
-// lives in the unclip->re-rect stage or in the scale/filter stage.
-var dlaPostUnclip [][4][2]float64
-
-func dlaRecordPostUnclip(q [4]pt) {
-	if os.Getenv("DLA_DUMP_QUADS") == "" {
-		return
-	}
-	var v [4][2]float64
-	for i := range q {
-		v[i] = [2]float64{q[i].X, q[i].Y}
-	}
-	dlaPostUnclip = append(dlaPostUnclip, v)
-}
-
-func dlaFlushPostUnclip() {
-	if os.Getenv("DLA_DUMP_QUADS") == "" {
-		return
-	}
-	b, _ := json.Marshal(dlaPostUnclip)
-	_ = os.WriteFile("/tmp/go_quads_post.json", b, 0o644)
-	dlaPostUnclip = nil
-}
-
 func polygonArea(p []pt) float64 {
 	n := len(p)
 	var a float64

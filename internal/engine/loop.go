@@ -485,7 +485,7 @@ func (l *Loop) handleToolUsesIteration(ctx context.Context, state *MutableState,
 
 	if execErr != nil {
 		l.setTransition(state, Terminate("tool_execution_error", types.StopReasonEndTurn))
-		return toolUsesOutcome{result: &RunResult{Messages: state.Messages, StopReason: types.StopReasonEndTurn, Iterations: state.Iterations, Error: fmt.Errorf("tool execution failed: %w", execErr), RecoveryContext: state.RecoveryContext, AutoCompactFailureCount: state.AutoCompactFailureCount}}
+		return toolUsesOutcome{result: &RunResult{Messages: state.Messages, StopReason: types.StopReasonEndTurn, Iterations: state.Iterations, Error: types.WrapError(types.ErrCodeToolExecution, "tool execution failed", execErr), RecoveryContext: state.RecoveryContext, AutoCompactFailureCount: state.AutoCompactFailureCount}}
 	}
 
 	state.PermissionContext = permissionContextFromToolContext(state.PermissionContext, execResult.FinalToolContext)
@@ -998,10 +998,6 @@ func (l *Loop) buildAPIRequest(state *MutableState, req RunRequest, model types.
 func (l *Loop) recordPreviousResponse(state *MutableState, _ types.ModelIdentifier, _ *types.APIResponse) {
 	state.PreviousResponseID = ""
 	state.PreviousResponseMessageCount = 0
-}
-
-func (l *Loop) sendAPIRequest(ctx context.Context, apiReq types.APIRequest, onChunk func(types.APIResponseChunk)) (*types.APIResponse, error) {
-	return l.sendAPIRequestWithClient(ctx, l.effectiveAPIClient(), apiReq, onChunk)
 }
 
 func (l *Loop) sendAPIRequestWithClient(ctx context.Context, client *providers.Client, apiReq types.APIRequest, onChunk func(types.APIResponseChunk)) (*types.APIResponse, error) {

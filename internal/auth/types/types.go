@@ -14,11 +14,8 @@ type APIProvider string
 const (
 	APIProviderOpenAI    APIProvider = "openai"
 	APIProviderAnthropic APIProvider = "anthropic"
-	APIProviderGoogle    APIProvider = "google"
 	APIProviderGemini    APIProvider = "gemini"
 	APIProviderOllama    APIProvider = "ollama"
-	APIProviderAzure     APIProvider = "azure"
-	APIProviderZAI       APIProvider = "z"
 	APIProviderMiniMax   APIProvider = "minimax"
 )
 
@@ -36,7 +33,6 @@ type TokenType string
 const (
 	TokenTypeAccess  TokenType = "access_token"
 	TokenTypeRefresh TokenType = "refresh_token"
-	TokenTypeID      TokenType = "id_token"
 )
 
 // Token represents an OAuth token

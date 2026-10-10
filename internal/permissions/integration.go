@@ -464,7 +464,7 @@ func (i *Integrator) CheckToolUse(
 
 	result, err := i.engine.CheckPermission(ctx, pctx)
 	if err != nil {
-		return types.PermissionResult{}, fmt.Errorf("permission check failed: %w", err)
+		return types.PermissionResult{}, types.WrapError(types.ErrCodePermissionError, "permission check failed", err)
 	}
 	if result.IsPassthrough() {
 		return types.AllowWithInput(result.Reason, result.UpdatedInput), nil

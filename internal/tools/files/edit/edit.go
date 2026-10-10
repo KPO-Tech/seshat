@@ -355,10 +355,6 @@ func (e *Tool) Call(
 	return res, nil
 }
 
-func normalizedBaseName(filePath string) string {
-	return strings.ToLower(filepath.Base(filePath))
-}
-
 // Description returns the tool description
 func (e *Tool) Description(ctx context.Context) (string, error) {
 	return ToolDescription, nil

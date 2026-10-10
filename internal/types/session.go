@@ -21,7 +21,6 @@ type SessionStatus string
 
 const (
 	SessionStatusActive    SessionStatus = "active"
-	SessionStatusIdle      SessionStatus = "idle"
 	SessionStatusInterrupt SessionStatus = "interrupted"
 	SessionStatusClosed    SessionStatus = "closed"
 )

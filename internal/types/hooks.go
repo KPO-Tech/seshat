@@ -138,9 +138,7 @@ type HookHandler func(ctx context.Context, progress HookProgress) (*HookResult, 
 type HookStage string
 
 const (
-	HookStagePre    HookStage = "pre"
-	HookStagePost   HookStage = "post"
-	HookStageAround HookStage = "around"
+	HookStagePre HookStage = "pre"
 
 	// Permission-specific hook stages
 	HookStagePrePermission  HookStage = "pre_permission"
