@@ -70,3 +70,10 @@ func MCPHealth() map[string]string {
 func Aliases() []Alias {
 	return internalskills.GetSkillAliases()
 }
+
+// RegisterAlias makes the skill tool accept alias as another name for the
+// skill target: invoking alias through the skill tool runs target. Call it
+// before the session starts; the registry is process-wide and not persisted.
+func RegisterAlias(alias string, target string) {
+	internalskills.RegisterSkillAlias(alias, target)
+}

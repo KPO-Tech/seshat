@@ -437,10 +437,6 @@ func (c *Client) sendMessage(ctx context.Context, req types.APIRequest) (*http.R
 
 // Helper methods
 
-func (c *Client) buildURL(path string) string {
-	return c.baseURL + path
-}
-
 func (c *Client) buildRequestEndpoint(req types.APIRequest) string {
 	return c.resolveAdapter().requestEndpoint(c, req)
 }

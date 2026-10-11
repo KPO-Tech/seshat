@@ -85,7 +85,7 @@ func (s *Session) UnregisterTool(name string) error {
 		return fmt.Errorf("session is nil")
 	}
 	if _, ok := s.state.Tools[name]; !ok {
-		return fmt.Errorf("tool %q not found", name)
+		return types.NewError(types.ErrCodeToolNotFound, fmt.Sprintf("tool %q not found", name))
 	}
 	delete(s.state.Tools, name)
 	return nil

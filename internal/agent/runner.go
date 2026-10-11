@@ -11,6 +11,7 @@ import (
 	"github.com/KPO-Tech/seshat/internal/engine"
 	"github.com/KPO-Tech/seshat/internal/hooks"
 	tool "github.com/KPO-Tech/seshat/internal/tools/registry"
+	skilltool "github.com/KPO-Tech/seshat/internal/tools/system/skills"
 	"github.com/KPO-Tech/seshat/internal/types"
 )
 
@@ -61,10 +62,10 @@ type RunConfig struct {
 	// Task is the task description
 	Task string
 
-	// Tools is the list of available tools (nil = all tools)
-	Tools []tool.Tool
-
-	// ToolFilter is the list of tool name patterns to allow (nil = use Tools field directly)
+	// ToolFilter is a list of tool name patterns to restrict the sub-agent's
+	// session to (wildcard-aware - see matchesPattern). Empty/nil falls back
+	// to the resolved agent type's own GetToolPatterns(); a bare "*" (or an
+	// empty pattern list on both) means no restriction at all.
 	ToolFilter []string
 
 	// Engine is an optional pre-created engine
@@ -138,9 +139,22 @@ type RunConfig struct {
 	GoalSessionID string
 
 	// PermissionMode, when non-empty, overrides the session's permission mode.
-	// Set to types.PermissionModeBypass for headless background agents so they
-	// can execute tools without waiting for interactive prompts.
+	// Headless sub-agents cannot display interactive prompts, so callers
+	// derive this from the parent session's mode via subAgentPermissionMode:
+	// normally types.PermissionModeBypass, or types.PermissionModeNever when
+	// the parent is itself in never mode (see that function's doc comment).
 	PermissionMode types.PermissionMode
+
+	// ForkRunner, when set, is wired into the sub-agent session's skill tool
+	// if restrictSessionSkillsIfDeclared swaps it for a restricted one
+	// (AgentDefinition.Skills non-empty). Without this, a sub-agent that
+	// preloads a Skills list loses the ability to run any context: fork
+	// skill entirely, even though its parent session had one - the
+	// restricted tool RestrictSessionSkills builds is otherwise a bare
+	// NewSkillTool(nil) with no fork runner of its own. Callers in
+	// internal/tools/agents construct this from the same engine/package
+	// that already builds SkillForkRunner for the top-level skill tool.
+	ForkRunner skilltool.ForkRunner
 
 	// ResumeFromSessionID, when set, opens an existing persisted session instead
 	// of creating a new one. The first message sent to the resumed session is
@@ -178,15 +192,13 @@ func RunAgent(config *RunConfig) (*RunResult, error) {
 		}, nil
 	}
 
-	// Determine tools to allow in the session
-	// Use ToolFilter if provided (from main agent's tool list), otherwise use agent's patterns
-	var allowedTools []tool.Tool
-	if len(config.ToolFilter) > 0 {
-		// ToolFilter is a list of tool names, filter from config.Tools
-		allowedTools = filterToolsByNames(config.Tools, config.ToolFilter)
-	} else {
-		// Use agent definition's tool patterns
-		allowedTools = filterToolsByPatterns(config.Tools, agentDef.GetToolPatterns())
+	// Tool restriction patterns: ToolFilter is the caller's already-combined
+	// list (the model's own tools:[...] intersected with the agent type's
+	// own patterns - see agent_tool.go's filterToolPatterns) when given,
+	// otherwise fall back to the agent type's own declared patterns alone.
+	restrictPatterns := config.ToolFilter
+	if len(restrictPatterns) == 0 {
+		restrictPatterns = agentDef.GetToolPatterns()
 	}
 
 	// Get context
@@ -230,6 +242,9 @@ func RunAgent(config *RunConfig) (*RunResult, error) {
 		}
 	}
 
+	RestrictSessionTools(session, restrictPatterns)
+	restrictSessionSkillsIfDeclared(session, agentDef, ctx, config.ForkRunner)
+
 	// Apply permission mode override (e.g. bypass for headless background agents).
 	if config.PermissionMode != "" {
 		session.SetPermissionMode(config.PermissionMode)
@@ -249,17 +264,6 @@ func RunAgent(config *RunConfig) (*RunResult, error) {
 	// Agents inherit MCP tools from the parent engine's tool registry.
 	// If agent-specific MCP servers are needed, they should be configured
 	// when creating the engine, not per-session.
-
-	// Register tools
-	for _, t := range allowedTools {
-		if err := session.RegisterTool(t); err != nil {
-			return &RunResult{
-				AgentType: config.AgentType,
-				Success:   false,
-				Error:     fmt.Sprintf("failed to register tool %s: %v", t.Definition().Name, err),
-			}, nil
-		}
-	}
 
 	// Wire the event emitter so sub-agent events stream back to the parent session.
 	if config.EventFn != nil {
@@ -488,41 +492,65 @@ func matchesPattern(name string, patterns []string) bool {
 	return false
 }
 
-// filterToolsByPatterns filters tools by allowed patterns
-func filterToolsByPatterns(tools []tool.Tool, patterns []string) []tool.Tool {
+// RestrictSessionTools unregisters every tool on session whose name does not
+// match one of patterns (wildcard-aware, via matchesPattern) - the
+// restriction a sub-agent's Tools/ToolFilter was always meant to apply, but
+// never did (see TODO.md's M5c entry, 2026-10-11): the session already has
+// its full tool surface populated by NewSessionFromState's own surface
+// builder before this runs, so trying to additively RegisterTool a filtered
+// subset on top (the old approach) either did nothing (the filtered list
+// was always empty - config.Tools was never populated by any caller) or
+// would have failed outright on every tool that overlapped with what the
+// surface builder already registered (RegisterTool errors on a duplicate
+// name). Pruning what's already there in place avoids both problems.
+//
+// A nil/empty patterns list, or a bare "*", means no restriction - every
+// tool the session started with stays.
+func RestrictSessionTools(session *engine.Session, patterns []string) {
 	if len(patterns) == 0 || (len(patterns) == 1 && patterns[0] == "*") {
-		return tools
+		return
 	}
-
-	result := make([]tool.Tool, 0)
-	for _, t := range tools {
-		if matchesPattern(t.Definition().Name, patterns) {
-			result = append(result, t)
+	for _, name := range session.GetToolNames() {
+		if !matchesPattern(name, patterns) {
+			_ = session.UnregisterTool(name)
 		}
 	}
-	return result
 }
 
-// filterToolsByNames filters tools by exact name matching (no wildcards)
-// Returns tools whose name is in the allowedNames list
-func filterToolsByNames(tools []tool.Tool, allowedNames []string) []tool.Tool {
-	if len(allowedNames) == 0 {
-		return tools
+// restrictSessionSkillsIfDeclared calls RestrictSessionSkills when agentDef
+// names specific skills to preload, split out of RunAgent to keep that
+// function's own branch count down rather than inlining the check there.
+func restrictSessionSkillsIfDeclared(session *engine.Session, agentDef *AgentDefinition, ctx context.Context, forkRunner skilltool.ForkRunner) {
+	if len(agentDef.Skills) > 0 {
+		RestrictSessionSkills(session, agentDef.Skills, ctx, forkRunner)
 	}
+}
 
-	// Build a set for O(1) lookup
-	allowedSet := make(map[string]bool, len(allowedNames))
-	for _, name := range allowedNames {
-		allowedSet[name] = true
+// RestrictSessionSkills replaces the session's skill tool with one scoped to
+// exactly allowed, so the sub-agent's own skill list and lookups only ever
+// see those skills - every other skill behaves as if it did not exist. A
+// session that does not expose the skill tool under its surface profile has
+// nothing to swap; UnregisterTool's error is treated as "nothing to do" and
+// not a failure.
+//
+// forkRunner, when non-nil, is wired into the replacement tool so a
+// restricted sub-agent can still run a context: fork skill from its allowed
+// list - the fresh NewSkillTool(nil) this builds otherwise has none, even if
+// the tool it just unregistered did.
+func RestrictSessionSkills(session *engine.Session, allowed []string, ctx context.Context, forkRunner skilltool.ForkRunner) {
+	if err := session.UnregisterTool(skilltool.SkillToolName); err != nil {
+		return
 	}
-
-	result := make([]tool.Tool, 0)
-	for _, t := range tools {
-		if allowedSet[t.Definition().Name] {
-			result = append(result, t)
-		}
+	restricted := skilltool.NewSkillTool(nil)
+	restricted.SetCwd(session.GetMetadata().RootPath)
+	restricted.SetUserID(types.AgentUserIDFromContext(ctx))
+	restricted.SetAllowedSkills(allowed)
+	if forkRunner != nil {
+		restricted.SetForkRunner(forkRunner)
 	}
-	return result
+	if err := session.RegisterTool(restricted); err != nil {
+		slog.Warn("failed to register restricted skill tool for sub-agent", "error", err)
+	}
 }
 
 // Runner is an advanced agent runner with hook and memory support

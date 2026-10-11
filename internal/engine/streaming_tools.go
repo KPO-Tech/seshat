@@ -32,7 +32,7 @@ func newStreamingToolCoordinator(
 		return nil
 	}
 
-	execReq := loop.buildExecuteRequest(nil, req, state, transcript)
+	execReq := loop.buildExecuteRequest(ctx, nil, req, state, transcript)
 	return &streamingToolCoordinator{
 		executor:  execution.NewStreamingExecutor(ctx, loop.orchestrator, execReq, req.Tools, execReq.PermissionCheck, tool.ToolUseContext{}),
 		tools:     req.Tools,
@@ -140,7 +140,7 @@ func (c *streamingToolCoordinator) complete(ctx context.Context) (map[int]execut
 	return results, nil
 }
 
-func (l *Loop) buildExecuteRequest(toolUses []types.ToolUseContent, req RunRequest, state *MutableState, transcript []types.Message) execution.ExecuteRequest {
+func (l *Loop) buildExecuteRequest(ctx context.Context, toolUses []types.ToolUseContent, req RunRequest, state *MutableState, transcript []types.Message) execution.ExecuteRequest {
 	var permCtx *types.PermissionContext
 	var permMode types.PermissionMode
 	if state != nil {
@@ -151,26 +151,34 @@ func (l *Loop) buildExecuteRequest(toolUses []types.ToolUseContent, req RunReque
 		permMode = req.PermissionMode
 	}
 	var permissionResolver types.PermissionResolver
+	// No prompt function means this context cannot show an interactive ask
+	// at all - the classifier (auto mode) and the PowerShell/request_permissions
+	// fast paths use this to deny instead of asking into the void, same as the
+	// no-prompt-fn safety net at resolution time already does for every other
+	// mode. Default true (avoid prompts) when there is no integrator to ask.
+	shouldAvoidPrompts := true
 	if l.permissionIntegrator != nil {
 		permissionResolver = l.permissionIntegrator.ResolverWithContext(req.SessionID, req.TurnID, permCtx, transcript)
+		shouldAvoidPrompts = !l.permissionIntegrator.HasPromptFn(ctx)
 	}
 	permissionCheck := req.PermissionCheck
 	if permissionCheck == nil && permissionResolver != nil {
 		permissionCheck = types.CanUseToolFunc(permissionResolver)
 	}
 	return execution.ExecuteRequest{
-		ToolUses:           toolUses,
-		Tools:              req.Tools,
-		PermissionCheck:    permissionCheck,
-		PermissionResolver: permissionResolver,
-		PermissionContext:  clonePermissionContext(permCtx),
-		SessionID:          req.SessionID,
-		TurnID:             req.TurnID,
-		WorkingDirectory:   req.WorkingDirectory,
-		PermissionMode:     permMode,
-		ProgressCallback:   req.ProgressCallback,
-		DenialTracking:     req.DenialTracking,
-		Transcript:         transcript,
+		ToolUses:                     toolUses,
+		Tools:                        req.Tools,
+		PermissionCheck:              permissionCheck,
+		PermissionResolver:           permissionResolver,
+		PermissionContext:            clonePermissionContext(permCtx),
+		SessionID:                    req.SessionID,
+		TurnID:                       req.TurnID,
+		WorkingDirectory:             req.WorkingDirectory,
+		PermissionMode:               permMode,
+		ProgressCallback:             req.ProgressCallback,
+		DenialTracking:               req.DenialTracking,
+		Transcript:                   transcript,
+		ShouldAvoidPermissionPrompts: shouldAvoidPrompts,
 	}
 }
 

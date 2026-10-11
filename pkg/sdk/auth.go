@@ -309,7 +309,10 @@ func providerEnvVars(provider string) []string {
 	case string(APIProviderFoundry):
 		return []string{"ANTHROPIC_FOUNDRY_API_KEY"}
 	case string(APIProviderZAi):
-		return []string{"Z_AI_API_KEY", "ZHIPUAI_API_KEY"}
+		// Order matches pkg/config/provider_catalog.go's
+		// ProviderCredentialEnvVars (M5d in TODO.md - the two lists used to
+		// disagree on which env var to check/suggest first).
+		return []string{"ZHIPUAI_API_KEY", "Z_AI_API_KEY"}
 	case string(APIProviderOpenRouter):
 		return []string{"OPENROUTER_API_KEY"}
 	case string(APIProviderMiniMax):
@@ -319,11 +322,18 @@ func providerEnvVars(provider string) []string {
 	case string(APIProviderMistral):
 		return []string{"MISTRAL_API_KEY"}
 	case string(APIProviderCodex):
-		return []string{"CODEX_ACCESS_TOKEN", "CODEX_API_KEY"}
+		// Order matches pkg/config/provider_catalog.go's
+		// ProviderCredentialEnvVars (M5d in TODO.md).
+		return []string{"CODEX_API_KEY", "CODEX_ACCESS_TOKEN"}
 	case string(APIProviderDeepSeek):
 		return []string{"DEEPSEEK_API_KEY"}
 	case string(APIProviderOpenCode):
 		return []string{"OPENCODE_API_KEY"}
+	case string(APIProviderKimi):
+		// Matches pkg/config/provider_catalog.go's ProviderCredentialEnvVars -
+		// this list used to fall through to the generic "API_KEY" default for
+		// Kimi instead (M5d in TODO.md).
+		return []string{"MOONSHOT_API_KEY", "KIMI_API_KEY"}
 	default:
 		return []string{"API_KEY"}
 	}

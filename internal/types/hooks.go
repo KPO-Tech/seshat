@@ -83,6 +83,40 @@ const (
 	HookEventFileChanged        HookEvent = "file_changed"
 )
 
+// ImplementedHookEvents are the hook events the runtime actually fires.
+// Many events above are defined (and re-exported by pkg/sdk) but nothing
+// ever emits them - see H4 in TODO.md. sdk.Client.RegisterHook rejects any
+// event not in this set, so a host finds out immediately that a hook it
+// registered will never run, instead of it silently never firing. Keep this
+// in sync with every executeHook/executeHookWithResult call site in
+// internal/engine (loop.go, session.go) and internal/agent/runner.go.
+var ImplementedHookEvents = map[HookEvent]bool{
+	HookEventQueryStart:        true,
+	HookEventQueryComplete:     true,
+	HookEventIterationStart:    true,
+	HookEventIterationStop:     true,
+	HookEventIterationContinue: true,
+	HookEventIterationComplete: true,
+	HookEventToolUsesStart:     true,
+	HookEventToolUsesComplete:  true,
+	HookEventSubagentStart:     true,
+	HookEventSubagentStop:      true,
+	HookEventOnError:           true,
+	HookEventSessionStart:      true,
+	HookEventSessionEnd:        true,
+	HookEventTurnStart:         true,
+	HookEventTurnEnd:           true,
+	HookEventPreToolUse:        true,
+	HookEventPostToolUse:       true,
+	HookEventPreCompact:        true,
+	HookEventPostCompact:       true,
+}
+
+// IsHookEventImplemented reports whether event is in ImplementedHookEvents.
+func IsHookEventImplemented(event HookEvent) bool {
+	return ImplementedHookEvents[event]
+}
+
 // HookProgress represents progress information for a hook
 type HookProgress struct {
 	// Event is the hook event type
@@ -104,9 +138,7 @@ type HookHandler func(ctx context.Context, progress HookProgress) (*HookResult, 
 type HookStage string
 
 const (
-	HookStagePre    HookStage = "pre"
-	HookStagePost   HookStage = "post"
-	HookStageAround HookStage = "around"
+	HookStagePre HookStage = "pre"
 
 	// Permission-specific hook stages
 	HookStagePrePermission  HookStage = "pre_permission"

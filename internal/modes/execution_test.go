@@ -12,7 +12,6 @@ func TestExecutionModeConstants(t *testing.T) {
 	}{
 		{"Execute mode", ExecutionModeExecute, "execute"},
 		{"Plan mode", ExecutionModePlan, "plan"},
-		{"PairProgramming mode", ExecutionModePairProgramming, "pair_programming"},
 	}
 
 	for _, tt := range tests {
@@ -29,15 +28,6 @@ func TestIsPlanMode(t *testing.T) {
 		t.Error("Expected true for Plan mode")
 	}
 	if IsPlanMode(ExecutionModeExecute) {
-		t.Error("Expected false for Execute mode")
-	}
-}
-
-func TestIsPairProgrammingMode(t *testing.T) {
-	if !IsPairProgrammingMode(ExecutionModePairProgramming) {
-		t.Error("Expected true for PairProgramming mode")
-	}
-	if IsPairProgrammingMode(ExecutionModeExecute) {
 		t.Error("Expected false for Execute mode")
 	}
 }
@@ -62,7 +52,6 @@ func TestModeStringFunctions(t *testing.T) {
 		check    func(string) bool
 	}{
 		{"Plan mode string", "plan", true, IsPlanModeString},
-		{"PairProgramming mode string", "pair_programming", true, IsPairProgrammingModeString},
 		{"Invalid mode string", "invalid", false, IsPlanModeString},
 	}
 

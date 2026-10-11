@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"strings"
 	"sync"
 	"time"
 
@@ -160,6 +161,13 @@ func (e *Engine) NewSessionFromState(
 		}
 	}
 
+	if e.hookExecutor != nil {
+		e.hookExecutor.ExecuteAsync(ctx, types.HookEventSessionStart, map[string]any{
+			"session_id":    sessionID,
+			"created_fresh": createdFresh,
+		})
+	}
+
 	return session, nil
 }
 
@@ -186,9 +194,27 @@ func (s *Session) submitWithMessage(ctx context.Context, userMsg types.Message, 
 		return nil, err
 	}
 	defer s.endTurn()
+	if s.engine != nil && s.engine.hookExecutor != nil {
+		defer s.engine.hookExecutor.ExecuteAsync(context.Background(), types.HookEventTurnEnd, map[string]any{
+			"session_id": s.state.SessionID,
+			"turn_id":    s.state.TurnID,
+		})
+	}
 
 	if err := s.enforceMaxTurns(); err != nil {
 		return nil, err
+	}
+
+	if s.engine != nil && s.engine.hookExecutor != nil {
+		if result := s.engine.hookExecutor.ExecuteFirst(ctx, types.HookEventTurnStart, map[string]any{
+			"session_id": s.state.SessionID,
+			"turn_id":    s.state.TurnID,
+		}); result != nil && (result.Action == types.HookActionStop || result.Action == types.HookActionDeny) {
+			if strings.TrimSpace(result.Message) != "" {
+				return nil, fmt.Errorf("turn denied by hook: %s", result.Message)
+			}
+			return nil, fmt.Errorf("turn denied by hook")
+		}
 	}
 
 	userMsg.Timestamp = currentTime().UTC()
@@ -226,6 +252,20 @@ func (s *Session) submitWithMessage(ctx context.Context, userMsg types.Message, 
 		ExecutionMode: s.state.CurrentExecutionMode(),
 	})
 
+	// turn.stage existed but nothing ever constructed it (H6 in TODO.md) -
+	// emit it for the one real pre-generation setup phase this engine has
+	// today (assembling tools, system prompt and context), so a client can
+	// show that instead of a silent gap before the first response chunk.
+	s.emitRuntimeEvent(types.RuntimeEvent{
+		Type:      types.RuntimeEventTypeStage,
+		SessionID: s.state.SessionID,
+		TurnID:    s.state.TurnID,
+		StageEvent: &types.StageRuntimeEvent{
+			Stage: "preparing_turn",
+			Label: "Preparing the turn",
+		},
+	})
+
 	apiReq, err := s.buildAPIRequest(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("failed to build API request: %w", err)
@@ -234,25 +274,26 @@ func (s *Session) submitWithMessage(ctx context.Context, userMsg types.Message, 
 
 	permissionContext := s.state.PermissionContextSnapshot()
 	loopReq := RunRequest{
-		Messages:              s.state.CloneMessages(),
-		SystemPrompt:          apiReq.SystemPrompt,
-		SystemPromptBlocks:    apiReq.SystemPromptBlocks,
-		ProviderTools:         apiReq.Tools,
-		Tools:                 runtimeTools,
-		ToolRegistry:          s.engine.toolRegistry,
-		RefreshSystemPrompt:   s.refreshSystemPrompt,
-		AutoDetectStage:       s.config.PromptStage == prompt.StageDefault,
-		SessionID:             s.state.SessionID,
-		TurnID:                s.state.TurnID,
-		WorkingDirectory:      s.workingDirectory(),
-		PermissionMode:        permissionContext.Mode,
-		PermissionContext:     permissionContext,
-		Model:                 s.config.Model,
-		MaxTokens:             s.config.MaxTokens,
-		ProgressCallback:      s.handleProgressCallback,
-		ResponseChunkCallback: s.handleResponseChunkCallback,
-		EventQueue:            s.eventQueue,
-		DenialTracking:        s.state.DenialTrackingState(),
+		Messages:                s.state.CloneMessages(),
+		SystemPrompt:            apiReq.SystemPrompt,
+		SystemPromptBlocks:      apiReq.SystemPromptBlocks,
+		ProviderTools:           apiReq.Tools,
+		Tools:                   runtimeTools,
+		ToolRegistry:            s.engine.toolRegistry,
+		RefreshSystemPrompt:     s.refreshSystemPrompt,
+		AutoDetectStage:         s.config.PromptStage == prompt.StageDefault,
+		SessionID:               s.state.SessionID,
+		TurnID:                  s.state.TurnID,
+		WorkingDirectory:        s.workingDirectory(),
+		PermissionMode:          permissionContext.Mode,
+		PermissionContext:       permissionContext,
+		Model:                   s.config.Model,
+		MaxTokens:               s.config.MaxTokens,
+		ProgressCallback:        s.handleProgressCallback,
+		ResponseChunkCallback:   s.handleResponseChunkCallback,
+		EventQueue:              s.eventQueue,
+		DenialTracking:          s.state.DenialTrackingState(),
+		AutoCompactFailureCount: s.state.AutoCompactFailureCount,
 	}
 
 	turnCtx, cancel := context.WithCancel(ctx)
@@ -271,6 +312,11 @@ func (s *Session) submitWithMessage(ctx context.Context, userMsg types.Message, 
 	}()
 
 	loopResult := s.engine.loop.Run(turnCtx, loopReq)
+	// Persist the auto-compact circuit-breaker count regardless of outcome -
+	// including on error, so a failing compaction still counts toward the
+	// breaker instead of resetting to zero on the next turn (see RunRequest/
+	// RunResult.AutoCompactFailureCount doc comments).
+	s.state.AutoCompactFailureCount = loopResult.AutoCompactFailureCount
 	if loopResult.Error != nil {
 		s.emitRuntimeEvent(types.RuntimeEvent{
 			Type:       types.RuntimeEventTypeTurnFailed,
@@ -363,7 +409,7 @@ func (s *Session) beginTurn() error {
 	defer s.mu.Unlock()
 	switch s.phase {
 	case sessionPhaseClosed:
-		return fmt.Errorf("session is closed")
+		return types.NewError(types.ErrCodeSessionClosed, "session is closed")
 	case sessionPhaseRunning:
 		return fmt.Errorf("session is busy: a turn is already in progress")
 	}
@@ -440,6 +486,13 @@ func (s *Session) Close() error {
 		closeCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 		_ = s.engine.browserManager.CloseSession(closeCtx, s.state.SessionID)
 		cancel()
+	}
+
+	if s.engine != nil && s.engine.hookExecutor != nil {
+		s.engine.hookExecutor.ExecuteAsync(context.Background(), types.HookEventSessionEnd, map[string]any{
+			"session_id":  s.state.SessionID,
+			"turn_number": s.state.TurnNumber,
+		})
 	}
 
 	return s.persistSessionState(messages)

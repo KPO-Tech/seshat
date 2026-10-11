@@ -21,34 +21,41 @@ import (
 // Public aliases keep the SDK consumable without forcing callers onto internal packages.
 type (
 	// Core types
-	APIProvider            = types.APIProvider
-	CallResult             = contract.CallResult
-	ContentBlock           = types.ContentBlock
-	ImageContent           = types.ImageContent
-	EntryType              = types.EntryType
-	ExecutionMode          = modes.ExecutionMode
-	Message                = types.Message
-	MessageID              = types.MessageID
-	ModelIdentifier        = types.ModelIdentifier
-	PermissionContext      = types.PermissionContext
-	PermissionMode         = types.PermissionMode
-	PromptFn               = types.PromptFn
-	PromptOption           = types.PromptOption
-	PromptRequest          = types.PromptRequest
-	PromptResponse         = types.PromptResponse
-	SessionID              = types.SessionID
-	Checkpoint             = state.Checkpoint
-	SessionInfo            = state.SessionInfo
-	SessionMetadata        = types.SessionMetadata
-	SessionStatus          = types.SessionStatus
-	Surface                = registry.Surface
-	TextContent            = types.TextContent
-	TokenUsage             = types.TokenUsage
-	Tool                   = contract.Tool
-	ToolDefinition         = registry.ToolDefinition
-	ToolHook               = execution.ToolHook
-	ToolHookInput          = execution.ToolHookInput
-	ToolHookStage          = execution.ToolHookStage
+	APIProvider       = types.APIProvider
+	CallResult        = contract.CallResult
+	ContentBlock      = types.ContentBlock
+	ImageContent      = types.ImageContent
+	EntryType         = types.EntryType
+	ExecutionMode     = modes.ExecutionMode
+	Message           = types.Message
+	MessageID         = types.MessageID
+	ModelIdentifier   = types.ModelIdentifier
+	PermissionContext = types.PermissionContext
+	PermissionMode    = types.PermissionMode
+	PromptFn          = types.PromptFn
+	PromptOption      = types.PromptOption
+	PromptRequest     = types.PromptRequest
+	PromptResponse    = types.PromptResponse
+	SessionID         = types.SessionID
+	Checkpoint        = state.Checkpoint
+	SessionInfo       = state.SessionInfo
+	SessionMetadata   = types.SessionMetadata
+	SessionStatus     = types.SessionStatus
+	Surface           = registry.Surface
+	TextContent       = types.TextContent
+	TokenUsage        = types.TokenUsage
+	Tool              = contract.Tool
+	ToolDefinition    = registry.ToolDefinition
+	ToolHook          = execution.ToolHook
+	ToolHookInput     = execution.ToolHookInput
+	ToolHookStage     = execution.ToolHookStage
+	// ToolHookResult and ToolHookStop are what ToolHook.Execute returns. They
+	// were missing from this alias block (H5 in TODO.md), so a host in
+	// another module could name ToolHook itself but not the type its own
+	// Execute method must return, making AddToolHook unusable from outside
+	// this module.
+	ToolHookResult         = execution.ToolHookResult
+	ToolHookStop           = execution.ToolHookStop
 	ToolProgress           = types.ToolProgress
 	ToolProgressStage      = types.ToolProgressStage
 	ResponseChunk          = types.APIResponseChunk
@@ -145,9 +152,8 @@ const (
 	APIProviderZAi        = types.APIProviderZAi
 	APIProviderKimi       = types.APIProviderKimi
 
-	ExecutionModeExecute         = modes.ExecutionModeExecute
-	ExecutionModePlan            = modes.ExecutionModePlan
-	ExecutionModePairProgramming = modes.ExecutionModePairProgramming
+	ExecutionModeExecute = modes.ExecutionModeExecute
+	ExecutionModePlan    = modes.ExecutionModePlan
 
 	PermissionModeAuto        = types.PermissionModeAuto
 	PermissionModeBypass      = types.PermissionModeBypass
@@ -196,7 +202,6 @@ const (
 	RuntimeEventTypeResponseChunk        = types.RuntimeEventTypeResponseChunk
 	RuntimeEventTypeToolProgress         = types.RuntimeEventTypeToolProgress
 	RuntimeEventTypePlanSubmitted        = types.RuntimeEventTypePlanSubmitted
-	RuntimeEventTypePlanStatusChanged    = types.RuntimeEventTypePlanStatusChanged
 	RuntimeEventTypeExecutionModeChanged = types.RuntimeEventTypeExecutionModeChanged
 	RuntimeEventTypeTaskChanged          = types.RuntimeEventTypeTaskChanged
 	RuntimeEventTypeBrowserSession       = types.RuntimeEventTypeBrowserSession

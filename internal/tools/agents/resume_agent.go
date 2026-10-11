@@ -162,7 +162,6 @@ func (t *ResumeAgentTool) Call(
 	config := &coreagent.RunConfig{
 		AgentType:           "general-purpose",
 		Task:                task,
-		Tools:               t.tools,
 		Engine:              t.eng,
 		MaxTurns:            maxTurns,
 		Context:             ctx,

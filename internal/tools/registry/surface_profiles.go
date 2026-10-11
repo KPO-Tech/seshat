@@ -1,9 +1,8 @@
 package registry
 
 const (
-	ToolSurfaceProfileMonoRun    = "mono_run"
-	ToolSurfaceProfileSubagent   = "subagent"
-	ToolSurfaceProfileSkillAgent = "skill_agent"
+	ToolSurfaceProfileMonoRun  = "mono_run"
+	ToolSurfaceProfileSubagent = "subagent"
 )
 
 const toolSurfaceProfilesMetadataKey = "surface_profiles"

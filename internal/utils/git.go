@@ -1,10 +1,7 @@
 package utils
 
 import (
-	"bytes"
-	"context"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"regexp"
 	"strings"
@@ -432,55 +429,6 @@ func extractBranchName(gitDir, shaOrRef string) string {
 	return strings.TrimSpace(string(content))[:7]
 }
 
-func GetCachedDefaultBranch(root string) string {
-	if root == "" {
-		return ""
-	}
-
-	entry := stateCache.get(root)
-
-	ctx, cancel := context.WithTimeout(context.Background(), gitQueryTimeout)
-	defer cancel()
-	cmd := exec.CommandContext(ctx, "git", "rev-parse", "--abbrev-ref", "origin/HEAD")
-	cmd.Dir = root
-	var stdout, stderr bytes.Buffer
-	cmd.Stdout = &stdout
-	cmd.Stderr = &stderr
-
-	if err := cmd.Run(); err == nil {
-		defaultBranch := strings.TrimSpace(stdout.String())
-		defaultBranch = strings.TrimPrefix(defaultBranch, "origin/")
-		entry.defaultBranch = defaultBranch
-		return defaultBranch
-	}
-
-	return entry.branch
-}
-
-func GetCachedRemoteUrl(root string) string {
-	if root == "" {
-		return ""
-	}
-
-	entry := stateCache.get(root)
-
-	ctx, cancel := context.WithTimeout(context.Background(), gitQueryTimeout)
-	defer cancel()
-	cmd := exec.CommandContext(ctx, "git", "remote", "get-url", "origin")
-	cmd.Dir = root
-	var stdout, stderr bytes.Buffer
-	cmd.Stdout = &stdout
-	cmd.Stderr = &stderr
-
-	if err := cmd.Run(); err == nil {
-		url := strings.TrimSpace(stdout.String())
-		entry.remoteUrl = normalizeGitRemoteUrl(url)
-		return entry.remoteUrl
-	}
-
-	return ""
-}
-
 func normalizeGitRemoteUrl(url string) string {
 	trimmed := strings.TrimSpace(url)
 	if trimmed == "" {
@@ -532,37 +480,6 @@ func isValidGitSha(s string) bool {
 	return false
 }
 
-func DirIsInGitRepo(cwd string) bool {
-	return FindGitRoot(cwd) != ""
-}
-
-func IsAtGitRoot(cwd string) bool {
-	gitRoot := FindGitRoot(cwd)
-	if gitRoot == "" {
-		return false
-	}
-
-	resolvedCwd, err := filepath.EvalSymlinks(cwd)
-	if err != nil {
-		return cwd == gitRoot
-	}
-
-	resolvedGitRoot, err := filepath.EvalSymlinks(gitRoot)
-	if err != nil {
-		return cwd == gitRoot
-	}
-
-	return resolvedCwd == resolvedGitRoot
-}
-
-func GetGitExe() string {
-	path, err := exec.LookPath("git")
-	if err != nil {
-		return "git"
-	}
-	return path
-}
-
 func (e *cacheEntry) getBranch() (string, time.Time) {
 	e.mu.RLock()
 	defer e.mu.RUnlock()
@@ -588,7 +505,3 @@ func (e *cacheEntry) setHead(head string) {
 	e.head = head
 	e.lastCheck = time.Now()
 }
-
-// gitQueryTimeout bounds the git commands of the cached lookups (they run from the interface, with no caller context): a repository on a
-// stalled network drive or a locked index must not freeze it.
-const gitQueryTimeout = 5 * time.Second

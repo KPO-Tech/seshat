@@ -35,7 +35,9 @@ func NewEngineWithRegistry(
 	orchestrator := execution.NewOrchestrator()
 
 	// Create compactor
-	compactor := compact.NewEngine(apiClient, compact.DefaultConfig())
+	compactConfig := compact.DefaultConfig()
+	compactConfig.SummaryModel = config.CompactSummaryModel
+	compactor := compact.NewEngine(apiClient, compactConfig)
 
 	// Create prompt assembler
 	promptAssembler := prompt.NewAssembler()

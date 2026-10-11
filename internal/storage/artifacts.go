@@ -2,7 +2,6 @@ package storage
 
 import (
 	"context"
-	"fmt"
 	"io"
 	"time"
 )
@@ -152,50 +151,6 @@ func (s *providerArtifactStore) URL(ctx context.Context, key string) (string, er
 	return s.provider.GetURL(ctx, key)
 }
 
-func StorePDFRef(ctx context.Context, store ArtifactStore, data []byte, title string) (ArtifactRef, error) {
-	if store == nil {
-		var err error
-		store, err = DefaultArtifactStore()
-		if err != nil {
-			return ArtifactRef{}, err
-		}
-	}
-	return store.PutArtifact(ctx, ArtifactPutRequest{
-		Namespace:   NamespaceDocuments,
-		Filename:    title,
-		ContentType: "application/pdf",
-		Timestamp:   time.Now().UTC(),
-	}, data)
-}
-
-func StoreScreenshotRef(ctx context.Context, store ArtifactStore, data []byte, sessionID, pageID string) (ArtifactRef, error) {
-	if store == nil {
-		var err error
-		store, err = DefaultArtifactStore()
-		if err != nil {
-			return ArtifactRef{}, err
-		}
-	}
-	key := ScreenshotKey(sessionID, pageID, time.Now().UTC())
-	return store.Put(ctx, key, data, "image/png")
-}
-
-func StoreDocumentRef(ctx context.Context, store ArtifactStore, data []byte, filename string) (ArtifactRef, error) {
-	if store == nil {
-		var err error
-		store, err = DefaultArtifactStore()
-		if err != nil {
-			return ArtifactRef{}, err
-		}
-	}
-	return store.PutArtifact(ctx, ArtifactPutRequest{
-		Namespace:   NamespaceDocuments,
-		Filename:    filename,
-		ContentType: DetectContentType(filename),
-		Timestamp:   time.Now().UTC(),
-	}, data)
-}
-
 func StoreRAGDocumentRef(ctx context.Context, store ArtifactStore, data []byte, filename string) (ArtifactRef, error) {
 	if store == nil {
 		var err error
@@ -258,13 +213,6 @@ func StoreAudioRef(ctx context.Context, store ArtifactStore, data []byte, sessio
 	}
 	key := AudioKey(sessionID, filename, time.Now().UTC())
 	return store.Put(ctx, key, data, contentType)
-}
-
-func copyRefURL(ref ArtifactRef) (string, error) {
-	if ref.URL == "" {
-		return "", fmt.Errorf("artifact URL is empty")
-	}
-	return ref.URL, nil
 }
 
 func artifactRefFromInfo(info ObjectInfo) ArtifactRef {

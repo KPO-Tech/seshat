@@ -16,10 +16,7 @@ type SectionType string
 
 const (
 	SectionTypeDefault SectionType = "default"
-	SectionTypeUser    SectionType = "user"
-	SectionTypeSystem  SectionType = "system"
 	SectionTypeDynamic SectionType = "dynamic"
-	SectionTypeAppend  SectionType = "append"
 )
 
 // Section represents a part of the system prompt

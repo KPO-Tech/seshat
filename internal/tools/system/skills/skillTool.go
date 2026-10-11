@@ -34,11 +34,42 @@ type skillDefCache struct {
 }
 
 type SkillTool struct {
-	loader     SkillLoader
-	cwd        string
-	userID     string
-	defCacheMu sync.Mutex
-	defCache   *skillDefCache
+	loader        SkillLoader
+	cwd           string
+	userID        string
+	allowedSkills []string
+	forkRunner    ForkRunner
+	defCacheMu    sync.Mutex
+	defCache      *skillDefCache
+}
+
+// ForkRunner runs a skill declared with `context: fork` as an isolated
+// sub-agent instead of inlining its prompt into the current conversation,
+// and returns that sub-agent's final text output. allowedTools and model
+// come straight from the skill's own frontmatter (Skill.AllowedTools,
+// Skill.Model) - they only mean anything in this forked path, never in the
+// default inline one.
+//
+// internal/agent already imports this package (for RestrictSessionSkills),
+// so this package cannot import internal/agent back without a cycle: a
+// host that can reach the agent-running infrastructure implements this
+// interface and wires it in via SkillTool.SetForkRunner. See
+// internal/tools/agents.SkillForkRunner for the real implementation.
+type ForkRunner interface {
+	// parentPermissionMode is the forking session's current permission
+	// mode, passed through unresolved so the implementation (which has
+	// access to the same sub-agent permission-inheritance policy every
+	// other sub-agent spawn path uses) decides what the forked skill
+	// actually runs under, instead of this package hardcoding a choice.
+	RunForkedSkill(ctx context.Context, skillName, task string, allowedTools []string, model string, parentPermissionMode types.PermissionMode) (string, error)
+}
+
+// SetForkRunner wires the sub-agent infrastructure a `context: fork` skill
+// needs. A skill tool built by NewSkillTool has none set: calling such a
+// skill returns an error naming the missing runner instead of silently
+// running inline.
+func (t *SkillTool) SetForkRunner(runner ForkRunner) {
+	t.forkRunner = runner
 }
 
 func NewSkillTool(loader SkillLoader) *SkillTool {
@@ -57,6 +88,34 @@ func (t *SkillTool) SetUserID(userID string) {
 	t.userID = userID
 }
 
+// SetAllowedSkills restricts this tool to the given skill names (matched
+// against Skill.Name or Skill.DisplayName): every other skill behaves as if
+// it did not exist, in the tool's own description and in lookups alike. A
+// nil or empty list means no restriction (every skill stays visible), which
+// is also the default for a tool built by NewSkillTool.
+func (t *SkillTool) SetAllowedSkills(names []string) {
+	t.allowedSkills = names
+}
+
+// filterAllowed narrows all down to SetAllowedSkills's list, or returns all
+// unchanged when no restriction was set.
+func (t *SkillTool) filterAllowed(all []Skill) []Skill {
+	if len(t.allowedSkills) == 0 {
+		return all
+	}
+	allowed := make(map[string]bool, len(t.allowedSkills))
+	for _, name := range t.allowedSkills {
+		allowed[name] = true
+	}
+	result := make([]Skill, 0, len(all))
+	for _, sk := range all {
+		if allowed[sk.Name] || allowed[sk.DisplayName] {
+			result = append(result, sk)
+		}
+	}
+	return result
+}
+
 func (t *SkillTool) Definition() contract.Definition {
 	t.defCacheMu.Lock()
 	defer t.defCacheMu.Unlock()
@@ -64,7 +123,8 @@ func (t *SkillTool) Definition() contract.Definition {
 		return t.defCache.def
 	}
 
-	skills, _ := t.loader.GetSkillDirCommands(t.cwd)
+	skills, _ := GetAllSkillsForUser(t.cwd, t.userID)
+	skills = t.filterAllowed(skills)
 	skillList := FormatSkillsList(skills)
 
 	def := contract.Definition{
@@ -113,6 +173,7 @@ func (t *SkillTool) Call(ctx context.Context, input contract.CallInput, permissi
 
 	if skill == nil {
 		all, _ := GetAllSkillsForUser(t.cwd, t.userID)
+		all = t.filterAllowed(all)
 		var available []string
 		for _, s := range all {
 			available = append(available, s.Name)
@@ -137,6 +198,17 @@ func (t *SkillTool) Call(ctx context.Context, input contract.CallInput, permissi
 		promptText += block.Text + "\n"
 	}
 
+	if skill.Context == ExecutionContextFork {
+		if t.forkRunner == nil {
+			return contract.NewErrorResult(fmt.Errorf("skill '%s' declares context: fork, but no fork runner is configured for this host", skillName)), nil
+		}
+		output, err := t.forkRunner.RunForkedSkill(ctx, skill.Name, promptText, skill.AllowedTools, skill.Model, input.ToolContextValue().PermissionMode)
+		if err != nil {
+			return contract.NewErrorResult(fmt.Errorf("skill '%s' fork failed: %w", skillName, err)), nil
+		}
+		return contract.NewTextResult(fmt.Sprintf("Skill '%s' invoked (forked) with args: '%s'\n\n%s", skillName, args, output)), nil
+	}
+
 	return contract.NewTextResult(fmt.Sprintf("Skill '%s' invoked with args: '%s'\n\n%s", skillName, args, promptText)), nil
 }
 
@@ -149,16 +221,25 @@ func (t *SkillTool) lookupSkill(name string) (*Skill, error) {
 	if err != nil {
 		return nil, err
 	}
+	all = t.filterAllowed(all)
 	for i := range all {
 		if all[i].Name == name || all[i].DisplayName == name {
 			return &all[i], nil
+		}
+	}
+	if resolved := ResolveSkillAlias(name); resolved != name {
+		for i := range all {
+			if all[i].Name == resolved || all[i].DisplayName == resolved {
+				return &all[i], nil
+			}
 		}
 	}
 	return nil, nil
 }
 
 func (t *SkillTool) Description(ctx context.Context) (string, error) {
-	skills, _ := GetAllSkills(t.cwd)
+	skills, _ := GetAllSkillsForUser(t.cwd, t.userID)
+	skills = t.filterAllowed(skills)
 	return GetPromptWithSkills(FormatSkillsList(skills)), nil
 }
 
@@ -227,6 +308,9 @@ func FormatSkillsList(skills []Skill) string {
 			continue
 		}
 		line := "- " + skill.Name + ": " + skill.Description
+		if skill.WhenToUse != "" {
+			line += " (use when: " + skill.WhenToUse + ")"
+		}
 		if len(skill.Triggers) > 0 {
 			line += " [auto-activates when user says: " + strings.Join(skill.Triggers, " / ") + "]"
 		}

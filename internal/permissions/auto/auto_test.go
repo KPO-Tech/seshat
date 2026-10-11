@@ -475,13 +475,48 @@ func TestMode_Classify_ClassifierError_FailOpen(t *testing.T) {
 	}
 }
 
-func TestMode_Classify_NoClassifier_FailClosed(t *testing.T) {
-	mode := NewMode(nil, &ModeConfig{FailClosed: true})
+// A classifier that was never configured at all asks - regardless of
+// FailClosed, which governs only a classifier that is configured but errors
+// at classification time (see TestMode_Classify_ClassifierError_FailClosed/
+// FailOpen below). Unconditionally allowing here was TODO.md M2: auto mode
+// approved every tool, including destructive ones, whenever nothing had
+// ever wired a classifier in - the common case for a deployment that never
+// touches this knob at all.
+func TestMode_Classify_NoClassifierConfigured_AsksRegardlessOfFailClosed(t *testing.T) {
+	for _, failClosed := range []bool{true, false} {
+		mode := NewMode(nil, &ModeConfig{FailClosed: failClosed})
+
+		ctx := context.Background()
+		pctx := &ClassifierContext{
+			ToolName:  "bash",
+			ToolInput: map[string]any{"command": "ls"},
+		}
+
+		result, err := mode.Classify(ctx, pctx)
+		if err != nil {
+			t.Fatalf("unexpected error (FailClosed=%v): %v", failClosed, err)
+		}
+
+		if result.Behavior != types.PermissionBehaviorAsk {
+			t.Errorf("expected Ask when no classifier was ever configured (FailClosed=%v), got %v", failClosed, result.Behavior)
+		}
+	}
+}
+
+// A headless/background agent cannot show the ask prompt above, so the same
+// "no classifier configured" case denies instead of asking into a void -
+// same rule the PowerShell and request_permissions fast paths already
+// apply, and necessary here specifically because this result returns
+// directly from checkGlobalPermission's Step 4 without passing through
+// applyModeTransformations' headless ask-to-deny conversion.
+func TestMode_Classify_NoClassifierConfigured_Headless_Denies(t *testing.T) {
+	mode := NewMode(nil, &ModeConfig{FailClosed: false})
 
 	ctx := context.Background()
 	pctx := &ClassifierContext{
-		ToolName:  "bash",
-		ToolInput: map[string]any{"command": "ls"},
+		ToolName:                     "bash",
+		ToolInput:                    map[string]any{"command": "ls"},
+		ShouldAvoidPermissionPrompts: true,
 	}
 
 	result, err := mode.Classify(ctx, pctx)
@@ -490,26 +525,7 @@ func TestMode_Classify_NoClassifier_FailClosed(t *testing.T) {
 	}
 
 	if result.Behavior != types.PermissionBehaviorDeny {
-		t.Errorf("expected Deny when no classifier in fail-closed mode, got %v", result.Behavior)
-	}
-}
-
-func TestMode_Classify_NoClassifier_FailOpen(t *testing.T) {
-	mode := NewMode(nil, &ModeConfig{FailClosed: false})
-
-	ctx := context.Background()
-	pctx := &ClassifierContext{
-		ToolName:  "bash",
-		ToolInput: map[string]any{"command": "ls"},
-	}
-
-	result, err := mode.Classify(ctx, pctx)
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-
-	if result.Behavior != types.PermissionBehaviorAsk {
-		t.Errorf("expected Ask when no classifier in fail-open mode, got %v", result.Behavior)
+		t.Errorf("expected Deny when no classifier is configured in a headless context, got %v", result.Behavior)
 	}
 }
 

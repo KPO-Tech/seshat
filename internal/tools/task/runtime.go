@@ -3,7 +3,6 @@ package task
 import (
 	"context"
 	"fmt"
-	"sort"
 	"sync"
 	"time"
 )
@@ -75,18 +74,4 @@ func requireRuntime() (Runtime, error) {
 
 func statusToString(status RuntimeTaskStatus) string {
 	return string(status)
-}
-
-func cloneRuntimeTask(task *RuntimeTask) *RuntimeTask {
-	if task == nil {
-		return nil
-	}
-	cloned := *task
-	return &cloned
-}
-
-func sortRuntimeTasks(tasks []*RuntimeTask) {
-	sort.SliceStable(tasks, func(i, j int) bool {
-		return tasks[i].CreatedAt.Before(tasks[j].CreatedAt)
-	})
 }

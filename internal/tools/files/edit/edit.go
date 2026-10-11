@@ -355,10 +355,6 @@ func (e *Tool) Call(
 	return res, nil
 }
 
-func normalizedBaseName(filePath string) string {
-	return strings.ToLower(filepath.Base(filePath))
-}
-
 // Description returns the tool description
 func (e *Tool) Description(ctx context.Context) (string, error) {
 	return ToolDescription, nil
@@ -407,35 +403,16 @@ func (e *Tool) CheckPermissions(ctx context.Context, input map[string]any, toolC
 		return types.Deny(err.Error())
 	}
 
-	// Plan mode: auto-allow edits in working directory (same logic as write_file)
+	// Plan mode is a read-only exploration/design phase (see write.go's
+	// matching comment for the full reasoning). Deny rather than the
+	// AcceptEdits-style auto-allow this used to fall into.
 	if toolCtx.ExecutionMode == "plan" {
-		workingDir := e.effectiveWorkingDir(toolCtx)
-		if !shared.IsInWorkingDirectory(absolutePath, workingDir) {
-			return types.AskWithDecisionReason(
-				fmt.Sprintf("file path outside working directory requires approval: %s", absolutePath),
-				&types.PermissionDecisionReason{
-					Type:   types.PermissionDecisionReasonMode,
-					Source: "plan",
-					Reason: fmt.Sprintf("path is outside working directory: %s", absolutePath),
-				},
-			)
-		}
-		if shared.IsDangerousFile(absolutePath) || shared.IsDangerousDirectory(absolutePath) || shared.HasSuspiciousPattern(absolutePath) {
-			return types.AskWithDecisionReason(
-				fmt.Sprintf("potentially dangerous file requires approval: %s", absolutePath),
-				&types.PermissionDecisionReason{
-					Type:   types.PermissionDecisionReasonSafetyCheck,
-					Source: "plan",
-					Reason: fmt.Sprintf("file is protected: %s", absolutePath),
-				},
-			)
-		}
-		return types.AllowWithDecisionReason(
-			"edit is safe in plan mode",
+		return types.DenyWithDecisionReason(
+			fmt.Sprintf("file edits are not allowed in plan mode: %s", absolutePath),
 			&types.PermissionDecisionReason{
 				Type:   types.PermissionDecisionReasonMode,
 				Source: "plan",
-				Reason: "file is in working directory and passes safety checks",
+				Reason: "plan mode is read-only - call exit_plan_mode first",
 			},
 		)
 	}

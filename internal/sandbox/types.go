@@ -6,11 +6,9 @@ package sandbox
 type EnvironmentKind string
 
 const (
-	EnvironmentLocal    EnvironmentKind = "local"
-	EnvironmentWorktree EnvironmentKind = "worktree"
-	EnvironmentDocker   EnvironmentKind = "docker"
-	EnvironmentRemote   EnvironmentKind = "remote"
-	EnvironmentUnknown  EnvironmentKind = "unknown"
+	EnvironmentLocal  EnvironmentKind = "local"
+	EnvironmentDocker EnvironmentKind = "docker"
+	EnvironmentRemote EnvironmentKind = "remote"
 )
 
 // AccessKind describes the resource access being requested.
@@ -23,7 +21,6 @@ const (
 	AccessDelete   AccessKind = "delete"
 	AccessSearch   AccessKind = "search"
 	AccessExecute  AccessKind = "execute"
-	AccessNetwork  AccessKind = "network"
 	AccessEscalate AccessKind = "escalate"
 )
 

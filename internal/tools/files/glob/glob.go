@@ -2,7 +2,6 @@ package glob
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"os"
@@ -540,15 +539,6 @@ func (g *Tool) SetWorkingDir(dir string) {
 // GetWorkingDir returns the current working directory
 func (g *Tool) GetWorkingDir() string {
 	return g.workingDir
-}
-
-// Helper functions for JSON encoding/decoding
-func encodeOutput(data any) ([]byte, error) {
-	return json.Marshal(data)
-}
-
-func decodeOutput(data []byte, v any) error {
-	return json.Unmarshal(data, v)
 }
 
 // ── Tool metadata ──────────────────────────────────────────────────────────────

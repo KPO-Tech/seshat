@@ -212,11 +212,6 @@ func (c *TwoStageClassifier) ClassifyWithTranscript(ctx context.Context, toolNam
 
 	var prefixMessages []types.Message
 
-	seshatMdMsg := BuildSeshatMdMessage()
-	if seshatMdMsg != nil {
-		prefixMessages = append(prefixMessages, *seshatMdMsg)
-	}
-
 	transcript := BuildTranscriptFromMessages(messages)
 	actionEntry := TranscriptEntry{
 		Role: "assistant",
@@ -233,15 +228,8 @@ func (c *TwoStageClassifier) ClassifyWithTranscript(ctx context.Context, toolNam
 
 	systemPrompt := BuildSystemPrompt()
 
-	seshatMdLen := 0
-	if seshatMdMsg != nil {
-		if tc, ok := seshatMdMsg.Content[0].(types.TextContent); ok {
-			seshatMdLen = len(tc.Text)
-		}
-	}
-
 	promptLengths := PromptLengths{
-		SystemPrompt: len(systemPrompt) + seshatMdLen,
+		SystemPrompt: len(systemPrompt),
 		ToolCalls:    len(actionCompact),
 		UserPrompts:  0,
 	}
@@ -306,6 +294,7 @@ func (c *TwoStageClassifier) runTwoStage(ctx context.Context, systemPrompt strin
 	stage2Block := c.xmlParser.ParseBlock(stage2Text)
 
 	if stage2Block == nil {
+		LogParseFailure(c.model, "stage2_unparseable")
 		return &ClassifierResult{
 			ShouldBlock: true,
 			Reason:      "Classifier stage 2 unparseable - blocking for safety",
@@ -339,6 +328,7 @@ func (c *TwoStageClassifier) runFastOnly(ctx context.Context, systemPrompt strin
 	stage1Block := c.xmlParser.ParseBlock(stage1Text)
 
 	if stage1Block == nil {
+		LogParseFailure(c.model, "stage1_unparseable")
 		return &ClassifierResult{
 			ShouldBlock: true,
 			Reason:      "Classifier stage 1 unparseable - blocking for safety",
@@ -378,6 +368,7 @@ func (c *TwoStageClassifier) runThinkingOnly(ctx context.Context, systemPrompt s
 	stage2Block := c.xmlParser.ParseBlock(stage2Text)
 
 	if stage2Block == nil {
+		LogParseFailure(c.model, "stage2_unparseable")
 		return &ClassifierResult{
 			ShouldBlock: true,
 			Reason:      "Classifier stage 2 unparseable - blocking for safety",

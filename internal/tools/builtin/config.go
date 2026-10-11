@@ -114,6 +114,12 @@ type Config struct {
 	// SandboxDocker configures the Docker sandbox backend when SandboxKind
 	// is sandbox.EnvironmentDocker. Zero value uses sandbox.DefaultDockerConfig().
 	SandboxDocker sandbox.DockerExecutorConfig
+
+	// EnableToolSearch keeps deferred tools (including MCP tools and any
+	// tool registering with ShouldDefer) out of the model's initial tool
+	// list; the model must call tool_search to discover and use them.
+	// False (the default) keeps every tool visible from the start.
+	EnableToolSearch bool
 }
 
 func DefaultConfig() *Config {

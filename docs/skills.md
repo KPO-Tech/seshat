@@ -6,7 +6,7 @@ Skills are reusable Markdown files that inject structured instructions into an a
 
 ## Quick start
 
-Create a file anywhere under `.claude/skills/` in your project (or `~/.seshat/skills/user/` for personal skills):
+Create a file anywhere under `.claude/skills/` in your project (or `~/.config/seshat/skills/user/` for personal skills - `~/.config/seshat` moves if `SESHAT_RUNTIME_ROOT` is set):
 
 ```markdown
 ---
@@ -15,7 +15,7 @@ description: "Summarise a GitHub pull request for the team."
 when_to_use: "When asked to summarise a PR or code review."
 allowed-tools:
   - bash
-  - read
+  - read_file
 ---
 
 Read the diff output from the bash tool and write a concise Markdown summary:
@@ -83,6 +83,8 @@ arguments:
     default: "text"
 ```
 
+`default` is parsed but not yet applied anywhere - an argument with no value passed at invocation is simply absent, not filled in. Declare it for self-documentation, but don't rely on it.
+
 ### `argument-hint`
 
 `string` — Short hint displayed to the user when invoking the skill.
@@ -98,23 +100,23 @@ argument-hint: "<file> [format]"
 ```yaml
 allowed-tools:
   - bash
-  - read
-  - write
+  - read_file
+  - write_file
   - grep
   - glob
 ```
 
-Available built-in tool names: `bash`, `read`, `write`, `grep`, `glob`, `web_fetch`, `web_search`, `mcp`, `think`, `agent`, `task`.
+Names are matched exactly (or by glob pattern) against the tool's real registered name - there is no alias table, so `read`/`write` match nothing. Common built-in names: `bash`, `read_file`, `write_file`, `edit_file`, `grep`, `glob`, `web_fetch`, `web_search`, `agent`, `task_create`, `task_list`, `task_get`, `task_update`, `task_stop`. MCP tools are namespaced as `mcp__<server>__<tool>`; there is no single tool named `mcp` or `think`.
 
 ### `model`
 
-`string` — Override the session model for this skill.
+`string` — Intended to override the session model for this skill (e.g. a smaller/faster model for skills that don't need full reasoning power).
 
 ```yaml
 model: "claude-3-5-haiku-20241022"
 ```
 
-Use a smaller/faster model for skills that don't need full reasoning power.
+Not yet applied: for `context: fork` the value reaches the forked agent's definition, but nothing downstream uses it to actually select a different provider/model; for the default `inline` context it isn't read at all. Declare it for self-documentation, but the skill still runs on the session's own model today.
 
 ### `context`
 
@@ -139,11 +141,13 @@ user-invocable: false   # background/policy skill, not user-callable
 
 ### `disable-model-invocation`
 
-`bool` — Run the skill body as a pure shell/hook script without calling the LLM. Useful for setup-only skills.
+`bool` — Intended to run the skill body as a pure shell/hook script without calling the LLM. Useful for setup-only skills.
 
 ```yaml
 disable-model-invocation: true
 ```
+
+Not yet implemented: this depends on `shell`/`hooks` execution (below), which is parsed but does not run yet. Setting this today does not change how the skill executes.
 
 ### `version`
 
@@ -164,9 +168,11 @@ paths:
   - "/var/log/app.log"
 ```
 
+Only takes effect through the public `pkg/skills.GetSkillsForContext` API, which a host application can call to filter skills by the files a turn touches - the normal `skill` tool invocation path does not consult `paths` or call that function automatically.
+
 ### `shell`
 
-Shell commands executed at lifecycle points **before** the agent is invoked. Useful for setup/teardown.
+Shell commands executed at lifecycle points around the skill. Useful for setup/teardown.
 
 ```yaml
 shell:
@@ -181,23 +187,13 @@ shell:
     - "echo 'Skill completed'"
 ```
 
+**Only `before` runs**, and not as a separate execution path: the skill's prompt gets a setup section telling the agent to run each `before` command itself, through its own Bash tool call, asking for permission first unless already granted - the same way `requires.install-cmd` already works. This goes through the normal permission system instead of bypassing it, which is why no raw shell-exec code was added here.
+
+`after`, `on_error` and `on_complete` are parsed but **not yet implemented** - they would need to fire once the skill's work is actually done or has failed, and there is no such signal today: the skill tool returns this prompt once and the conversation just continues, with nothing tracking when "the skill" itself finishes. Implementing them needs that lifecycle tracking built first, not just more prompt text.
+
 ### `hooks`
 
-Attach other skills at lifecycle events of this skill.
-
-```yaml
-hooks:
-  before_tool:
-    - "validate-workspace"
-  after_tool:
-    - "audit-log"
-  on_error:
-    - "notify-slack"
-  on_complete:
-    - "cleanup-temp"
-```
-
-Available hook events: `before`, `after`, `before_tool`, `after_tool`, `on_error`, `on_cancel`, `on_complete`, `tool_allowed`, `tool_denied`.
+**Not implemented, and not planned as a separate system.** `hooks:` would attach other skills to lifecycle events of this skill, but it overlaps the existing, separate hook system in `internal/hooks` (see [`docs/`](./) for that system's own docs) that the engine already runs real `pre_tool_use`/`post_tool_use`/`session_start`/etc. events through. Adding a second, skill-scoped hook mechanism alongside it would mean two ways to do the same thing with no clear rule for which one fires when. If you need to react to tool use or session lifecycle events, use `internal/hooks` directly rather than this field - it is parsed into the skill definition for forward compatibility but has no effect.
 
 ---
 
@@ -208,15 +204,19 @@ Skills are loaded from multiple directories with clear precedence:
 | Directory | Source | Who manages it |
 |---|---|---|
 | `{project}/.claude/skills/` | Project | Team (committed to repo) |
-| `~/.seshat/skills/user/` | Personal | Individual developer |
-| `~/.seshat/skills/managed/` | Admin | Platform operators |
-| `~/.seshat/bundled-skills/` | Bundled | Seshat built-ins |
+| `~/.config/seshat/skills/user/` | Personal | Individual developer |
+| `~/.config/seshat/skills/managed/` | Admin | Platform operators |
+| `~/.config/seshat/skills/builtin/` | Built-in | Seshat itself |
+
+The root `~/.config/seshat` moves if `SESHAT_RUNTIME_ROOT` is set. A `.claude/skills/` directory below the project root (in a subdirectory, up to 6 levels down) is also discovered automatically, not just at the project root itself.
 
 Project skills override personal skills with the same name.
 
 ---
 
 ## Complete examples
+
+Example 2 below uses `shell.before`, which runs as described (via the agent's own Bash tool call). Example 4 uses `hooks`, which has no effect (see that field's reference entry above) - everything else in each example works as shown.
 
 ### 1. Code formatter
 
@@ -245,7 +245,7 @@ context: fork
 model: "claude-3-5-haiku-20241022"
 allowed-tools:
   - bash
-  - read
+  - read_file
   - grep
 shell:
   before:
@@ -294,7 +294,7 @@ description: "Review a database migration for safety and correctness."
 when_to_use: "Before merging any pull request that contains database migrations."
 context: fork
 allowed-tools:
-  - read
+  - read_file
   - glob
   - bash
 paths:
@@ -325,9 +325,8 @@ Report findings as a Markdown checklist. Mark each item ✓ (safe) or ✗ (risk)
 
 ## Tips
 
-- **Keep skills focused.** One skill per task. Compose with `hooks:` rather than writing monolithic skills.
+- **Keep skills focused.** One skill per task. `hooks:` is not implemented and not planned as a separate system (see above) - compose skills some other way.
 - **Use `context: fork`** for anything destructive or long-running to avoid polluting the main session history.
-- **Restrict tools** with `allowed-tools:` — the principle of least privilege applies to agents too.
-- **Use `shell: before`** to install tools or set up environment instead of asking the agent to do it (more reliable, faster).
-- **Test with `disable-model-invocation: true`** to verify shell setup before adding the LLM body.
+- **Restrict tools** with `allowed-tools:`, using real tool names (`read_file`, not `read`) — the principle of least privilege applies to agents too.
+- **Use `shell.before`** for setup the agent should run before starting the skill's task; it still asks for permission like any other Bash call. `shell.after`/`on_error`/`on_complete` and `disable-model-invocation:` are not executed yet.
 - **Commit project skills** (`.claude/skills/`) to your repository so the whole team benefits.

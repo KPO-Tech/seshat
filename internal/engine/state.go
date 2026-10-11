@@ -128,6 +128,13 @@ type SessionState struct {
 	LastCompaction      *types.CompactionMetadata
 	CompactionCount     int
 	CanonicalTranscript int
+
+	// AutoCompactFailureCount tracks consecutive auto-compact failures across
+	// turns, so the circuit breaker in compact.Engine.AutoCompact can actually
+	// trip. MutableState's own copy of this is per-turn scratch space seeded
+	// from here and folded back after each Run (see Loop.initializeState /
+	// Session.SubmitMessage).
+	AutoCompactFailureCount int
 }
 
 func NewSessionState(sessionID types.SessionID, turnID types.TurnID, messages []types.Message, tools map[string]tool.Tool, turnNumber int, totalTokens int, metadata *types.SessionMetadata) *SessionState {

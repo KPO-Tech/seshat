@@ -22,7 +22,11 @@ type Definition struct {
 	Nodes       []Node `json:"nodes" yaml:"nodes"`
 }
 
-// Node is one step of a workflow: a prompt for an agent, run once the nodes listed in Needs have succeeded, and whose output is given to the nodes that need it.\nKind gives the node a role: "agent" (or empty) for a plain step, "verifier", "critic", or "router", a node that chooses among the nodes listed in Routes (at least one is required). MaxTurns is the number of turns the executor should allow the agent of the node, 0 leaving it to the executor, and OutputFormat describes the form the output should take.
+// Node is one step of a workflow: a prompt for an agent, run once the nodes listed in Needs have succeeded, and whose output is given to the nodes that need it.
+//
+// Kind labels the node's role in its prompt only - "agent" (or empty) for a plain step, "verifier", "critic", or "router" with Routes (at least one is required) describing the choices offered to it. Run does not act on Kind or on a router's chosen route or a verifier's verdict: every node whose Needs succeeded (no error from the executor) runs, in topological-level order, regardless of what a verifier concluded in its own output or which route a router named. A custom Executor can parse a node's own output and decide differently for the nodes it controls, but the engine's own flow is kind-agnostic.
+//
+// Agent, when the default executor is used (see pkg/sdk.Client.RunWorkflow), is the built-in agent type that runs this node instead of a plain model call - empty means a plain call with no particular persona. MaxTurns is the number of autonomous turns that agent gets; 0 means a single turn, same as a plain call. OutputFormat describes the form the node's output should take, for the prompt only.
 type Node struct {
 	ID           string   `json:"id" yaml:"id"`
 	Kind         string   `json:"kind,omitempty" yaml:"kind,omitempty"`

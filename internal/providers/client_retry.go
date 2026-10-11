@@ -55,19 +55,6 @@ func (c *Client) shouldRetry(err error, resp *http.Response) bool {
 	return false
 }
 
-func (c *Client) calculateNextBackoff(current int64) int64 {
-	next := float64(current) * c.retryConfig.BackoffMultiplier
-	max := float64(c.retryConfig.MaxBackoff)
-	if next > max {
-		return c.retryConfig.MaxBackoff
-	}
-	return int64(next)
-}
-
-func (c *Client) waitDuration(duration int64) <-chan time.Time {
-	return time.After(time.Duration(duration) * time.Millisecond)
-}
-
 // calculateAdvancedBackoff calculates next retry delay with jitter
 func (c *Client) calculateAdvancedBackoff(attempt int) time.Duration {
 	return providerretry.CalculateHTTPBackoff(c.retryConfig, attempt)

@@ -22,6 +22,8 @@ Seshat supports all three MCP transports:
 | `SSE` | Remote HTTP server (Server-Sent Events) | `URL` |
 | `HTTP` | Remote HTTP server (streamable HTTP) | `URL` |
 
+`Transport` itself is optional: Seshat infers it when a server config sets `Command` (stdio) or `URL` (HTTP) without it, exactly like every example on this page. Set it explicitly only to pick `SSE` or `WebSocket` over the default HTTP for a `URL`-based server - `WebSocket` is accepted for compatibility but is served over the same HTTP transport as `SSE`/`HTTP`, not a real WebSocket connection.
+
 ---
 
 ## Configuration (SDK)
