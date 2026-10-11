@@ -454,7 +454,6 @@ func (t *AgentTool) runAgent(ctx context.Context, agentType, task string, maxTur
 		Engine:         eng,
 		MaxTurns:       effectiveMaxTurns,
 		Context:        subCtx,
-		Tools:          nil,
 		Callback:       nil,
 		ToolFilter:     filteredToolPatterns,
 		PermissionMode: permMode,
@@ -662,16 +661,21 @@ func (t *AgentTool) runAgentBackground(ctx context.Context, agentType, prompt st
 		}, nil
 	}
 
-	// Resolve the requested type's system prompt so the background run gets
-	// its identity and instructions, same as the synchronous spawn paths -
-	// agentType was otherwise only used for display in the result below,
-	// never to pick what the sub-agent actually behaves like.
+	// Resolve the requested type's system prompt and tool restriction so the
+	// background run actually behaves like that type, same as the
+	// synchronous spawn paths - agentType/allowedTools were otherwise only
+	// used for display in the result below, never to pick what the
+	// sub-agent's identity or visible tools actually are.
 	var systemPrompt string
-	if agentDef := t.resolveAgentDef(agentType); agentDef != nil && agentDef.GetSystemPrompt != nil {
-		systemPrompt = agentDef.GetSystemPrompt()
+	var toolPatterns []string
+	if agentDef := t.resolveAgentDef(agentType); agentDef != nil {
+		if agentDef.GetSystemPrompt != nil {
+			systemPrompt = agentDef.GetSystemPrompt()
+		}
+		toolPatterns = filterToolPatterns(allowedTools, agentDef.GetToolPatterns())
 	}
 
-	task, err := manager.CreateAgentTask(ctx, prompt, nil, permMode, systemPrompt)
+	task, err := manager.CreateAgentTask(ctx, prompt, nil, permMode, systemPrompt, toolPatterns)
 	if err != nil {
 		return tool.CallResult{
 			Data:    map[string]any{"error": fmt.Sprintf("failed to create background agent: %v", err)},
@@ -817,7 +821,6 @@ func (t *AgentTool) runForkAgent(ctx context.Context, agentType, task string, ma
 		Engine:           eng,
 		MaxTurns:         effectiveMaxTurns,
 		Context:          subCtx,
-		Tools:            nil,
 		ToolFilter:       filterToolPatterns(allowedTools, agentDef.GetToolPatterns()),
 		ForkFromMessages: forkMessages,
 		Callback:         nil,
@@ -958,7 +961,6 @@ func (t *AgentTool) runAgentInWorktree(ctx context.Context, agentType, task stri
 		Engine:         eng,
 		MaxTurns:       effectiveMaxTurns,
 		Context:        ctx,
-		Tools:          nil,
 		ToolFilter:     filterToolPatterns(allowedTools, agentDef.GetToolPatterns()),
 		WorktreeDir:    session.WorktreePath,
 		Callback:       nil,

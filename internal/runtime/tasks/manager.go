@@ -14,6 +14,7 @@ import (
 	"sync"
 	"time"
 
+	coreagent "github.com/KPO-Tech/seshat/internal/agent"
 	"github.com/KPO-Tech/seshat/internal/engine"
 	tool "github.com/KPO-Tech/seshat/internal/tools/registry"
 	taskTool "github.com/KPO-Tech/seshat/internal/tools/task"
@@ -146,7 +147,12 @@ func (m *Manager) CreateBashTask(ctx context.Context, command string) (*Task, er
 // to pick a prompt). The session also gets the same "subagent" tool
 // surface profile every other sub-agent spawn path uses (coreagent.RunAgent),
 // instead of the top-level default a plain NewSession would give it.
-func (m *Manager) CreateAgentTask(ctx context.Context, prompt string, tools []tool.Tool, permissionMode types.PermissionMode, systemPrompt string) (*Task, error) {
+//
+// toolPatterns, when non-empty and not a bare "*", prunes the session down
+// to tools matching one of them (see coreagent.RestrictSessionTools) -
+// the caller's combined agentType-pattern/allowedTools list, mirroring
+// what every synchronous sub-agent spawn path already applies via RunAgent.
+func (m *Manager) CreateAgentTask(ctx context.Context, prompt string, tools []tool.Tool, permissionMode types.PermissionMode, systemPrompt string, toolPatterns []string) (*Task, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	if m.activeTaskCountLocked() >= m.config.MaxConcurrentTasks {
@@ -181,6 +187,7 @@ func (m *Manager) CreateAgentTask(ctx context.Context, prompt string, tools []to
 	if systemPrompt != "" {
 		session.SetSystemPromptTemplate(systemPrompt)
 	}
+	coreagent.RestrictSessionTools(session, toolPatterns)
 	if err := session.RegisterTools(tools); err != nil {
 		return nil, fmt.Errorf("failed to register tools: %w", err)
 	}

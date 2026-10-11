@@ -62,10 +62,10 @@ type RunConfig struct {
 	// Task is the task description
 	Task string
 
-	// Tools is the list of available tools (nil = all tools)
-	Tools []tool.Tool
-
-	// ToolFilter is the list of tool name patterns to allow (nil = use Tools field directly)
+	// ToolFilter is a list of tool name patterns to restrict the sub-agent's
+	// session to (wildcard-aware - see matchesPattern). Empty/nil falls back
+	// to the resolved agent type's own GetToolPatterns(); a bare "*" (or an
+	// empty pattern list on both) means no restriction at all.
 	ToolFilter []string
 
 	// Engine is an optional pre-created engine
@@ -192,15 +192,13 @@ func RunAgent(config *RunConfig) (*RunResult, error) {
 		}, nil
 	}
 
-	// Determine tools to allow in the session
-	// Use ToolFilter if provided (from main agent's tool list), otherwise use agent's patterns
-	var allowedTools []tool.Tool
-	if len(config.ToolFilter) > 0 {
-		// ToolFilter is a list of tool names, filter from config.Tools
-		allowedTools = filterToolsByNames(config.Tools, config.ToolFilter)
-	} else {
-		// Use agent definition's tool patterns
-		allowedTools = filterToolsByPatterns(config.Tools, agentDef.GetToolPatterns())
+	// Tool restriction patterns: ToolFilter is the caller's already-combined
+	// list (the model's own tools:[...] intersected with the agent type's
+	// own patterns - see agent_tool.go's filterToolPatterns) when given,
+	// otherwise fall back to the agent type's own declared patterns alone.
+	restrictPatterns := config.ToolFilter
+	if len(restrictPatterns) == 0 {
+		restrictPatterns = agentDef.GetToolPatterns()
 	}
 
 	// Get context
@@ -244,6 +242,7 @@ func RunAgent(config *RunConfig) (*RunResult, error) {
 		}
 	}
 
+	RestrictSessionTools(session, restrictPatterns)
 	restrictSessionSkillsIfDeclared(session, agentDef, ctx, config.ForkRunner)
 
 	// Apply permission mode override (e.g. bypass for headless background agents).
@@ -265,17 +264,6 @@ func RunAgent(config *RunConfig) (*RunResult, error) {
 	// Agents inherit MCP tools from the parent engine's tool registry.
 	// If agent-specific MCP servers are needed, they should be configured
 	// when creating the engine, not per-session.
-
-	// Register tools
-	for _, t := range allowedTools {
-		if err := session.RegisterTool(t); err != nil {
-			return &RunResult{
-				AgentType: config.AgentType,
-				Success:   false,
-				Error:     fmt.Sprintf("failed to register tool %s: %v", t.Definition().Name, err),
-			}, nil
-		}
-	}
 
 	// Wire the event emitter so sub-agent events stream back to the parent session.
 	if config.EventFn != nil {
@@ -504,6 +492,31 @@ func matchesPattern(name string, patterns []string) bool {
 	return false
 }
 
+// RestrictSessionTools unregisters every tool on session whose name does not
+// match one of patterns (wildcard-aware, via matchesPattern) - the
+// restriction a sub-agent's Tools/ToolFilter was always meant to apply, but
+// never did (see TODO.md's M5c entry, 2026-10-11): the session already has
+// its full tool surface populated by NewSessionFromState's own surface
+// builder before this runs, so trying to additively RegisterTool a filtered
+// subset on top (the old approach) either did nothing (the filtered list
+// was always empty - config.Tools was never populated by any caller) or
+// would have failed outright on every tool that overlapped with what the
+// surface builder already registered (RegisterTool errors on a duplicate
+// name). Pruning what's already there in place avoids both problems.
+//
+// A nil/empty patterns list, or a bare "*", means no restriction - every
+// tool the session started with stays.
+func RestrictSessionTools(session *engine.Session, patterns []string) {
+	if len(patterns) == 0 || (len(patterns) == 1 && patterns[0] == "*") {
+		return
+	}
+	for _, name := range session.GetToolNames() {
+		if !matchesPattern(name, patterns) {
+			_ = session.UnregisterTool(name)
+		}
+	}
+}
+
 // restrictSessionSkillsIfDeclared calls RestrictSessionSkills when agentDef
 // names specific skills to preload, split out of RunAgent to keep that
 // function's own branch count down rather than inlining the check there.
@@ -538,43 +551,6 @@ func RestrictSessionSkills(session *engine.Session, allowed []string, ctx contex
 	if err := session.RegisterTool(restricted); err != nil {
 		slog.Warn("failed to register restricted skill tool for sub-agent", "error", err)
 	}
-}
-
-// filterToolsByPatterns filters tools by allowed patterns
-func filterToolsByPatterns(tools []tool.Tool, patterns []string) []tool.Tool {
-	if len(patterns) == 0 || (len(patterns) == 1 && patterns[0] == "*") {
-		return tools
-	}
-
-	result := make([]tool.Tool, 0)
-	for _, t := range tools {
-		if matchesPattern(t.Definition().Name, patterns) {
-			result = append(result, t)
-		}
-	}
-	return result
-}
-
-// filterToolsByNames filters tools by exact name matching (no wildcards)
-// Returns tools whose name is in the allowedNames list
-func filterToolsByNames(tools []tool.Tool, allowedNames []string) []tool.Tool {
-	if len(allowedNames) == 0 {
-		return tools
-	}
-
-	// Build a set for O(1) lookup
-	allowedSet := make(map[string]bool, len(allowedNames))
-	for _, name := range allowedNames {
-		allowedSet[name] = true
-	}
-
-	result := make([]tool.Tool, 0)
-	for _, t := range tools {
-		if allowedSet[t.Definition().Name] {
-			result = append(result, t)
-		}
-	}
-	return result
 }
 
 // Runner is an advanced agent runner with hook and memory support
