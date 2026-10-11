@@ -27,6 +27,7 @@ import (
 	bashTool "github.com/KPO-Tech/seshat/internal/tools/bash"
 	"github.com/KPO-Tech/seshat/internal/tools/registry"
 	"github.com/KPO-Tech/seshat/internal/tools/system/mcp"
+	skillTool "github.com/KPO-Tech/seshat/internal/tools/system/skills"
 	taskTool "github.com/KPO-Tech/seshat/internal/tools/task"
 	"github.com/KPO-Tech/seshat/internal/types"
 	browsercore "github.com/KPO-Tech/seshat/internal/web/browser"
@@ -116,7 +117,9 @@ func NewClient(config *ClientConfig) (*Client, error) {
 
 	// Core subsystems
 	orchestrator := execution.NewOrchestrator()
-	compactor := compact.NewEngine(apiClient, compact.DefaultConfig())
+	compactConfig := compact.DefaultConfig()
+	compactConfig.SummaryModel = config.CompactSummaryModel
+	compactor := compact.NewEngine(apiClient, compactConfig)
 	promptAssembler := prompt.NewAssembler()
 	promptAssembler.SetDefaultSections(prompt.DefaultSystemPromptSections())
 	permissionEngine, err := newPermissionEngine(config)
@@ -202,6 +205,8 @@ func NewClient(config *ClientConfig) (*Client, error) {
 		return nil, fmt.Errorf("failed to register agent tool: %w", err)
 	}
 
+	wireSkillForkRunner(reg, queryEngine)
+
 	// spawn_agent and resume_agent need the live engine instance — registered here, not in builtin.go.
 	// nil tools → sub-agent inherits all tools from the engine registry at call time.
 	agentRegistry := coreagent.NewAgentRegistry()
@@ -261,30 +266,58 @@ func NewClient(config *ClientConfig) (*Client, error) {
 	return client, nil
 }
 
+// wireSkillForkRunner injects the engine-dependent piece of the skill tool
+// (running a `context: fork` skill as a sub-agent) after the fact: the tool
+// itself is constructed inside builtin.go, before this engine exists, so -
+// like agentToolInstance.SetEngine in NewClient - there is nothing to inject
+// into until the registered instance is looked back up. Split out of
+// NewClient to keep that function's own branch count down.
+func wireSkillForkRunner(reg *registry.Registry, queryEngine *engine.Engine) {
+	resolved, ok := reg.Get(skillTool.SkillToolName)
+	if !ok {
+		return
+	}
+	skill, ok := resolved.(*skillTool.SkillTool)
+	if !ok {
+		return
+	}
+	skill.SetForkRunner(agentTool.NewSkillForkRunner(queryEngine))
+}
+
 // buildEngineConfig converts ClientConfig into engine.Config.
 func buildEngineConfig(config *ClientConfig) *engine.Config {
 	maxTokens := config.MaxTokens
 	if maxTokens == 0 {
 		maxTokens = 8192
 	}
+	maxTurns := config.MaxTurns
+	if maxTurns <= 0 {
+		// Matches engine.DefaultConfig()'s MaxTurns - without this, a host
+		// that builds ClientConfig directly (bypassing engine.DefaultConfig)
+		// got no session-turn limit at all instead of the intended default
+		// (M3 in TODO.md).
+		maxTurns = 100
+	}
 	qc := &engine.Config{
-		MaxTurns:                config.MaxTurns,
-		AutoCompact:             config.AutoCompact,
-		PermissionMode:          config.PermissionMode,
-		Model:                   config.Model,
-		TitleModel:              config.TitleModel,
-		MaxTokens:               maxTokens,
-		WorkingDirectory:        config.WorkingDir,
-		SystemPromptTemplate:    config.SystemPromptTemplate,
-		MCPServers:              config.MCPServers,
-		EnableMemory:            config.EnableMemory,
-		EnableMonitoring:        config.EnableMonitoring,
-		MaxIterations:           config.MaxIterations,
-		TurnTokenBudget:         config.TurnTokenBudget,
-		BudgetContinuationLimit: config.BudgetContinuationLimit,
-		ContinuationNudgeLimit:  config.ContinuationNudgeLimit,
-		StopHooks:               config.StopHooks,
-		MaxConsecutiveDenials:   config.MaxConsecutiveDenials,
+		MaxTurns:                 maxTurns,
+		AutoCompact:              config.AutoCompact,
+		PermissionMode:           config.PermissionMode,
+		Model:                    config.Model,
+		TitleModel:               config.TitleModel,
+		CompactSummaryModel:      config.CompactSummaryModel,
+		TrustProjectInstructions: config.TrustProjectInstructions,
+		MaxTokens:                maxTokens,
+		WorkingDirectory:         config.WorkingDir,
+		SystemPromptTemplate:     config.SystemPromptTemplate,
+		MCPServers:               config.MCPServers,
+		EnableMemory:             config.EnableMemory,
+		EnableMonitoring:         config.EnableMonitoring,
+		MaxIterations:            config.MaxIterations,
+		TurnTokenBudget:          config.TurnTokenBudget,
+		BudgetContinuationLimit:  config.BudgetContinuationLimit,
+		ContinuationNudgeLimit:   config.ContinuationNudgeLimit,
+		StopHooks:                config.StopHooks,
+		MaxConsecutiveDenials:    config.MaxConsecutiveDenials,
 	}
 	if pc := config.PromptConfig; pc != nil {
 		if pc.SystemPrompt != nil {
@@ -406,6 +439,33 @@ func (c *Client) Ask(ctx context.Context, prompt string, tools []Tool) (*AskResp
 		Usage:       response.Usage,
 		IsComplete:  response.IsComplete,
 	}, nil
+}
+
+// RunAgentTask runs task as agentType (a built-in agent type, e.g.
+// AgentTypeGeneralPurpose) for up to maxTurns autonomous turns - 0 means a
+// single turn, same as Ask - and returns its final text output. Used by
+// RunWorkflow's default executor when a workflow.Node declares Agent/
+// MaxTurns; exposed publicly so a custom Executor can reuse the same
+// mechanism instead of reimplementing it.
+func (c *Client) RunAgentTask(ctx context.Context, agentType, task string, maxTurns int) (string, error) {
+	if c.queryEngine == nil {
+		return "", fmt.Errorf("engine not available")
+	}
+	result, err := coreagent.RunAgent(&coreagent.RunConfig{
+		AgentType:      agentType,
+		Task:           task,
+		Engine:         c.queryEngine,
+		Context:        ctx,
+		MaxTurns:       maxTurns,
+		PermissionMode: types.PermissionModeBypass,
+	})
+	if err != nil {
+		return "", err
+	}
+	if !result.Success {
+		return "", fmt.Errorf("agent task failed: %s", result.Error)
+	}
+	return result.Output, nil
 }
 
 // CreateSession creates a new session for multi-turn conversations.

@@ -361,9 +361,9 @@ func permissionErrorFromResult(result types.PermissionResult, fallback string) e
 		reason = fallback
 	}
 	if result.Behavior == types.PermissionBehaviorAsk {
-		return fmt.Errorf("user confirmation required: %s", reason)
+		return types.NewError(types.ErrCodeToolPermission, fmt.Sprintf("user confirmation required: %s", reason))
 	}
-	return fmt.Errorf("permission denied: %s", reason)
+	return types.NewError(types.ErrCodeToolPermission, fmt.Sprintf("permission denied: %s", reason))
 }
 
 func firstNonEmpty(values ...string) string {

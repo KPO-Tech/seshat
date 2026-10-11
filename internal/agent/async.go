@@ -20,13 +20,11 @@ import (
 type AgentEventType string
 
 const (
-	AgentEventStarted    AgentEventType = "started"
-	AgentEventCompleted  AgentEventType = "completed"
-	AgentEventFailed     AgentEventType = "failed"
-	AgentEventProgress   AgentEventType = "progress"
-	AgentEventCancelled  AgentEventType = "cancelled"
-	AgentEventTurnUpdate AgentEventType = "turn_update"
-	AgentEventToolUse    AgentEventType = "tool_use"
+	AgentEventStarted   AgentEventType = "started"
+	AgentEventCompleted AgentEventType = "completed"
+	AgentEventFailed    AgentEventType = "failed"
+	AgentEventProgress  AgentEventType = "progress"
+	AgentEventCancelled AgentEventType = "cancelled"
 )
 
 // AgentEvent represents a real-time event from an async agent

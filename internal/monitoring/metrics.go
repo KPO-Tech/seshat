@@ -12,7 +12,6 @@ const (
 	MetricTypeCounter   MetricType = "counter"   // Counting events
 	MetricTypeGauge     MetricType = "gauge"     // Point-in-time values
 	MetricTypeHistogram MetricType = "histogram" // Distribution of values
-	MetricTypeTimer     MetricType = "timer"     // Duration measurements
 )
 
 // Metric represents a single metric with labels

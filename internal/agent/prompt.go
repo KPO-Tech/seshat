@@ -79,10 +79,12 @@ agent({ type: "explore", task: "Inspect request handling in cmd/grpc and pkg/grp
 // Parallel background investigations
 agent({ type: "explore", task: "Inspect the frontend state flow for session persistence. Report findings only.", run_in_background: true })
 agent({ type: "browse", task: "Research the latest official documentation and release notes for the provider API change. Summarize the important breaking changes with sources.", run_in_background: true })
-agent({ type: "verify", task: "After the fix lands, run relevant tests and summarize failures or passes.", run_in_background: true })
 
 // Focused implementation
-agent({ type: "general-purpose", task: "Implement the sidebar session rename menu in the renderer and report the changed files plus validation steps." })`
+agent({ type: "general-purpose", task: "Implement the sidebar session rename menu in the renderer and report the changed files plus validation steps." })
+
+// Security/compliance audit of an agent definition — not a general "check my work" reviewer
+agent({ type: "verify", task: "Review the new custom agent definition in .seshat/agents/deploy.md for scope creep: flag any tool permissions or bypass modes beyond what deploying a build requires." })`
 
 // Description returns the tool description
 func Description() string {

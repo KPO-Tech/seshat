@@ -97,12 +97,26 @@ type TitleGenerator interface {
 
 // ClientConfig represents the client configuration.
 type ClientConfig struct {
-	APIKey         string          `json:"api_key"`
-	Model          ModelIdentifier `json:"model"`
-	TitleModel     ModelIdentifier `json:"title_model,omitempty"`
-	PermissionMode PermissionMode  `json:"permission_mode"`
-	MaxTurns       int             `json:"max_turns"`
-	AutoCompact    bool            `json:"auto_compact"`
+	APIKey     string          `json:"api_key"`
+	Model      ModelIdentifier `json:"model"`
+	TitleModel ModelIdentifier `json:"title_model,omitempty"`
+	// CompactSummaryModel overrides which model generates compaction summaries.
+	// Zero value means "use Model" (the session's own model), so compaction
+	// works on any provider without needing an Anthropic key.
+	CompactSummaryModel ModelIdentifier `json:"compact_summary_model,omitempty"`
+
+	// TrustProjectInstructions gates SESHAT.md/AGENTS.md/.seshat/instructions.md
+	// found in WorkingDir behind project trust before they are injected into
+	// the system prompt (see docs/project-trust.md). It is called with the
+	// file's exact path and content; return true to trust and inject it. nil
+	// fails closed - no project you didn't write or explicitly trust can put
+	// its own instructions in the model's prompt. A host that already trusts
+	// projects for other configuration (the terminal interface's `seshat
+	// trust`) should wire this to the same hash-based check.
+	TrustProjectInstructions func(path string, content []byte) bool `json:"-"`
+	PermissionMode           PermissionMode                         `json:"permission_mode"`
+	MaxTurns                 int                                    `json:"max_turns"`
+	AutoCompact              bool                                   `json:"auto_compact"`
 
 	// Session persistence
 	PersistSessions   bool           `json:"persist_sessions"`
@@ -280,6 +294,17 @@ type ClientConfig struct {
 	// is SandboxKindDocker. Zero value uses sane, security-conscious
 	// defaults (see sandbox.DefaultDockerConfig).
 	SandboxDocker SandboxDockerConfig `json:"-"`
+
+	// EnableToolSearch keeps deferred tools (MCP tools, and any built-in
+	// tool registering with ShouldDefer, e.g. skill) out of the model's
+	// initial tool list - the model calls the tool_search tool to discover
+	// and use them instead. False (the default) leaves the
+	// ENABLE_TOOL_SEARCH environment variable as the decider (so existing
+	// deployments setting it keep working); true enables it regardless of
+	// that variable. There is no way to force it off through this field
+	// alone if the environment variable is also set - unset that variable
+	// too for a host that wants this field to be the single source of truth.
+	EnableToolSearch bool `json:"enable_tool_search,omitempty"`
 }
 
 // PreToolHookConfig is a single shell hook that runs before a tool call.
@@ -303,7 +328,7 @@ func DefaultClientConfig() *ClientConfig {
 	return &ClientConfig{
 		Model: ModelIdentifier{
 			Provider: APIProviderAnthropic,
-			Model:    "claude-3-5-sonnet-20241022",
+			Model:    providers.DefaultLegacySonnetModel,
 		},
 		PermissionMode:    PermissionModeOnRequest,
 		MaxTurns:          100,

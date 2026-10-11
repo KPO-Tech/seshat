@@ -102,7 +102,7 @@ type ToolUseContext struct {
 	// PermissionMode is the current permission mode (who approves)
 	PermissionMode types.PermissionMode `json:"permission_mode"`
 
-	// ExecutionMode is the current execution mode (agent behavior: plan, execute, browse)
+	// ExecutionMode is the current execution mode (agent behavior: plan, execute)
 	// Separated from PermissionMode for clean separation of concerns.
 	ExecutionMode string `json:"execution_mode,omitempty"`
 

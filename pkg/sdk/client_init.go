@@ -162,6 +162,7 @@ func initBuiltinRegistry(config *ClientConfig, browserManager browsercore.Manage
 		RequireSandbox:             config.RequireSandbox,
 		SandboxKind:                config.SandboxKind,
 		SandboxDocker:              config.SandboxDocker,
+		EnableToolSearch:           config.EnableToolSearch,
 	})
 	if err != nil {
 		return nil, err
@@ -188,6 +189,7 @@ func initImageGenerator(config *ClientConfig) image.Generation {
 		// API key here would block a perfectly valid local-only setup. Only
 		// bail out when there's neither a key nor an explicit endpoint.
 		if apiKey == "" && baseURL == "" {
+			logCapabilityCredentialsMissing("image generation", "generate_image", providerID)
 			return nil
 		}
 		opts := []imageproviders.OpenAIOption{}
@@ -200,6 +202,7 @@ func initImageGenerator(config *ClientConfig) image.Generation {
 		return imageproviders.NewOpenAI(apiKey, opts...)
 	case "gemini":
 		if apiKey == "" && baseURL == "" {
+			logCapabilityCredentialsMissing("image generation", "generate_image", providerID)
 			return nil
 		}
 		opts := []imageproviders.GeminiOption{}
@@ -211,8 +214,25 @@ func initImageGenerator(config *ClientConfig) image.Generation {
 		}
 		return imageproviders.NewGemini(apiKey, opts...)
 	default:
+		logCapabilityUnknownProvider("image generation", "generate_image", providerID)
 		return nil
 	}
+}
+
+// logCapabilityCredentialsMissing warns when a host explicitly selected a
+// provider for a secondary capability (image generation, text-to-speech,
+// speech-to-text) but no API key or base URL could be resolved for it, so the
+// tool silently stays disabled instead of erroring on every call. Capability
+// config left unset entirely (the common case for hosts not using the
+// feature) does not reach this path and stays silent.
+func logCapabilityCredentialsMissing(capability, toolName, providerID string) {
+	log.Printf("[sdk] %s configured with provider %q but no API key or base URL was resolved for it; %s will stay disabled until credentials are set", capability, providerID, toolName)
+}
+
+// logCapabilityUnknownProvider warns when a host selected a provider ID for a
+// secondary capability that this build does not implement.
+func logCapabilityUnknownProvider(capability, toolName, providerID string) {
+	log.Printf("[sdk] %s configured with unrecognized provider %q; %s will stay disabled", capability, providerID, toolName)
 }
 
 func initTextToSpeechGenerator(config *ClientConfig) tts.Generation {
@@ -230,6 +250,7 @@ func initTextToSpeechGenerator(config *ClientConfig) tts.Generation {
 		// a self-hosted, OpenAI-API-compatible server, which doesn't require
 		// a real cloud API key.
 		if apiKey == "" && baseURL == "" {
+			logCapabilityCredentialsMissing("text-to-speech", "text_to_speech", providerID)
 			return nil
 		}
 		opts := []audioproviders.OpenAITTSOption{}
@@ -247,6 +268,7 @@ func initTextToSpeechGenerator(config *ClientConfig) tts.Generation {
 		}
 		return audioproviders.NewOpenAITTS(apiKey, opts...)
 	default:
+		logCapabilityUnknownProvider("text-to-speech", "text_to_speech", providerID)
 		return nil
 	}
 }
@@ -266,6 +288,7 @@ func initSpeechToTextTranscriber(config *ClientConfig) stt.SpeechToText {
 		// locally running whisper.cpp server (OpenAI-API-compatible, no auth
 		// checked) power this tool with BaseURL set and no APIKey at all.
 		if apiKey == "" && baseURL == "" {
+			logCapabilityCredentialsMissing("speech-to-text", "speech_to_text", providerID)
 			return nil
 		}
 		opts := []audioproviders.OpenAISTTOption{}
@@ -280,6 +303,7 @@ func initSpeechToTextTranscriber(config *ClientConfig) stt.SpeechToText {
 		}
 		return audioproviders.NewOpenAISTT(apiKey, opts...)
 	default:
+		logCapabilityUnknownProvider("speech-to-text", "speech_to_text", providerID)
 		return nil
 	}
 }

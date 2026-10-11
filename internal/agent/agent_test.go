@@ -637,6 +637,32 @@ func TestBrowseAgentToolSurfaceIsReadOnlyResearchFocused(t *testing.T) {
 	}
 }
 
+// TestPlanAgentToolSurfaceIsReadOnly guards against a regression of M5c:
+// the plan agent used to carry write_file/edit_file despite its own prompt
+// never mentioning writing, and despite ExecutionModePlan denying writes
+// outright at the session level.
+func TestPlanAgentToolSurfaceIsReadOnly(t *testing.T) {
+	agent := GetBuiltInAgentByType(AgentTypePlan)
+	require.NotNil(t, agent, "expected plan agent to be registered")
+
+	allowed := make(map[string]bool, len(agent.Tools))
+	for _, tool := range agent.Tools {
+		allowed[tool] = true
+	}
+
+	for _, expected := range []string{"read_file", "glob", "grep"} {
+		if !allowed[expected] {
+			t.Fatalf("expected plan agent to allow %q", expected)
+		}
+	}
+
+	for _, blocked := range []string{"write_file", "edit_file", "bash", "task_create"} {
+		if allowed[blocked] {
+			t.Fatalf("expected plan agent not to allow %q", blocked)
+		}
+	}
+}
+
 // TestMemoryAdapter_BasicOperations tests basic memory operations.
 func TestMemoryAdapter_BasicOperations(t *testing.T) {
 	memSystem := NewMemoryAdapter()

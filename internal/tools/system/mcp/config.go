@@ -159,22 +159,36 @@ func validateMcpConfig(config *McpJsonConfig) []ValidationError {
 
 func ExpandEnvVars(config McpServerConfig) (McpServerConfig, []string) {
 	var missing []string
+	seenMissing := make(map[string]bool)
 
 	expand := func(s string) string {
-		result := os.ExpandEnv(s)
-		if strings.Contains(result, "${") {
-			parts := strings.Split(result, "${")
-			for _, part := range parts[1:] {
-				end := strings.Index(part, "}")
-				if end > 0 {
-					varName := part[:end]
-					if os.Getenv(varName) == "" {
-						missing = append(missing, varName)
-					}
-				}
+		// Scan the ORIGINAL string for ${VAR} references before os.ExpandEnv
+		// runs - it replaces an unset variable with "" rather than leaving
+		// "${VAR}" in place, so checking the already-expanded result for
+		// "${" (the previous logic here) could never find a missing
+		// variable: by the time it looked, ExpandEnv had already erased the
+		// evidence.
+		rest := s
+		for {
+			start := strings.Index(rest, "${")
+			if start < 0 {
+				break
+			}
+			end := strings.Index(rest[start:], "}")
+			if end < 0 {
+				break
+			}
+			varName := rest[start+2 : start+end]
+			rest = rest[start+end+1:]
+			if varName == "" {
+				continue
+			}
+			if _, ok := os.LookupEnv(varName); !ok && !seenMissing[varName] {
+				seenMissing[varName] = true
+				missing = append(missing, varName)
 			}
 		}
-		return result
+		return os.ExpandEnv(s)
 	}
 
 	config.Command = expand(config.Command)
@@ -201,7 +215,9 @@ func LoadMcpConfigs(cwd string) ConfigLoadResult {
 	if DoesEnterpriseConfigExist() {
 		enterpriseConfig, errors := ParseMcpConfigFromFile(GetEnterpriseConfigPath())
 		for name, server := range enterpriseConfig.MCPServers {
-			allServers[name] = ScopedMcpServerConfig{server, ScopeEnterprise}
+			expanded, expandErrs := expandServerEnvVars(name, server, GetEnterpriseConfigPath())
+			allServers[name] = ScopedMcpServerConfig{expanded, ScopeEnterprise}
+			allErrors = append(allErrors, expandErrs...)
 		}
 		allErrors = append(allErrors, errors...)
 		return ConfigLoadResult{allServers, allErrors}
@@ -210,7 +226,9 @@ func LoadMcpConfigs(cwd string) ConfigLoadResult {
 	userConfig, userErrors := ParseMcpConfigFromFile(GetGlobalConfigPath())
 	for name, server := range userConfig.MCPServers {
 		server.Scope = ScopeUser
-		allServers[name] = ScopedMcpServerConfig{server, ScopeUser}
+		expanded, expandErrs := expandServerEnvVars(name, server, GetGlobalConfigPath())
+		allServers[name] = ScopedMcpServerConfig{expanded, ScopeUser}
+		allErrors = append(allErrors, expandErrs...)
 	}
 	allErrors = append(allErrors, userErrors...)
 
@@ -219,7 +237,9 @@ func LoadMcpConfigs(cwd string) ConfigLoadResult {
 		projectConfig, projectErrors := ParseMcpConfigFromFile(configPath)
 		for name, server := range projectConfig.MCPServers {
 			server.Scope = ScopeProject
-			allServers[name] = ScopedMcpServerConfig{server, ScopeProject}
+			expanded, expandErrs := expandServerEnvVars(name, server, configPath)
+			allServers[name] = ScopedMcpServerConfig{expanded, ScopeProject}
+			allErrors = append(allErrors, expandErrs...)
 		}
 		allErrors = append(allErrors, projectErrors...)
 	}
@@ -228,11 +248,36 @@ func LoadMcpConfigs(cwd string) ConfigLoadResult {
 	localConfig, localErrors := ParseMcpConfigFromFile(localConfigPath)
 	for name, server := range localConfig.MCPServers {
 		server.Scope = ScopeLocal
-		allServers[name] = ScopedMcpServerConfig{server, ScopeLocal}
+		expanded, expandErrs := expandServerEnvVars(name, server, localConfigPath)
+		allServers[name] = ScopedMcpServerConfig{expanded, ScopeLocal}
+		allErrors = append(allErrors, expandErrs...)
 	}
 	allErrors = append(allErrors, localErrors...)
 
 	return ConfigLoadResult{allServers, allErrors}
+}
+
+// expandServerEnvVars resolves ${VAR}-style references in server's Command/
+// Args/URL/Env/Headers before it is connected to. ExpandEnvVars existed but
+// LoadMcpConfigs never called it (M4 in TODO.md), so a server config using
+// the documented ${VAR} syntax had it passed through to the server process
+// literally, unexpanded, instead of substituted. A referenced variable that
+// isn't set produces a non-fatal warning rather than failing the whole load.
+func expandServerEnvVars(name string, server McpServerConfig, configPath string) (McpServerConfig, []ValidationError) {
+	expanded, missing := ExpandEnvVars(server)
+	if len(missing) == 0 {
+		return expanded, nil
+	}
+	errs := make([]ValidationError, 0, len(missing))
+	for _, varName := range missing {
+		errs = append(errs, ValidationError{
+			File:     configPath,
+			Path:     fmt.Sprintf("mcpServers.%s", name),
+			Message:  fmt.Sprintf("environment variable %q referenced in this server's config is not set", varName),
+			Severity: "warning",
+		})
+	}
+	return expanded, errs
 }
 
 func findProjectMcpConfigs(cwd string) []string {
@@ -476,60 +521,6 @@ func ConnectMcpServers(ctx context.Context, manager *MCPClientManager, cwd strin
 	}
 
 	return nil
-}
-
-type MCPOAuthConfig struct {
-	ClientID     string
-	ClientSecret string
-	AuthURL      string
-	TokenURL     string
-	Scopes       []string
-}
-
-func GetOAuthConfig() *MCPOAuthConfig {
-	return &MCPOAuthConfig{
-		ClientID:     os.Getenv("SESHAT_MCP_CLIENT_ID"),
-		ClientSecret: os.Getenv("SESHAT_MCP_CLIENT_SECRET"),
-		AuthURL:      os.Getenv("SESHAT_MCP_AUTH_URL"),
-		TokenURL:     os.Getenv("SESHAT_MCP_TOKEN_URL"),
-		Scopes:       strings.Split(os.Getenv("SESHAT_MCP_SCOPES"), ","),
-	}
-}
-
-func ShouldUseOAuth() bool {
-	cfg := GetOAuthConfig()
-	return cfg.ClientID != "" && cfg.AuthURL != ""
-}
-
-func (m *MCPClientManager) ConnectWithOAuth(ctx context.Context, config ConnectServerConfig) error {
-	if !ShouldUseOAuth() {
-		return m.Connect(ctx, config)
-	}
-
-	oauthCfg := GetOAuthConfig()
-	slog.Info("MCP OAuth: authenticating", "server", config.Name, "client_id", oauthCfg.ClientID)
-
-	return m.Connect(ctx, config)
-}
-
-type PluginMcpServer struct {
-	Name   string
-	Source string
-	Config McpServerConfig
-}
-
-var pluginMcpServers []PluginMcpServer
-
-func RegisterPluginMcpServer(name string, source string, config McpServerConfig) {
-	pluginMcpServers = append(pluginMcpServers, PluginMcpServer{
-		Name:   fmt.Sprintf("plugin:%s:%s", source, name),
-		Source: source,
-		Config: config,
-	})
-}
-
-func GetPluginMcpServers() []PluginMcpServer {
-	return pluginMcpServers
 }
 
 type MCPServerStatus struct {

@@ -464,18 +464,6 @@ func MessageFromTranscriptEntry(entry TranscriptEntry) (Message, bool) {
 	}, true
 }
 
-func MessagesFromTranscriptEntries(entries []TranscriptEntry) []Message {
-	messages := make([]Message, 0, len(entries))
-	for _, entry := range entries {
-		message, ok := MessageFromTranscriptEntry(entry)
-		if !ok {
-			continue
-		}
-		messages = append(messages, message)
-	}
-	return messages
-}
-
 func TranscriptEntriesFromMessages(messages []Message, turnID TurnID) []TranscriptEntry {
 	entries := make([]TranscriptEntry, 0, len(messages))
 	for _, message := range messages {
@@ -768,19 +756,6 @@ func WithCompactionMetadata(message Message, metadata *CompactionMetadata) Messa
 	return cloned
 }
 
-func WithoutCompactionMetadata(message Message) Message {
-	if message.Metadata == nil || message.Metadata.Compaction == nil {
-		return message
-	}
-	cloned := message
-	cloned.Metadata = CloneMessageMetadata(message.Metadata)
-	cloned.Metadata.Compaction = nil
-	if cloned.Metadata.TurnID == "" && cloned.Metadata.StopReason == "" && cloned.Metadata.StopSequence == nil && cloned.Metadata.Usage == nil {
-		cloned.Metadata = nil
-	}
-	return cloned
-}
-
 func transcriptMetadataSignature(metadata *MessageMetadata) string {
 	if metadata == nil {
 		return ""
@@ -814,10 +789,6 @@ func transcriptMetadataSignature(metadata *MessageMetadata) string {
 	return fmt.Sprintf("%s|%s|%s|%d|%d|%s", metadata.TurnID, metadata.StopReason, stopSequence, inputTokens, outputTokens, compactionSignature)
 }
 
-func MessageTranscriptMetadataSignature(message Message) string {
-	return transcriptMetadataSignature(message.Metadata)
-}
-
 func MessagesEquivalentForTranscript(left Message, right Message) bool {
 	if left.ID != right.ID || left.Role != right.Role {
 		return false
@@ -840,122 +811,12 @@ func CanonicalTranscriptPrefix(messages []Message, prefix []Message) bool {
 	return true
 }
 
-func IsTranscriptCompactionEntry(entry TranscriptEntry) bool {
-	return entry.Type == EntryTypeCompact
-}
-
-func IsTranscriptSystemEntry(entry TranscriptEntry) bool {
-	return entry.Type == EntryTypeSystem
-}
-
-func IsCanonicalTranscriptEntry(entry TranscriptEntry) bool {
-	return entry.Type == EntryTypeMessage || entry.Type == EntryTypeCompact || entry.Type == EntryTypeSystem
-}
-
-func FilterCanonicalTranscriptEntries(entries []TranscriptEntry) []TranscriptEntry {
-	canonical := make([]TranscriptEntry, 0, len(entries))
-	for _, entry := range entries {
-		if !IsCanonicalTranscriptEntry(entry) {
-			continue
-		}
-		canonical = append(canonical, entry)
-	}
-	return canonical
-}
-
 func CloneMessages(messages []Message) []Message {
 	return append([]Message(nil), messages...)
 }
 
 func CanonicalTranscriptMessageCount(messages []Message) int {
 	return len(CanonicalTranscriptMessages(messages))
-}
-
-func LastCompactionMessage(messages []Message) (Message, bool) {
-	for i := len(messages) - 1; i >= 0; i-- {
-		if HasCompactionMetadata(messages[i]) {
-			return messages[i], true
-		}
-	}
-	return Message{}, false
-}
-
-func BuildCompactionMetadata(kind string, preCompactTokens int, postCompactTokens int, targetTokens int, preservedMessages int, preservedTurns int, preservedToolPairs int) *CompactionMetadata {
-	return &CompactionMetadata{
-		Kind:               kind,
-		PreCompactTokens:   preCompactTokens,
-		PostCompactTokens:  postCompactTokens,
-		TargetTokens:       targetTokens,
-		PreservedMessages:  preservedMessages,
-		PreservedTurns:     preservedTurns,
-		PreservedToolPairs: preservedToolPairs,
-	}
-}
-
-func IsCompactionSummaryMessage(message Message) bool {
-	if !HasCompactionMetadata(message) {
-		return false
-	}
-	metadata := message.Metadata.Compaction
-	return metadata != nil && metadata.Kind == "summary"
-}
-
-func IsCompactionMarkerMessage(message Message) bool {
-	if !HasCompactionMetadata(message) {
-		return false
-	}
-	metadata := message.Metadata.Compaction
-	return metadata != nil && metadata.Kind == "marker"
-}
-
-func IsCompactionArtifactMessage(message Message) bool {
-	return IsCompactionSummaryMessage(message) || IsCompactionMarkerMessage(message)
-}
-
-func CountCompactionArtifacts(messages []Message) int {
-	count := 0
-	for _, message := range messages {
-		if IsCompactionArtifactMessage(message) {
-			count++
-		}
-	}
-	return count
-}
-
-func CountPreservedTailMessages(messages []Message) int {
-	preserved := preservedTailForMetrics(messages)
-	count := 0
-	for _, message := range preserved {
-		if IsCompactionArtifactMessage(message) {
-			continue
-		}
-		count++
-	}
-	return count
-}
-
-func CountPreservedTailTurns(messages []Message) int {
-	preserved := preservedTailForMetrics(messages)
-	filtered := make([]Message, 0, len(preserved))
-	for _, message := range preserved {
-		if IsCompactionArtifactMessage(message) {
-			continue
-		}
-		filtered = append(filtered, message)
-	}
-	return CountDistinctTurnIDs(filtered)
-}
-
-func CountPreservedTailToolResultMessages(messages []Message) int {
-	preserved := preservedTailForMetrics(messages)
-	filtered := make([]Message, 0, len(preserved))
-	for _, message := range preserved {
-		if IsCompactionArtifactMessage(message) {
-			continue
-		}
-		filtered = append(filtered, message)
-	}
-	return CountToolResultMessages(filtered)
 }
 
 func HasCompactionBoundaryDescriptor(metadata *CompactionMetadata) bool {
@@ -1046,13 +907,6 @@ func ValidateCompactionBoundary(messages []Message) error {
 		return err
 	}
 	return nil
-}
-
-func preservedTailForMetrics(messages []Message) []Message {
-	if preserved, _, ok := ActiveCompactionPreservedTail(messages); ok {
-		return preserved
-	}
-	return messages
 }
 
 func collectToolUseIDs(message Message) []string {

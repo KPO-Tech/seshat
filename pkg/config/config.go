@@ -147,7 +147,9 @@ type Config struct {
 	// Hooks — user-defined shell commands that fire on lifecycle events.
 	// Currently supported event: pre_tool_use (fires before every tool call).
 	//
-	// Example .seshat.yaml:
+	// Example config.yaml (the actual file LoadInto reads via viper - this
+	// comment used to say .seshat.yaml, which is not a name this loader ever
+	// looks for; M5d in TODO.md):
 	//   hooks:
 	//     pre_tool_use:
 	//       - command: "jq '.command' && exit 0"
@@ -343,7 +345,7 @@ func LoadInto(config *Config) error {
 	config.RuntimeRoot = runtimepath.ResolveRoot(config.RuntimeRoot)
 
 	// Evaluate any $(...) shell substitutions in credential fields.
-	// This allows api_key: "$(vault kv get -field=token secret/api)" in .seshat.yaml.
+	// This allows api_key: "$(vault kv get -field=token secret/api)" in config.yaml.
 	ExpandShellValues(config)
 
 	ApplyRuntimeEnv(*config)

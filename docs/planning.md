@@ -1,6 +1,6 @@
 # Planning Mode and Execution Modes
 
-Seshat is a Go agent runtime that supports three distinct execution modes. Each mode controls how much autonomy the agent has before taking actions. You can switch modes per session or configure a default.
+Seshat is a Go agent runtime that supports two distinct execution modes. Each mode controls how much autonomy the agent has before taking actions. You can switch modes per session or configure a default.
 
 > Full documentation: [seshat-ai.com/docs/guides/workflows](https://seshat-ai.com/docs/guides/workflows)
 
@@ -55,24 +55,6 @@ session, _ := client.CreateSession(ctx, &sdk.SessionConfig{
 
 ---
 
-### 3. Pair programming (collaborative)
-
-The agent proposes each action one at a time and waits for confirmation before proceeding. Unlike plan mode (which shows the full plan upfront), pair mode is step-by-step.
-
-Best for: exploratory work, learning sessions, pair programming where you want to stay in the loop for each decision.
-
-```bash
-seshat chat --mode pair
-```
-
-```go
-session, _ := client.CreateSession(ctx, &sdk.SessionConfig{
-    ExecutionMode: sdk.ModePairProgramming,
-})
-```
-
----
-
 ## Permission engine
 
 Orthogonal to execution modes, the permission engine controls which tools require explicit approval:
@@ -83,7 +65,7 @@ Orthogonal to execution modes, the permission engine controls which tools requir
 | `acceptEdits` | File edits auto-approved, all others require confirmation |
 | `onRequest` | Every tool call requires explicit approval |
 | `bypass` | All tools auto-approved (use only in trusted pipelines) |
-| `never` | No tools are ever called (read-only reasoning sessions) |
+| `never` | Never prompts the user; a tool call that would need approval is denied and reported back to the agent instead (headless/background sessions) |
 
 ```go
 session, _ := client.CreateSession(ctx, &sdk.SessionConfig{

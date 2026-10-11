@@ -168,7 +168,6 @@ func (t *SpawnAgentTool) Call(
 	config := &coreagent.RunConfig{
 		AgentType:       agentType,
 		Task:            prompt,
-		Tools:           t.tools,
 		Engine:          t.eng,
 		MaxTurns:        maxTurns,
 		Context:         ctx,

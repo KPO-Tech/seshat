@@ -444,20 +444,6 @@ func (m *RodManager) waitForPageReady(page *rod.Page) error {
 	})
 }
 
-func (m *RodManager) readPageTitle(page *rod.Page) string {
-	title, err := withRodResult(func() (string, error) {
-		info, infoErr := page.Info()
-		if infoErr != nil {
-			return "", infoErr
-		}
-		return info.Title, nil
-	})
-	if err != nil {
-		return ""
-	}
-	return title
-}
-
 func (s *sessionState) snapshot() SessionState {
 	return SessionState{
 		SessionID:    s.id,

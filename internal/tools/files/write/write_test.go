@@ -102,6 +102,47 @@ func TestWriteTool_CheckPermissions_NormalPathPassthrough(t *testing.T) {
 // ValidateInput schema checks
 // ---------------------------------------------------------------------------
 
+// ---------------------------------------------------------------------------
+// Plan mode is read-only: writes are denied, not auto-allowed (TODO.md M5e -
+// plan mode used to fall into the same AcceptEdits-style auto-allow as
+// PermissionModeAcceptEdits, so a plan-mode session asked FEWER questions
+// about writes than a normal session would, contradicting the mode's own
+// "tools are described but not executed" doc comment and the instructions
+// enter_plan_mode gives the model).
+// ---------------------------------------------------------------------------
+
+func TestWriteTool_CheckPermissions_PlanMode_DeniesWrite(t *testing.T) {
+	w := NewWriteTool("/project")
+	ctx := tool.NewToolUseContext("test-session", "test-turn", "test-use", types.PermissionModeOnRequest)
+	ctx.ExecutionMode = "plan"
+
+	got := w.CheckPermissions(context.Background(), map[string]any{
+		"file_path": "/project/main.go",
+		"content":   "package main",
+	}, ctx)
+
+	if got.Behavior != types.PermissionBehaviorDeny {
+		t.Fatalf("expected Deny in plan mode, got %v (reason: %s)", got.Behavior, got.Reason)
+	}
+}
+
+func TestWriteTool_CheckPermissions_PlanMode_DeniesEvenInsideWorkingDir(t *testing.T) {
+	// Before the fix, a path inside the working directory was exactly the
+	// case that got auto-allowed (checkAcceptEditsPermissions's happy path).
+	w := NewWriteTool("/project")
+	ctx := tool.NewToolUseContext("test-session", "test-turn", "test-use", types.PermissionModeOnRequest)
+	ctx.ExecutionMode = "plan"
+
+	got := w.CheckPermissions(context.Background(), map[string]any{
+		"file_path": "/project/notes.txt",
+		"content":   "harmless notes",
+	}, ctx)
+
+	if got.Behavior != types.PermissionBehaviorDeny {
+		t.Fatalf("expected Deny in plan mode even for a safe in-working-dir path, got %v", got.Behavior)
+	}
+}
+
 func TestWriteTool_ValidateInput(t *testing.T) {
 	w := NewWriteTool("/tmp")
 	ctx := context.Background()

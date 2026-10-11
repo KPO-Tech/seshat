@@ -7,6 +7,23 @@ import (
 	"github.com/KPO-Tech/seshat/internal/types"
 )
 
+// legacyClaude35Date is the release-date suffix of the 2024 Claude 3.5
+// Sonnet/Haiku snapshots, shared by every default/fallback/alias below that
+// still points at them (Anthropic's own fallback chain, plus the Bedrock,
+// Vertex, and Foundry alias maps - each spells the model ID in its own
+// provider-specific format, but all six should move together, not drift
+// out of sync one literal at a time).
+const legacyClaude35Date = "20241022"
+
+// DefaultLegacySonnetModel and DefaultLegacyHaikuModel are the 2024 Claude 3.5
+// model identifiers used as defaults across the engine, SDK, and the
+// Anthropic/Foundry alias maps below. They still resolve in the model
+// catalog; this only consolidates the literal so it isn't duplicated.
+const (
+	DefaultLegacySonnetModel = "claude-3-5-sonnet-" + legacyClaude35Date
+	DefaultLegacyHaikuModel  = "claude-3-5-haiku-" + legacyClaude35Date
+)
+
 // RoutingConfig defines provider routing and fallback behavior.
 type RoutingConfig struct {
 	// Priority determines which provider to try first (lower = higher priority).
@@ -40,18 +57,22 @@ func DefaultConfigs() map[types.APIProvider]*Config {
 			BaseURL:  "https://api.anthropic.com",
 			ModelAliasMapping: map[string]string{
 				"sonnet":   "claude-sonnet-4-20250514",
-				"haiku":    "claude-3-5-haiku-20241022",
+				"haiku":    DefaultLegacyHaikuModel,
 				"opus":     "claude-3-opus-20240229",
-				"sonnet-3": "claude-3-5-sonnet-20241022",
+				"sonnet-3": DefaultLegacySonnetModel,
 			},
 			Routing: &RoutingConfig{
 				Priority: 1,
 				FallbackModels: []types.ModelIdentifier{
-					{Provider: types.APIProviderAnthropic, Model: "claude-3-5-sonnet-20241022"},
-					{Provider: types.APIProviderAnthropic, Model: "claude-3-5-haiku-20241022"},
+					{Provider: types.APIProviderAnthropic, Model: DefaultLegacySonnetModel},
+					{Provider: types.APIProviderAnthropic, Model: DefaultLegacyHaikuModel},
 				},
-				FallbackProviders: []types.APIProvider{types.APIProviderOpenAI},
-				CircuitBreaker:    DefaultCircuitBreakerConfig(),
+				// No default FallbackProviders: a session that picked
+				// Anthropic must not silently continue on a different
+				// vendor just because an OpenAI key happens to be present
+				// (M5f in TODO.md, privacy) - cross-vendor fallback is
+				// opt-in only, via ProviderConfig.Routing.FallbackProviders.
+				CircuitBreaker: DefaultCircuitBreakerConfig(),
 			},
 		},
 		types.APIProviderOpenAI: {
@@ -88,8 +109,8 @@ func DefaultConfigs() map[types.APIProvider]*Config {
 			Provider: types.APIProviderBedrock,
 			Region:   getEnvOrDefault("AWS_REGION", "us-east-1"),
 			ModelAliasMapping: map[string]string{
-				"sonnet": "anthropic.claude-3-5-sonnet-20241022",
-				"haiku":  "anthropic.claude-3-5-haiku-20241022",
+				"sonnet": "anthropic." + DefaultLegacySonnetModel,
+				"haiku":  "anthropic." + DefaultLegacyHaikuModel,
 				"opus":   "anthropic.claude-3-opus-20240229",
 			},
 		},
@@ -98,8 +119,8 @@ func DefaultConfigs() map[types.APIProvider]*Config {
 			ProjectID: os.Getenv("ANTHROPIC_VERTEX_PROJECT_ID"),
 			Region:    getEnvOrDefault("CLOUD_ML_REGION", "us-east5"),
 			ModelAliasMapping: map[string]string{
-				"sonnet": "claude-3-5-sonnet@20241022",
-				"haiku":  "claude-3-5-haiku@20241022",
+				"sonnet": "claude-3-5-sonnet@" + legacyClaude35Date,
+				"haiku":  "claude-3-5-haiku@" + legacyClaude35Date,
 				"opus":   "claude-3-opus@20240229",
 			},
 		},
@@ -108,8 +129,8 @@ func DefaultConfigs() map[types.APIProvider]*Config {
 			BaseURL:  getEnvOrDefault("ANTHROPIC_FOUNDRY_BASE_URL", "https://your-resource.services.ai.azure.com/anthropic/v1"),
 			Region:   getEnvOrDefault("ANTHROPIC_FOUNDRY_RESOURCE", ""),
 			ModelAliasMapping: map[string]string{
-				"sonnet": "claude-3-5-sonnet-20241022",
-				"haiku":  "claude-3-5-haiku-20241022",
+				"sonnet": DefaultLegacySonnetModel,
+				"haiku":  DefaultLegacyHaikuModel,
 			},
 		},
 		types.APIProviderGemini: {

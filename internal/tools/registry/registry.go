@@ -34,6 +34,13 @@ type RegistryConfig struct {
 
 	// CaseSensitive controls whether tool names are case-sensitive
 	CaseSensitive bool `json:"case_sensitive"`
+
+	// EnableToolSearch keeps deferred tools out of the initial model-visible
+	// surface (BuildSurface) so the model must discover them through
+	// ToolSearch first. True enables it regardless of the ENABLE_TOOL_SEARCH
+	// environment variable; false leaves that variable as the decider, so it
+	// still works for a registry built without going through pkg/sdk.
+	EnableToolSearch bool `json:"enable_tool_search"`
 }
 
 // DefaultRegistryConfig returns default registry configuration
@@ -341,7 +348,7 @@ func (r *Registry) BuildSurface(ctx *SurfaceContext) (*Surface, error) {
 
 		// When ToolSearch is active, deferred tools must stay out of the initial
 		// model-visible surface and be discovered through ToolSearch instead.
-		if isToolSearchSurfaceEnabled() && IsDeferred(tool) {
+		if r.isToolSearchSurfaceEnabled() && IsDeferred(tool) {
 			continue
 		}
 
@@ -393,7 +400,10 @@ func (r *Registry) BuildSurface(ctx *SurfaceContext) (*Surface, error) {
 	return surface, nil
 }
 
-func isToolSearchSurfaceEnabled() bool {
+func (r *Registry) isToolSearchSurfaceEnabled() bool {
+	if r.config != nil && r.config.EnableToolSearch {
+		return true
+	}
 	value := strings.TrimSpace(os.Getenv("ENABLE_TOOL_SEARCH"))
 	if value == "" || value == "false" {
 		return false

@@ -10,6 +10,7 @@ import (
 	"sort"
 	"strings"
 	"sync"
+	"time"
 
 	automode "github.com/KPO-Tech/seshat/internal/permissions/auto"
 	"github.com/KPO-Tech/seshat/internal/providers"
@@ -74,6 +75,14 @@ func (i *Integrator) effectivePromptFn(ctx context.Context) types.PromptFn {
 		return fn
 	}
 	return i.promptFn
+}
+
+// HasPromptFn reports whether a prompt function is actually available for
+// ctx - the same check effectivePromptFn uses to resolve an ask, exposed so
+// a caller can decide ahead of time whether this context can show an
+// interactive prompt at all (see ExecuteRequest.ShouldAvoidPermissionPrompts).
+func (i *Integrator) HasPromptFn(ctx context.Context) bool {
+	return i.effectivePromptFn(ctx) != nil
 }
 
 // Resolver creates a typed PermissionResolver that integrates with the permission engine.
@@ -221,6 +230,21 @@ func (i *Integrator) ResolverWithContext(
 		promptFn := i.effectivePromptFn(ctx)
 		if promptFn == nil {
 			return result
+		}
+
+		// Emit tool.permission_required before prompting, so a host that
+		// only listens on the runtime-event channel (not PromptFn) can show
+		// its own approval UI too - this event existed but nothing ever
+		// constructed it (H6 in TODO.md).
+		if emitter, ok := ctx.Value(types.RuntimeEventEmitterKey).(func(types.RuntimeEvent)); ok && emitter != nil {
+			reqCopy := request
+			emitter(types.RuntimeEvent{
+				Type:              types.RuntimeEventTypeToolPermissionRequired,
+				SessionID:         requestSessionID,
+				TurnID:            requestTurnID,
+				Timestamp:         time.Now(),
+				PermissionRequest: &reqCopy,
+			})
 		}
 
 		promptReq := types.PromptRequest{
@@ -448,7 +472,7 @@ func (i *Integrator) CheckToolUse(
 
 	result, err := i.engine.CheckPermission(ctx, pctx)
 	if err != nil {
-		return types.PermissionResult{}, fmt.Errorf("permission check failed: %w", err)
+		return types.PermissionResult{}, types.WrapError(types.ErrCodePermissionError, "permission check failed", err)
 	}
 	if result.IsPassthrough() {
 		return types.AllowWithInput(result.Reason, result.UpdatedInput), nil

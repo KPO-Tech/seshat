@@ -67,23 +67,6 @@ func (s *StreamingExecutor) SubmitToolUse(toolUse types.ToolUseContent, index in
 	s.dispatch()
 }
 
-func (s *StreamingExecutor) SubmitToolUseChunk(chunk ToolUseChunk) {
-	s.mu.Lock()
-	if chunk.IsPartial {
-		for i := range s.pending {
-			if s.pending[i].ToolUse.ID == chunk.ToolUse.ID {
-				s.pending[i] = chunk
-				s.mu.Unlock()
-				// partial update — do not dispatch; tool input is not yet complete
-				return
-			}
-		}
-	}
-	s.pending = append(s.pending, chunk)
-	s.mu.Unlock()
-	s.dispatch()
-}
-
 // dispatch drains the pending queue up to the worker cap.
 // Safe to call from any goroutine; acquires its own lock.
 func (s *StreamingExecutor) dispatch() {
@@ -170,17 +153,6 @@ func (s *StreamingExecutor) executeToolAsync(toolUse types.ToolUseContent, index
 	s.mu.Unlock()
 }
 
-func (s *StreamingExecutor) GetCompletedResults() []toolExecutionOutcome {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-
-	completed := make([]toolExecutionOutcome, len(s.completed))
-	copy(completed, s.completed)
-	s.completed = s.completed[:0]
-
-	return completed
-}
-
 func (s *StreamingExecutor) GetAllCompleted() []toolExecutionOutcome {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -208,13 +180,6 @@ func (s *StreamingExecutor) GetAllCompletedResults() []StreamingExecutionResult 
 		})
 	}
 	return results
-}
-
-func (s *StreamingExecutor) GetPendingCount() int {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-
-	return len(s.pending) + len(s.running)
 }
 
 // Wait blocks until all submitted tools complete or ctx is canceled.

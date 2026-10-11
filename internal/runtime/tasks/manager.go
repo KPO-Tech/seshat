@@ -14,6 +14,7 @@ import (
 	"sync"
 	"time"
 
+	coreagent "github.com/KPO-Tech/seshat/internal/agent"
 	"github.com/KPO-Tech/seshat/internal/engine"
 	tool "github.com/KPO-Tech/seshat/internal/tools/registry"
 	taskTool "github.com/KPO-Tech/seshat/internal/tools/task"
@@ -128,7 +129,30 @@ func (m *Manager) CreateBashTask(ctx context.Context, command string) (*Task, er
 }
 
 // CreateAgentTask creates a new agent task.
-func (m *Manager) CreateAgentTask(ctx context.Context, prompt string, tools []tool.Tool) (*Task, error) {
+//
+// permissionMode, when non-empty, is applied to the new session before it
+// ever runs - a background task has no interactive prompt to show, and
+// without this it silently inherited whatever permission mode m.client
+// defaults new sessions to (typically onRequest), which routes any "ask"
+// through the same engine-wide prompt function the foreground session
+// uses. Callers should resolve this the same way every other sub-agent
+// spawn path does (see agents.subAgentPermissionMode): bypass by default,
+// or never when the spawning session is itself in never mode.
+//
+// systemPrompt, when non-empty, becomes the session's system prompt
+// template - the caller's resolved agentDef.GetSystemPrompt(), so a
+// background run actually gets the requested agent type's identity and
+// instructions instead of silently running under the engine's default one
+// (the type the model asked for was otherwise only used for display, never
+// to pick a prompt). The session also gets the same "subagent" tool
+// surface profile every other sub-agent spawn path uses (coreagent.RunAgent),
+// instead of the top-level default a plain NewSession would give it.
+//
+// toolPatterns, when non-empty and not a bare "*", prunes the session down
+// to tools matching one of them (see coreagent.RestrictSessionTools) -
+// the caller's combined agentType-pattern/allowedTools list, mirroring
+// what every synchronous sub-agent spawn path already applies via RunAgent.
+func (m *Manager) CreateAgentTask(ctx context.Context, prompt string, tools []tool.Tool, permissionMode types.PermissionMode, systemPrompt string, toolPatterns []string) (*Task, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	if m.activeTaskCountLocked() >= m.config.MaxConcurrentTasks {
@@ -138,7 +162,14 @@ func (m *Manager) CreateAgentTask(ctx context.Context, prompt string, tools []to
 		return nil, fmt.Errorf("query engine not configured for agent tasks")
 	}
 	taskID := TaskID(fmt.Sprintf("agent_%d", time.Now().UnixNano()))
-	session, err := m.client.NewSession(ctx)
+	subagentMetadata := &types.SessionMetadata{
+		Status:        types.SessionStatusActive,
+		CreatedAt:     time.Now(),
+		UpdatedAt:     time.Now(),
+		Additional:    map[string]any{"tool_surface_profile": tool.ToolSurfaceProfileSubagent},
+		SchemaVersion: types.SessionMetadataSchemaVersion,
+	}
+	session, err := m.client.NewSessionFromState(ctx, "", subagentMetadata, nil)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create agent session: %w", err)
 	}
@@ -150,6 +181,13 @@ func (m *Manager) CreateAgentTask(ctx context.Context, prompt string, tools []to
 			_ = session.Close()
 		}
 	}()
+	if permissionMode != "" {
+		session.SetPermissionMode(permissionMode)
+	}
+	if systemPrompt != "" {
+		session.SetSystemPromptTemplate(systemPrompt)
+	}
+	coreagent.RestrictSessionTools(session, toolPatterns)
 	if err := session.RegisterTools(tools); err != nil {
 		return nil, fmt.Errorf("failed to register tools: %w", err)
 	}

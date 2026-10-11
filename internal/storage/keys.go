@@ -68,32 +68,6 @@ func sessionScopedArtifactPrefix(request ArtifactPutRequest, namespace string, d
 	}
 }
 
-func PDFKey(title string, now time.Time) string {
-	return BuildArtifactKey(ArtifactPutRequest{
-		Namespace:   NamespaceDocuments,
-		Filename:    title,
-		ContentType: "application/pdf",
-		Timestamp:   now,
-	})
-}
-
-// ScreenshotKey builds a session-scoped storage key for a browser screenshot.
-// Layout: workspaces/{sessionID}/artifacts/screenshots/{pageID}/{date}/{timestamp}-screenshot.png
-// Must match the path produced by BuildArtifactKey(NamespaceBrowserScreenshots).
-func ScreenshotKey(sessionID, pageID string, now time.Time) string {
-	now = now.UTC()
-	if now.IsZero() {
-		now = time.Now().UTC()
-	}
-	datePrefix := fmt.Sprintf("%04d/%02d/%02d", now.Year(), now.Month(), now.Day())
-	parts := []string{SessionKeyPrefix, sanitizePathSegment(sessionID), "artifacts", "screenshots"}
-	if pageID != "" {
-		parts = append(parts, sanitizePathSegment(pageID))
-	}
-	parts = append(parts, datePrefix)
-	return path.Join(append(parts, fmt.Sprintf("%d-screenshot.png", now.UnixNano()))...)
-}
-
 // DownloadKey builds a session-scoped storage key for a browser download.
 // Layout: workspaces/{sessionID}/tools/{pageID}/{date}/{timestamp}-{filename}
 func DownloadKey(sessionID, pageID, filename string, now time.Time) string {
@@ -148,15 +122,6 @@ func AudioKey(sessionID, filename string, now time.Time) string {
 	filename = normalizeArtifactFilename(filename, DetectContentType(filename), "audio")
 	parts := []string{SessionKeyPrefix, sanitizePathSegment(sessionID), "artifacts", "audio", datePrefix}
 	return path.Join(append(parts, fmt.Sprintf("%d-%s", now.UnixNano(), filename))...)
-}
-
-func DocumentKey(filename string, now time.Time) string {
-	return BuildArtifactKey(ArtifactPutRequest{
-		Namespace:   NamespaceDocuments,
-		Filename:    filename,
-		ContentType: DetectContentType(filename),
-		Timestamp:   now,
-	})
 }
 
 func DetectContentType(filename string) string {

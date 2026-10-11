@@ -50,8 +50,12 @@ type Loop struct {
 
 // LoopConfig represents the loop configuration.
 type LoopConfig struct {
-	MaxIterations                int        `json:"max_iterations"`
-	AutoCompact                  bool       `json:"auto_compact"`
+	MaxIterations int  `json:"max_iterations"`
+	AutoCompact   bool `json:"auto_compact"`
+	// MaxTurns is currently dead weight: nothing in this file reads it. The
+	// live session-turn limit is engine.Config.MaxTurns, enforced by
+	// Session.enforceMaxTurns (M3 in TODO.md - its default used to disagree
+	// with this one, 200 vs 100, despite neither mattering here).
 	MaxTurns                     int        `json:"max_turns"`
 	EnableStreaming              bool       `json:"enable_streaming"`
 	MaxOutputTokensRecoveryLimit int        `json:"max_output_tokens_recovery_limit"`
@@ -83,7 +87,7 @@ func DefaultLoopConfig() *LoopConfig {
 	return normalizeLoopConfig(&LoopConfig{
 		MaxIterations:                100,
 		AutoCompact:                  true,
-		MaxTurns:                     200,
+		MaxTurns:                     100,
 		EnableStreaming:              true,
 		MaxOutputTokensRecoveryLimit: 3,
 		ContinuationNudgeLimit:       3,
@@ -98,7 +102,7 @@ func normalizeLoopConfig(config *LoopConfig) *LoopConfig {
 		config.MaxIterations = 100
 	}
 	if config.MaxTurns <= 0 {
-		config.MaxTurns = 200
+		config.MaxTurns = 100
 	}
 	if !config.EnableStreaming {
 		config.EnableStreaming = true
@@ -186,6 +190,13 @@ type RunRequest struct {
 	// OutputSchema, when set, constrains the model to return JSON matching the
 	// schema. Passed through to types.APIRequest.OutputSchema.
 	OutputSchema *schema.StructuredOutputInfo `json:"-"`
+
+	// AutoCompactFailureCount carries the session's consecutive auto-compact
+	// failure count into this turn, so the circuit breaker in
+	// compact.Engine.AutoCompact persists across turns instead of resetting
+	// to zero every Run. The caller (Session.SubmitMessage) is responsible
+	// for threading RunResult.AutoCompactFailureCount back in on the next turn.
+	AutoCompactFailureCount int `json:"auto_compact_failure_count,omitempty"`
 }
 
 // RunResult represents the result of running the loop.
@@ -206,6 +217,12 @@ type RunResult struct {
 	// Persisted by the engine into session metadata so that interrupted or
 	// errored sessions can expose what was in-flight at the time of failure.
 	RecoveryContext *RecoveryContext `json:"-"`
+	// AutoCompactFailureCount is the session's consecutive auto-compact
+	// failure count after this turn. The caller must store it (e.g. on
+	// SessionState) and pass it back in as the next turn's
+	// RunRequest.AutoCompactFailureCount for the circuit breaker to work
+	// across turns.
+	AutoCompactFailureCount int `json:"auto_compact_failure_count,omitempty"`
 }
 
 type PromptRefresh struct {
@@ -248,7 +265,7 @@ func (l *Loop) Run(ctx context.Context, req RunRequest) RunResult {
 	for state.Iterations < l.config.MaxIterations {
 		select {
 		case <-ctx.Done():
-			return RunResult{Messages: state.Messages, StopReason: types.StopReasonEndTurn, Iterations: state.Iterations, Error: ctx.Err(), RecoveryContext: state.RecoveryContext}
+			return RunResult{Messages: state.Messages, StopReason: types.StopReasonEndTurn, Iterations: state.Iterations, Error: ctx.Err(), RecoveryContext: state.RecoveryContext, AutoCompactFailureCount: state.AutoCompactFailureCount}
 		default:
 		}
 
@@ -276,7 +293,7 @@ func (l *Loop) Run(ctx context.Context, req RunRequest) RunResult {
 		}
 
 		// Execute iteration start hook
-		if l.executeHook(ctx, types.HookEventIterationStart, map[string]any{
+		if l.executeHookAndStop(ctx, state, types.HookEventIterationStart, map[string]any{
 			"iteration":     state.Iterations,
 			"session_id":    req.SessionID,
 			"turn_id":       req.TurnID,
@@ -297,11 +314,12 @@ func (l *Loop) Run(ctx context.Context, req RunRequest) RunResult {
 			}
 			l.setTransition(state, Terminate("auto_compact_error", types.StopReasonEndTurn))
 			return RunResult{
-				Messages:        state.Messages,
-				StopReason:      types.StopReasonEndTurn,
-				Iterations:      state.Iterations,
-				Error:           err,
-				RecoveryContext: state.RecoveryContext,
+				Messages:                state.Messages,
+				StopReason:              types.StopReasonEndTurn,
+				Iterations:              state.Iterations,
+				Error:                   err,
+				RecoveryContext:         state.RecoveryContext,
+				AutoCompactFailureCount: state.AutoCompactFailureCount,
 			}
 		}
 
@@ -315,14 +333,14 @@ func (l *Loop) Run(ctx context.Context, req RunRequest) RunResult {
 				recovered, recoveryErr := l.tryRecovery(ctx, state, req, err)
 				if recoveryErr != nil {
 					l.setTransition(state, Terminate("recovery_error", types.StopReasonEndTurn))
-					return RunResult{Messages: state.Messages, StopReason: types.StopReasonEndTurn, Iterations: state.Iterations, Error: fmt.Errorf("recovery failed: %w", recoveryErr), RecoveryContext: state.RecoveryContext}
+					return RunResult{Messages: state.Messages, StopReason: types.StopReasonEndTurn, Iterations: state.Iterations, Error: fmt.Errorf("recovery failed: %w", recoveryErr), RecoveryContext: state.RecoveryContext, AutoCompactFailureCount: state.AutoCompactFailureCount}
 				}
 				if recovered {
 					continue
 				}
 			}
 			l.setTransition(state, Terminate("api_error_terminal", types.StopReasonEndTurn))
-			return RunResult{Messages: state.Messages, StopReason: types.StopReasonEndTurn, Iterations: state.Iterations, Error: err, RecoveryContext: state.RecoveryContext}
+			return RunResult{Messages: state.Messages, StopReason: types.StopReasonEndTurn, Iterations: state.Iterations, Error: err, RecoveryContext: state.RecoveryContext, AutoCompactFailureCount: state.AutoCompactFailureCount}
 		}
 
 		l.updateUsage(state, &apiResp.Usage)
@@ -331,57 +349,13 @@ func (l *Loop) Run(ctx context.Context, req RunRequest) RunResult {
 
 		toolUses := l.extractToolUses(apiResp.Content)
 		if len(toolUses) > 0 {
-			// Execute tool uses start hook
-			if l.executeHook(ctx, types.HookEventToolUsesStart, map[string]any{
-				"iteration":  state.Iterations,
-				"tool_count": len(toolUses),
-				"session_id": req.SessionID,
-				"turn_id":    req.TurnID,
-			}) {
-				l.setTransition(state, Terminate("hook_stop", types.StopReasonEndTurn))
+			outcome := l.handleToolUsesIteration(ctx, state, &req, toolUses)
+			if outcome.result != nil {
+				return *outcome.result
+			}
+			if outcome.shouldBreak {
 				break
 			}
-
-			state.ToolUses = append(state.ToolUses, toolUses...)
-
-			transcriptBeforeCurrentAction := append([]types.Message(nil), state.Messages[:len(state.Messages)-1]...)
-			execResult, execErr := l.executeToolsForResponse(ctx, toolUses, req, state, transcriptBeforeCurrentAction)
-
-			if execErr != nil {
-				l.setTransition(state, Terminate("tool_execution_error", types.StopReasonEndTurn))
-				return RunResult{Messages: state.Messages, StopReason: types.StopReasonEndTurn, Iterations: state.Iterations, Error: fmt.Errorf("tool execution failed: %w", execErr), RecoveryContext: state.RecoveryContext}
-			}
-
-			state.PermissionContext = permissionContextFromToolContext(state.PermissionContext, execResult.FinalToolContext)
-			if state.PermissionContext != nil {
-				state.PermissionMode = state.PermissionContext.Mode
-			}
-
-			state.Messages = append(state.Messages, execResult.Messages...)
-			state.ToolResults = append(state.ToolResults, execResult.Results...)
-
-			// Execute tool uses complete hook
-			l.executeHook(ctx, types.HookEventToolUsesComplete, map[string]any{
-				"iteration":      state.Iterations,
-				"tool_count":     len(toolUses),
-				"success_count":  len(execResult.Results),
-				"error_count":    len(execResult.Errors),
-				"session_id":     req.SessionID,
-				"turn_id":        req.TurnID,
-				"total_duration": execResult.TotalDuration,
-			})
-
-			discovery := l.integrateDiscoveredDeferredTools(ctx, state, &req, toolUses, execResult.Results)
-			if recoveryMessage := toolLoopRecoveryMessage(discovery); recoveryMessage != "" {
-				state.Messages = append(state.Messages, newContinuationMessage(req.TurnID, recoveryMessage))
-				state.ContinuationNudgeCount = 0
-				state.MaxOutputTokensRecoveryCount = 0
-				l.setTransition(state, ContinueWithRecovery("tool_loop_recovery", RecoveryTypeContinuationNudge))
-				continue
-			}
-			state.ContinuationNudgeCount = 0
-			state.MaxOutputTokensRecoveryCount = 0
-			l.setTransition(state, Continue("tool_results_appended"))
 			continue
 		}
 
@@ -398,7 +372,7 @@ func (l *Loop) Run(ctx context.Context, req RunRequest) RunResult {
 			continued, stopErr := l.handleTerminalStop(ctx, state, req, apiResp.StopReason, assistantMessage, toolUses)
 			if stopErr != nil {
 				l.setTransition(state, Terminate("stop_hook_error", types.StopReasonEndTurn))
-				return RunResult{Messages: state.Messages, StopReason: types.StopReasonEndTurn, Iterations: state.Iterations, Error: stopErr, RecoveryContext: state.RecoveryContext}
+				return RunResult{Messages: state.Messages, StopReason: types.StopReasonEndTurn, Iterations: state.Iterations, Error: stopErr, RecoveryContext: state.RecoveryContext, AutoCompactFailureCount: state.AutoCompactFailureCount}
 			}
 			if continued {
 				continue
@@ -409,7 +383,7 @@ func (l *Loop) Run(ctx context.Context, req RunRequest) RunResult {
 		continued, noToolErr := l.handleNoToolUses(ctx, state, req, assistantMessage)
 		if noToolErr != nil {
 			l.setTransition(state, Terminate("stop_hook_error", types.StopReasonEndTurn))
-			return RunResult{Messages: state.Messages, StopReason: types.StopReasonEndTurn, Iterations: state.Iterations, Error: noToolErr, RecoveryContext: state.RecoveryContext}
+			return RunResult{Messages: state.Messages, StopReason: types.StopReasonEndTurn, Iterations: state.Iterations, Error: noToolErr, RecoveryContext: state.RecoveryContext, AutoCompactFailureCount: state.AutoCompactFailureCount}
 		}
 		if continued {
 			// Execute iteration continue hook
@@ -457,19 +431,103 @@ func (l *Loop) Run(ctx context.Context, req RunRequest) RunResult {
 	}
 
 	return RunResult{
-		Messages:           state.Messages,
-		StopReason:         terminalStopReason(state.StopReason),
-		ToolUses:           state.ToolUses,
-		ToolResults:        state.ToolResults,
-		Usage:              state.Usage,
-		PermissionContext:  clonePermissionContext(state.PermissionContext),
-		Compacted:          state.Compacted,
-		CompactPreTokens:   state.CompactPreTokens,
-		CompactPostTokens:  state.CompactPostTokens,
-		Iterations:         state.Iterations,
-		DiscoveredDeferred: append([]string(nil), state.DiscoveredDeferred...),
-		RecoveryContext:    state.RecoveryContext,
+		Messages:                state.Messages,
+		StopReason:              terminalStopReason(state.StopReason),
+		ToolUses:                state.ToolUses,
+		ToolResults:             state.ToolResults,
+		Usage:                   state.Usage,
+		PermissionContext:       clonePermissionContext(state.PermissionContext),
+		Compacted:               state.Compacted,
+		CompactPreTokens:        state.CompactPreTokens,
+		CompactPostTokens:       state.CompactPostTokens,
+		Iterations:              state.Iterations,
+		DiscoveredDeferred:      append([]string(nil), state.DiscoveredDeferred...),
+		RecoveryContext:         state.RecoveryContext,
+		AutoCompactFailureCount: state.AutoCompactFailureCount,
 	}
+}
+
+// toolUsesOutcome tells Run's main loop what to do after one iteration's
+// tool uses have been handled: return result immediately when non-nil,
+// otherwise break the loop when shouldBreak, otherwise continue it.
+type toolUsesOutcome struct {
+	result      *RunResult
+	shouldBreak bool
+}
+
+// handleToolUsesIteration runs the hooks, tool execution, and deferred-tool
+// discovery for one iteration's tool uses - split out of Run to keep that
+// function's own branch count down. req is a pointer because
+// integrateDiscoveredDeferredTools mutates it (e.g. appending newly
+// discovered deferred tools) and Run's own req must see that update on its
+// next iteration; every other call here only reads req, so it gets *req.
+func (l *Loop) handleToolUsesIteration(ctx context.Context, state *MutableState, req *RunRequest, toolUses []types.ToolUseContent) toolUsesOutcome {
+	// Execute tool uses start hook
+	if l.executeHookAndStop(ctx, state, types.HookEventToolUsesStart, map[string]any{
+		"iteration":  state.Iterations,
+		"tool_count": len(toolUses),
+		"session_id": req.SessionID,
+		"turn_id":    req.TurnID,
+	}) {
+		l.setTransition(state, Terminate("hook_stop", types.StopReasonEndTurn))
+		return toolUsesOutcome{shouldBreak: true}
+	}
+
+	if l.applyPreToolUseHooks(ctx, state, *req, toolUses) {
+		l.setTransition(state, Terminate("hook_stop", types.StopReasonEndTurn))
+		return toolUsesOutcome{shouldBreak: true}
+	}
+
+	state.ToolUses = append(state.ToolUses, toolUses...)
+
+	transcriptBeforeCurrentAction := append([]types.Message(nil), state.Messages[:len(state.Messages)-1]...)
+	execResult, execErr := l.executeToolsForResponse(ctx, toolUses, *req, state, transcriptBeforeCurrentAction)
+
+	if execErr != nil {
+		l.setTransition(state, Terminate("tool_execution_error", types.StopReasonEndTurn))
+		return toolUsesOutcome{result: &RunResult{Messages: state.Messages, StopReason: types.StopReasonEndTurn, Iterations: state.Iterations, Error: types.WrapError(types.ErrCodeToolExecution, "tool execution failed", execErr), RecoveryContext: state.RecoveryContext, AutoCompactFailureCount: state.AutoCompactFailureCount}}
+	}
+
+	state.PermissionContext = permissionContextFromToolContext(state.PermissionContext, execResult.FinalToolContext)
+	if state.PermissionContext != nil {
+		state.PermissionMode = state.PermissionContext.Mode
+	}
+
+	state.Messages = append(state.Messages, execResult.Messages...)
+	state.ToolResults = append(state.ToolResults, execResult.Results...)
+
+	// Execute post tool use hook. Fires after the merge above so a
+	// hook that stops the turn here still leaves a well-formed
+	// transcript - the tool already ran and its results are already
+	// recorded (H4 in TODO.md).
+	if l.applyPostToolUseHooks(ctx, state, *req, toolUses, execResult) {
+		l.setTransition(state, Terminate("hook_stop", types.StopReasonEndTurn))
+		return toolUsesOutcome{shouldBreak: true}
+	}
+
+	// Execute tool uses complete hook
+	l.executeHook(ctx, types.HookEventToolUsesComplete, map[string]any{
+		"iteration":      state.Iterations,
+		"tool_count":     len(toolUses),
+		"success_count":  len(execResult.Results),
+		"error_count":    len(execResult.Errors),
+		"session_id":     req.SessionID,
+		"turn_id":        req.TurnID,
+		"total_duration": execResult.TotalDuration,
+	})
+
+	discovery := l.integrateDiscoveredDeferredTools(ctx, state, req, toolUses, execResult.Results)
+	if recoveryMessage := toolLoopRecoveryMessage(discovery); recoveryMessage != "" {
+		state.Messages = append(state.Messages, newContinuationMessage(req.TurnID, recoveryMessage))
+		state.ContinuationNudgeCount = 0
+		state.MaxOutputTokensRecoveryCount = 0
+		l.setTransition(state, ContinueWithRecovery("tool_loop_recovery", RecoveryTypeContinuationNudge))
+		return toolUsesOutcome{}
+	}
+	state.ContinuationNudgeCount = 0
+	state.MaxOutputTokensRecoveryCount = 0
+	l.setTransition(state, Continue("tool_results_appended"))
+	return toolUsesOutcome{}
 }
 
 func (l *Loop) setTransition(state *MutableState, transition Transition) {
@@ -700,6 +758,10 @@ func (l *Loop) initializeState(req RunRequest) *MutableState {
 	state.Compacted = false
 	state.CompactPreTokens = 0
 	state.CompactPostTokens = 0
+	// Seed from the session's cross-turn count instead of leaving the
+	// zero value, otherwise the auto-compact circuit breaker can never
+	// accumulate failures past one turn (see compact.Engine.AutoCompact).
+	state.AutoCompactFailureCount = req.AutoCompactFailureCount
 	return state
 }
 
@@ -707,30 +769,65 @@ func (l *Loop) maybeAutoCompact(ctx context.Context, state *MutableState, req Ru
 	if !l.config.AutoCompact {
 		return nil
 	}
-	result, err := l.compactor.AutoCompact(
-		ctx,
-		req.SystemPrompt,
-		state.Messages,
-		req.Model,
-		req.SessionID,
-		req.TurnID,
-		&compact.TrackingState{ConsecutiveFailures: state.AutoCompactFailureCount},
-	)
-	if err != nil {
-		state.AutoCompactFailureCount = result.ConsecutiveFailures
-		return fmt.Errorf("auto-compact failed: %w", err)
+
+	hookDenied := false
+	if preResult := l.executeHookWithResult(ctx, types.HookEventPreCompact, map[string]any{
+		"session_id": req.SessionID,
+		"turn_id":    req.TurnID,
+	}); preResult != nil && (preResult.Action == types.HookActionStop || preResult.Action == types.HookActionDeny) {
+		// A hook denied this round's compaction attempt - not a failure,
+		// just skip it this turn, exactly like ShouldCompact deciding
+		// compaction isn't needed yet (H4 in TODO.md). Still falls through to
+		// the blocking-limit check below (M1): a denied compaction must not
+		// let an oversized request reach the provider silently.
+		appendSystemNoteFromHook(state, types.HookEventPreCompact, preResult.Message)
+		hookDenied = true
 	}
-	state.AutoCompactFailureCount = result.ConsecutiveFailures
-	if result.DidCompact {
-		state.Messages = result.Messages
-		state.Compacted = true
-		state.CompactPreTokens = result.PreCompactTokens
-		state.CompactPostTokens = result.PostCompactTokens
-		// Compaction rewrote Messages, so any previously recorded Codex
-		// continuation reference no longer describes a valid prefix of it -
-		// see recordPreviousResponse/buildAPIRequest.
-		state.PreviousResponseID = ""
-		state.PreviousResponseMessageCount = 0
+
+	if !hookDenied {
+		result, err := l.compactor.AutoCompact(
+			ctx,
+			req.SystemPrompt,
+			state.Messages,
+			req.Model,
+			req.SessionID,
+			req.TurnID,
+			&compact.TrackingState{ConsecutiveFailures: state.AutoCompactFailureCount},
+		)
+		if err != nil {
+			state.AutoCompactFailureCount = result.ConsecutiveFailures
+			return fmt.Errorf("auto-compact failed: %w", err)
+		}
+		state.AutoCompactFailureCount = result.ConsecutiveFailures
+		if result.DidCompact {
+			state.Messages = result.Messages
+			state.Compacted = true
+			state.CompactPreTokens = result.PreCompactTokens
+			state.CompactPostTokens = result.PostCompactTokens
+			// Compaction rewrote Messages, so any previously recorded Codex
+			// continuation reference no longer describes a valid prefix of it -
+			// see recordPreviousResponse/buildAPIRequest.
+			state.PreviousResponseID = ""
+			state.PreviousResponseMessageCount = 0
+		}
+		// Post-compact notification, like every other *_complete hook in this
+		// file: fire-and-forget, not stop-capable (there is nothing left to gate
+		// once compaction already ran).
+		l.executeHook(ctx, types.HookEventPostCompact, map[string]any{
+			"session_id":  req.SessionID,
+			"turn_id":     req.TurnID,
+			"did_compact": result.DidCompact,
+			"pre_tokens":  result.PreCompactTokens,
+			"post_tokens": result.PostCompactTokens,
+		})
+	}
+
+	// Even after compaction, the request may still not fit (e.g. a single
+	// huge tool result, or compaction itself failing to shrink enough).
+	// Fail locally with a typed error instead of letting the provider reject
+	// an oversized request (M1 in TODO.md).
+	if err := l.compactor.CheckBlockingLimit(req.SystemPrompt, state.Messages, req.Model); err != nil {
+		return err
 	}
 	return nil
 }
@@ -906,10 +1003,6 @@ func (l *Loop) buildAPIRequest(state *MutableState, req RunRequest, model types.
 func (l *Loop) recordPreviousResponse(state *MutableState, _ types.ModelIdentifier, _ *types.APIResponse) {
 	state.PreviousResponseID = ""
 	state.PreviousResponseMessageCount = 0
-}
-
-func (l *Loop) sendAPIRequest(ctx context.Context, apiReq types.APIRequest, onChunk func(types.APIResponseChunk)) (*types.APIResponse, error) {
-	return l.sendAPIRequestWithClient(ctx, l.effectiveAPIClient(), apiReq, onChunk)
 }
 
 func (l *Loop) sendAPIRequestWithClient(ctx context.Context, client *providers.Client, apiReq types.APIRequest, onChunk func(types.APIResponseChunk)) (*types.APIResponse, error) {
@@ -1232,7 +1325,7 @@ func toolLoopRecoveryMessage(update toolDiscoveryUpdate) string {
 }
 
 func (l *Loop) executeTools(ctx context.Context, toolUses []types.ToolUseContent, req RunRequest, state *MutableState, transcript []types.Message) (execution.ExecuteResult, error) {
-	return l.orchestrator.Execute(ctx, l.buildExecuteRequest(toolUses, req, state, transcript))
+	return l.orchestrator.Execute(ctx, l.buildExecuteRequest(ctx, toolUses, req, state, transcript))
 }
 
 func (l *Loop) isRecoverableError(err error) bool {
@@ -1515,7 +1608,94 @@ func (l *Loop) executeHookWithResult(ctx context.Context, event types.HookEvent,
 	case types.HookActionModify:
 		slog.Debug("hook modified execution data", "event", event, "keys", len(result.UpdatedInput))
 	case types.HookActionRetry:
-		slog.Debug("hook requested retry", "event", event, "message", result.Message)
+		// Retry is intentionally not implemented: nothing re-runs the tool
+		// call or API call this refers to. Logged, not silently dropped, so
+		// it is visible that a hook's retry request had no effect (H4 in
+		// TODO.md - implementing it safely needs a rework of the batched
+		// tool-execution pipeline in streaming_tools.go, out of scope here).
+		slog.Warn("hook requested retry, which is not implemented - the turn proceeds as if it returned continue", "event", event, "message", result.Message)
 	}
 	return result
+}
+
+// appendSystemNoteFromHook appends message (if non-empty) to state.Messages
+// as a system note attributed to event, so a hook's Stop/Deny reason
+// actually reaches the model/transcript instead of only being logged (H4 in
+// TODO.md).
+func appendSystemNoteFromHook(state *MutableState, event types.HookEvent, message string) {
+	if strings.TrimSpace(message) == "" {
+		return
+	}
+	id := fmt.Sprintf("hook_denied_%s_%d", event, state.Iterations)
+	state.Messages = append(state.Messages, types.SystemMessage(id, message))
+}
+
+// appendHookDenialAndStop reports whether result is a Stop/Deny action,
+// first appending its Message via appendSystemNoteFromHook if so.
+func appendHookDenialAndStop(state *MutableState, event types.HookEvent, result *types.HookResult) bool {
+	if result == nil || (result.Action != types.HookActionStop && result.Action != types.HookActionDeny) {
+		return false
+	}
+	appendSystemNoteFromHook(state, event, result.Message)
+	return true
+}
+
+// executeHookAndStop runs event through executeHookWithResult and reports
+// whether the turn should stop, via appendHookDenialAndStop. Returns false
+// for every outcome but Stop/Deny, including a nil hookExecutor.
+func (l *Loop) executeHookAndStop(ctx context.Context, state *MutableState, event types.HookEvent, data map[string]any) bool {
+	return appendHookDenialAndStop(state, event, l.executeHookWithResult(ctx, event, data))
+}
+
+// applyPreToolUseHooks runs the pre_tool_use hook for each tool call about to
+// execute. A Modify result rewrites that tool's Input in place before
+// execution - the orchestrator sees the modified input, though the assistant
+// message already recorded in state.Messages is not retroactively rewritten,
+// the same convention permission-based UpdatedInput already follows
+// elsewhere in this loop. A Stop/Deny result ends the whole turn, like every
+// other stop-capable hook in this file: there is no narrower "skip only this
+// tool" primitive. Returns true if the turn should stop.
+func (l *Loop) applyPreToolUseHooks(ctx context.Context, state *MutableState, req RunRequest, toolUses []types.ToolUseContent) bool {
+	for i := range toolUses {
+		result := l.executeHookWithResult(ctx, types.HookEventPreToolUse, map[string]any{
+			"tool_name":   toolUses[i].Name,
+			"tool_input":  toolUses[i].Input,
+			"tool_use_id": toolUses[i].ID,
+			"session_id":  req.SessionID,
+			"turn_id":     req.TurnID,
+		})
+		if appendHookDenialAndStop(state, types.HookEventPreToolUse, result) {
+			return true
+		}
+		if result != nil && result.Action == types.HookActionModify && len(result.UpdatedInput) > 0 {
+			toolUses[i].Input = result.UpdatedInput
+		}
+	}
+	return false
+}
+
+// applyPostToolUseHooks fires the post_tool_use hook for each tool call that
+// just executed, carrying whether it succeeded. Stop/Deny ends the whole
+// turn (the tools already ran; callers must merge execResult into state
+// before calling this, so the transcript stays well-formed either way - see
+// the call site in Run). Returns true if the turn should stop.
+func (l *Loop) applyPostToolUseHooks(ctx context.Context, state *MutableState, req RunRequest, toolUses []types.ToolUseContent, execResult execution.ExecuteResult) bool {
+	for i := range toolUses {
+		data := map[string]any{
+			"tool_name":   toolUses[i].Name,
+			"tool_use_id": toolUses[i].ID,
+			"session_id":  req.SessionID,
+			"turn_id":     req.TurnID,
+			"success":     true,
+		}
+		if i < len(execResult.Results) && execResult.Results[i].Error != nil {
+			data["success"] = false
+			data["error"] = execResult.Results[i].Error.Error()
+		}
+		result := l.executeHookWithResult(ctx, types.HookEventPostToolUse, data)
+		if appendHookDenialAndStop(state, types.HookEventPostToolUse, result) {
+			return true
+		}
+	}
+	return false
 }

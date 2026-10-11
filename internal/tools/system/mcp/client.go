@@ -21,6 +21,17 @@ func NewClient(config ServerConfig) (*Client, error) {
 	if config.Timeout <= 0 {
 		config.Timeout = 30 * time.Second
 	}
+	if config.Transport == "" {
+		// Infer the transport instead of failing on every config that
+		// follows the README/docs examples, none of which set Transport
+		// explicitly (H7 in TODO.md).
+		switch {
+		case config.Command != "":
+			config.Transport = TransportTypeStdio
+		case config.URL != "":
+			config.Transport = TransportTypeHTTP
+		}
+	}
 	switch config.Transport {
 	case TransportTypeStdio:
 		transport, err = NewStdioTransport(StdioTransportConfig{Command: config.Command, Args: config.Args, Env: config.Env})

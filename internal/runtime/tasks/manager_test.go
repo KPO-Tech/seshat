@@ -2,9 +2,24 @@ package tasks
 
 import (
 	"context"
+	"encoding/json"
+	"fmt"
+	"io"
+	"net/http"
+	"net/http/httptest"
 	"os"
+	"strings"
 	"testing"
 	"time"
+
+	"github.com/KPO-Tech/seshat/internal/engine"
+	"github.com/KPO-Tech/seshat/internal/execution"
+	"github.com/KPO-Tech/seshat/internal/permissions"
+	"github.com/KPO-Tech/seshat/internal/prompt"
+	"github.com/KPO-Tech/seshat/internal/providers"
+	compact "github.com/KPO-Tech/seshat/internal/runtime/memory"
+	"github.com/KPO-Tech/seshat/internal/tools/registry"
+	"github.com/KPO-Tech/seshat/internal/types"
 )
 
 // newTestManager creates a minimal Manager for unit tests (no real engine needed for
@@ -150,5 +165,90 @@ func TestGetTaskStats(t *testing.T) {
 	}
 	if stats.Killed != 1 {
 		t.Errorf("expected Killed=1, got %d", stats.Killed)
+	}
+}
+
+// ---------------------------------------------------------------------------
+// CreateAgentTask must actually apply the caller's resolved systemPrompt to
+// the background session, not just use it for display - see TODO.md's M5c
+// entry (2026-10-11 follow-up): agentType used to be ignored by the
+// background path entirely, so a requested agent type's identity never
+// reached the model.
+// ---------------------------------------------------------------------------
+
+// newCapturingTestEngine builds a real *engine.Engine backed by a mock HTTP
+// server that records the last request body it received, instead of
+// returning a canned response immediately - CreateAgentTask's goroutine
+// needs to actually complete for WaitForTask to return, so the mock must
+// answer like a real (if trivial) streaming provider.
+func newCapturingTestEngine(t *testing.T) (*engine.Engine, func() string) {
+	t.Helper()
+	var lastBody string
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		body, _ := io.ReadAll(r.Body)
+		lastBody = string(body)
+		w.Header().Set("Content-Type", "text/event-stream")
+		events := []map[string]any{
+			{"type": "content_block_start", "content_block": map[string]any{"type": "text", "text": ""}},
+			{"type": "content_block_delta", "delta": map[string]any{"type": "text_delta", "text": "done"}},
+			{"type": "content_block_stop"},
+			{"type": "message_delta", "delta": map[string]any{"stop_reason": "end_turn"}, "usage": map[string]any{"input_tokens": 1, "output_tokens": 1}},
+			{"type": "message_stop"},
+		}
+		for _, event := range events {
+			payload, _ := json.Marshal(event)
+			fmt.Fprintf(w, "data: %s\n\n", payload)
+		}
+	}))
+	t.Cleanup(server.Close)
+
+	apiClient := providers.NewClientWithConfig("test-key", &providers.Config{
+		Provider: types.APIProviderAnthropic,
+		BaseURL:  server.URL,
+	})
+	apiClient.SetHTTPClient(server.Client())
+	apiClient.SetRetryConfig(types.RetryConfig{MaxAttempts: 1})
+
+	engineConfig := engine.DefaultConfig()
+	engineConfig.PermissionMode = types.PermissionModeBypass
+
+	eng := engine.NewEngine(
+		apiClient,
+		execution.NewOrchestrator(),
+		compact.NewEngine(apiClient, compact.DefaultConfig()),
+		prompt.NewAssembler(),
+		permissions.NewIntegrator(permissions.NewEngine()),
+		registry.NewRegistry(),
+		nil,
+		engineConfig,
+		nil,
+		nil,
+	)
+	eng.SetAPIClient(apiClient)
+	return eng, func() string { return lastBody }
+}
+
+func TestCreateAgentTask_AppliesSystemPromptToTheModelRequest(t *testing.T) {
+	eng, lastBody := newCapturingTestEngine(t)
+	tmpDir, err := os.MkdirTemp("", "tasks-systemprompt-test-")
+	if err != nil {
+		t.Fatalf("MkdirTemp: %v", err)
+	}
+	t.Cleanup(func() { os.RemoveAll(tmpDir) })
+
+	m := NewManager(eng, &ManagerConfig{MaxConcurrentTasks: 5, TaskTimeout: 10 * time.Second, OutputDir: tmpDir})
+
+	const marker = "YOU ARE THE SPECIAL MARKER AGENT"
+	task, err := m.CreateAgentTask(context.Background(), "do the thing", nil, types.PermissionModeBypass, marker, nil)
+	if err != nil {
+		t.Fatalf("CreateAgentTask: %v", err)
+	}
+
+	if _, err := m.WaitForTask(context.Background(), task.ID, 5*time.Second); err != nil {
+		t.Fatalf("WaitForTask: %v", err)
+	}
+
+	if !strings.Contains(lastBody(), marker) {
+		t.Errorf("expected the resolved system prompt in the request sent to the model, got body: %s", lastBody())
 	}
 }

@@ -127,6 +127,61 @@ func TestIntegratorAutoModeClassifierDenies(t *testing.T) {
 	}
 }
 
+// TestIntegratorAutoModeNoClassifierAsksInteractively guards TODO.md M2: a
+// fresh engine that never had SetClassifier/SetAdvancedClassifier called at
+// all - the common case for any deployment that doesn't wire the optional
+// ML classifier - used to approve every tool call in auto mode, including
+// destructive ones. An interactive session now asks instead.
+func TestIntegratorAutoModeNoClassifierAsksInteractively(t *testing.T) {
+	t.Setenv("SESHAT_RUNTIME_ROOT", t.TempDir())
+	engine := NewEngine()
+	// Deliberately never call SetClassifier/SetAdvancedClassifier.
+
+	integrator := NewIntegrator(engine)
+	resolver := integrator.ResolverWithContext("s1", "t1", nil, nil)
+
+	result := resolver.ResolvePermission(context.Background(), types.GlobalToolPermissionRequest(
+		"bash",
+		map[string]any{"command": "rm -rf /"},
+		"tu-3",
+		"s1",
+		"t1",
+		types.PermissionModeAuto,
+		"",
+		nil,
+	))
+
+	if !result.IsAsk() {
+		t.Fatalf("expected Ask when no classifier was ever configured, got %+v (reason: %v)", result.Behavior, result.DecisionReason)
+	}
+}
+
+// TestIntegratorAutoModeNoClassifierDeniesHeadless is the headless
+// counterpart: a background agent cannot show the ask prompt above, so the
+// same case denies instead of asking into a void it can never answer.
+func TestIntegratorAutoModeNoClassifierDeniesHeadless(t *testing.T) {
+	t.Setenv("SESHAT_RUNTIME_ROOT", t.TempDir())
+	engine := NewEngine()
+
+	integrator := NewIntegrator(engine)
+	resolver := integrator.ResolverWithContext("s1", "t1", nil, nil)
+
+	result := resolver.ResolvePermission(context.Background(), types.GlobalToolPermissionRequest(
+		"bash",
+		map[string]any{"command": "rm -rf /"},
+		"tu-4",
+		"s1",
+		"t1",
+		types.PermissionModeAuto,
+		"",
+		map[string]any{"should_avoid_permission_prompts": true},
+	))
+
+	if !result.IsDenied() {
+		t.Fatalf("expected Deny when no classifier was ever configured in a headless context, got %+v (reason: %v)", result.Behavior, result.DecisionReason)
+	}
+}
+
 // TestIntegratorAlwaysSafeToolSkipsClassifierEvenWhenClassifierDenies proves
 // get_file_metadata (and the other tools in isAlwaysSafeTool's file
 // read-only group) never reach the auto-mode classifier at all: with a

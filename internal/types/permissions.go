@@ -139,7 +139,7 @@ type PermissionContext struct {
 	// Mode is the current permission mode (who approves)
 	Mode PermissionMode `json:"mode"`
 
-	// ExecutionMode is the current execution mode (what agent does: execute, plan, pair_programming, browse)
+	// ExecutionMode is the current execution mode (what agent does: execute, plan)
 	ExecutionMode string `json:"execution_mode,omitempty"`
 
 	// PrePlanMode stores the mode before entering plan mode for restoration

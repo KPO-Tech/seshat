@@ -65,6 +65,7 @@ SESHAT_DB_PATH=/tmp/seshat/seshat.sqlite     # SQLite database path
 SESHAT_DEBUG=true                          # verbose logging
 SESHAT_PROVIDER_BASE_URL=...               # custom provider base URL
 WEB_SEARCH_PROVIDER=tavily                # web search provider
+ENABLE_TOOL_SEARCH=true                   # hide deferred tools (MCP, skill) behind the tool_search tool; pkg/sdk.ClientConfig.EnableToolSearch overrides this when set to true
 ```
 
 The config loader reads, in order: environment variables → `.env` in the current directory → `~/.seshat.yaml`.

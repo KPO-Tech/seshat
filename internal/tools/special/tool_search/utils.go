@@ -45,11 +45,6 @@ func GetToolSearchMode() ToolSearchMode {
 	return ToolSearchModeTST
 }
 
-func IsToolSearchEnabled() bool {
-	mode := GetToolSearchMode()
-	return mode != ToolSearchModeStandard
-}
-
 func IsToolSearchEnabledOptimistic() bool {
 	mode := GetToolSearchMode()
 	return mode != ToolSearchModeStandard
@@ -71,26 +66,6 @@ func IsDeferredTool(tool contract.Tool) bool {
 	}
 
 	return def.ShouldDefer
-}
-
-func GetDeferredTools(tools []contract.Tool) []contract.Tool {
-	var deferred []contract.Tool
-	for _, tool := range tools {
-		if IsDeferredTool(tool) {
-			deferred = append(deferred, tool)
-		}
-	}
-	return deferred
-}
-
-func GetNonDeferredTools(tools []contract.Tool) []contract.Tool {
-	var nonDeferred []contract.Tool
-	for _, tool := range tools {
-		if !IsDeferredTool(tool) {
-			nonDeferred = append(nonDeferred, tool)
-		}
-	}
-	return nonDeferred
 }
 
 func ParseAutoPercentage(value string) (int, bool) {
@@ -120,48 +95,4 @@ func GetAutoThresholdPercent() int {
 		return percent
 	}
 	return DefaultAutoThresholdPercent
-}
-
-func GetAutoToolSearchCharThreshold(contextWindow int) int {
-	percent := GetAutoThresholdPercent()
-	return (contextWindow * percent / 100) * 4
-}
-
-func ModelSupportsToolReference(model string) bool {
-	lower := strings.ToLower(model)
-	return !strings.Contains(lower, "haiku")
-}
-
-func ExtractDiscoveredToolNames(messages []any) map[string]bool {
-	discovered := make(map[string]bool)
-	for _, msg := range messages {
-		msgMap, ok := msg.(map[string]any)
-		if !ok {
-			continue
-		}
-		content, ok := msgMap["content"].([]any)
-		if !ok {
-			continue
-		}
-		for _, block := range content {
-			blockMap, ok := block.(map[string]any)
-			if !ok || blockMap["type"] != "tool_result" {
-				continue
-			}
-			blockContent, ok := blockMap["content"].([]any)
-			if !ok {
-				continue
-			}
-			for _, item := range blockContent {
-				itemMap, ok := item.(map[string]any)
-				if !ok || itemMap["type"] != "tool_reference" {
-					continue
-				}
-				if toolName, ok := itemMap["tool_name"].(string); ok {
-					discovered[toolName] = true
-				}
-			}
-		}
-	}
-	return discovered
 }

@@ -59,6 +59,51 @@ func TestBuildSurfaceExcludesDeferredToolsWhenToolSearchEnabled(t *testing.T) {
 	}
 }
 
+func TestBuildSurfaceExcludesDeferredToolsWhenRegistryConfigEnablesToolSearch(t *testing.T) {
+	regConfig := DefaultRegistryConfig()
+	regConfig.EnableToolSearch = true
+	reg := NewRegistryWithConfig(regConfig)
+	if err := reg.Register(surfaceTestTool{def: Definition{Name: "Read", Description: "read", IsReadOnly: true}}); err != nil {
+		t.Fatalf("failed to register non-deferred tool: %v", err)
+	}
+	if err := reg.Register(surfaceTestTool{def: Definition{Name: "Deploy", Description: "deploy", ShouldDefer: true}}); err != nil {
+		t.Fatalf("failed to register deferred tool: %v", err)
+	}
+
+	surface, err := NewSurfaceBuilder(reg).Build(context.Background(), SurfaceBuildRequest{
+		IncludeReadOnly:    true,
+		IncludeDestructive: true,
+	})
+	if err != nil {
+		t.Fatalf("Build failed: %v", err)
+	}
+
+	if len(surface.Tools) != 1 || surface.Tools[0].Name != "Read" {
+		t.Fatalf("expected only Read (RegistryConfig.EnableToolSearch must gate deferred tools without needing the environment variable), got %#v", surface.Tools)
+	}
+}
+
+func TestBuildSurfaceKeepsDeferredToolsVisibleByDefault(t *testing.T) {
+	// Neither RegistryConfig.EnableToolSearch nor ENABLE_TOOL_SEARCH is set:
+	// the default surface still shows every tool, deferred or not.
+	reg := NewRegistry()
+	if err := reg.Register(surfaceTestTool{def: Definition{Name: "Deploy", Description: "deploy", ShouldDefer: true}}); err != nil {
+		t.Fatalf("failed to register deferred tool: %v", err)
+	}
+
+	surface, err := NewSurfaceBuilder(reg).Build(context.Background(), SurfaceBuildRequest{
+		IncludeReadOnly:    true,
+		IncludeDestructive: true,
+	})
+	if err != nil {
+		t.Fatalf("Build failed: %v", err)
+	}
+
+	if len(surface.Tools) != 1 || surface.Tools[0].Name != "Deploy" {
+		t.Fatalf("expected the deferred tool to stay visible by default, got %#v", surface.Tools)
+	}
+}
+
 func TestBuildSurfaceFiltersBySurfaceProfile(t *testing.T) {
 	reg := NewRegistry()
 	if err := reg.Register(surfaceTestTool{def: Definition{

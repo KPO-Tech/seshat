@@ -871,25 +871,26 @@ func (w *SeshatWorkspace) UpdateAgentModel(ctx context.Context) error {
 
 	enableMonitoring := w.monitoring != nil
 	newClient, err := sdk.NewClient(&sdk.ClientConfig{
-		APIKey:            apiKey,
-		Model:             sdk.ModelIdentifier{Provider: sdk.APIProvider(provider), Model: modelID},
-		PermissionMode:    w.permMode,
-		AutoCompact:       true,
-		PersistSessions:   true,
-		SessionSQLitePath: w.sqlitePath,
-		PromptFn:          w.PromptFn,
-		ProgressFn:        w.OnProgress,
-		ResponseChunkFn:   w.OnChunk,
-		RuntimeEventFn:    w.OnRuntimeEvent,
-		OnSessionTitled:   w.OnSessionTitled,
-		WorkingDir:        w.workDir,
-		ProviderConfig:    provCfg,
-		ImageGeneration:   w.currentImageGenerationConfig(),
-		TextToSpeech:      w.currentTextToSpeechConfig(),
-		SpeechToText:      w.currentSpeechToTextConfig(),
-		EnableMonitoring:  enableMonitoring,
-		Monitoring:        w.monitoring,
-		PlanStore:         w.planStore,
+		APIKey:                   apiKey,
+		Model:                    sdk.ModelIdentifier{Provider: sdk.APIProvider(provider), Model: modelID},
+		PermissionMode:           w.permMode,
+		AutoCompact:              true,
+		PersistSessions:          true,
+		SessionSQLitePath:        w.sqlitePath,
+		PromptFn:                 w.PromptFn,
+		ProgressFn:               w.OnProgress,
+		ResponseChunkFn:          w.OnChunk,
+		RuntimeEventFn:           w.OnRuntimeEvent,
+		OnSessionTitled:          w.OnSessionTitled,
+		WorkingDir:               w.workDir,
+		ProviderConfig:           provCfg,
+		ImageGeneration:          w.currentImageGenerationConfig(),
+		TextToSpeech:             w.currentTextToSpeechConfig(),
+		SpeechToText:             w.currentSpeechToTextConfig(),
+		EnableMonitoring:         enableMonitoring,
+		Monitoring:               w.monitoring,
+		PlanStore:                w.planStore,
+		TrustProjectInstructions: config.IsTrustedProjectFile,
 	})
 	if err != nil {
 		return fmt.Errorf("rebuild SDK client: %w", err)
@@ -1393,7 +1394,13 @@ func (w *SeshatWorkspace) ListTools(ctx context.Context) ([]ToolInfo, error) {
 	}
 	return tools, nil
 }
-func (w *SeshatWorkspace) ListSkills(_ context.Context) ([]skills.CatalogEntry, error) {
+
+// discoverActiveSkills runs the same skill discovery ListSkills and ReadSkill
+// both need, and returns the active skills alongside the resolved skill
+// paths (for labelling). Factored out so ReadSkill (previously a stub - see
+// H8 in TODO.md) discovers the exact same skill set ListSkills shows in the
+// catalog, instead of drifting out of sync with a second implementation.
+func (w *SeshatWorkspace) discoverActiveSkills() (active []*skills.Skill, resolvedPaths []string) {
 	// w.Config() returns a lazily-synthesized config (provider/model/MCP
 	// state only) whose Options is never populated with the defaulted
 	// SkillsPaths/DisabledSkills. The fully-loaded config — with
@@ -1421,12 +1428,18 @@ func (w *SeshatWorkspace) ListSkills(_ context.Context) ([]skills.CatalogEntry, 
 		WorkingDir:     w.workDir,
 		Resolver:       resolver.ResolveValue,
 	}
-	_, active, _ := skills.DiscoverFromConfig(discCfg)
-	resolvedPaths := discCfg.ResolvePaths()
+	_, active, _ = skills.DiscoverFromConfig(discCfg)
+	return active, discCfg.ResolvePaths()
+}
+
+func (w *SeshatWorkspace) ListSkills(_ context.Context) ([]skills.CatalogEntry, error) {
+	active, resolvedPaths := w.discoverActiveSkills()
 	return skills.Catalog(active, resolvedPaths, w.workDir), nil
 }
-func (w *SeshatWorkspace) ReadSkill(_ context.Context, _ string) ([]byte, skills.SkillReadResult, error) {
-	return nil, skills.SkillReadResult{}, nil
+
+func (w *SeshatWorkspace) ReadSkill(_ context.Context, skillID string) ([]byte, skills.SkillReadResult, error) {
+	active, resolvedPaths := w.discoverActiveSkills()
+	return skills.ReadContent(active, resolvedPaths, w.workDir, skillID)
 }
 
 // ─── MCP ──────────────────────────────────────────────────────────────────────

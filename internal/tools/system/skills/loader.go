@@ -3,12 +3,16 @@ package skills
 import (
 	"context"
 	"fmt"
+	"io/fs"
 	"log/slog"
 	"os"
 	"path/filepath"
 	"sort"
 	"strings"
+	"sync"
+	"time"
 
+	shared "github.com/KPO-Tech/seshat/internal/tools/files/shared"
 	"github.com/KPO-Tech/seshat/pkg/runtimepath"
 )
 
@@ -137,7 +141,24 @@ func (l *FileSkillLoader) GetSkillDirCommandsForUser(cwd string, userID string) 
 	builtinSkills := NewFileSkillLoaderWithSource(GetBuiltinSkillsPath(), SettingSourceProjectSettings)
 	legacyCommands := NewFileSkillLoaderWithSource(filepath.Join(cwd, DefaultCommandsDirectory), SettingSourceProjectSettings)
 
-	sources := []SkillLoader{projectSkills, managedSkills, userSkills, builtinSkills, legacyCommands}
+	// l.Directory defaults to DefaultSkillDirectory (".seshat/skills" - see
+	// NewFileSkillLoader) but this method used to ignore the receiver
+	// entirely, so that folder - the one the old documentation recommended -
+	// was never read (H8 in TODO.md). Resolve it relative to cwd exactly like
+	// the other project-relative sources above.
+	legacySkillsDir := l.Directory
+	if legacySkillsDir != "" && !filepath.IsAbs(legacySkillsDir) {
+		legacySkillsDir = filepath.Join(cwd, legacySkillsDir)
+	}
+	legacySkills := NewFileSkillLoaderWithSource(legacySkillsDir, SettingSourceProjectSettings)
+
+	sources := []SkillLoader{projectSkills, legacySkills, managedSkills, userSkills, builtinSkills, legacyCommands}
+
+	// A monorepo keeps skills next to the package they belong to, not only at
+	// cwd's own .claude/skills (already covered by projectSkills above).
+	for _, nested := range cachedNestedSkillDirs(cwd) {
+		sources = append(sources, NewFileSkillLoaderWithSource(nested, SettingSourceProjectSettings))
+	}
 
 	// Add any cloned skill repo collections (e.g. paperasse).
 	// Each repo root is a skill collection: every subdirectory containing a SKILL.md
@@ -424,6 +445,7 @@ func CreateSkillFromFrontmatter(frontmatter FrontmatterData, markdownContent str
 	capturedBaseDir := baseDir
 	capturedTier := preambleTier
 	capturedRequires := requires
+	capturedShell := shell
 
 	return Skill{
 		Name:                        skillName,
@@ -461,6 +483,9 @@ func CreateSkillFromFrontmatter(frontmatter FrontmatterData, markdownContent str
 			expanded = applyPreamble(expanded, capturedBaseDir, capturedTier)
 			if preflight := buildPreflightSection(capturedRequires, capturedBaseDir); preflight != "" {
 				expanded = preflight + "\n\n---\n\n" + expanded
+			}
+			if before := buildShellBeforeSection(capturedShell); before != "" {
+				expanded = before + "\n\n---\n\n" + expanded
 			}
 			return []ContentBlock{{Type: "text", Text: expanded}}, nil
 		},
@@ -502,6 +527,33 @@ func buildPreflightSection(reqs []SkillRequirement, skillDir string) string {
 			installCmd := strings.ReplaceAll(r.InstallCmd, "${SESHAT_SKILL_DIR}", skillDir)
 			b.WriteString(fmt.Sprintf("- **Install** (only with user permission): `%s`\n", installCmd))
 		}
+	}
+	return b.String()
+}
+
+// buildShellBeforeSection generates a setup block instructing the agent to run
+// a skill's shell.before commands through its own Bash tool call before doing
+// the skill's work - the same prompt-injection pattern buildPreflightSection
+// already uses for SkillRequirement.InstallCmd, so these commands go through
+// the normal permission system (ask by default) instead of a new, separate
+// execution path that would bypass it.
+//
+// Only "before" is implemented. "after"/"on_error"/"on_complete" need to know
+// when the skill's own work actually finished or failed - there is no such
+// lifecycle signal today (the skill tool returns this prompt once and the
+// conversation just continues), so injecting instructions for them here would
+// describe behavior that cannot actually happen. Left unimplemented rather
+// than faked; see TODO.md's M5b entry.
+func buildShellBeforeSection(shell *FrontmatterShell) string {
+	if shell == nil || len(shell.Before) == 0 {
+		return ""
+	}
+	var b strings.Builder
+	b.WriteString("## Setup: Shell Commands\n\n")
+	b.WriteString("Before starting this skill's task, run each command below using Bash, in order.\n")
+	b.WriteString("Ask for explicit permission first unless it has already been granted. If a command fails, tell the user and stop rather than continuing the skill in a broken environment.\n\n")
+	for _, cmd := range shell.Before {
+		b.WriteString(fmt.Sprintf("- `%s`\n", cmd))
 	}
 	return b.String()
 }
@@ -581,17 +633,127 @@ func DiscoverSkillDirsForPaths(filePaths []string, cwd string) []string {
 	return newDirs
 }
 
+// maxNestedSkillDirDepth caps how far cachedNestedSkillDirs descends below
+// cwd, so one call cannot run away in a very deep tree.
+const maxNestedSkillDirDepth = 6
+
+// nestedSkillDirsCacheTTL mirrors skillDefCacheTTL (skillTool.go): long
+// enough that a tool-list rebuild mid-session doesn't re-walk the whole
+// project tree, short enough that a newly added skills/ directory shows up
+// without restarting.
+const nestedSkillDirsCacheTTL = 10 * time.Second
+
+var nestedSkillDirsCache struct {
+	mu   sync.Mutex
+	cwd  string
+	dirs []string
+	at   time.Time
+}
+
+// cachedNestedSkillDirs memoizes discoverNestedSkillDirs for
+// nestedSkillDirsCacheTTL, keyed by cwd: GetSkillDirCommandsForUser calls it
+// on every lookup (skillTool.go's lookupSkill/Call/Description have no cache
+// of their own), and a raw, uncached os.WalkDir of the whole project tree on
+// every single skill lookup is exactly the per-request filesystem scan a
+// prior perf investigation already flagged above (the "users" directory
+// comment) as adding ~1s per chat turn.
+func cachedNestedSkillDirs(cwd string) []string {
+	nestedSkillDirsCache.mu.Lock()
+	defer nestedSkillDirsCache.mu.Unlock()
+	if nestedSkillDirsCache.cwd == cwd && time.Since(nestedSkillDirsCache.at) < nestedSkillDirsCacheTTL {
+		return nestedSkillDirsCache.dirs
+	}
+	dirs := discoverNestedSkillDirs(cwd)
+	nestedSkillDirsCache.cwd = cwd
+	nestedSkillDirsCache.dirs = dirs
+	nestedSkillDirsCache.at = time.Now()
+	return dirs
+}
+
+// discoverNestedSkillDirs walks cwd, bounded to maxNestedSkillDirDepth and
+// skipping VCS, dependency and build directories (and any other dotted
+// directory), for .claude/skills directories below the top level - the one
+// GetProjectSkillsPath already covers directly without this walk.
+func discoverNestedSkillDirs(cwd string) []string {
+	cwd = strings.TrimSpace(cwd)
+	if cwd == "" {
+		return nil
+	}
+
+	skip := make(map[string]bool)
+	for _, name := range shared.GetFileReadIgnorePatterns(context.Background()) {
+		skip[name] = true
+	}
+	for _, name := range shared.GetVCSDirectoriesToExclude() {
+		skip[name] = true
+	}
+	// Not in the shared ignore list (which is about reading file content, not
+	// directory traversal), but a dependency directory a skill walk has no
+	// business entering either.
+	skip["vendor"] = true
+
+	rootDepth := strings.Count(filepath.Clean(cwd), string(filepath.Separator))
+	var dirs []string
+	_ = filepath.WalkDir(cwd, func(path string, d fs.DirEntry, err error) error {
+		if err != nil {
+			return nil //nolint:nilerr // best-effort discovery; an unreadable subtree is just skipped
+		}
+		if !d.IsDir() || path == cwd {
+			return nil
+		}
+		name := d.Name()
+		if skip[name] || strings.HasPrefix(name, ".") {
+			return filepath.SkipDir
+		}
+		if depth := strings.Count(filepath.Clean(path), string(filepath.Separator)) - rootDepth; depth > maxNestedSkillDirDepth {
+			return filepath.SkipDir
+		}
+		if info, statErr := os.Stat(filepath.Join(path, ".claude", "skills")); statErr == nil && info.IsDir() {
+			dirs = append(dirs, filepath.Join(path, ".claude", "skills"))
+		}
+		return nil
+	})
+	return dirs
+}
+
+// SubstituteArguments fills ${argument:name} and ${name} placeholders in
+// content from args. With a single declared name, the whole args string
+// fills it - the common case, matching a single-placeholder ArgumentHint
+// like "<file>". With more than one name, args is split on whitespace
+// positionally (first word to the first name, and so on), with the LAST
+// name absorbing everything remaining so a trailing multi-word value (a
+// sentence, a path with spaces) isn't cut up. A name with nothing left to
+// fill it gets substituted with "", not the whole string - unlike every
+// other name getting the same full value, which is what every placeholder
+// did before this function distinguished them.
 func SubstituteArguments(content string, args string, argumentNames []string) string {
 	if args == "" || len(argumentNames) == 0 {
 		return content
 	}
 
+	values := make([]string, len(argumentNames))
+	if len(argumentNames) == 1 {
+		values[0] = args
+	} else {
+		fields := strings.Fields(args)
+		for i := range argumentNames {
+			if i >= len(fields) {
+				break
+			}
+			if i == len(argumentNames)-1 {
+				values[i] = strings.Join(fields[i:], " ")
+			} else {
+				values[i] = fields[i]
+			}
+		}
+	}
+
 	result := content
 
-	for _, argName := range argumentNames {
+	for i, argName := range argumentNames {
 		placeholder := "${argument:" + argName + "}"
-		result = strings.ReplaceAll(result, placeholder, args)
-		result = strings.ReplaceAll(result, "${"+argName+"}", args)
+		result = strings.ReplaceAll(result, placeholder, values[i])
+		result = strings.ReplaceAll(result, "${"+argName+"}", values[i])
 	}
 
 	return result
@@ -762,55 +924,6 @@ func MatchTrigger(userInput string, skills []Skill) *Skill {
 		}
 	}
 	return nil
-}
-
-// Skill change detection state
-var (
-	skillCacheValid   bool = true
-	conditionalSkills map[string]Skill
-	dynamicSkills     map[string]Skill
-)
-
-func init() {
-	conditionalSkills = make(map[string]Skill)
-	dynamicSkills = make(map[string]Skill)
-}
-
-func InvalidateSkillCache() {
-	skillCacheValid = false
-}
-
-func ClearSkillCaches() {
-	skillCacheValid = false
-	conditionalSkills = make(map[string]Skill)
-	dynamicSkills = make(map[string]Skill)
-}
-
-func ActivateConditionalSkillsForPaths(filePaths []string, cwd string) []string {
-	var activated []string
-
-	for name, skill := range conditionalSkills {
-		if len(skill.Paths) == 0 {
-			continue
-		}
-
-		for _, filePath := range filePaths {
-			for _, pattern := range skill.Paths {
-				if matchesPathPattern(filePath, pattern, cwd) {
-					dynamicSkills[name] = skill
-					activated = append(activated, name)
-					delete(conditionalSkills, name)
-					break
-				}
-			}
-		}
-	}
-
-	if len(activated) > 0 {
-		skillCacheValid = false
-	}
-
-	return activated
 }
 
 func matchesPathPattern(filePath string, pattern string, cwd string) bool {

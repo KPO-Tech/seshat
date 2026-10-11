@@ -35,6 +35,7 @@ import (
 	researchTools "github.com/KPO-Tech/seshat/internal/tools/research"
 	devtoTool "github.com/KPO-Tech/seshat/internal/tools/social/devto"
 	hnTool "github.com/KPO-Tech/seshat/internal/tools/social/hackernews"
+	twitterTool "github.com/KPO-Tech/seshat/internal/tools/social/twitter"
 	askUserQuestionTool "github.com/KPO-Tech/seshat/internal/tools/special/ask_user"
 	configTool "github.com/KPO-Tech/seshat/internal/tools/special/config"
 	fimtool "github.com/KPO-Tech/seshat/internal/tools/special/fim"
@@ -220,7 +221,13 @@ func RegisterBuiltinToolsWithConfig(reg *tool.Registry, config *Config) error {
 		devtoTool.NewFeedTool(),
 		devtoTool.NewArticleTool(),
 		devtoTool.NewPublishTool(),
-		// Twitter, LinkedIn, WhatsApp: stubs disabled until implemented (IsEnabled=false)
+
+		// Twitter/X — posts to a public account; also a stub (IsEnabled=false
+		// until a real API v2 client replaces the ErrNotImplemented bodies, see
+		// the package doc comment). Registered like the stubs above rather than
+		// left out entirely, so it shows up in introspection the same way.
+		twitterTool.NewSearchTool(),
+		twitterTool.NewTweetTool(),
 	}
 	// Research tools (app store reviews, Reddit, YouTube, Google Places, Trustpilot): a tool whose keys
 	// are missing reports itself disabled, so the model is never offered what it cannot use.
@@ -286,7 +293,10 @@ func NewBuiltinRegistry() (*tool.Registry, error) {
 
 // NewBuiltinRegistryWithConfig creates a new registry with all built-in tools registered for a host runtime.
 func NewBuiltinRegistryWithConfig(config *Config) (*tool.Registry, error) {
-	reg := tool.NewRegistry()
+	config = normalizeConfig(config)
+	regConfig := tool.DefaultRegistryConfig()
+	regConfig.EnableToolSearch = config.EnableToolSearch
+	reg := tool.NewRegistryWithConfig(regConfig)
 	if err := RegisterBuiltinToolsWithConfig(reg, config); err != nil {
 		return nil, err
 	}

@@ -2,6 +2,7 @@ package engine
 
 import (
 	"github.com/KPO-Tech/seshat/internal/prompt"
+	"github.com/KPO-Tech/seshat/internal/providers"
 	"github.com/KPO-Tech/seshat/internal/tools/system/mcp"
 	"github.com/KPO-Tech/seshat/internal/types"
 	browsercore "github.com/KPO-Tech/seshat/internal/web/browser"
@@ -9,19 +10,33 @@ import (
 
 // Config represents the engine configuration.
 type Config struct {
-	MaxTurns             int                   `json:"max_turns"`
-	AutoCompact          bool                  `json:"auto_compact"`
-	PermissionMode       types.PermissionMode  `json:"permission_mode"`
-	Model                types.ModelIdentifier `json:"model"`
-	TitleModel           types.ModelIdentifier `json:"title_model,omitempty"`
-	MaxTokens            int                   `json:"max_tokens"`
-	WorkingDirectory     string                `json:"working_directory,omitempty"`
-	SystemPromptTemplate string                `json:"system_prompt_template"`
-	MCPServers           []mcp.ServerConfig    `json:"mcp_servers"`
-	EnableMemory         bool                  `json:"enable_memory"`
-	EnableMonitoring     bool                  `json:"enable_monitoring"`
+	MaxTurns       int                   `json:"max_turns"`
+	AutoCompact    bool                  `json:"auto_compact"`
+	PermissionMode types.PermissionMode  `json:"permission_mode"`
+	Model          types.ModelIdentifier `json:"model"`
+	TitleModel     types.ModelIdentifier `json:"title_model,omitempty"`
+	// CompactSummaryModel overrides which model generates compaction summaries.
+	// Zero value means "use Model" (the session's own model), so compaction
+	// works on any provider without needing an Anthropic key.
+	CompactSummaryModel types.ModelIdentifier `json:"compact_summary_model,omitempty"`
+	// TrustProjectInstructions gates SESHAT.md/AGENTS.md/.seshat/instructions.md
+	// found in the working directory behind project trust before they are
+	// injected into the system prompt (see docs/project-trust.md and
+	// readTrustedProjectInstructions). nil fails closed: no project's own
+	// instructions are ever injected without a host wiring this in - e.g. to
+	// the same hash-based trust store it already uses for the project's other
+	// configuration files.
+	TrustProjectInstructions func(path string, content []byte) bool `json:"-"`
+	MaxTokens                int                                    `json:"max_tokens"`
+	WorkingDirectory         string                                 `json:"working_directory,omitempty"`
+	SystemPromptTemplate     string                                 `json:"system_prompt_template"`
+	MCPServers               []mcp.ServerConfig                     `json:"mcp_servers"`
+	EnableMemory             bool                                   `json:"enable_memory"`
+	EnableMonitoring         bool                                   `json:"enable_monitoring"`
 
-	// MaxIterations caps model→tool→model cycles per turn. 0 = loop default (10).
+	// MaxIterations caps model→tool→model cycles per turn. 0 = loop default
+	// (100 - see DefaultLoopConfig; this comment previously said 10, which
+	// was never the actual default - M3 in TODO.md).
 	MaxIterations int `json:"max_iterations"`
 
 	// TurnTokenBudget enables token-budget continuation when > 0.
@@ -78,7 +93,7 @@ func DefaultConfig() *Config {
 		PermissionMode: types.PermissionModeOnRequest,
 		Model: types.ModelIdentifier{
 			Provider: types.APIProviderAnthropic,
-			Model:    "claude-3-5-sonnet-20241022",
+			Model:    providers.DefaultLegacySonnetModel,
 		},
 		MaxTokens:            8192,
 		SystemPromptTemplate: "",

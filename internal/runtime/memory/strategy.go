@@ -27,6 +27,13 @@ type CompactionStrategy interface {
 		turnID types.TurnID,
 		tracking *TrackingState,
 	) (CompactionResult, error)
+
+	// CheckBlockingLimit reports whether systemPrompt+messages fit within the
+	// hard blocking limit for model (BlockingLimitTokens), returning a typed
+	// error (ErrCodeCompactFull) if not - even after AutoCompact has already
+	// tried. Called right after AutoCompact so an oversized request fails
+	// locally with a clear reason instead of at the provider (M1 in TODO.md).
+	CheckBlockingLimit(systemPrompt string, messages []types.Message, model types.ModelIdentifier) error
 }
 
 // Verify Engine satisfies CompactionStrategy at compile time.

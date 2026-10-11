@@ -393,6 +393,70 @@ Run the brainstorming server.
 	}
 }
 
+// TestShellBeforeInjection verifies that a skill with shell.before injects a
+// setup block instructing the agent to run those commands via Bash (with
+// permission), and that the main content is still present.
+func TestShellBeforeInjection(t *testing.T) {
+	base := t.TempDir()
+	skillDir := filepath.Join(base, "security-audit")
+	if err := os.MkdirAll(skillDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	content := `---
+name: security-audit
+description: run a security scan
+shell:
+  before:
+    - "which gosec || go install github.com/securego/gosec/v2/cmd/gosec@latest"
+  after:
+    - "echo done"
+---
+
+Run gosec and report findings.
+`
+	if err := os.WriteFile(filepath.Join(skillDir, "skill.md"), []byte(content), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	loader := NewFileSkillLoaderWithSource(base, SettingSourceUserSettings)
+	loaded, err := loader.LoadSkills()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(loaded) != 1 {
+		t.Fatalf("expected 1 skill, got %d", len(loaded))
+	}
+	sk := loaded[0]
+	if sk.Shell == nil || len(sk.Shell.Before) != 1 {
+		t.Fatalf("expected shell.before to be parsed, got %+v", sk.Shell)
+	}
+
+	blocks, err := sk.GetPromptForCommand("", context.Background())
+	if err != nil {
+		t.Fatalf("GetPromptForCommand: %v", err)
+	}
+	if len(blocks) == 0 {
+		t.Fatal("expected content blocks")
+	}
+	text := blocks[0].Text
+	if !strings.Contains(text, "Setup: Shell Commands") {
+		t.Error("expected shell setup section in prompt")
+	}
+	if !strings.Contains(text, "gosec") {
+		t.Error("expected the before command in prompt")
+	}
+	if !strings.Contains(text, "permission") {
+		t.Error("expected a permission instruction in prompt")
+	}
+	if !strings.Contains(text, "Run gosec and report findings") {
+		t.Error("expected original skill content in prompt")
+	}
+	// after: is parsed but intentionally not injected (no post-completion hook exists yet).
+	if strings.Contains(text, "echo done") {
+		t.Error("shell.after should not be injected into the prompt yet")
+	}
+}
+
 // TestMatchTrigger verifies that MatchTrigger finds the right skill.
 func TestMatchTrigger(t *testing.T) {
 	skills := []Skill{

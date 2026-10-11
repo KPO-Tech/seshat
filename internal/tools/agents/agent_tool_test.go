@@ -21,6 +21,32 @@ import (
 )
 
 // ---------------------------------------------------------------------------
+// subAgentPermissionMode — M5c: sub-agent permission mode inheritance
+// ---------------------------------------------------------------------------
+
+func TestSubAgentPermissionMode(t *testing.T) {
+	tests := []struct {
+		name   string
+		parent types.PermissionMode
+		want   types.PermissionMode
+	}{
+		{"never parent forces never child", types.PermissionModeNever, types.PermissionModeNever},
+		{"onRequest parent still bypasses", types.PermissionModeOnRequest, types.PermissionModeBypass},
+		{"auto parent still bypasses", types.PermissionModeAuto, types.PermissionModeBypass},
+		{"bypass parent stays bypass", types.PermissionModeBypass, types.PermissionModeBypass},
+		{"acceptEdits parent still bypasses", types.PermissionModeAcceptEdits, types.PermissionModeBypass},
+		{"empty/unset parent still bypasses", types.PermissionMode(""), types.PermissionModeBypass},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := subAgentPermissionMode(tt.parent); got != tt.want {
+				t.Errorf("subAgentPermissionMode(%q) = %q, want %q", tt.parent, got, tt.want)
+			}
+		})
+	}
+}
+
+// ---------------------------------------------------------------------------
 // Unit tests — per-instance engine isolation
 // ---------------------------------------------------------------------------
 
@@ -67,7 +93,7 @@ func TestAgentTool_runAgent_NilEngine_ReturnsError(t *testing.T) {
 	a := NewAgentTool(nil)
 	// Do NOT call SetEngine — engine is nil.
 
-	result := a.runAgent(nil, "general", "do something", 1, nil, nil)
+	result := a.runAgent(nil, "general", "do something", 1, nil, nil, types.PermissionModeBypass)
 	if result == nil {
 		t.Fatal("expected non-nil RunResult, got nil")
 	} else {
@@ -84,7 +110,7 @@ func TestAgentTool_runAgent_NilEngine_ReturnsError(t *testing.T) {
 func TestAgentTool_runForkAgent_NilEngine_ReturnsError(t *testing.T) {
 	a := NewAgentTool(nil)
 
-	result := a.runForkAgent(nil, "general", "do something", 1, nil, nil, nil)
+	result := a.runForkAgent(nil, "general", "do something", 1, nil, nil, nil, types.PermissionModeBypass)
 	if result == nil {
 		t.Fatal("expected non-nil RunResult, got nil")
 	} else {
@@ -270,7 +296,7 @@ func TestRunAgent_DepthGuard_Rejects(t *testing.T) {
 		ctx = withSubAgentDepth(ctx)
 	}
 
-	result := agentTool.runAgent(ctx, coreagent.AgentTypeGeneralPurpose, "test task", 0, nil, nil)
+	result := agentTool.runAgent(ctx, coreagent.AgentTypeGeneralPurpose, "test task", 0, nil, nil, types.PermissionModeBypass)
 	if result.Success {
 		t.Error("expected spawn to be rejected at max depth, but it succeeded")
 	}
@@ -289,7 +315,7 @@ func TestRunAgent_DepthGuard_AllowsWithinLimit(t *testing.T) {
 	agentTool := NewAgentTool(nil)
 	ctx := context.Background()
 	// Depth 0 — well within limit.
-	result := agentTool.runAgent(ctx, coreagent.AgentTypeGeneralPurpose, "test task", 0, nil, nil)
+	result := agentTool.runAgent(ctx, coreagent.AgentTypeGeneralPurpose, "test task", 0, nil, nil, types.PermissionModeBypass)
 	// Engine is nil so execution fails, but the error must be about the engine,
 	// not about depth.
 	if strings.Contains(result.Error, "depth") {
@@ -304,7 +330,7 @@ func TestRunForkAgent_DepthGuard_Rejects(t *testing.T) {
 	for i := 0; i < coreagent.MaxSubAgentDepth; i++ {
 		ctx = withSubAgentDepth(ctx)
 	}
-	result := agentTool.runForkAgent(ctx, coreagent.AgentTypeGeneralPurpose, "test", 0, nil, nil, nil)
+	result := agentTool.runForkAgent(ctx, coreagent.AgentTypeGeneralPurpose, "test", 0, nil, nil, nil, types.PermissionModeBypass)
 	if result.Success {
 		t.Error("expected fork spawn to be rejected at max depth")
 	}
