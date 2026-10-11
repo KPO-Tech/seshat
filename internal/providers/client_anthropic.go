@@ -21,6 +21,7 @@ func (c *Client) streamAnthropicResponse(ctx context.Context, resp *http.Respons
 	defer resp.Body.Close()
 
 	reader := bufio.NewReader(resp.Body)
+	sawMessageStop := false
 
 	for {
 		select {
@@ -34,6 +35,14 @@ func (c *Client) streamAnthropicResponse(ctx context.Context, resp *http.Respons
 						Type:  types.APIChunkTypeError,
 						Error: types.WrapError(types.ErrCodeAPIResponse, "failed to read stream", err),
 					}
+				} else if !sawMessageStop {
+					// The connection closed cleanly (no read error) but the
+					// Anthropic protocol's sole terminal event never arrived -
+					// a dropped/truncated connection, not a real EOF-after-done.
+					chunkChan <- types.APIResponseChunk{
+						Type:  types.APIChunkTypeError,
+						Error: types.WrapError(types.ErrCodeAPIResponse, "stream ended without a message_stop event", errStreamInterrupted),
+					}
 				}
 				return
 			}
@@ -45,6 +54,12 @@ func (c *Client) streamAnthropicResponse(ctx context.Context, resp *http.Respons
 
 			data := strings.TrimPrefix(line, "data: ")
 			if data == "[DONE]" {
+				if !sawMessageStop {
+					chunkChan <- types.APIResponseChunk{
+						Type:  types.APIChunkTypeError,
+						Error: types.WrapError(types.ErrCodeAPIResponse, "stream ended without a message_stop event", errStreamInterrupted),
+					}
+				}
 				return
 			}
 
@@ -55,6 +70,9 @@ func (c *Client) streamAnthropicResponse(ctx context.Context, resp *http.Respons
 					Error: types.WrapError(types.ErrCodeAPIResponse, "failed to parse stream chunk", err),
 				}
 				return
+			}
+			if chunk.Type == types.APIChunkTypeMessageStop {
+				sawMessageStop = true
 			}
 
 			chunkChan <- chunk

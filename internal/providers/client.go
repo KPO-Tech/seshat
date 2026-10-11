@@ -335,7 +335,7 @@ func (c *Client) CreateMessageStreamResult(ctx context.Context, req types.APIReq
 func (c *Client) CreateMessageStreamResultWithCallback(ctx context.Context, req types.APIRequest, onChunk func(types.APIResponseChunk)) (*types.APIStreamResult, error) {
 	req = c.resolveRequestModel(req)
 	req.Stream = true
-	return c.resolveAdapter().createStreamResult(c, ctx, req, onChunk)
+	return c.resolveAdapter().createStreamResult(c, ctx, req, wrapThinkTagFilter(onChunk))
 }
 
 // createAnthropicStreamResult consumes an Anthropic SSE stream and returns the
