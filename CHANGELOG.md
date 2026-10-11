@@ -9,6 +9,8 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [1.4.1] - 2026-10-11
+
 ### Fixed
 
 - **A stream that dropped mid-response, or ended with no finish signal and nothing visible to show for it, was silently treated as a successful completion.** Anthropic-shaped streams (anthropic/bedrock/vertex/workers-ai) only ever raised an error on a genuine read failure - a clean connection close (`io.EOF`) before the protocol's sole terminal event (`message_stop`) ever arrived looked identical to a normal finish. OpenAI-compatible streams (Z.ai, Ollama, and other `openAICompatAdapter`/`ollamaAdapter` providers) had the same gap from the other direction: a missing `finish_reason` defaulted to `end_turn`, so a connection that died before producing any text or tool call - including a reasoning model that burned its whole output budget with nothing visible to show for it - was returned as an ordinary (if empty) response instead of failing. Both paths now surface a retryable `ErrCodeAPIResponse` in that case, which routes through the engine's existing recovery path (`Loop.isRecoverableError`/`tryRecovery`) instead of handing the caller a truncated answer with no indication anything went wrong.
