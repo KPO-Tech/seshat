@@ -388,14 +388,7 @@ func parseOpenAISSEStream(ctx context.Context, body io.Reader, model types.Model
 			line, err := reader.ReadString('\n')
 			if err != nil {
 				if err == io.EOF {
-					stopChunk := types.APIResponseChunk{
-						Type:       types.APIChunkTypeMessageStop,
-						StopReason: stringPtr(normalizeOpenAIStopReason(finishReason, nil)),
-						Usage:      &usage,
-					}
-					emitStreamChunk(onChunk, stopChunk)
-					collected = append(collected, stopChunk)
-					return buildOpenAIStreamResult(model, "openai-stream-response", text.String(), thinking.String(), toolCalls, order, finishReason, usage, collected)
+					return finishOpenAIStream(onChunk, model, text.String(), thinking.String(), toolCalls, order, finishReason, usage, collected)
 				}
 				return nil, types.WrapError(types.ErrCodeAPIResponse, "failed to read openai stream", err)
 			}
@@ -405,14 +398,7 @@ func parseOpenAISSEStream(ctx context.Context, body io.Reader, model types.Model
 			}
 			data := strings.TrimPrefix(line, "data: ")
 			if data == "[DONE]" {
-				stopChunk := types.APIResponseChunk{
-					Type:       types.APIChunkTypeMessageStop,
-					StopReason: stringPtr(normalizeOpenAIStopReason(finishReason, nil)),
-					Usage:      &usage,
-				}
-				emitStreamChunk(onChunk, stopChunk)
-				collected = append(collected, stopChunk)
-				return buildOpenAIStreamResult(model, "openai-stream-response", text.String(), thinking.String(), toolCalls, order, finishReason, usage, collected)
+				return finishOpenAIStream(onChunk, model, text.String(), thinking.String(), toolCalls, order, finishReason, usage, collected)
 			}
 
 			var chunk struct {
@@ -438,9 +424,27 @@ func parseOpenAISSEStream(ctx context.Context, body io.Reader, model types.Model
 					PromptTokens     int `json:"prompt_tokens"`
 					CompletionTokens int `json:"completion_tokens"`
 				} `json:"usage"`
+				// Error carries an in-band provider failure (e.g. OpenRouter
+				// surfacing an upstream 5xx as "data: {\"error\": ...}" inside
+				// an otherwise-200 stream instead of a non-200 HTTP status).
+				// Without this field it silently unmarshalled into a no-op
+				// delta - zero Choices - and the stream finished looking like
+				// an ordinary, possibly truncated, success.
+				Error *struct {
+					Message string `json:"message"`
+					Type    string `json:"type"`
+					Code    any    `json:"code"`
+				} `json:"error"`
 			}
 			if err := json.Unmarshal([]byte(data), &chunk); err != nil {
 				return nil, types.WrapError(types.ErrCodeAPIResponse, "failed to decode openai stream chunk", err)
+			}
+			if chunk.Error != nil {
+				return nil, types.WrapError(
+					types.ErrCodeAPIResponse,
+					fmt.Sprintf("provider reported an in-stream error: %s (code %v)", chunk.Error.Message, chunk.Error.Code),
+					errProviderStreamError,
+				)
 			}
 			for _, choice := range chunk.Choices {
 				if choice.Delta.ReasoningContent != "" {
@@ -510,6 +514,26 @@ func parseOpenAISSEStream(ctx context.Context, body io.Reader, model types.Model
 			}
 		}
 	}
+}
+
+// finishOpenAIStream emits the synthetic message_stop chunk and builds the
+// aggregated result when the stream reaches [DONE] or a clean EOF. If the
+// provider never sent a finish_reason and produced no visible text or tool
+// call, that is a silently truncated/interrupted stream - previously this
+// looked identical to a legitimate (if terse) completion.
+func finishOpenAIStream(onChunk func(types.APIResponseChunk), model types.ModelIdentifier, text string, thinking string, toolCalls map[int]*openAIStreamToolCallState, order []int, finishReason string, usage types.TokenUsage, collected []types.APIResponseChunk) (*types.APIStreamResult, error) {
+	if finishReason == "" && text == "" && len(toolCalls) == 0 {
+		return nil, types.WrapError(types.ErrCodeAPIResponse, "stream ended with no finish signal and no visible output", errStreamInterrupted)
+	}
+
+	stopChunk := types.APIResponseChunk{
+		Type:       types.APIChunkTypeMessageStop,
+		StopReason: stringPtr(normalizeOpenAIStopReason(finishReason, nil)),
+		Usage:      &usage,
+	}
+	emitStreamChunk(onChunk, stopChunk)
+	collected = append(collected, stopChunk)
+	return buildOpenAIStreamResult(model, "openai-stream-response", text, thinking, toolCalls, order, finishReason, usage, collected)
 }
 
 func buildOpenAIStreamResult(model types.ModelIdentifier, responseID string, text string, thinking string, toolCalls map[int]*openAIStreamToolCallState, order []int, finishReason string, usage types.TokenUsage, collected []types.APIResponseChunk) (*types.APIStreamResult, error) {

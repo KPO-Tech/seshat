@@ -175,21 +175,26 @@ func TestRunForkedAgentIncludesInheritedMessages(t *testing.T) {
 		if err := json.NewDecoder(r.Body).Decode(&capturedPayload); err != nil {
 			t.Fatalf("decode request body: %v", err)
 		}
-		w.Header().Set("Content-Type", "application/json")
-		_ = json.NewEncoder(w).Encode(map[string]any{
-			"id":    "msg_test",
-			"type":  "message",
-			"role":  "assistant",
-			"model": "claude-3-5-sonnet-20241022",
-			"content": []map[string]any{
-				{"type": "text", "text": "done"},
-			},
-			"stop_reason": "end_turn",
-			"usage": map[string]any{
-				"input_tokens":  12,
-				"output_tokens": 4,
-			},
-		})
+		// The engine always requests Stream: true (internal/engine/loop.go
+		// forces EnableStreaming on), so the response must be a real SSE
+		// event sequence ending in message_stop - a flat JSON body parses as
+		// a stream with no recognizable "data: " lines and no completion
+		// signal, which internal/providers now correctly reports as an
+		// interrupted stream instead of silently returning empty content.
+		w.Header().Set("Content-Type", "text/event-stream")
+		flusher, _ := w.(http.Flusher)
+		for _, event := range []string{
+			`{"type":"content_block_start","content_block":{"type":"text","text":""}}`,
+			`{"type":"content_block_delta","delta":{"type":"text_delta","text":"done"}}`,
+			`{"type":"content_block_stop"}`,
+			`{"type":"message_delta","delta":{"stop_reason":"end_turn"},"usage":{"output_tokens":4}}`,
+			`{"type":"message_stop"}`,
+		} {
+			_, _ = w.Write([]byte("data: " + event + "\n\n"))
+			if flusher != nil {
+				flusher.Flush()
+			}
+		}
 	}))
 	defer server.Close()
 
