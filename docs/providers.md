@@ -303,7 +303,7 @@ The loop tries fallback models first (same provider, cheaper/faster model), then
 ```go
 type APIResponseChunk struct {
     Type         APIChunkType  // content_block_start | delta | stop | message_stop | error
-    DeltaType    string        // "text_delta" | "input_json_delta"
+    DeltaType    string        // "text_delta" | "thinking_delta" | "input_json_delta"
     Delta        string        // text fragment
     PartialJSON  string        // partial tool input JSON
     ContentBlock ContentBlock  // for content_block_start
@@ -314,6 +314,17 @@ type APIResponseChunk struct {
 Each chunk is forwarded to:
 1. `ResponseChunkCallback` (if set on session) — synchronous callback in the loop goroutine
 2. `EventQueue` (always present on session) — buffered async channel, overflow drops silently
+
+A model that leaks reasoning into the text channel as raw `<think>...</think>`
+tags (instead of a provider's structured reasoning field, e.g. DeepSeek-R1
+served without native `reasoning_content` support) has those spans
+reclassified into `thinking_delta` chunks before `onChunk` sees them. The
+persisted response/history keep the raw text unchanged.
+
+A stream that drops mid-response, ends with no finish signal and no visible
+output, or carries an in-band `{"error": ...}` payload from the provider,
+returns an error instead of a truncated success — retried by the engine's
+existing recovery path rather than surfacing silently as a short answer.
 
 ---
 

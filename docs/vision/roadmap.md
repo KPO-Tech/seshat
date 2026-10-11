@@ -31,6 +31,7 @@
 - **Sandbox hardening** — Landlock read isolation (`/usr`, `/lib`, `/bin` read-only allowlist) is deferred due to cross-platform complexity. Current implementation restricts write/delete to the workspace but allows read from the full filesystem.
 - **MCP spec conformance** — The MCP client implements the core spec. Async tasks and elicitation (MCP November 2025 spec) are not yet implemented.
 - **Observability depth** — OTel tracing is wired at the transport layer. Per-session, per-turn, per-tool spans are not yet emitted consistently.
+- **Inline tool execution within a single model stream** — today a turn always ends the current provider stream before any tool call runs, then opens a new stream to continue (standard batch-of-tool-calls-per-turn model). Executing a tool the instant its call is fully parsed out of the stream - while the same generation keeps running - would remove a full request/response round-trip per tool call, at the cost of parsing tool calls out of raw text incrementally instead of relying on a provider's structured tool-call delta. Deliberately deferred: it is a bigger architectural change than today's per-provider adapters, and most of today's providers already support structured streamed tool calls, which this would have to keep working alongside.
 
 ---
 
