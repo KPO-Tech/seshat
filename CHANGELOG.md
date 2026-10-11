@@ -9,6 +9,8 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [1.4.0] - 2026-10-11
+
 ### Changed
 
 - **Plan mode no longer auto-allows file writes/edits.** `write_file`/`edit_file` used to fall into the same AcceptEdits-style auto-allow as `PermissionModeAcceptEdits` whenever `ExecutionMode == "plan"`, so a plan-mode session asked fewer questions about writing files than a normal session would - the opposite of "tools are described but not executed." Both now deny outright in plan mode; the plan's own content never went through these tools (`exit_plan_mode` takes it as a parameter).
