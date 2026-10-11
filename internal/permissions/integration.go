@@ -77,6 +77,14 @@ func (i *Integrator) effectivePromptFn(ctx context.Context) types.PromptFn {
 	return i.promptFn
 }
 
+// HasPromptFn reports whether a prompt function is actually available for
+// ctx - the same check effectivePromptFn uses to resolve an ask, exposed so
+// a caller can decide ahead of time whether this context can show an
+// interactive prompt at all (see ExecuteRequest.ShouldAvoidPermissionPrompts).
+func (i *Integrator) HasPromptFn(ctx context.Context) bool {
+	return i.effectivePromptFn(ctx) != nil
+}
+
 // Resolver creates a typed PermissionResolver that integrates with the permission engine.
 func (i *Integrator) Resolver(sessionID types.SessionID, turnID types.TurnID, mode types.PermissionMode) types.PermissionResolver {
 	return i.ResolverWithContext(sessionID, turnID, &types.PermissionContext{Mode: mode}, nil)

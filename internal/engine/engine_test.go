@@ -1318,7 +1318,7 @@ func TestBuildExecuteRequest_NilIntegrator_DoesNotPanic(t *testing.T) {
 	transcript := []types.Message{types.UserMessage("msg-1", "go")}
 
 	// Must not panic.
-	execReq := l.buildExecuteRequest(toolUses, req, nil, transcript)
+	execReq := l.buildExecuteRequest(context.Background(), toolUses, req, nil, transcript)
 
 	if execReq.PermissionResolver != nil {
 		t.Errorf("PermissionResolver should be nil when permissionIntegrator is nil, got %v", execReq.PermissionResolver)
@@ -1349,7 +1349,7 @@ func TestBuildExecuteRequest_NilIntegrator_ForwardsCallerPermissionCheck(t *test
 		PermissionCheck: customCheck,
 	}
 
-	execReq := l.buildExecuteRequest(toolUses, req, nil, nil)
+	execReq := l.buildExecuteRequest(context.Background(), toolUses, req, nil, nil)
 
 	if execReq.PermissionCheck == nil {
 		t.Fatal("PermissionCheck should be forwarded from req when permissionIntegrator is nil")
@@ -1358,6 +1358,59 @@ func TestBuildExecuteRequest_NilIntegrator_ForwardsCallerPermissionCheck(t *test
 	execReq.PermissionCheck(context.Background(), types.ToolPermissionRequest{})
 	if !called {
 		t.Error("forwarded PermissionCheck was not the supplied custom check")
+	}
+}
+
+// ---------------------------------------------------------------------------
+// ShouldAvoidPermissionPrompts is derived from whether a prompt function is
+// actually available for ctx - not left permanently unset. See TODO.md's
+// M5c entry (2026-10-11 follow-up): auto mode's "no classifier configured"
+// and PowerShell/request_permissions fast paths all branch on this to deny
+// instead of asking into a context with no UI to show the prompt.
+// ---------------------------------------------------------------------------
+
+func newLoopWithIntegrator(promptFn types.PromptFn) *Loop {
+	integrator := permissions.NewIntegrator(permissions.NewEngine())
+	if promptFn != nil {
+		integrator.SetPromptFn(promptFn)
+	}
+	return NewLoop(
+		nil,
+		execution.NewOrchestrator(),
+		nil,
+		nil,
+		integrator,
+		nil,
+		&LoopConfig{
+			MaxIterations:   5,
+			AutoCompact:     false,
+			EnableStreaming: false,
+		},
+		nil,
+	)
+}
+
+func TestBuildExecuteRequest_NoPromptFn_AvoidsPermissionPrompts(t *testing.T) {
+	l := newLoopWithIntegrator(nil)
+	req := RunRequest{SessionID: types.SessionID("s1"), TurnID: types.TurnID("t1"), PermissionMode: types.PermissionModeAuto}
+
+	execReq := l.buildExecuteRequest(context.Background(), nil, req, nil, nil)
+
+	if !execReq.ShouldAvoidPermissionPrompts {
+		t.Error("expected ShouldAvoidPermissionPrompts=true when no prompt function is configured for ctx")
+	}
+}
+
+func TestBuildExecuteRequest_WithPromptFn_DoesNotAvoidPermissionPrompts(t *testing.T) {
+	l := newLoopWithIntegrator(func(ctx context.Context, req types.PromptRequest) (types.PromptResponse, error) {
+		return types.PromptResponse{}, nil
+	})
+	req := RunRequest{SessionID: types.SessionID("s1"), TurnID: types.TurnID("t1"), PermissionMode: types.PermissionModeAuto}
+
+	execReq := l.buildExecuteRequest(context.Background(), nil, req, nil, nil)
+
+	if execReq.ShouldAvoidPermissionPrompts {
+		t.Error("expected ShouldAvoidPermissionPrompts=false when a prompt function is configured")
 	}
 }
 

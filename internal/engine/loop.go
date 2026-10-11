@@ -1325,7 +1325,7 @@ func toolLoopRecoveryMessage(update toolDiscoveryUpdate) string {
 }
 
 func (l *Loop) executeTools(ctx context.Context, toolUses []types.ToolUseContent, req RunRequest, state *MutableState, transcript []types.Message) (execution.ExecuteResult, error) {
-	return l.orchestrator.Execute(ctx, l.buildExecuteRequest(toolUses, req, state, transcript))
+	return l.orchestrator.Execute(ctx, l.buildExecuteRequest(ctx, toolUses, req, state, transcript))
 }
 
 func (l *Loop) isRecoverableError(err error) bool {
