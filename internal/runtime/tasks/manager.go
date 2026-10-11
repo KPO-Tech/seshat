@@ -137,7 +137,16 @@ func (m *Manager) CreateBashTask(ctx context.Context, command string) (*Task, er
 // uses. Callers should resolve this the same way every other sub-agent
 // spawn path does (see agents.subAgentPermissionMode): bypass by default,
 // or never when the spawning session is itself in never mode.
-func (m *Manager) CreateAgentTask(ctx context.Context, prompt string, tools []tool.Tool, permissionMode types.PermissionMode) (*Task, error) {
+//
+// systemPrompt, when non-empty, becomes the session's system prompt
+// template - the caller's resolved agentDef.GetSystemPrompt(), so a
+// background run actually gets the requested agent type's identity and
+// instructions instead of silently running under the engine's default one
+// (the type the model asked for was otherwise only used for display, never
+// to pick a prompt). The session also gets the same "subagent" tool
+// surface profile every other sub-agent spawn path uses (coreagent.RunAgent),
+// instead of the top-level default a plain NewSession would give it.
+func (m *Manager) CreateAgentTask(ctx context.Context, prompt string, tools []tool.Tool, permissionMode types.PermissionMode, systemPrompt string) (*Task, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	if m.activeTaskCountLocked() >= m.config.MaxConcurrentTasks {
@@ -147,7 +156,14 @@ func (m *Manager) CreateAgentTask(ctx context.Context, prompt string, tools []to
 		return nil, fmt.Errorf("query engine not configured for agent tasks")
 	}
 	taskID := TaskID(fmt.Sprintf("agent_%d", time.Now().UnixNano()))
-	session, err := m.client.NewSession(ctx)
+	subagentMetadata := &types.SessionMetadata{
+		Status:        types.SessionStatusActive,
+		CreatedAt:     time.Now(),
+		UpdatedAt:     time.Now(),
+		Additional:    map[string]any{"tool_surface_profile": tool.ToolSurfaceProfileSubagent},
+		SchemaVersion: types.SessionMetadataSchemaVersion,
+	}
+	session, err := m.client.NewSessionFromState(ctx, "", subagentMetadata, nil)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create agent session: %w", err)
 	}
@@ -161,6 +177,9 @@ func (m *Manager) CreateAgentTask(ctx context.Context, prompt string, tools []to
 	}()
 	if permissionMode != "" {
 		session.SetPermissionMode(permissionMode)
+	}
+	if systemPrompt != "" {
+		session.SetSystemPromptTemplate(systemPrompt)
 	}
 	if err := session.RegisterTools(tools); err != nil {
 		return nil, fmt.Errorf("failed to register tools: %w", err)

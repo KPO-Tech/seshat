@@ -662,7 +662,16 @@ func (t *AgentTool) runAgentBackground(ctx context.Context, agentType, prompt st
 		}, nil
 	}
 
-	task, err := manager.CreateAgentTask(ctx, prompt, nil, permMode)
+	// Resolve the requested type's system prompt so the background run gets
+	// its identity and instructions, same as the synchronous spawn paths -
+	// agentType was otherwise only used for display in the result below,
+	// never to pick what the sub-agent actually behaves like.
+	var systemPrompt string
+	if agentDef := t.resolveAgentDef(agentType); agentDef != nil && agentDef.GetSystemPrompt != nil {
+		systemPrompt = agentDef.GetSystemPrompt()
+	}
+
+	task, err := manager.CreateAgentTask(ctx, prompt, nil, permMode, systemPrompt)
 	if err != nil {
 		return tool.CallResult{
 			Data:    map[string]any{"error": fmt.Sprintf("failed to create background agent: %v", err)},
