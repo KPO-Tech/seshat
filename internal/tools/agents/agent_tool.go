@@ -332,7 +332,7 @@ func (t *AgentTool) Call(
 	}
 
 	if runInBackground {
-		result, err := t.runAgentBackground(ctx, agentType, fullPrompt, allowedTools, input.ToolUseID)
+		result, err := t.runAgentBackground(ctx, agentType, fullPrompt, allowedTools, input.ToolUseID, permMode)
 		if err != nil {
 			return tool.CallResult{Data: map[string]any{"error": err.Error()}, Content: err.Error()}, nil
 		}
@@ -645,7 +645,7 @@ func matchesPattern(name string, patterns []string) bool {
 // metadata.subagent_finished=true once the task actually reaches a terminal
 // state - the same marker spawn_agent's own notifier uses, so the frontend
 // can apply one shared rule for both.
-func (t *AgentTool) runAgentBackground(ctx context.Context, agentType, prompt string, allowedTools []string, callID string) (tool.CallResult, error) {
+func (t *AgentTool) runAgentBackground(ctx context.Context, agentType, prompt string, allowedTools []string, callID string, permMode types.PermissionMode) (tool.CallResult, error) {
 	manager := tasks.GlobalManager()
 	if manager == nil {
 		return tool.CallResult{
@@ -662,7 +662,7 @@ func (t *AgentTool) runAgentBackground(ctx context.Context, agentType, prompt st
 		}, nil
 	}
 
-	task, err := manager.CreateAgentTask(ctx, prompt, nil)
+	task, err := manager.CreateAgentTask(ctx, prompt, nil, permMode)
 	if err != nil {
 		return tool.CallResult{
 			Data:    map[string]any{"error": fmt.Sprintf("failed to create background agent: %v", err)},
