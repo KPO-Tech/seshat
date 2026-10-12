@@ -16,6 +16,7 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 ### Fixed
 
 - **A dialog with a filter or key field was one column wider than its own border, which left a small gap before the right edge.** The width handed to those fields reserved a single column for the cursor, but the field renders three: its prompt plus the cursor cell. The card therefore grew by one column while its separators stayed where they were, so the horizontal rules stopped one cell short of the border - visible in `Settings → Providers → LLM` and in the provider detail pane. The width now comes from one helper that measures the prompt and the cursor on the component itself rather than assuming them, and `RenderContext.Render` truncates every part to the dialog's inner width, so no part can widen a card again whatever it contains. A test renders all eleven Settings views off-screen and asserts that each one is exactly the card width with its separators touching the column before the border.
+- **The `configured` badge of a provider in `Settings → Providers → LLM` could disagree with the saved configuration.** The row captured its state when the list was rebuilt, so a key saved from the provider detail pane was not reflected in the badge until the next rebuild - a filter keystroke, or reopening Settings. The row now reads the live config on every render, the way the theme and capability rows already do.
 
 ## [1.5.0] - 2026-10-12
 

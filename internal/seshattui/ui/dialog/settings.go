@@ -1059,20 +1059,14 @@ func (s *Settings) rebuildProvList(filter string) {
 	if providers, err := config.Providers(s.com.Config()); err == nil {
 		s.providers = providers
 	}
-	cfg := s.com.Config()
 	items := make([]list.FilterableItem, 0, len(s.providers))
 	for _, p := range s.providers {
 		p := p
-		configured := false
-		if cfg != nil {
-			if pc, ok := cfg.Providers.Get(string(p.ID)); ok {
-				configured = pc.APIKey != "" || pc.OAuthToken != nil || (!providerNeedsAPIKey(string(p.ID)) && pc.BaseURL != "")
-			}
-		}
 		items = append(items, &settingsProviderItem{
 			Versioned: list.NewVersioned(),
-			provider:  p, configured: configured,
-			t: s.com.Styles,
+			provider:  p,
+			com:       s.com,
+			t:         s.com.Styles,
 		})
 	}
 	s.provList.SetItems(items...)
@@ -1740,13 +1734,18 @@ func (i *settingsSectionItem) Render(width int) string {
 
 // ─── settingsProviderItem ──────────────────────────────────────────────────
 
+// settingsProviderItem represents one LLM provider in the Providers sub-view.
+// Like settingsThemeItem, it reads the live config on every Render so the
+// configured badge reflects the current setting without requiring an explicit
+// list rebuild — otherwise a key saved from the provider detail view only
+// appears once the whole settings dialog is reopened.
 type settingsProviderItem struct {
 	*list.Versioned
-	provider   catwalk.Provider
-	configured bool
-	focused    bool
-	match      fuzzy.Match
-	t          *styles.Styles
+	provider catwalk.Provider
+	com      *common.Common
+	focused  bool
+	match    fuzzy.Match
+	t        *styles.Styles
 }
 
 func (i *settingsProviderItem) Filter() string { return i.provider.Name + " " + string(i.provider.ID) }
@@ -1782,10 +1781,11 @@ func (i *settingsProviderItem) Render(width int) string {
 	const prefix = "    "
 	const prefixW = 4
 
-	// Status badge at far right.
+	// Status badge at far right, recomputed live from the config store.
+	configured := capabilityProviderConfigured(i.com.Config(), string(i.provider.ID))
 	var statusStyle lipgloss.Style
 	var statusText string
-	if i.configured {
+	if configured {
 		statusStyle = lipgloss.NewStyle().Foreground(t.ToolCallSuccess.GetForeground())
 		statusText = "✓ configured"
 	} else {
