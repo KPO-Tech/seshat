@@ -7,8 +7,8 @@ import (
 	"io"
 	"strings"
 
-	"github.com/KPO-Tech/seshat/pkg/companion"
-	"github.com/KPO-Tech/seshat/pkg/runtimepath"
+	"github.com/KPO-Tech/seshat-runtime/pkg/companion"
+	"github.com/KPO-Tech/seshat-runtime/pkg/runtimepath"
 )
 
 func runCompanion(args []string, stdout, stderr io.Writer) error {

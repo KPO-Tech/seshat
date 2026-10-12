@@ -8,7 +8,7 @@ import (
 	"fmt"
 	"image/png"
 
-	"github.com/KPO-Tech/seshat/internal/nativedoc/pdfium"
+	"github.com/KPO-Tech/seshat-runtime/internal/nativedoc/pdfium"
 )
 
 // RenderPage renders 1-indexed page pageNum of the PDF in data to a

@@ -14,8 +14,8 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/KPO-Tech/seshat/internal/seshattui/lsp"
-	tool "github.com/KPO-Tech/seshat/internal/tools/registry"
+	"github.com/KPO-Tech/seshat-runtime/internal/seshattui/lsp"
+	tool "github.com/KPO-Tech/seshat-runtime/internal/tools/registry"
 	"github.com/charmbracelet/x/powernap/pkg/lsp/protocol"
 )
 

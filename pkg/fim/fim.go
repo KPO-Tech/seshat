@@ -7,7 +7,7 @@
 // (or editor) already triggered it deterministically.
 package fim
 
-import internalfim "github.com/KPO-Tech/seshat/internal/fim"
+import internalfim "github.com/KPO-Tech/seshat-runtime/internal/fim"
 
 type (
 	// Completer is the interface for FIM providers.

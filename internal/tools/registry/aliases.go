@@ -3,8 +3,8 @@ package registry
 import (
 	"context"
 
-	contract "github.com/KPO-Tech/seshat/internal/tools/contract"
-	"github.com/KPO-Tech/seshat/internal/types"
+	contract "github.com/KPO-Tech/seshat-runtime/internal/tools/contract"
+	"github.com/KPO-Tech/seshat-runtime/internal/types"
 )
 
 type Tool = contract.Tool

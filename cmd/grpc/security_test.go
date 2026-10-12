@@ -24,8 +24,8 @@ import (
 	"google.golang.org/grpc/metadata"
 	"google.golang.org/grpc/status"
 
-	appconfig "github.com/KPO-Tech/seshat/pkg/config"
-	pb "github.com/KPO-Tech/seshat/pkg/grpc/seshat"
+	appconfig "github.com/KPO-Tech/seshat-runtime/pkg/config"
+	pb "github.com/KPO-Tech/seshat-runtime/pkg/grpc/seshat"
 )
 
 func TestIsLoopbackHost(t *testing.T) {

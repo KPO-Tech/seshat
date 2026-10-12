@@ -7,7 +7,7 @@ import (
 
 	"github.com/ledongthuc/pdf"
 
-	"github.com/KPO-Tech/seshat/internal/mdtable"
+	"github.com/KPO-Tech/seshat-runtime/internal/mdtable"
 )
 
 // A table with no ruling lines cannot be found from the page's drawing, and from its text alone it cannot be told

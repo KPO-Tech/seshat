@@ -5,7 +5,7 @@ import (
 	"strings"
 	"testing"
 
-	publicvector "github.com/KPO-Tech/seshat/pkg/vector"
+	publicvector "github.com/KPO-Tech/seshat-runtime/pkg/vector"
 )
 
 // fakeEmbedder is a minimal Embedder for exercising the public API surface

@@ -1,8 +1,8 @@
 package engine
 
 import (
-	"github.com/KPO-Tech/seshat/internal/prompt"
-	"github.com/KPO-Tech/seshat/internal/types"
+	"github.com/KPO-Tech/seshat-runtime/internal/prompt"
+	"github.com/KPO-Tech/seshat-runtime/internal/types"
 )
 
 // DetectTurnStage examines the messages generated after the initial user message

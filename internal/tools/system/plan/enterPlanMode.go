@@ -5,11 +5,11 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/KPO-Tech/seshat/internal/modes"
-	"github.com/KPO-Tech/seshat/internal/modes/execution"
-	tool "github.com/KPO-Tech/seshat/internal/tools/registry"
-	"github.com/KPO-Tech/seshat/internal/tools/schema"
-	"github.com/KPO-Tech/seshat/internal/types"
+	"github.com/KPO-Tech/seshat-runtime/internal/modes"
+	"github.com/KPO-Tech/seshat-runtime/internal/modes/execution"
+	tool "github.com/KPO-Tech/seshat-runtime/internal/tools/registry"
+	"github.com/KPO-Tech/seshat-runtime/internal/tools/schema"
+	"github.com/KPO-Tech/seshat-runtime/internal/types"
 )
 
 // EnterPlanModeTool represents the EnterPlanMode tool.

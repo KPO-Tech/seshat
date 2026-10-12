@@ -17,9 +17,9 @@
 package tools
 
 import (
-	internalcontract "github.com/KPO-Tech/seshat/internal/tools/contract"
-	internalschema "github.com/KPO-Tech/seshat/internal/tools/schema"
-	internaltypes "github.com/KPO-Tech/seshat/internal/types"
+	internalcontract "github.com/KPO-Tech/seshat-runtime/internal/tools/contract"
+	internalschema "github.com/KPO-Tech/seshat-runtime/internal/tools/schema"
+	internaltypes "github.com/KPO-Tech/seshat-runtime/internal/types"
 )
 
 type (

@@ -9,9 +9,9 @@ import (
 	"testing"
 	"time"
 
-	bashTool "github.com/KPO-Tech/seshat/internal/tools/bash"
-	tool "github.com/KPO-Tech/seshat/internal/tools/registry"
-	"github.com/KPO-Tech/seshat/internal/types"
+	bashTool "github.com/KPO-Tech/seshat-runtime/internal/tools/bash"
+	tool "github.com/KPO-Tech/seshat-runtime/internal/tools/registry"
+	"github.com/KPO-Tech/seshat-runtime/internal/types"
 )
 
 // requireRipgrep skips the test when rg isn't on PATH - the streaming

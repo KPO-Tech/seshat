@@ -9,9 +9,9 @@ import (
 	tea "charm.land/bubbletea/v2"
 	"github.com/charmbracelet/x/ansi"
 
-	"github.com/KPO-Tech/seshat/internal/seshattui/agent/tools"
-	"github.com/KPO-Tech/seshat/internal/seshattui/message"
-	"github.com/KPO-Tech/seshat/internal/seshattui/ui/styles"
+	"github.com/KPO-Tech/seshat-runtime/internal/seshattui/agent/tools"
+	"github.com/KPO-Tech/seshat-runtime/internal/seshattui/message"
+	"github.com/KPO-Tech/seshat-runtime/internal/seshattui/ui/styles"
 )
 
 // AnswerAskUserMsg is sent when the user completes an ask_user_question bubble.

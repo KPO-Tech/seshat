@@ -3,7 +3,7 @@ package providers
 import (
 	"testing"
 
-	"github.com/KPO-Tech/seshat/internal/types"
+	"github.com/KPO-Tech/seshat-runtime/internal/types"
 )
 
 // TestAnthropicDefaultConfigHasNoCrossVendorFallback guards M5f in TODO.md

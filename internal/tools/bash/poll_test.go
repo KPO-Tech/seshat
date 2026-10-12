@@ -10,7 +10,7 @@ import (
 	"testing"
 	"time"
 
-	tool "github.com/KPO-Tech/seshat/internal/tools/registry"
+	tool "github.com/KPO-Tech/seshat-runtime/internal/tools/registry"
 )
 
 // These tests spawn a real shell process per case instead of mocking

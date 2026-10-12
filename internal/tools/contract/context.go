@@ -3,8 +3,8 @@ package contract
 import (
 	"context"
 
-	"github.com/KPO-Tech/seshat/internal/types"
-	"github.com/KPO-Tech/seshat/internal/workspace"
+	"github.com/KPO-Tech/seshat-runtime/internal/types"
+	"github.com/KPO-Tech/seshat-runtime/internal/workspace"
 )
 
 // PermissionRuleMatcherKey is the metadata key used to pass a prepared matcher through runtime metadata.

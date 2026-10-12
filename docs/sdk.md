@@ -3,7 +3,7 @@
 ## Installation
 
 ```go
-import "github.com/KPO-Tech/seshat/pkg/sdk"
+import "github.com/KPO-Tech/seshat-runtime/pkg/sdk"
 ```
 
 ---
@@ -453,7 +453,7 @@ Tracked: API request counts/latency, tool call counts/latency, permission denial
 ### OpenTelemetry tracing
 
 ```go
-import "github.com/KPO-Tech/seshat/internal/monitoring"
+import "github.com/KPO-Tech/seshat-runtime/internal/monitoring"
 
 shutdown, err := monitoring.InitTracer(ctx, "my-service")
 defer shutdown(ctx)

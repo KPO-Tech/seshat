@@ -13,9 +13,9 @@ import (
 	"time"
 
 	"charm.land/catwalk/pkg/catwalk"
-	"github.com/KPO-Tech/seshat/internal/seshattui/csync"
-	"github.com/KPO-Tech/seshat/internal/seshattui/oauth"
-	"github.com/KPO-Tech/seshat/internal/seshattui/oauth/copilot"
+	"github.com/KPO-Tech/seshat-runtime/internal/seshattui/csync"
+	"github.com/KPO-Tech/seshat-runtime/internal/seshattui/oauth"
+	"github.com/KPO-Tech/seshat-runtime/internal/seshattui/oauth/copilot"
 	"github.com/invopop/jsonschema"
 )
 

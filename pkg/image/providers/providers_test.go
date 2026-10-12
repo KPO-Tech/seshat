@@ -3,7 +3,7 @@ package imageproviders
 import (
 	"testing"
 
-	publicimage "github.com/KPO-Tech/seshat/pkg/image"
+	publicimage "github.com/KPO-Tech/seshat-runtime/pkg/image"
 )
 
 func TestNewOpenAI_PublicWrapper(t *testing.T) {

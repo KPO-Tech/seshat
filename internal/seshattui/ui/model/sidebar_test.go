@@ -4,8 +4,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/KPO-Tech/seshat/internal/seshattui/session"
-	"github.com/KPO-Tech/seshat/internal/seshattui/ui/styles"
+	"github.com/KPO-Tech/seshat-runtime/internal/seshattui/session"
+	"github.com/KPO-Tech/seshat-runtime/internal/seshattui/ui/styles"
 )
 
 func TestEnsureSidebarTaskSelectionPrefersInProgress(t *testing.T) {

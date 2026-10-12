@@ -8,7 +8,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/KPO-Tech/seshat/pkg/runtimepath"
+	"github.com/KPO-Tech/seshat-runtime/pkg/runtimepath"
 )
 
 // ============================================================================

@@ -1,21 +1,21 @@
 package sdk
 
 import (
-	"github.com/KPO-Tech/seshat/internal/engine"
-	"github.com/KPO-Tech/seshat/internal/execution"
-	"github.com/KPO-Tech/seshat/internal/hooks"
-	longterm "github.com/KPO-Tech/seshat/internal/memory/longterm"
-	"github.com/KPO-Tech/seshat/internal/modes"
-	"github.com/KPO-Tech/seshat/internal/monitoring"
-	"github.com/KPO-Tech/seshat/internal/rag"
-	"github.com/KPO-Tech/seshat/internal/runtime/state"
-	"github.com/KPO-Tech/seshat/internal/storage"
-	"github.com/KPO-Tech/seshat/internal/tools/builtin"
-	"github.com/KPO-Tech/seshat/internal/tools/contract"
-	"github.com/KPO-Tech/seshat/internal/tools/registry"
-	"github.com/KPO-Tech/seshat/internal/tools/system/mcp"
-	websearchtool "github.com/KPO-Tech/seshat/internal/tools/web/search"
-	"github.com/KPO-Tech/seshat/internal/types"
+	"github.com/KPO-Tech/seshat-runtime/internal/engine"
+	"github.com/KPO-Tech/seshat-runtime/internal/execution"
+	"github.com/KPO-Tech/seshat-runtime/internal/hooks"
+	longterm "github.com/KPO-Tech/seshat-runtime/internal/memory/longterm"
+	"github.com/KPO-Tech/seshat-runtime/internal/modes"
+	"github.com/KPO-Tech/seshat-runtime/internal/monitoring"
+	"github.com/KPO-Tech/seshat-runtime/internal/rag"
+	"github.com/KPO-Tech/seshat-runtime/internal/runtime/state"
+	"github.com/KPO-Tech/seshat-runtime/internal/storage"
+	"github.com/KPO-Tech/seshat-runtime/internal/tools/builtin"
+	"github.com/KPO-Tech/seshat-runtime/internal/tools/contract"
+	"github.com/KPO-Tech/seshat-runtime/internal/tools/registry"
+	"github.com/KPO-Tech/seshat-runtime/internal/tools/system/mcp"
+	websearchtool "github.com/KPO-Tech/seshat-runtime/internal/tools/web/search"
+	"github.com/KPO-Tech/seshat-runtime/internal/types"
 )
 
 // Public aliases keep the SDK consumable without forcing callers onto internal packages.

@@ -5,7 +5,7 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/KPO-Tech/seshat/pkg/config"
+	"github.com/KPO-Tech/seshat-runtime/pkg/config"
 )
 
 func TestRunReportsCoreChecks(t *testing.T) {

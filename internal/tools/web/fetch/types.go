@@ -5,7 +5,7 @@ import (
 	"net/url"
 	"strings"
 
-	fetchcore "github.com/KPO-Tech/seshat/internal/web/fetch"
+	fetchcore "github.com/KPO-Tech/seshat-runtime/internal/web/fetch"
 )
 
 // Input represents the tool input.

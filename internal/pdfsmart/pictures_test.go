@@ -18,7 +18,7 @@ import (
 	"github.com/pdfcpu/pdfcpu/pkg/pdfcpu"
 	"github.com/pdfcpu/pdfcpu/pkg/pdfcpu/types"
 
-	"github.com/KPO-Tech/seshat/internal/documentreader"
+	"github.com/KPO-Tech/seshat-runtime/internal/documentreader"
 )
 
 // withPicture stamps a picture of the given size on the pages of a PDF, which gives a text page that holds a raster image.

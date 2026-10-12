@@ -1,6 +1,6 @@
 package sdk
 
-import "github.com/KPO-Tech/seshat/internal/sandbox"
+import "github.com/KPO-Tech/seshat-runtime/internal/sandbox"
 
 // RemoteExecutor lets a host application (e.g. seshat-backend, driven by
 // Electron's terminal relay) route a session's bash-tool execution through

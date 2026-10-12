@@ -5,8 +5,8 @@ import (
 	"errors"
 	"testing"
 
-	tool "github.com/KPO-Tech/seshat/internal/tools/registry"
-	mbtool "github.com/KPO-Tech/seshat/internal/tools/special/mailbox"
+	tool "github.com/KPO-Tech/seshat-runtime/internal/tools/registry"
+	mbtool "github.com/KPO-Tech/seshat-runtime/internal/tools/special/mailbox"
 )
 
 // ─── fake dispatcher ──────────────────────────────────────────────────────────

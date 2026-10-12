@@ -5,7 +5,7 @@ import (
 	"errors"
 	"time"
 
-	"github.com/KPO-Tech/seshat/pkg/dataflow"
+	"github.com/KPO-Tech/seshat-runtime/pkg/dataflow"
 )
 
 // maxWait bounds the "wait" node's seconds parameter — a graph running

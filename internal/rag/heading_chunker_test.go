@@ -6,7 +6,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/KPO-Tech/seshat/internal/utils"
+	"github.com/KPO-Tech/seshat-runtime/internal/utils"
 )
 
 // words returns n distinct words, so a test can tell what ended up where.

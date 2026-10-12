@@ -4,8 +4,8 @@ import (
 	"context"
 	"io"
 
-	"github.com/KPO-Tech/seshat/internal/runtime/state"
-	"github.com/KPO-Tech/seshat/internal/storage"
+	"github.com/KPO-Tech/seshat-runtime/internal/runtime/state"
+	"github.com/KPO-Tech/seshat-runtime/internal/storage"
 )
 
 // SessionBackend is the SDK-owned low-level persistence backend contract.

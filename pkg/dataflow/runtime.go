@@ -4,7 +4,7 @@ import (
 	"context"
 	"sync"
 
-	"github.com/KPO-Tech/seshat/pkg/workflow"
+	"github.com/KPO-Tech/seshat-runtime/pkg/workflow"
 )
 
 // Runtime carries the per-run dependencies node executors need, injected by

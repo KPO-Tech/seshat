@@ -8,13 +8,13 @@ import (
 	"strings"
 	"time"
 
-	coreagent "github.com/KPO-Tech/seshat/internal/agent"
-	"github.com/KPO-Tech/seshat/internal/engine"
-	"github.com/KPO-Tech/seshat/internal/runtime/tasks"
-	tool "github.com/KPO-Tech/seshat/internal/tools/registry"
-	"github.com/KPO-Tech/seshat/internal/tools/schema"
-	worktreeTool "github.com/KPO-Tech/seshat/internal/tools/special/worktree"
-	"github.com/KPO-Tech/seshat/internal/types"
+	coreagent "github.com/KPO-Tech/seshat-runtime/internal/agent"
+	"github.com/KPO-Tech/seshat-runtime/internal/engine"
+	"github.com/KPO-Tech/seshat-runtime/internal/runtime/tasks"
+	tool "github.com/KPO-Tech/seshat-runtime/internal/tools/registry"
+	"github.com/KPO-Tech/seshat-runtime/internal/tools/schema"
+	worktreeTool "github.com/KPO-Tech/seshat-runtime/internal/tools/special/worktree"
+	"github.com/KPO-Tech/seshat-runtime/internal/types"
 )
 
 // subAgentDepthKey is the context key used to propagate spawn depth so that

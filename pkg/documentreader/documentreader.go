@@ -1,6 +1,6 @@
 package documentreader
 
-import internalreader "github.com/KPO-Tech/seshat/internal/documentreader"
+import internalreader "github.com/KPO-Tech/seshat-runtime/internal/documentreader"
 
 type (
 	// APIError is returned for non-2xx docling-serve responses.

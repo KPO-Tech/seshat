@@ -1,6 +1,6 @@
 package vision
 
-import internalvision "github.com/KPO-Tech/seshat/internal/pdfsmart/vision"
+import internalvision "github.com/KPO-Tech/seshat-runtime/internal/pdfsmart/vision"
 
 type (
 	// LLMCaller is the minimal interface Transcriber needs to call the

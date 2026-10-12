@@ -4,7 +4,7 @@ import (
 	"context"
 	"testing"
 
-	tool "github.com/KPO-Tech/seshat/internal/tools/registry"
+	tool "github.com/KPO-Tech/seshat-runtime/internal/tools/registry"
 )
 
 func TestTool_Call_ReturnsEffectivePolicy(t *testing.T) {

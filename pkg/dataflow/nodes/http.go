@@ -14,7 +14,7 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/KPO-Tech/seshat/pkg/dataflow"
+	"github.com/KPO-Tech/seshat-runtime/pkg/dataflow"
 )
 
 // blockedNetworks are private/link-local/metadata ranges an HTTP node must

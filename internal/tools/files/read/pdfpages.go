@@ -10,8 +10,8 @@ import (
 	"sync"
 	"time"
 
-	"github.com/KPO-Tech/seshat/internal/pdfsmart"
-	tool "github.com/KPO-Tech/seshat/internal/tools/registry"
+	"github.com/KPO-Tech/seshat-runtime/internal/pdfsmart"
+	tool "github.com/KPO-Tech/seshat-runtime/internal/tools/registry"
 )
 
 const (

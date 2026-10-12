@@ -12,7 +12,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/KPO-Tech/seshat/internal/types"
+	"github.com/KPO-Tech/seshat-runtime/internal/types"
 )
 
 // LogLevel represents severity of log messages

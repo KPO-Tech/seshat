@@ -32,7 +32,7 @@ import (
 	// the embedding process — which, in practice, it almost always already
 	// is. sql_test.go blank-imports modernc.org/sqlite for this package's
 	// own tests, where no such conflict exists.
-	"github.com/KPO-Tech/seshat/pkg/dataflow"
+	"github.com/KPO-Tech/seshat-runtime/pkg/dataflow"
 )
 
 // sqlNode is the shared implementation behind the postgres/mysql/sqlite node

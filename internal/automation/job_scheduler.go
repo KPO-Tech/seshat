@@ -9,8 +9,8 @@ import (
 	"sync"
 	"time"
 
-	"github.com/KPO-Tech/seshat/pkg/dataflow"
-	"github.com/KPO-Tech/seshat/pkg/sdk"
+	"github.com/KPO-Tech/seshat-runtime/pkg/dataflow"
+	"github.com/KPO-Tech/seshat-runtime/pkg/sdk"
 	"github.com/google/uuid"
 )
 

@@ -1,6 +1,6 @@
 package agent
 
-import internalagent "github.com/KPO-Tech/seshat/internal/agent"
+import internalagent "github.com/KPO-Tech/seshat-runtime/internal/agent"
 
 type (
 	// AgentDefinition defines an agent

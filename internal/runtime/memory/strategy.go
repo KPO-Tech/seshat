@@ -3,7 +3,7 @@ package memory
 import (
 	"context"
 
-	"github.com/KPO-Tech/seshat/internal/types"
+	"github.com/KPO-Tech/seshat-runtime/internal/types"
 )
 
 // CompactionStrategy abstracts the compaction algorithm used by the query loop.

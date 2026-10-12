@@ -1,6 +1,6 @@
 package web
 
-import internalweb "github.com/KPO-Tech/seshat/internal/web"
+import internalweb "github.com/KPO-Tech/seshat-runtime/internal/web"
 
 type (
 	// DomainCategory groups related domains for the frontend domain catalog UI.

@@ -8,10 +8,10 @@ import (
 	"strings"
 	"sync"
 
-	auto "github.com/KPO-Tech/seshat/internal/permissions/auto"
-	tool "github.com/KPO-Tech/seshat/internal/tools/registry"
-	"github.com/KPO-Tech/seshat/internal/types"
-	"github.com/KPO-Tech/seshat/internal/utils"
+	auto "github.com/KPO-Tech/seshat-runtime/internal/permissions/auto"
+	tool "github.com/KPO-Tech/seshat-runtime/internal/tools/registry"
+	"github.com/KPO-Tech/seshat-runtime/internal/types"
+	"github.com/KPO-Tech/seshat-runtime/internal/utils"
 )
 
 // Engine checks permissions for tool usage.

@@ -19,14 +19,14 @@ import (
 	"google.golang.org/grpc/reflection"
 	"google.golang.org/grpc/status"
 
-	"github.com/KPO-Tech/seshat/internal/providers"
-	"github.com/KPO-Tech/seshat/internal/storage"
-	internaltypes "github.com/KPO-Tech/seshat/internal/types"
-	appconfig "github.com/KPO-Tech/seshat/pkg/config"
-	pb "github.com/KPO-Tech/seshat/pkg/grpc/seshat"
-	publicmcp "github.com/KPO-Tech/seshat/pkg/mcp"
-	"github.com/KPO-Tech/seshat/pkg/sdk"
-	publicskills "github.com/KPO-Tech/seshat/pkg/skills"
+	"github.com/KPO-Tech/seshat-runtime/internal/providers"
+	"github.com/KPO-Tech/seshat-runtime/internal/storage"
+	internaltypes "github.com/KPO-Tech/seshat-runtime/internal/types"
+	appconfig "github.com/KPO-Tech/seshat-runtime/pkg/config"
+	pb "github.com/KPO-Tech/seshat-runtime/pkg/grpc/seshat"
+	publicmcp "github.com/KPO-Tech/seshat-runtime/pkg/mcp"
+	"github.com/KPO-Tech/seshat-runtime/pkg/sdk"
+	publicskills "github.com/KPO-Tech/seshat-runtime/pkg/skills"
 )
 
 // GRPCConfig holds server configuration.

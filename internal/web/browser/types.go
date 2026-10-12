@@ -4,8 +4,8 @@ import (
 	"context"
 	"time"
 
-	"github.com/KPO-Tech/seshat/internal/storage"
-	"github.com/KPO-Tech/seshat/internal/types"
+	"github.com/KPO-Tech/seshat-runtime/internal/storage"
+	"github.com/KPO-Tech/seshat-runtime/internal/types"
 )
 
 // Manager owns browser lifecycle, per-session isolation, and page operations.

@@ -24,7 +24,7 @@ import (
 	"mvdan.cc/sh/v3/interp"
 	"mvdan.cc/sh/v3/syntax"
 
-	"github.com/KPO-Tech/seshat/internal/envfilter"
+	"github.com/KPO-Tech/seshat-runtime/internal/envfilter"
 )
 
 // ShellType represents the type of shell to use

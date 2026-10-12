@@ -3,9 +3,9 @@ package sdk
 import (
 	"strings"
 
-	"github.com/KPO-Tech/seshat/internal/permissions"
-	"github.com/KPO-Tech/seshat/internal/tools/registry"
-	"github.com/KPO-Tech/seshat/internal/types"
+	"github.com/KPO-Tech/seshat-runtime/internal/permissions"
+	"github.com/KPO-Tech/seshat-runtime/internal/tools/registry"
+	"github.com/KPO-Tech/seshat-runtime/internal/types"
 )
 
 // ManagedPolicy is what whoever runs the host (a company, through its server) imposes on every

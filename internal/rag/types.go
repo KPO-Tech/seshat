@@ -3,8 +3,8 @@ package rag
 import (
 	"context"
 
-	"github.com/KPO-Tech/seshat/internal/storage"
-	"github.com/KPO-Tech/seshat/internal/vector"
+	"github.com/KPO-Tech/seshat-runtime/internal/storage"
+	"github.com/KPO-Tech/seshat-runtime/internal/vector"
 )
 
 type Embedder interface {

@@ -7,8 +7,8 @@ import (
 	"fmt"
 	"io"
 
-	engineconfig "github.com/KPO-Tech/seshat/pkg/config"
-	"github.com/KPO-Tech/seshat/pkg/doctor"
+	engineconfig "github.com/KPO-Tech/seshat-runtime/pkg/config"
+	"github.com/KPO-Tech/seshat-runtime/pkg/doctor"
 )
 
 func runDoctor(ctx context.Context, args []string, stdout, stderr io.Writer) error {

@@ -11,7 +11,7 @@ import (
 	"strings"
 	"testing"
 
-	nativedoc "github.com/KPO-Tech/seshat/internal/nativedoc"
+	nativedoc "github.com/KPO-Tech/seshat-runtime/internal/nativedoc"
 )
 
 // testdata/text_layer.pdf, sample.docx, and sample.xlsx are the same real

@@ -8,11 +8,11 @@ import (
 	"sync"
 	"time"
 
-	coregoal "github.com/KPO-Tech/seshat/internal/agent/goal"
-	"github.com/KPO-Tech/seshat/internal/execution"
-	"github.com/KPO-Tech/seshat/internal/prompt"
-	tool "github.com/KPO-Tech/seshat/internal/tools/registry"
-	"github.com/KPO-Tech/seshat/internal/types"
+	coregoal "github.com/KPO-Tech/seshat-runtime/internal/agent/goal"
+	"github.com/KPO-Tech/seshat-runtime/internal/execution"
+	"github.com/KPO-Tech/seshat-runtime/internal/prompt"
+	tool "github.com/KPO-Tech/seshat-runtime/internal/tools/registry"
+	"github.com/KPO-Tech/seshat-runtime/internal/types"
 )
 
 // Session represents an active query session.

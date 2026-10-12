@@ -15,7 +15,7 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/KPO-Tech/seshat/pkg/runtimepath"
+	"github.com/KPO-Tech/seshat-runtime/pkg/runtimepath"
 )
 
 // TaskOutput manages task output storage.

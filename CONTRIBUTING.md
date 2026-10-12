@@ -63,8 +63,8 @@ This section is for building seshat from source to change it. To use it, follow 
 ### Clone and build
 
 ```bash
-git clone https://github.com/KPO-Tech/seshat
-cd seshat
+git clone https://github.com/KPO-Tech/seshat-runtime
+cd seshat-runtime
 
 # Install git pre-commit hooks (run once)
 make hooks

@@ -5,8 +5,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/KPO-Tech/seshat/internal/permissions"
-	"github.com/KPO-Tech/seshat/internal/types"
+	"github.com/KPO-Tech/seshat-runtime/internal/permissions"
+	"github.com/KPO-Tech/seshat-runtime/internal/types"
 )
 
 func TestManagedInstructionsTextCarriesTheRulesAndWhereTheyComeFrom(t *testing.T) {

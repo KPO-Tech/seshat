@@ -6,7 +6,7 @@ import (
 	"sync"
 	"testing"
 
-	"github.com/KPO-Tech/seshat/internal/types"
+	"github.com/KPO-Tech/seshat-runtime/internal/types"
 )
 
 // TestConcurrentTurnsUseTheirOwnContextPromptFn is the regression test for

@@ -9,7 +9,7 @@ import (
 	"net/http"
 	"strings"
 
-	"github.com/KPO-Tech/seshat/internal/types"
+	"github.com/KPO-Tech/seshat-runtime/internal/types"
 )
 
 // streamAnthropicResponse consumes an Anthropic SSE response and forwards

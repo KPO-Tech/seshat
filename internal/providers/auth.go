@@ -16,10 +16,10 @@ import (
 	"strings"
 	"time"
 
-	"github.com/KPO-Tech/seshat/internal/auth/oauth"
-	"github.com/KPO-Tech/seshat/internal/auth/store"
-	authTypes "github.com/KPO-Tech/seshat/internal/auth/types"
-	"github.com/KPO-Tech/seshat/internal/types"
+	"github.com/KPO-Tech/seshat-runtime/internal/auth/oauth"
+	"github.com/KPO-Tech/seshat-runtime/internal/auth/store"
+	authTypes "github.com/KPO-Tech/seshat-runtime/internal/auth/types"
+	"github.com/KPO-Tech/seshat-runtime/internal/types"
 )
 
 // ============================================================================

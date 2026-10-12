@@ -6,9 +6,9 @@ import (
 	"testing"
 	"time"
 
-	tool "github.com/KPO-Tech/seshat/internal/tools/registry"
-	"github.com/KPO-Tech/seshat/internal/types"
-	browsercore "github.com/KPO-Tech/seshat/internal/web/browser"
+	tool "github.com/KPO-Tech/seshat-runtime/internal/tools/registry"
+	"github.com/KPO-Tech/seshat-runtime/internal/types"
+	browsercore "github.com/KPO-Tech/seshat-runtime/internal/web/browser"
 )
 
 type fakeManager struct {

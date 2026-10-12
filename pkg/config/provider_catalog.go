@@ -7,9 +7,9 @@ import (
 	"sort"
 	"strings"
 
-	internalproviders "github.com/KPO-Tech/seshat/internal/providers"
-	"github.com/KPO-Tech/seshat/pkg/runtimepath"
-	"github.com/KPO-Tech/seshat/pkg/sdk"
+	internalproviders "github.com/KPO-Tech/seshat-runtime/internal/providers"
+	"github.com/KPO-Tech/seshat-runtime/pkg/runtimepath"
+	"github.com/KPO-Tech/seshat-runtime/pkg/sdk"
 )
 
 // ProviderSetupField is one value needed to set a provider up: its key, label and description, the environment variable that can carry it, whether it is a secret and whether it is required.

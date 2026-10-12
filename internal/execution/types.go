@@ -3,8 +3,8 @@ package execution
 import (
 	"time"
 
-	tool "github.com/KPO-Tech/seshat/internal/tools/contract"
-	"github.com/KPO-Tech/seshat/internal/types"
+	tool "github.com/KPO-Tech/seshat-runtime/internal/tools/contract"
+	"github.com/KPO-Tech/seshat-runtime/internal/types"
 )
 
 // ExecuteRequest represents a request to execute tools.

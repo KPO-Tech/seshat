@@ -7,7 +7,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/KPO-Tech/seshat/internal/types"
+	"github.com/KPO-Tech/seshat-runtime/internal/types"
 )
 
 // HookLifecycleConfig configures the hook lifecycle manager behavior

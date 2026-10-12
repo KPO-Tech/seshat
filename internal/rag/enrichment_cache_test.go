@@ -4,7 +4,7 @@ import (
 	"context"
 	"testing"
 
-	"github.com/KPO-Tech/seshat/internal/storage"
+	"github.com/KPO-Tech/seshat-runtime/internal/storage"
 )
 
 // countingEnricher records how many texts it was actually asked to enrich

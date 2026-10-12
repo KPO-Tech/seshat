@@ -3,7 +3,7 @@ package fimproviders
 import (
 	"testing"
 
-	publicfim "github.com/KPO-Tech/seshat/pkg/fim"
+	publicfim "github.com/KPO-Tech/seshat-runtime/pkg/fim"
 )
 
 func TestNewMistral_PublicWrapper(t *testing.T) {

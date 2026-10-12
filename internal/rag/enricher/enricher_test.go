@@ -10,7 +10,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/KPO-Tech/seshat/internal/types"
+	"github.com/KPO-Tech/seshat-runtime/internal/types"
 )
 
 // fakeCaller returns a canned response per call, or an error. respFor lets a

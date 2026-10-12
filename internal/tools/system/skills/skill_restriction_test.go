@@ -5,7 +5,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/KPO-Tech/seshat/internal/tools/contract"
+	"github.com/KPO-Tech/seshat-runtime/internal/tools/contract"
 )
 
 func registerTwoTestSkills(t *testing.T) {

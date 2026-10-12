@@ -13,7 +13,7 @@ import (
 	"github.com/pdfcpu/pdfcpu/pkg/api"
 	"github.com/pdfcpu/pdfcpu/pkg/pdfcpu/model"
 
-	"github.com/KPO-Tech/seshat/internal/documentreader"
+	"github.com/KPO-Tech/seshat-runtime/internal/documentreader"
 )
 
 // pdfcpu fills a package-level default configuration lazily and without a lock, so the first calls

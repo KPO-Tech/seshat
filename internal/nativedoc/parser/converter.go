@@ -12,8 +12,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/KPO-Tech/seshat/internal/documentreader"
-	"github.com/KPO-Tech/seshat/internal/nativedoc"
+	"github.com/KPO-Tech/seshat-runtime/internal/documentreader"
+	"github.com/KPO-Tech/seshat-runtime/internal/nativedoc"
 )
 
 // defaultRenderDPI matches deepdoc's own default rendering resolution for

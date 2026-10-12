@@ -3,7 +3,7 @@ package hooks
 import (
 	"context"
 
-	"github.com/KPO-Tech/seshat/internal/types"
+	"github.com/KPO-Tech/seshat-runtime/internal/types"
 )
 
 type PreExecutionResult struct {

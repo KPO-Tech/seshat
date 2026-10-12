@@ -6,8 +6,8 @@ import (
 	"regexp"
 	"strings"
 
-	"github.com/KPO-Tech/seshat/internal/tools/files/shared"
-	"github.com/KPO-Tech/seshat/internal/workspace"
+	"github.com/KPO-Tech/seshat-runtime/internal/tools/files/shared"
+	"github.com/KPO-Tech/seshat-runtime/internal/workspace"
 )
 
 // dangerousPatterns are compiled once at package init — never per-call.

@@ -9,8 +9,8 @@ import (
 
 	"github.com/go-rod/rod"
 
-	"github.com/KPO-Tech/seshat/internal/storage"
-	"github.com/KPO-Tech/seshat/internal/types"
+	"github.com/KPO-Tech/seshat-runtime/internal/storage"
+	"github.com/KPO-Tech/seshat-runtime/internal/types"
 )
 
 // Snapshot returns a compact text + element snapshot of the selected page.

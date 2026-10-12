@@ -1,6 +1,6 @@
 package embedder
 
-import internalembedder "github.com/KPO-Tech/seshat/internal/rag/embedder"
+import internalembedder "github.com/KPO-Tech/seshat-runtime/internal/rag/embedder"
 
 type (
 	// Config holds the configuration for a provider-backed embedder.

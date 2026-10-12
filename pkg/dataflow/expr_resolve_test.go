@@ -5,7 +5,7 @@ import (
 	"errors"
 	"testing"
 
-	"github.com/KPO-Tech/seshat/pkg/dataflow/expr"
+	"github.com/KPO-Tech/seshat-runtime/pkg/dataflow/expr"
 )
 
 // recordingEvaluator captures the last bindings it was called with, so tests

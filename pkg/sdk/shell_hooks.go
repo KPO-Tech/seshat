@@ -5,9 +5,9 @@ import (
 	"encoding/json"
 	"fmt"
 
-	shellhooks "github.com/KPO-Tech/seshat/internal/hooks"
-	runtimehooks "github.com/KPO-Tech/seshat/internal/runtime/hooks"
-	"github.com/KPO-Tech/seshat/internal/types"
+	shellhooks "github.com/KPO-Tech/seshat-runtime/internal/hooks"
+	runtimehooks "github.com/KPO-Tech/seshat-runtime/internal/runtime/hooks"
+	"github.com/KPO-Tech/seshat-runtime/internal/types"
 )
 
 // shellPreToolHooksID is the fixed ToolHook.ID every shell pre-tool hook

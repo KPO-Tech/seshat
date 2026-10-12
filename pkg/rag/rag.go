@@ -1,10 +1,10 @@
 package rag
 
 import (
-	internalrag "github.com/KPO-Tech/seshat/internal/rag"
-	publicreader "github.com/KPO-Tech/seshat/pkg/documentreader"
-	publicstorage "github.com/KPO-Tech/seshat/pkg/storage"
-	publicvector "github.com/KPO-Tech/seshat/pkg/vector"
+	internalrag "github.com/KPO-Tech/seshat-runtime/internal/rag"
+	publicreader "github.com/KPO-Tech/seshat-runtime/pkg/documentreader"
+	publicstorage "github.com/KPO-Tech/seshat-runtime/pkg/storage"
+	publicvector "github.com/KPO-Tech/seshat-runtime/pkg/vector"
 )
 
 type (

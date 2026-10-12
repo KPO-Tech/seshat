@@ -4,8 +4,8 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/KPO-Tech/seshat/internal/types"
-	"github.com/KPO-Tech/seshat/internal/utils"
+	"github.com/KPO-Tech/seshat-runtime/internal/types"
+	"github.com/KPO-Tech/seshat-runtime/internal/utils"
 )
 
 // Classifier is the interface for permission classification in auto mode.

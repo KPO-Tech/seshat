@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"strings"
 
-	fetchcore "github.com/KPO-Tech/seshat/internal/web/fetch"
+	fetchcore "github.com/KPO-Tech/seshat-runtime/internal/web/fetch"
 )
 
 // parseInput validates the raw tool payload and normalizes optional routing hints.

@@ -5,10 +5,10 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/KPO-Tech/seshat/internal/tools/registry"
-	"github.com/KPO-Tech/seshat/internal/tools/system/mcp"
-	websearchtool "github.com/KPO-Tech/seshat/internal/tools/web/search"
-	"github.com/KPO-Tech/seshat/internal/types"
+	"github.com/KPO-Tech/seshat-runtime/internal/tools/registry"
+	"github.com/KPO-Tech/seshat-runtime/internal/tools/system/mcp"
+	websearchtool "github.com/KPO-Tech/seshat-runtime/internal/tools/web/search"
+	"github.com/KPO-Tech/seshat-runtime/internal/types"
 )
 
 // LoadSessionWithAdditional loads an existing session and merges additional metadata keys.

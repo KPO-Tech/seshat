@@ -6,7 +6,7 @@
 // image content blocks.
 package model
 
-import internalmodel "github.com/KPO-Tech/seshat/internal/model"
+import internalmodel "github.com/KPO-Tech/seshat-runtime/internal/model"
 
 type (
 	// Capabilities describes what a specific model variant can do.

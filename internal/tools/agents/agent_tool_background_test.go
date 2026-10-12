@@ -7,9 +7,9 @@ import (
 	"testing"
 	"time"
 
-	coreagent "github.com/KPO-Tech/seshat/internal/agent"
-	"github.com/KPO-Tech/seshat/internal/runtime/tasks"
-	"github.com/KPO-Tech/seshat/internal/types"
+	coreagent "github.com/KPO-Tech/seshat-runtime/internal/agent"
+	"github.com/KPO-Tech/seshat-runtime/internal/runtime/tasks"
+	"github.com/KPO-Tech/seshat-runtime/internal/types"
 )
 
 // waitForEvent blocks until emit has been called once (or the test times out),

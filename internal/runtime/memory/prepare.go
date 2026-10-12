@@ -3,7 +3,7 @@ package memory
 import (
 	"fmt"
 
-	"github.com/KPO-Tech/seshat/internal/types"
+	"github.com/KPO-Tech/seshat-runtime/internal/types"
 )
 
 // MessagePreparer prepares messages for compaction

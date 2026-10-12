@@ -11,7 +11,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/KPO-Tech/seshat/pkg/dataflow"
+	"github.com/KPO-Tech/seshat-runtime/pkg/dataflow"
 )
 
 // Elasticsearch is the "elasticsearch" node type. Elasticsearch's own API is

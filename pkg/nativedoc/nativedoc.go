@@ -16,9 +16,9 @@
 package nativedoc
 
 import (
-	internalnativedoc "github.com/KPO-Tech/seshat/internal/nativedoc"
-	"github.com/KPO-Tech/seshat/internal/nativedoc/parser"
-	"github.com/KPO-Tech/seshat/pkg/pdfsmart"
+	internalnativedoc "github.com/KPO-Tech/seshat-runtime/internal/nativedoc"
+	"github.com/KPO-Tech/seshat-runtime/internal/nativedoc/parser"
+	"github.com/KPO-Tech/seshat-runtime/pkg/pdfsmart"
 )
 
 // Converter implements documentreader.Converter for PDF, DOCX, and

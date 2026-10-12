@@ -3,7 +3,7 @@ package storage
 import (
 	"context"
 
-	internalstorage "github.com/KPO-Tech/seshat/internal/storage"
+	internalstorage "github.com/KPO-Tech/seshat-runtime/internal/storage"
 )
 
 type (

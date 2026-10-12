@@ -25,9 +25,9 @@ import (
 	"time"
 	"unicode/utf8"
 
-	tool "github.com/KPO-Tech/seshat/internal/tools/registry"
-	"github.com/KPO-Tech/seshat/internal/tools/schema"
-	"github.com/KPO-Tech/seshat/internal/types"
+	tool "github.com/KPO-Tech/seshat-runtime/internal/tools/registry"
+	"github.com/KPO-Tech/seshat-runtime/internal/tools/schema"
+	"github.com/KPO-Tech/seshat-runtime/internal/types"
 )
 
 // Key names, as they appear in the per-run map. The environment variable of each is the upper-case name.
@@ -181,7 +181,7 @@ func oneOf(value string, allowed ...string) bool {
 // ─── HTTP ─────────────────────────────────────────────────────────────────────────────────────────
 
 const (
-	userAgent    = "seshat-research/1.0 (+https://github.com/KPO-Tech/seshat)"
+	userAgent    = "seshat-research/1.0 (+https://github.com/KPO-Tech/seshat-runtime)"
 	maxBodyBytes = 8 << 20
 )
 

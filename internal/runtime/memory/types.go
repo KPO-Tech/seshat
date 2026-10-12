@@ -1,6 +1,6 @@
 package memory
 
-import "github.com/KPO-Tech/seshat/internal/types"
+import "github.com/KPO-Tech/seshat-runtime/internal/types"
 
 // TrackingState carries circuit-breaker state across loop iterations.
 type TrackingState struct {

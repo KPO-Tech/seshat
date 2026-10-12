@@ -7,12 +7,12 @@ import (
 	"strings"
 	"time"
 
-	"github.com/KPO-Tech/seshat/internal/agent/goal"
-	"github.com/KPO-Tech/seshat/internal/engine"
-	"github.com/KPO-Tech/seshat/internal/hooks"
-	tool "github.com/KPO-Tech/seshat/internal/tools/registry"
-	skilltool "github.com/KPO-Tech/seshat/internal/tools/system/skills"
-	"github.com/KPO-Tech/seshat/internal/types"
+	"github.com/KPO-Tech/seshat-runtime/internal/agent/goal"
+	"github.com/KPO-Tech/seshat-runtime/internal/engine"
+	"github.com/KPO-Tech/seshat-runtime/internal/hooks"
+	tool "github.com/KPO-Tech/seshat-runtime/internal/tools/registry"
+	skilltool "github.com/KPO-Tech/seshat-runtime/internal/tools/system/skills"
+	"github.com/KPO-Tech/seshat-runtime/internal/types"
 )
 
 // RunResult is the result of running an agent

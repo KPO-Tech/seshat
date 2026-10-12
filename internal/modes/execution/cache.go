@@ -4,7 +4,7 @@ import (
 	"crypto/rand"
 	"sync"
 
-	"github.com/KPO-Tech/seshat/internal/types"
+	"github.com/KPO-Tech/seshat-runtime/internal/types"
 )
 
 // WordList is used to generate human-readable mode file slugs.

@@ -10,7 +10,7 @@ import (
 	"net/http"
 	"path/filepath"
 
-	"github.com/KPO-Tech/seshat/internal/audio/stt"
+	"github.com/KPO-Tech/seshat-runtime/internal/audio/stt"
 )
 
 const (

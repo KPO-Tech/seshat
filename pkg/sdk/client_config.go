@@ -4,13 +4,13 @@ import (
 	"context"
 	"time"
 
-	"github.com/KPO-Tech/seshat/internal/providers"
-	"github.com/KPO-Tech/seshat/internal/sandbox"
-	bashTool "github.com/KPO-Tech/seshat/internal/tools/bash"
-	"github.com/KPO-Tech/seshat/pkg/companion"
-	"github.com/KPO-Tech/seshat/pkg/documentreader"
-	"github.com/KPO-Tech/seshat/pkg/pdfsmart"
-	"github.com/KPO-Tech/seshat/pkg/runtimepath"
+	"github.com/KPO-Tech/seshat-runtime/internal/providers"
+	"github.com/KPO-Tech/seshat-runtime/internal/sandbox"
+	bashTool "github.com/KPO-Tech/seshat-runtime/internal/tools/bash"
+	"github.com/KPO-Tech/seshat-runtime/pkg/companion"
+	"github.com/KPO-Tech/seshat-runtime/pkg/documentreader"
+	"github.com/KPO-Tech/seshat-runtime/pkg/pdfsmart"
+	"github.com/KPO-Tech/seshat-runtime/pkg/runtimepath"
 )
 
 // SandboxKind selects an OS-level sandbox backend for bash tool execution.

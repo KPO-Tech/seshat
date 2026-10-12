@@ -8,10 +8,10 @@ import (
 	"sort"
 	"strings"
 
-	tool "github.com/KPO-Tech/seshat/internal/tools/registry"
-	"github.com/KPO-Tech/seshat/internal/tools/schema"
-	skills "github.com/KPO-Tech/seshat/internal/tools/system/skills"
-	"github.com/KPO-Tech/seshat/internal/types"
+	tool "github.com/KPO-Tech/seshat-runtime/internal/tools/registry"
+	"github.com/KPO-Tech/seshat-runtime/internal/tools/schema"
+	skills "github.com/KPO-Tech/seshat-runtime/internal/tools/system/skills"
+	"github.com/KPO-Tech/seshat-runtime/internal/types"
 )
 
 // ReadTool implements seshat_read_skill.

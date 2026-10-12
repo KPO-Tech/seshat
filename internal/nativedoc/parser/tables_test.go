@@ -9,8 +9,8 @@ import (
 	"strings"
 	"testing"
 
-	nativedoc "github.com/KPO-Tech/seshat/internal/nativedoc"
-	"github.com/KPO-Tech/seshat/internal/pdfsmart"
+	nativedoc "github.com/KPO-Tech/seshat-runtime/internal/nativedoc"
+	"github.com/KPO-Tech/seshat-runtime/internal/pdfsmart"
 )
 
 // The layout and table-structure models run here for real, on a page whose table has no ruling lines
