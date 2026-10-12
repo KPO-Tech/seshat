@@ -1,9 +1,10 @@
 <p align="center">
-  <img src="docs/brand/lockup-on-light.svg#gh-light-mode-only" alt="Seshat Runtime" width="360">
-  <img src="docs/brand/lockup-on-dark.svg#gh-dark-mode-only" alt="Seshat Runtime" width="360">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="docs/brand/lockup-on-dark.svg">
+    <img src="docs/brand/lockup-on-light.svg" alt="Seshat Runtime" width="420">
+  </picture>
 </p>
 
-<h1 align="center">Seshat</h1>
 
 <p align="center">
   <b>Open-source Go agent runtime for governed, multi-provider, self-hostable execution</b><br>
@@ -26,6 +27,8 @@
   <img src="https://img.shields.io/badge/Providers-15-4F6EF7?style=for-the-badge">
   <img src="https://img.shields.io/badge/Tools-60%2B-A855F7?style=for-the-badge">
 </p>
+
+<h1 align="center">Seshat Runtime</h1>
 
 ---
 
