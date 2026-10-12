@@ -11,7 +11,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/KPO-Tech/seshat/internal/seshattui/oauth"
+	"github.com/KPO-Tech/seshat-runtime/internal/seshattui/oauth"
 )
 
 const (

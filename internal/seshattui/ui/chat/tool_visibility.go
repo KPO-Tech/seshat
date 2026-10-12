@@ -1,11 +1,11 @@
 package chat
 
 import (
-	"github.com/KPO-Tech/seshat/internal/seshattui/message"
-	requestPermTool "github.com/KPO-Tech/seshat/internal/tools/special/request_permissions"
-	worktreeTool "github.com/KPO-Tech/seshat/internal/tools/special/worktree"
-	planTool "github.com/KPO-Tech/seshat/internal/tools/system/plan"
-	taskTool "github.com/KPO-Tech/seshat/internal/tools/task"
+	"github.com/KPO-Tech/seshat-runtime/internal/seshattui/message"
+	requestPermTool "github.com/KPO-Tech/seshat-runtime/internal/tools/special/request_permissions"
+	worktreeTool "github.com/KPO-Tech/seshat-runtime/internal/tools/special/worktree"
+	planTool "github.com/KPO-Tech/seshat-runtime/internal/tools/system/plan"
+	taskTool "github.com/KPO-Tech/seshat-runtime/internal/tools/task"
 )
 
 // ShouldRenderToolCall reports whether a tool call should appear as a normal

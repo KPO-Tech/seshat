@@ -8,7 +8,7 @@ import (
 	"strconv"
 	"strings"
 
-	tool "github.com/KPO-Tech/seshat/internal/tools/registry"
+	tool "github.com/KPO-Tech/seshat-runtime/internal/tools/registry"
 )
 
 // The Apple App Store, through its public search and customer-review feeds. No key is needed.

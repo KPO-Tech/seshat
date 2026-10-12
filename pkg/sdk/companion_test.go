@@ -4,7 +4,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/KPO-Tech/seshat/pkg/companion"
+	"github.com/KPO-Tech/seshat-runtime/pkg/companion"
 )
 
 func TestBuildEngineConfigAppendsCompanionPrompt(t *testing.T) {

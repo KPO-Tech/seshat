@@ -4,7 +4,7 @@ import (
 	"errors"
 	"testing"
 
-	"github.com/KPO-Tech/seshat/internal/types"
+	"github.com/KPO-Tech/seshat-runtime/internal/types"
 )
 
 // TestShouldRetryWithStrategy_NilError verifies nil always returns false.

@@ -5,8 +5,8 @@ package parser
 import (
 	"fmt"
 
-	"github.com/KPO-Tech/seshat/internal/documentreader"
-	"github.com/KPO-Tech/seshat/internal/officetext"
+	"github.com/KPO-Tech/seshat-runtime/internal/documentreader"
+	"github.com/KPO-Tech/seshat-runtime/internal/officetext"
 )
 
 // convertDOCX converts a DOCX to markdown. Delegates to

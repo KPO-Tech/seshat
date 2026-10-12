@@ -7,11 +7,11 @@ import (
 	"slices"
 	"strings"
 
-	"github.com/KPO-Tech/seshat/internal/seshattui/agent/tools/mcp"
-	"github.com/KPO-Tech/seshat/internal/seshattui/config"
-	"github.com/KPO-Tech/seshat/internal/seshattui/lsp"
-	"github.com/KPO-Tech/seshat/internal/seshattui/skills"
-	tool "github.com/KPO-Tech/seshat/internal/tools/registry"
+	"github.com/KPO-Tech/seshat-runtime/internal/seshattui/agent/tools/mcp"
+	"github.com/KPO-Tech/seshat-runtime/internal/seshattui/config"
+	"github.com/KPO-Tech/seshat-runtime/internal/seshattui/lsp"
+	"github.com/KPO-Tech/seshat-runtime/internal/seshattui/skills"
+	tool "github.com/KPO-Tech/seshat-runtime/internal/tools/registry"
 )
 
 const SeshatInfoToolName = "seshat_info"

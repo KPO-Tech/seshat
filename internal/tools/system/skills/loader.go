@@ -12,8 +12,8 @@ import (
 	"sync"
 	"time"
 
-	shared "github.com/KPO-Tech/seshat/internal/tools/files/shared"
-	"github.com/KPO-Tech/seshat/pkg/runtimepath"
+	shared "github.com/KPO-Tech/seshat-runtime/internal/tools/files/shared"
+	"github.com/KPO-Tech/seshat-runtime/pkg/runtimepath"
 )
 
 const (

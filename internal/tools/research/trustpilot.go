@@ -8,7 +8,7 @@ import (
 	"strconv"
 	"strings"
 
-	tool "github.com/KPO-Tech/seshat/internal/tools/registry"
+	tool "github.com/KPO-Tech/seshat-runtime/internal/tools/registry"
 )
 
 // Trustpilot, through its Business Units API with an API key: a company's score and its public reviews.

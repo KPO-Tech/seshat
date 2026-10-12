@@ -6,7 +6,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/KPO-Tech/seshat/internal/types"
+	"github.com/KPO-Tech/seshat-runtime/internal/types"
 )
 
 // Registry is a unified hook registry for all lifecycle hooks.

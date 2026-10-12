@@ -8,7 +8,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/KPO-Tech/seshat/internal/envfilter"
+	"github.com/KPO-Tech/seshat-runtime/internal/envfilter"
 )
 
 // NoopExecutor runs commands directly on the host OS with no additional

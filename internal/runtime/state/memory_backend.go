@@ -7,7 +7,7 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/KPO-Tech/seshat/internal/types"
+	"github.com/KPO-Tech/seshat-runtime/internal/types"
 )
 
 // MemoryBackend is a simple in-memory backend useful for tests and as a

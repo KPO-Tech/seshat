@@ -4,7 +4,7 @@ import (
 	"os"
 	"testing"
 
-	"github.com/KPO-Tech/seshat/pkg/runtimepath"
+	"github.com/KPO-Tech/seshat-runtime/pkg/runtimepath"
 )
 
 func TestEnsureSeshatTUIRuntimeRootSetsDefaultWhenUnset(t *testing.T) {

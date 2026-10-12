@@ -12,7 +12,7 @@ import (
 	"time"
 
 	"charm.land/catwalk/pkg/catwalk"
-	"github.com/KPO-Tech/seshat/internal/seshattui/agent/hyper"
+	"github.com/KPO-Tech/seshat-runtime/internal/seshattui/agent/hyper"
 	xetag "github.com/charmbracelet/x/etag"
 )
 

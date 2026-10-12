@@ -11,8 +11,8 @@
 // Example:
 //
 //	import (
-//	    "github.com/KPO-Tech/seshat/internal/fim"
-//	    fimproviders "github.com/KPO-Tech/seshat/internal/fim/providers"
+//	    "github.com/KPO-Tech/seshat-runtime/internal/fim"
+//	    fimproviders "github.com/KPO-Tech/seshat-runtime/internal/fim/providers"
 //	)
 //
 //	client := fimproviders.NewMistral(

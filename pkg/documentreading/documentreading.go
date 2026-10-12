@@ -17,12 +17,12 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/KPO-Tech/seshat/internal/htmltext"
-	"github.com/KPO-Tech/seshat/internal/pagemark"
-	"github.com/KPO-Tech/seshat/pkg/documentreader"
-	"github.com/KPO-Tech/seshat/pkg/officetext"
-	"github.com/KPO-Tech/seshat/pkg/pdfsmart"
-	"github.com/KPO-Tech/seshat/pkg/textquality"
+	"github.com/KPO-Tech/seshat-runtime/internal/htmltext"
+	"github.com/KPO-Tech/seshat-runtime/internal/pagemark"
+	"github.com/KPO-Tech/seshat-runtime/pkg/documentreader"
+	"github.com/KPO-Tech/seshat-runtime/pkg/officetext"
+	"github.com/KPO-Tech/seshat-runtime/pkg/pdfsmart"
+	"github.com/KPO-Tech/seshat-runtime/pkg/textquality"
 )
 
 // HTMLExtensions are the HTML formats Convert turns into markdown: a saved page, an exported report, a

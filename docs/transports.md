@@ -178,9 +178,9 @@ PATH="$HOME/go/bin:$HOME/.local/bin:$PATH" \
 protoc \
   --proto_path=pkg/grpc/proto \
   --go_out=. \
-  --go_opt=module=github.com/KPO-Tech/seshat \
+  --go_opt=module=github.com/KPO-Tech/seshat-runtime \
   --go-grpc_out=. \
-  --go-grpc_opt=module=github.com/KPO-Tech/seshat \
+  --go-grpc_opt=module=github.com/KPO-Tech/seshat-runtime \
   pkg/grpc/proto/seshat.proto
 ```
 

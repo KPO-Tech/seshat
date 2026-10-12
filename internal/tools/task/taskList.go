@@ -4,10 +4,10 @@ import (
 	"context"
 	"fmt"
 
-	bashTool "github.com/KPO-Tech/seshat/internal/tools/bash"
-	tool "github.com/KPO-Tech/seshat/internal/tools/registry"
-	"github.com/KPO-Tech/seshat/internal/tools/schema"
-	"github.com/KPO-Tech/seshat/internal/types"
+	bashTool "github.com/KPO-Tech/seshat-runtime/internal/tools/bash"
+	tool "github.com/KPO-Tech/seshat-runtime/internal/tools/registry"
+	"github.com/KPO-Tech/seshat-runtime/internal/tools/schema"
+	"github.com/KPO-Tech/seshat-runtime/internal/types"
 )
 
 // TaskInfo represents information about a background task

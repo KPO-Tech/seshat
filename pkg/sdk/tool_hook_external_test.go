@@ -4,7 +4,7 @@ import (
 	"context"
 	"testing"
 
-	"github.com/KPO-Tech/seshat/pkg/sdk"
+	"github.com/KPO-Tech/seshat-runtime/pkg/sdk"
 )
 
 // TestAddToolHook_UsableFromOutsideModule guards H5 in TODO.md: pkg/sdk

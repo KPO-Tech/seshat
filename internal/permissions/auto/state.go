@@ -8,7 +8,7 @@ package auto
 import (
 	"sync"
 
-	"github.com/KPO-Tech/seshat/internal/types"
+	"github.com/KPO-Tech/seshat-runtime/internal/types"
 )
 
 var (

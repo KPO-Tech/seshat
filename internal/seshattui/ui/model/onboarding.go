@@ -9,9 +9,9 @@ import (
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
 
-	"github.com/KPO-Tech/seshat/internal/seshattui/home"
-	"github.com/KPO-Tech/seshat/internal/seshattui/ui/common"
-	"github.com/KPO-Tech/seshat/internal/seshattui/ui/util"
+	"github.com/KPO-Tech/seshat-runtime/internal/seshattui/home"
+	"github.com/KPO-Tech/seshat-runtime/internal/seshattui/ui/common"
+	"github.com/KPO-Tech/seshat-runtime/internal/seshattui/ui/util"
 )
 
 // markProjectInitializedCmd marks the current project as initialized in the config.

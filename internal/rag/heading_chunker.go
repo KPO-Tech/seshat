@@ -5,7 +5,7 @@ import (
 	"regexp"
 	"strings"
 
-	"github.com/KPO-Tech/seshat/internal/utils"
+	"github.com/KPO-Tech/seshat-runtime/internal/utils"
 )
 
 // HeadingChunker cuts a markdown document along its own structure: a heading hierarchy (markdown headings, numbered

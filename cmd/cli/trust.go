@@ -7,7 +7,7 @@ import (
 	"os"
 	"strings"
 
-	"github.com/KPO-Tech/seshat/internal/seshattui/config"
+	"github.com/KPO-Tech/seshat-runtime/internal/seshattui/config"
 )
 
 // runTrust shows, grants or withdraws the trust of the configuration files of a project (see internal/seshattui/config/trust.go):

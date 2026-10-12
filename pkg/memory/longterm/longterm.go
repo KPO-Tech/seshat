@@ -1,6 +1,6 @@
 package longterm
 
-import internallongterm "github.com/KPO-Tech/seshat/internal/memory/longterm"
+import internallongterm "github.com/KPO-Tech/seshat-runtime/internal/memory/longterm"
 
 type (
 	// Entity is a named thing with a type and a list of observations.

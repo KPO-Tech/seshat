@@ -1,6 +1,6 @@
 package enricher
 
-import internalenricher "github.com/KPO-Tech/seshat/internal/rag/enricher"
+import internalenricher "github.com/KPO-Tech/seshat-runtime/internal/rag/enricher"
 
 type (
 	// LLMCaller is the minimal interface LLMEnricher needs to call the

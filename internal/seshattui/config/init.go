@@ -7,7 +7,7 @@ import (
 	"slices"
 	"strings"
 
-	"github.com/KPO-Tech/seshat/internal/seshattui/fsext"
+	"github.com/KPO-Tech/seshat-runtime/internal/seshattui/fsext"
 )
 
 const (

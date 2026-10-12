@@ -25,11 +25,11 @@ import (
 
 	pdfoxide "github.com/yfedoseev/pdf_oxide/go"
 
-	"github.com/KPO-Tech/seshat/internal/documentreader"
-	"github.com/KPO-Tech/seshat/internal/nativedoc"
-	"github.com/KPO-Tech/seshat/internal/nativedoc/pdfium"
-	"github.com/KPO-Tech/seshat/internal/pdfsmart"
-	"github.com/KPO-Tech/seshat/internal/pdftext"
+	"github.com/KPO-Tech/seshat-runtime/internal/documentreader"
+	"github.com/KPO-Tech/seshat-runtime/internal/nativedoc"
+	"github.com/KPO-Tech/seshat-runtime/internal/nativedoc/pdfium"
+	"github.com/KPO-Tech/seshat-runtime/internal/pdfsmart"
+	"github.com/KPO-Tech/seshat-runtime/internal/pdftext"
 )
 
 // convertPDF converts a PDF. Per page: native text extraction (pdf_oxide)

@@ -3,7 +3,7 @@ package message
 import (
 	"context"
 
-	"github.com/KPO-Tech/seshat/internal/seshattui/pubsub"
+	"github.com/KPO-Tech/seshat-runtime/internal/seshattui/pubsub"
 )
 
 // CreateMessageParams are the parameters for creating a new message.

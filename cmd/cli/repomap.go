@@ -6,7 +6,7 @@ import (
 	"fmt"
 	"io"
 
-	"github.com/KPO-Tech/seshat/pkg/repomap"
+	"github.com/KPO-Tech/seshat-runtime/pkg/repomap"
 )
 
 func runRepoMap(ctx context.Context, args []string, stdout, stderr io.Writer) error {

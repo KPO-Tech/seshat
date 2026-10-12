@@ -15,8 +15,8 @@
   <a href="https://seshat-ai.com/en"><b>🌐 Website</b></a> ·
   <a href="https://seshat-ai.com/en/docs"><b>📚 Documentation</b></a> ·
   <a href="https://seshat-ai.com/en/docs/getting-started/installation"><b>⬇️ Installation</b></a> ·
-  <a href="https://github.com/KPO-Tech/seshat/discussions"><b>💬 Discussions</b></a> ·
-  <a href="https://github.com/KPO-Tech/seshat/issues"><b>🐛 Issues</b></a> ·
+  <a href="https://github.com/KPO-Tech/seshat-runtime/discussions"><b>💬 Discussions</b></a> ·
+  <a href="https://github.com/KPO-Tech/seshat-runtime/issues"><b>🐛 Issues</b></a> ·
   <a href="https://github.com/KPO-Tech/SeshatOS"><b>🖥️ SeshatOS</b></a>
 </p>
 
@@ -165,7 +165,7 @@ The full guide is on the website: [Installation — seshat-ai.com](https://sesha
 **End users — one command, fully configured:**
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/KPO-Tech/seshat/main/scripts/install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/KPO-Tech/seshat-runtime/main/scripts/install.sh | bash
 ```
 
 Downloads the right binary for your platform, adds it to your PATH, and leaves the runtime directory (`~/.config/seshat-cli/`) ready. The DB and sessions are created on first run.
@@ -179,13 +179,13 @@ VERSION=v0.1.0 bash <(curl -fsSL ...)   # pin a specific version
 
 ```bash
 # Install the CLI binary
-go install github.com/KPO-Tech/seshat/cmd/cli@latest
+go install github.com/KPO-Tech/seshat-runtime/cmd/cli@latest
 ```
 
 **SDK — embed in your Go application:**
 
 ```bash
-go get github.com/KPO-Tech/seshat@latest
+go get github.com/KPO-Tech/seshat-runtime@latest
 ```
 
 ---
@@ -200,10 +200,10 @@ An AI agent in your terminal. Multi-provider, local-first, skills-aware. Guide: 
 
 ```bash
 # End users — full setup in one command:
-curl -fsSL https://raw.githubusercontent.com/KPO-Tech/seshat/main/scripts/install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/KPO-Tech/seshat-runtime/main/scripts/install.sh | bash
 
 # Developers — binary only via Go toolchain:
-go install github.com/KPO-Tech/seshat/cmd/cli@latest
+go install github.com/KPO-Tech/seshat-runtime/cmd/cli@latest
 ```
 
 **Configure a provider**
@@ -261,11 +261,11 @@ One runtime. Every language.
 Embed the full runtime in your own Go application. Reference: [Go SDK](https://seshat-ai.com/en/docs/sdk/go-sdk), with the [events and hooks](https://seshat-ai.com/en/docs/sdk/events-and-hooks) and the [integration guide](https://seshat-ai.com/en/docs/sdk/integration).
 
 ```bash
-go get github.com/KPO-Tech/seshat/pkg/sdk
+go get github.com/KPO-Tech/seshat-runtime/pkg/sdk
 ```
 
 ```go
-import "github.com/KPO-Tech/seshat/pkg/sdk"
+import "github.com/KPO-Tech/seshat-runtime/pkg/sdk"
 
 client, err := sdk.NewClient(&sdk.ClientConfig{
     APIKey: os.Getenv("ANTHROPIC_API_KEY"),
@@ -380,7 +380,7 @@ Full model listings and capabilities: [`docs/providers.md`](./docs/providers.md)
 
 ```bash
 # 1. Install
-curl -fsSL https://raw.githubusercontent.com/KPO-Tech/seshat/main/scripts/install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/KPO-Tech/seshat-runtime/main/scripts/install.sh | bash
 
 # Reload your shell (or open a new terminal) if prompted, then:
 
@@ -472,8 +472,8 @@ Full architecture diagrams (Mermaid): [`docs/vision/diagrams.md`](./docs/vision/
 
 ```bash
 # Linux / macOS — installs all dependencies, builds, wires git hooks
-git clone https://github.com/KPO-Tech/seshat
-cd seshat
+git clone https://github.com/KPO-Tech/seshat-runtime
+cd seshat-runtime
 make setup
 
 # Windows (PowerShell — make is not available by default on Windows)
@@ -518,7 +518,7 @@ Override with `SESHAT_RUNTIME_ROOT=/your/path seshat chat`.
 
 > **Linux** — primary development and testing platform. Fully supported.
 >
-> **macOS** — code is written to support macOS and basic testing has been done, but **macOS support is not yet fully validated**. If you hit an issue, please [open a report](https://github.com/KPO-Tech/seshat/issues).
+> **macOS** — code is written to support macOS and basic testing has been done, but **macOS support is not yet fully validated**. If you hit an issue, please [open a report](https://github.com/KPO-Tech/seshat-runtime/issues).
 >
 > **Windows** — PowerShell setup script included and paths are handled (`%APPDATA%`), but **Windows support has not been tested yet**. Contributions and test reports welcome.
 

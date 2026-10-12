@@ -1564,7 +1564,7 @@ const file_pkg_grpc_proto_seshat_proto_rawDesc = "" +
 	"ConnectMCP\x12\x19.seshat.ConnectMCPRequest\x1a\x1a.seshat.ConnectMCPResponse\x12L\n" +
 	"\rDisconnectMCP\x12\x1c.seshat.DisconnectMCPRequest\x1a\x1d.seshat.DisconnectMCPResponse\x12@\n" +
 	"\tGetModels\x12\x18.seshat.GetModelsRequest\x1a\x19.seshat.GetModelsResponse\x12F\n" +
-	"\vHealthCheck\x12\x1a.seshat.HealthCheckRequest\x1a\x1b.seshat.HealthCheckResponseB,Z*github.com/KPO-Tech/seshat/pkg/grpc/seshatb\x06proto3"
+	"\vHealthCheck\x12\x1a.seshat.HealthCheckRequest\x1a\x1b.seshat.HealthCheckResponseB4Z2github.com/KPO-Tech/seshat-runtime/pkg/grpc/seshatb\x06proto3"
 
 var (
 	file_pkg_grpc_proto_seshat_proto_rawDescOnce sync.Once

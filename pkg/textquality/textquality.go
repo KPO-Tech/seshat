@@ -2,7 +2,7 @@
 // detection for external consumers (e.g. seshat-ai).
 package textquality
 
-import internaltextquality "github.com/KPO-Tech/seshat/internal/textquality"
+import internaltextquality "github.com/KPO-Tech/seshat-runtime/internal/textquality"
 
 // IsGarbledText reports whether s looks like broken text extraction (e.g. a
 // PDF's subsetted-font character mapping producing "(cid:NNN)" placeholders

@@ -5,7 +5,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/KPO-Tech/seshat/pkg/runtimepath"
+	"github.com/KPO-Tech/seshat-runtime/pkg/runtimepath"
 )
 
 func TestLoadMissingReturnsDisabledDefault(t *testing.T) {

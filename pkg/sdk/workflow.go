@@ -3,7 +3,7 @@ package sdk
 import (
 	"context"
 
-	"github.com/KPO-Tech/seshat/pkg/workflow"
+	"github.com/KPO-Tech/seshat-runtime/pkg/workflow"
 )
 
 // WorkflowDefinition is a workflow: a named set of nodes, each one a prompt for an agent, linked by the nodes they need. It is read from YAML or JSON (see LoadFile).

@@ -1,4 +1,4 @@
-module github.com/KPO-Tech/seshat
+module github.com/KPO-Tech/seshat-runtime
 
 go 1.26.9
 

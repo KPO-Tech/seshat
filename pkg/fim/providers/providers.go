@@ -5,8 +5,8 @@ package fimproviders
 import (
 	"net/http"
 
-	internalfim "github.com/KPO-Tech/seshat/internal/fim"
-	internalproviders "github.com/KPO-Tech/seshat/internal/fim/providers"
+	internalfim "github.com/KPO-Tech/seshat-runtime/internal/fim"
+	internalproviders "github.com/KPO-Tech/seshat-runtime/internal/fim/providers"
 )
 
 type (

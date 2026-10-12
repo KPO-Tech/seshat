@@ -5,7 +5,7 @@ import (
 	"regexp"
 	"strings"
 
-	"github.com/KPO-Tech/seshat/internal/utils"
+	"github.com/KPO-Tech/seshat-runtime/internal/utils"
 )
 
 // TableChunker splits a Markdown/GFM document while keeping every table's

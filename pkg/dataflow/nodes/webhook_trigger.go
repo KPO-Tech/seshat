@@ -5,7 +5,7 @@ import (
 	"errors"
 	"strings"
 
-	"github.com/KPO-Tech/seshat/pkg/dataflow"
+	"github.com/KPO-Tech/seshat-runtime/pkg/dataflow"
 )
 
 // WebhookTrigger is the "webhook_trigger" node type: a graph's HTTP entry

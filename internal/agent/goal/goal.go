@@ -11,7 +11,7 @@ import (
 	"sync"
 	"time"
 
-	dbpkg "github.com/KPO-Tech/seshat/internal/db"
+	dbpkg "github.com/KPO-Tech/seshat-runtime/internal/db"
 )
 
 // MaxObjectiveChars mirrors Codex's MAX_THREAD_GOAL_OBJECTIVE_CHARS.

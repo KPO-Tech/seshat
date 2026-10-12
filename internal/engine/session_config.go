@@ -4,10 +4,10 @@ import (
 	"fmt"
 	"sort"
 
-	"github.com/KPO-Tech/seshat/internal/execution"
-	"github.com/KPO-Tech/seshat/internal/modes"
-	tool "github.com/KPO-Tech/seshat/internal/tools/registry"
-	"github.com/KPO-Tech/seshat/internal/types"
+	"github.com/KPO-Tech/seshat-runtime/internal/execution"
+	"github.com/KPO-Tech/seshat-runtime/internal/modes"
+	tool "github.com/KPO-Tech/seshat-runtime/internal/tools/registry"
+	"github.com/KPO-Tech/seshat-runtime/internal/types"
 )
 
 // --- callbacks ---

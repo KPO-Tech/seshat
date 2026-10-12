@@ -4,7 +4,7 @@
 // without going through an external document-reader service.
 package officetext
 
-import internalofficetext "github.com/KPO-Tech/seshat/internal/officetext"
+import internalofficetext "github.com/KPO-Tech/seshat-runtime/internal/officetext"
 
 // SupportedExtensions lists the formats Extract can handle natively.
 var SupportedExtensions = internalofficetext.SupportedExtensions

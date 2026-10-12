@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/KPO-Tech/seshat/internal/mdtable"
+	"github.com/KPO-Tech/seshat-runtime/internal/mdtable"
 	"github.com/xuri/excelize/v2"
 )
 

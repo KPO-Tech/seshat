@@ -4,9 +4,9 @@ import (
 	"context"
 	"fmt"
 
-	tool "github.com/KPO-Tech/seshat/internal/tools/registry"
-	"github.com/KPO-Tech/seshat/internal/tools/schema"
-	fetchcore "github.com/KPO-Tech/seshat/internal/web/fetch"
+	tool "github.com/KPO-Tech/seshat-runtime/internal/tools/registry"
+	"github.com/KPO-Tech/seshat-runtime/internal/tools/schema"
+	fetchcore "github.com/KPO-Tech/seshat-runtime/internal/web/fetch"
 )
 
 const SearchHint = "fetch web pages and extract information"

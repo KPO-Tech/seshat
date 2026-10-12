@@ -3,9 +3,9 @@ package web
 import (
 	"context"
 
-	"github.com/KPO-Tech/seshat/internal/storage"
-	"github.com/KPO-Tech/seshat/internal/types"
-	browsercore "github.com/KPO-Tech/seshat/internal/web/browser"
+	"github.com/KPO-Tech/seshat-runtime/internal/storage"
+	"github.com/KPO-Tech/seshat-runtime/internal/types"
+	browsercore "github.com/KPO-Tech/seshat-runtime/internal/web/browser"
 )
 
 const (

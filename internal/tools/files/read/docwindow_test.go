@@ -10,7 +10,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/KPO-Tech/seshat/internal/documentreader"
+	"github.com/KPO-Tech/seshat-runtime/internal/documentreader"
 )
 
 func TestWindowDocumentReturnsTheWholeOfASmallDocument(t *testing.T) {

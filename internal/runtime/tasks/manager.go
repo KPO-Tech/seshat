@@ -14,12 +14,12 @@ import (
 	"sync"
 	"time"
 
-	coreagent "github.com/KPO-Tech/seshat/internal/agent"
-	"github.com/KPO-Tech/seshat/internal/engine"
-	tool "github.com/KPO-Tech/seshat/internal/tools/registry"
-	taskTool "github.com/KPO-Tech/seshat/internal/tools/task"
-	"github.com/KPO-Tech/seshat/internal/types"
-	"github.com/KPO-Tech/seshat/pkg/runtimepath"
+	coreagent "github.com/KPO-Tech/seshat-runtime/internal/agent"
+	"github.com/KPO-Tech/seshat-runtime/internal/engine"
+	tool "github.com/KPO-Tech/seshat-runtime/internal/tools/registry"
+	taskTool "github.com/KPO-Tech/seshat-runtime/internal/tools/task"
+	"github.com/KPO-Tech/seshat-runtime/internal/types"
+	"github.com/KPO-Tech/seshat-runtime/pkg/runtimepath"
 )
 
 // Manager manages background task execution.

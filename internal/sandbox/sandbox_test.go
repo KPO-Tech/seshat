@@ -7,7 +7,7 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/KPO-Tech/seshat/internal/types"
+	"github.com/KPO-Tech/seshat-runtime/internal/types"
 )
 
 func TestCommandPolicyAsksForDangerousCommand(t *testing.T) {

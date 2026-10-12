@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/KPO-Tech/seshat/internal/types"
+	"github.com/KPO-Tech/seshat-runtime/internal/types"
 )
 
 // legacyClaude35Date is the release-date suffix of the 2024 Claude 3.5

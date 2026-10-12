@@ -9,8 +9,8 @@ import (
 	"context"
 	"testing"
 
-	"github.com/KPO-Tech/seshat/pkg/sdk"
-	"github.com/KPO-Tech/seshat/pkg/tools"
+	"github.com/KPO-Tech/seshat-runtime/pkg/sdk"
+	"github.com/KPO-Tech/seshat-runtime/pkg/tools"
 )
 
 // echoTool is a minimal external-style custom tool: echoes its "message"

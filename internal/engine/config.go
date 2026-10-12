@@ -1,11 +1,11 @@
 package engine
 
 import (
-	"github.com/KPO-Tech/seshat/internal/prompt"
-	"github.com/KPO-Tech/seshat/internal/providers"
-	"github.com/KPO-Tech/seshat/internal/tools/system/mcp"
-	"github.com/KPO-Tech/seshat/internal/types"
-	browsercore "github.com/KPO-Tech/seshat/internal/web/browser"
+	"github.com/KPO-Tech/seshat-runtime/internal/prompt"
+	"github.com/KPO-Tech/seshat-runtime/internal/providers"
+	"github.com/KPO-Tech/seshat-runtime/internal/tools/system/mcp"
+	"github.com/KPO-Tech/seshat-runtime/internal/types"
+	browsercore "github.com/KPO-Tech/seshat-runtime/internal/web/browser"
 )
 
 // Config represents the engine configuration.

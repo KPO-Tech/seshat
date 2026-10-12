@@ -5,7 +5,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/KPO-Tech/seshat/internal/tools/contract"
+	"github.com/KPO-Tech/seshat-runtime/internal/tools/contract"
 )
 
 // resetSkillAliases restores the package-level alias registry after a test

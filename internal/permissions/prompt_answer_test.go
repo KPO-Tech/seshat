@@ -3,7 +3,7 @@ package permissions
 import (
 	"testing"
 
-	"github.com/KPO-Tech/seshat/internal/types"
+	"github.com/KPO-Tech/seshat-runtime/internal/types"
 )
 
 // What the user answered to a permission prompt: a boolean is the decision, the text "always" approves and asks to remember it for the

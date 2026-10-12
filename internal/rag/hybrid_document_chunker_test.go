@@ -8,8 +8,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/KPO-Tech/seshat/internal/documentreader"
-	"github.com/KPO-Tech/seshat/internal/vector"
+	"github.com/KPO-Tech/seshat-runtime/internal/documentreader"
+	"github.com/KPO-Tech/seshat-runtime/internal/vector"
 )
 
 func TestHybridDocumentChunker_SplitDocument(t *testing.T) {

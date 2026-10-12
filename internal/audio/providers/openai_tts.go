@@ -11,7 +11,7 @@ import (
 	"io"
 	"net/http"
 
-	"github.com/KPO-Tech/seshat/internal/audio/tts"
+	"github.com/KPO-Tech/seshat-runtime/internal/audio/tts"
 )
 
 const (

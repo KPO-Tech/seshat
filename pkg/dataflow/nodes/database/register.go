@@ -1,6 +1,6 @@
 package database
 
-import "github.com/KPO-Tech/seshat/pkg/dataflow"
+import "github.com/KPO-Tech/seshat-runtime/pkg/dataflow"
 
 // Register adds every database node type in this package to registry.
 func Register(registry *dataflow.Registry) {

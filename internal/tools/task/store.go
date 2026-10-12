@@ -9,7 +9,7 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/KPO-Tech/seshat/internal/db"
+	"github.com/KPO-Tech/seshat-runtime/internal/db"
 )
 
 // Task represents a task in the task list.

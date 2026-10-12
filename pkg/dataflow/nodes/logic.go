@@ -6,8 +6,8 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/KPO-Tech/seshat/pkg/dataflow"
-	"github.com/KPO-Tech/seshat/pkg/dataflow/expr"
+	"github.com/KPO-Tech/seshat-runtime/pkg/dataflow"
+	"github.com/KPO-Tech/seshat-runtime/pkg/dataflow/expr"
 )
 
 // logicBindings builds the bindings map for a per-item expression in

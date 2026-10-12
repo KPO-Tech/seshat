@@ -7,8 +7,8 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/KPO-Tech/seshat/internal/tools/files/shared"
-	"github.com/KPO-Tech/seshat/internal/types"
+	"github.com/KPO-Tech/seshat-runtime/internal/tools/files/shared"
+	"github.com/KPO-Tech/seshat-runtime/internal/types"
 )
 
 // ─── Change representation ────────────────────────────────────────────────────

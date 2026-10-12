@@ -7,7 +7,7 @@ import (
 	"sync"
 	"testing"
 
-	"github.com/KPO-Tech/seshat/pkg/dataflow/expr"
+	"github.com/KPO-Tech/seshat-runtime/pkg/dataflow/expr"
 )
 
 // funcExecutor lets tests define a node's behavior as a plain function,

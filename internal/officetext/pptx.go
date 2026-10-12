@@ -8,7 +8,7 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/KPO-Tech/seshat/internal/mdtable"
+	"github.com/KPO-Tech/seshat-runtime/internal/mdtable"
 )
 
 // ExtractPPTX converts a slide deck to markdown: one "## Slide N" section per slide, with the slide's title

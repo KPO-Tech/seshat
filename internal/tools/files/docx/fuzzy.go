@@ -4,7 +4,7 @@ import (
 	"regexp"
 	"strings"
 
-	editTool "github.com/KPO-Tech/seshat/internal/tools/files/edit"
+	editTool "github.com/KPO-Tech/seshat-runtime/internal/tools/files/edit"
 )
 
 var xmlTagPattern = regexp.MustCompile(`<[^>]+>`)

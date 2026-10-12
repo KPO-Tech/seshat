@@ -4,9 +4,9 @@ import (
 	"encoding/json"
 	"strings"
 
-	"github.com/KPO-Tech/seshat/internal/seshattui/diffdetect"
-	"github.com/KPO-Tech/seshat/internal/seshattui/stringext"
-	"github.com/KPO-Tech/seshat/internal/seshattui/ui/styles"
+	"github.com/KPO-Tech/seshat-runtime/internal/seshattui/diffdetect"
+	"github.com/KPO-Tech/seshat-runtime/internal/seshattui/stringext"
+	"github.com/KPO-Tech/seshat-runtime/internal/seshattui/ui/styles"
 )
 
 type toolResultContentWidths struct {

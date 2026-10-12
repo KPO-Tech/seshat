@@ -3,7 +3,7 @@ package providers
 import (
 	"strings"
 
-	"github.com/KPO-Tech/seshat/internal/types"
+	"github.com/KPO-Tech/seshat-runtime/internal/types"
 )
 
 // thinkOpenTag and thinkCloseTag mark reasoning that a model emitted inline

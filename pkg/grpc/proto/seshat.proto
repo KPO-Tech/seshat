@@ -17,7 +17,7 @@ syntax = "proto3";
 package seshat;
 
 // Option pour générer le code Go
-option go_package = "github.com/KPO-Tech/seshat/pkg/grpc/seshat";
+option go_package = "github.com/KPO-Tech/seshat-runtime/pkg/grpc/seshat";
 
 // ============================================================================
 // Services

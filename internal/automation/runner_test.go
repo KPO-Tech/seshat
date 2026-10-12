@@ -3,8 +3,8 @@ package automation
 import (
 	"testing"
 
-	"github.com/KPO-Tech/seshat/internal/providers"
-	"github.com/KPO-Tech/seshat/pkg/sdk"
+	"github.com/KPO-Tech/seshat-runtime/internal/providers"
+	"github.com/KPO-Tech/seshat-runtime/pkg/sdk"
 )
 
 // TestBuildClientConfigPropagatesRequireSandbox is a network-free plumbing

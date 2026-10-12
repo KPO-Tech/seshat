@@ -3,7 +3,7 @@ package search
 import (
 	"time"
 
-	webcore "github.com/KPO-Tech/seshat/internal/web"
+	webcore "github.com/KPO-Tech/seshat-runtime/internal/web"
 )
 
 // Cache is a search-specific view over the shared web TTL cache.

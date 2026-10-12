@@ -1,6 +1,6 @@
 package skills
 
-import internalskills "github.com/KPO-Tech/seshat/internal/tools/system/skills"
+import internalskills "github.com/KPO-Tech/seshat-runtime/internal/tools/system/skills"
 
 type (
 	// FrontmatterData is the YAML header of a skill file (name, description, when to use it, allowed tools, arguments, model, invocation rules, version...), as it was written.

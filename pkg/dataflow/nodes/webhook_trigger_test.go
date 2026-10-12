@@ -4,7 +4,7 @@ import (
 	"context"
 	"testing"
 
-	"github.com/KPO-Tech/seshat/pkg/dataflow"
+	"github.com/KPO-Tech/seshat-runtime/pkg/dataflow"
 )
 
 func TestWebhookTriggerDescriptionIsATrigger(t *testing.T) {

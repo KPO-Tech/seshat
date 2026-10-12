@@ -19,16 +19,16 @@ import (
 
 	tea "charm.land/bubbletea/v2"
 	"charm.land/catwalk/pkg/catwalk"
-	mcptools "github.com/KPO-Tech/seshat/internal/seshattui/agent/tools/mcp"
-	"github.com/KPO-Tech/seshat/internal/seshattui/config"
-	"github.com/KPO-Tech/seshat/internal/seshattui/history"
-	"github.com/KPO-Tech/seshat/internal/seshattui/lsp"
-	"github.com/KPO-Tech/seshat/internal/seshattui/message"
-	"github.com/KPO-Tech/seshat/internal/seshattui/oauth"
-	"github.com/KPO-Tech/seshat/internal/seshattui/permission"
-	"github.com/KPO-Tech/seshat/internal/seshattui/session"
-	"github.com/KPO-Tech/seshat/internal/seshattui/skills"
-	"github.com/KPO-Tech/seshat/pkg/doctor"
+	mcptools "github.com/KPO-Tech/seshat-runtime/internal/seshattui/agent/tools/mcp"
+	"github.com/KPO-Tech/seshat-runtime/internal/seshattui/config"
+	"github.com/KPO-Tech/seshat-runtime/internal/seshattui/history"
+	"github.com/KPO-Tech/seshat-runtime/internal/seshattui/lsp"
+	"github.com/KPO-Tech/seshat-runtime/internal/seshattui/message"
+	"github.com/KPO-Tech/seshat-runtime/internal/seshattui/oauth"
+	"github.com/KPO-Tech/seshat-runtime/internal/seshattui/permission"
+	"github.com/KPO-Tech/seshat-runtime/internal/seshattui/session"
+	"github.com/KPO-Tech/seshat-runtime/internal/seshattui/skills"
+	"github.com/KPO-Tech/seshat-runtime/pkg/doctor"
 )
 
 // LSPClientInfo holds information about an LSP client's state. This is

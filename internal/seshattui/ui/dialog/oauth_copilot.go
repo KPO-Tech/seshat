@@ -7,9 +7,9 @@ import (
 
 	tea "charm.land/bubbletea/v2"
 	"charm.land/catwalk/pkg/catwalk"
-	"github.com/KPO-Tech/seshat/internal/seshattui/config"
-	"github.com/KPO-Tech/seshat/internal/seshattui/oauth/copilot"
-	"github.com/KPO-Tech/seshat/internal/seshattui/ui/common"
+	"github.com/KPO-Tech/seshat-runtime/internal/seshattui/config"
+	"github.com/KPO-Tech/seshat-runtime/internal/seshattui/oauth/copilot"
+	"github.com/KPO-Tech/seshat-runtime/internal/seshattui/ui/common"
 )
 
 func NewOAuthCopilot(

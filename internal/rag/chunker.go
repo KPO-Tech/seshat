@@ -2,7 +2,7 @@ package rag
 
 import (
 	"context"
-	"github.com/KPO-Tech/seshat/internal/pagemark"
+	"github.com/KPO-Tech/seshat-runtime/internal/pagemark"
 	"strings"
 )
 

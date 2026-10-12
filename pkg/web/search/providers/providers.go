@@ -1,6 +1,6 @@
 package providers
 
-import internalproviders "github.com/KPO-Tech/seshat/internal/web/search/providers"
+import internalproviders "github.com/KPO-Tech/seshat-runtime/internal/web/search/providers"
 
 type (
 	// ProviderMode defines the search provider selection mode.

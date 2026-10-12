@@ -6,9 +6,9 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/KPO-Tech/seshat/internal/nativedoc"
-	"github.com/KPO-Tech/seshat/internal/nativedoc/pdfium"
-	"github.com/KPO-Tech/seshat/internal/pdftext"
+	"github.com/KPO-Tech/seshat-runtime/internal/nativedoc"
+	"github.com/KPO-Tech/seshat-runtime/internal/nativedoc/pdfium"
+	"github.com/KPO-Tech/seshat-runtime/internal/pdftext"
 )
 
 // FindTables renders a page, lets the layout and table-structure models find the tables on it and read their

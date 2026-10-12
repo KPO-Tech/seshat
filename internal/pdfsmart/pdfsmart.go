@@ -44,9 +44,9 @@ import (
 	"github.com/pdfcpu/pdfcpu/pkg/api"
 	pdfcpumodel "github.com/pdfcpu/pdfcpu/pkg/pdfcpu/model"
 
-	"github.com/KPO-Tech/seshat/internal/documentreader"
-	"github.com/KPO-Tech/seshat/internal/pdftext"
-	"github.com/KPO-Tech/seshat/internal/textquality"
+	"github.com/KPO-Tech/seshat-runtime/internal/documentreader"
+	"github.com/KPO-Tech/seshat-runtime/internal/pdftext"
+	"github.com/KPO-Tech/seshat-runtime/internal/textquality"
 )
 
 // pdfcpuConfigWarmup works around a real data race inside pdfcpu itself:

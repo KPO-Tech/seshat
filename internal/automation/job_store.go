@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/KPO-Tech/seshat/internal/db"
+	"github.com/KPO-Tech/seshat-runtime/internal/db"
 )
 
 // DBJobStore implements JobStore backed by a seshat DB instance.

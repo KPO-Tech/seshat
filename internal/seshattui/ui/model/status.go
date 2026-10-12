@@ -7,8 +7,8 @@ import (
 	"charm.land/bubbles/v2/help"
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
-	"github.com/KPO-Tech/seshat/internal/seshattui/ui/common"
-	"github.com/KPO-Tech/seshat/internal/seshattui/ui/util"
+	"github.com/KPO-Tech/seshat-runtime/internal/seshattui/ui/common"
+	"github.com/KPO-Tech/seshat-runtime/internal/seshattui/ui/util"
 	uv "github.com/charmbracelet/ultraviolet"
 	"github.com/charmbracelet/x/ansi"
 )

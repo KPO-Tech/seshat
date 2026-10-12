@@ -10,7 +10,7 @@ import (
 	"regexp"
 	"strings"
 
-	tool "github.com/KPO-Tech/seshat/internal/tools/registry"
+	tool "github.com/KPO-Tech/seshat-runtime/internal/tools/registry"
 )
 
 // Google Places reviews, through the Places API (New) with an API key. The API bills each call and returns at most

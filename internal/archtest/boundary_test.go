@@ -12,7 +12,7 @@ import (
 	"testing"
 )
 
-const modulePkg = "github.com/KPO-Tech/seshat/pkg/"
+const modulePkg = "github.com/KPO-Tech/seshat-runtime/pkg/"
 
 // legacyPkgImports are the imports of pkg/ that internal/ code already had when this test was written. AGENTS.md says internal/ must
 // never import pkg/ (the dependency flows entry points, then pkg/sdk, then internal/), so the list only gets shorter: a new import

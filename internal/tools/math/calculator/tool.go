@@ -7,9 +7,9 @@ import (
 	"encoding/json"
 	"fmt"
 
-	"github.com/KPO-Tech/seshat/internal/tools/math/engine"
-	tool "github.com/KPO-Tech/seshat/internal/tools/registry"
-	"github.com/KPO-Tech/seshat/internal/tools/schema"
+	"github.com/KPO-Tech/seshat-runtime/internal/tools/math/engine"
+	tool "github.com/KPO-Tech/seshat-runtime/internal/tools/registry"
+	"github.com/KPO-Tech/seshat-runtime/internal/tools/schema"
 )
 
 const (

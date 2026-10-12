@@ -6,7 +6,7 @@ import (
 
 	_ "modernc.org/sqlite" // registers "sqlite" for this package's own tests — see sql.go's doc comment for why production code doesn't import it directly
 
-	"github.com/KPO-Tech/seshat/pkg/dataflow"
+	"github.com/KPO-Tech/seshat-runtime/pkg/dataflow"
 )
 
 type staticSecrets map[string]string

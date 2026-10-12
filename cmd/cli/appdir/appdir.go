@@ -29,7 +29,7 @@ import (
 	"os"
 	"path/filepath"
 
-	"github.com/KPO-Tech/seshat/pkg/runtimepath"
+	"github.com/KPO-Tech/seshat-runtime/pkg/runtimepath"
 )
 
 // Root returns the application root directory, resolved via SESHAT_RUNTIME_ROOT

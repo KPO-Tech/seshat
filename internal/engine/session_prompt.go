@@ -6,10 +6,10 @@ import (
 	"os"
 	"strings"
 
-	"github.com/KPO-Tech/seshat/internal/prompt"
-	tool "github.com/KPO-Tech/seshat/internal/tools/registry"
-	"github.com/KPO-Tech/seshat/internal/types"
-	"github.com/KPO-Tech/seshat/pkg/repomap"
+	"github.com/KPO-Tech/seshat-runtime/internal/prompt"
+	tool "github.com/KPO-Tech/seshat-runtime/internal/tools/registry"
+	"github.com/KPO-Tech/seshat-runtime/internal/types"
+	"github.com/KPO-Tech/seshat-runtime/pkg/repomap"
 )
 
 // buildAPIRequest builds the provider-facing request data for the current turn.

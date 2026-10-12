@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/KPO-Tech/seshat/internal/documentreader"
+	"github.com/KPO-Tech/seshat-runtime/internal/documentreader"
 )
 
 // ChunkProfileName identifies a recommended chunking profile for RAG

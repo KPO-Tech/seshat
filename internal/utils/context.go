@@ -1,6 +1,6 @@
 package utils
 
-import "github.com/KPO-Tech/seshat/internal/types"
+import "github.com/KPO-Tech/seshat-runtime/internal/types"
 
 // ContextManager manages context window limits
 type ContextManager struct {

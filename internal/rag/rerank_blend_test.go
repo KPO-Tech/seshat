@@ -5,8 +5,8 @@ import (
 	"errors"
 	"testing"
 
-	"github.com/KPO-Tech/seshat/internal/storage"
-	"github.com/KPO-Tech/seshat/internal/vector"
+	"github.com/KPO-Tech/seshat-runtime/internal/storage"
+	"github.com/KPO-Tech/seshat-runtime/internal/vector"
 )
 
 // blendFixtureEmbedder maps three known documents ("doc-a"/"doc-b"/"doc-c")

@@ -7,7 +7,7 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/KPO-Tech/seshat/pkg/workflow"
+	"github.com/KPO-Tech/seshat-runtime/pkg/workflow"
 )
 
 // RegisterBuiltins registers the "agent", "query", "tools" and "subworkflow"

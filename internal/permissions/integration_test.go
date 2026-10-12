@@ -7,9 +7,9 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/KPO-Tech/seshat/internal/sandbox"
-	"github.com/KPO-Tech/seshat/internal/types"
-	"github.com/KPO-Tech/seshat/pkg/runtimepath"
+	"github.com/KPO-Tech/seshat-runtime/internal/sandbox"
+	"github.com/KPO-Tech/seshat-runtime/internal/types"
+	"github.com/KPO-Tech/seshat-runtime/pkg/runtimepath"
 )
 
 // ─── mock classifier for e2e tests ───────────────────────────────────────────

@@ -5,9 +5,9 @@ import (
 	"fmt"
 	"time"
 
-	coreagent "github.com/KPO-Tech/seshat/internal/agent"
-	"github.com/KPO-Tech/seshat/internal/engine"
-	"github.com/KPO-Tech/seshat/internal/types"
+	coreagent "github.com/KPO-Tech/seshat-runtime/internal/agent"
+	"github.com/KPO-Tech/seshat-runtime/internal/engine"
+	"github.com/KPO-Tech/seshat-runtime/internal/types"
 )
 
 // SkillForkRunner implements skills.ForkRunner: it runs a `context: fork`

@@ -5,10 +5,10 @@ import (
 	"strings"
 
 	"charm.land/lipgloss/v2"
-	"github.com/KPO-Tech/seshat/internal/seshattui/agent/tools/mcp"
-	"github.com/KPO-Tech/seshat/internal/seshattui/config"
-	"github.com/KPO-Tech/seshat/internal/seshattui/ui/common"
-	"github.com/KPO-Tech/seshat/internal/seshattui/ui/styles"
+	"github.com/KPO-Tech/seshat-runtime/internal/seshattui/agent/tools/mcp"
+	"github.com/KPO-Tech/seshat-runtime/internal/seshattui/config"
+	"github.com/KPO-Tech/seshat-runtime/internal/seshattui/ui/common"
+	"github.com/KPO-Tech/seshat-runtime/internal/seshattui/ui/styles"
 )
 
 // mcpInfo renders the MCP status section showing active MCP clients and their

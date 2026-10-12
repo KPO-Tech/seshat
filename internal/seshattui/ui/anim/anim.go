@@ -15,7 +15,7 @@ import (
 	"charm.land/lipgloss/v2"
 	"github.com/lucasb-eyer/go-colorful"
 
-	"github.com/KPO-Tech/seshat/internal/seshattui/csync"
+	"github.com/KPO-Tech/seshat-runtime/internal/seshattui/csync"
 )
 
 const (

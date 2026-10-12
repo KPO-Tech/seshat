@@ -5,8 +5,8 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/KPO-Tech/seshat/internal/seshattui/env"
-	"github.com/KPO-Tech/seshat/internal/seshattui/shell"
+	"github.com/KPO-Tech/seshat-runtime/internal/seshattui/env"
+	"github.com/KPO-Tech/seshat-runtime/internal/seshattui/shell"
 )
 
 // resolveTimeout bounds how long a single ResolveValue call may spend

@@ -7,7 +7,7 @@
 // (pkg/image/providers) power both call sites.
 package image
 
-import internalimage "github.com/KPO-Tech/seshat/internal/image"
+import internalimage "github.com/KPO-Tech/seshat-runtime/internal/image"
 
 type (
 	// Generation is the core interface for image generation providers.

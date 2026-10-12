@@ -9,9 +9,9 @@ import (
 	"strings"
 	"testing"
 
-	fileReadTool "github.com/KPO-Tech/seshat/internal/tools/files/read"
-	tool "github.com/KPO-Tech/seshat/internal/tools/registry"
-	officetext "github.com/KPO-Tech/seshat/pkg/officetext"
+	fileReadTool "github.com/KPO-Tech/seshat-runtime/internal/tools/files/read"
+	tool "github.com/KPO-Tech/seshat-runtime/internal/tools/registry"
+	officetext "github.com/KPO-Tech/seshat-runtime/pkg/officetext"
 )
 
 func TestPrettyPrintCompactRoundTrip(t *testing.T) {

@@ -12,8 +12,8 @@ import (
 	"sync"
 	"time"
 
-	"github.com/KPO-Tech/seshat/internal/monitoring"
-	"github.com/KPO-Tech/seshat/internal/types"
+	"github.com/KPO-Tech/seshat-runtime/internal/monitoring"
+	"github.com/KPO-Tech/seshat-runtime/internal/types"
 )
 
 // codexJar is a process-global cookie jar for chatgpt.com Cloudflare cookies

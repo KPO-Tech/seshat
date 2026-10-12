@@ -7,10 +7,10 @@ import (
 	"sync"
 	"time"
 
-	"github.com/KPO-Tech/seshat/internal/monitoring"
-	runtimehooks "github.com/KPO-Tech/seshat/internal/runtime/hooks"
-	tool "github.com/KPO-Tech/seshat/internal/tools/contract"
-	"github.com/KPO-Tech/seshat/internal/types"
+	"github.com/KPO-Tech/seshat-runtime/internal/monitoring"
+	runtimehooks "github.com/KPO-Tech/seshat-runtime/internal/runtime/hooks"
+	tool "github.com/KPO-Tech/seshat-runtime/internal/tools/contract"
+	"github.com/KPO-Tech/seshat-runtime/internal/types"
 )
 
 // ---------------------------------------------------------------------------

@@ -9,7 +9,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/KPO-Tech/seshat/internal/db"
+	"github.com/KPO-Tech/seshat-runtime/internal/db"
 )
 
 // ProfileRegistry stores and retrieves AgentProfile records backed by SQLite.

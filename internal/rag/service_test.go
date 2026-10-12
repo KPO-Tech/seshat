@@ -8,8 +8,8 @@ import (
 	"testing"
 	"unicode/utf8"
 
-	"github.com/KPO-Tech/seshat/internal/storage"
-	"github.com/KPO-Tech/seshat/internal/vector"
+	"github.com/KPO-Tech/seshat-runtime/internal/storage"
+	"github.com/KPO-Tech/seshat-runtime/internal/vector"
 )
 
 // fakeEmbedder returns deterministic embeddings based on keyword content.

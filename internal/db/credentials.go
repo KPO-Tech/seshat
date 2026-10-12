@@ -12,7 +12,7 @@ import (
 	"os"
 	"path/filepath"
 
-	"github.com/KPO-Tech/seshat/pkg/runtimepath"
+	"github.com/KPO-Tech/seshat-runtime/pkg/runtimepath"
 	"gorm.io/gorm"
 	"gorm.io/gorm/clause"
 )
