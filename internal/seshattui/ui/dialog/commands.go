@@ -278,7 +278,7 @@ func (c *Commands) Draw(scr uv.Screen, area uv.Rectangle) *tea.Cursor {
 
 	width := max(0, min(settingsCardMaxWidth, area.Dx()-t.Dialog.View.GetHorizontalBorderSize()))
 	innerWidth := width - t.Dialog.View.GetHorizontalFrameSize()
-	inputW := max(0, innerWidth-t.Dialog.InputPrompt.GetHorizontalFrameSize()-1)
+	inputW := textInputWidth(t.Dialog.InputPrompt, innerWidth)
 
 	c.input.SetWidth(inputW)
 	c.help.SetWidth(innerWidth)

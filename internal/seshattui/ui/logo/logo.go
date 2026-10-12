@@ -23,7 +23,6 @@ type Opts struct {
 	FieldColor   color.Color // diagonal lines
 	TitleColorA  color.Color // left gradient ramp point
 	TitleColorB  color.Color // right gradient ramp point
-	CharmColor   color.Color // Charm™ text color
 	VersionColor color.Color // version text color
 	Width        int         // width of the rendered logo, used for truncation
 	Hyper        bool        // whether it is Seshat or HyperSeshat
@@ -40,11 +39,6 @@ type Opts struct {
 // The compact argument determines whether it renders compact for the sidebar
 // or wider for the main pane.
 func Render(base lipgloss.Style, version string, compact bool, o Opts) string {
-	charm := "Charm™"
-	if !o.Hyper {
-		charm = " " + charm
-	}
-
 	fg := func(c color.Color, s string) string {
 		return lipgloss.NewStyle().Foreground(c).Render(s)
 	}
@@ -62,11 +56,12 @@ func Render(base lipgloss.Style, version string, compact bool, o Opts) string {
 		}
 	}
 	seshatLetterforms := []letterform{
-		LetterN,
+		LetterS,
 		LetterE,
-		LetterX,
-		LetterU,
 		LetterSAlt,
+		LetterH,
+		LetterA,
+		LetterT,
 	}
 	if o.Hyper && !compact {
 		seshatLetterforms = append(hyperLetterforms, seshatLetterforms...)
@@ -91,18 +86,18 @@ func Render(base lipgloss.Style, version string, compact bool, o Opts) string {
 	}
 	seshat = b.String()
 
-	// Charm and version.
-	metaRowGap := 1
-	maxVersionWidth := seshatWidth - lipgloss.Width(charm) - metaRowGap
-	version = ansi.Truncate(version, maxVersionWidth, "…") // truncate version if too long.
+	// Version, right-aligned on its own row above the wordmark.
+	version = ansi.Truncate(version, seshatWidth, "…") // truncate version if too long.
 	if o.Hyper && compact {
 		version += " "
 	}
-	gap := max(0, seshatWidth-lipgloss.Width(charm)-lipgloss.Width(version))
-	metaRow := fg(o.CharmColor, charm) + strings.Repeat(" ", gap) + fg(o.VersionColor, version)
+	gap := max(0, seshatWidth-lipgloss.Width(version))
+	metaRow := strings.Repeat(" ", gap) + fg(o.VersionColor, version)
 
-	// Join the meta row and big Seshat title.
-	seshat = strings.TrimSpace(metaRow + "\n" + seshat)
+	// Join the meta row and big Seshat title. Only the art is trimmed, so that
+	// the version row keeps its right alignment.
+	seshat = strings.TrimSpace(seshat)
+	seshat = metaRow + "\n" + seshat
 
 	// Narrow version. If this is HyperSeshat, this is also a stacked version.
 	if compact {
@@ -153,11 +148,5 @@ func SmallRender(t *styles.Styles, width int, o Opts) string {
 	if o.Hyper {
 		name = "SESHAT"
 	}
-	charm := "Charm™"
-	if !o.Hyper {
-		charm = " " + charm
-	}
-	title := t.Logo.SmallCharm.Render(charm)
-	title = fmt.Sprintf("%s %s", title, styles.ApplyBoldForegroundGrad(t.Logo.GradCanvas, name, t.Logo.SmallGradFromColor, t.Logo.SmallGradToColor))
-	return title
+	return styles.ApplyBoldForegroundGrad(t.Logo.GradCanvas, name, t.Logo.SmallGradFromColor, t.Logo.SmallGradToColor)
 }
