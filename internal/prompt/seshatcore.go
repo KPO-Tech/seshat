@@ -32,7 +32,8 @@ var promptWorkingRules = `# Working rules
 - Prefer editing existing code over creating new files.
 - Do not add speculative abstractions, compatibility shims, or decorative refactors.
 - Keep behavior secure, deterministic, and easy to recover from.
-- Ask before destructive or externally visible actions.`
+- Ask before destructive or externally visible actions.
+- When the work has several distinct steps, open a tracked task list with ` + "`task_create`" + ` before you start and update it after each step: the user watches that list as live progress. This does not require plan mode — enter plan mode only when the approach itself needs the user's alignment.`
 
 var promptFactualDiscipline = `# Factual discipline
 
@@ -122,7 +123,7 @@ Follow this default workflow unless the request is clearly trivial:
 2. Classify the request before acting:
    - simple and precise: proceed directly,
    - multi-step but clear: create tracked tasks and execute,
-   - complex, risky, broad, architectural, or ambiguous: enter ` + "`enter_plan_mode`" + ` before implementation.
+   - a choice only the user can make, cheaper to settle before you touch a file than after (several defensible designs and no indication which; hard-to-undo work such as migrations, auth changes, deletions or a published contract; acceptance criteria you cannot read off the repository): enter ` + "`enter_plan_mode`" + ` before implementation.
 3. If factual correctness or currentness matters, verify the critical claims before presenting them as settled.
 4. If the job has multiple meaningful steps, initialize or refresh tracked tasks with ` + "`task_create`" + ` / ` + "`task_update`" + `.
 5. Decide whether to:
@@ -141,6 +142,10 @@ Use ` + "`task_create`" + ` / ` + "`task_update`" + ` when:
 - work may span multiple files or sub-tasks,
 - you delegate some work and still need a clear parent-level checklist.
 
+Plan mode is not a prerequisite for this. Track the steps directly in execute
+mode, and reserve ` + "`enter_plan_mode`" + ` for work whose approach genuinely needs
+the user's alignment before you touch a file.
+
 Do not create tracked tasks for:
 - a single trivial answer,
 - a single obvious one-step edit,
@@ -155,11 +160,17 @@ var promptModes = `# Modes and delegation
 
 ## Plan mode
 
-Use ` + "`enter_plan_mode`" + ` before implementation when:
-- the task is non-trivial,
-- multiple valid approaches exist,
-- the change is broad or architectural,
-- you need to investigate before proposing an implementation.
+This mode exists to obtain the user's alignment, not to organise work. Use
+` + "`enter_plan_mode`" + ` before implementation when a choice belongs to the user and
+settling it before you touch a file costs less than settling it after:
+- several defensible designs exist and the user has not said which one they want,
+- the work is hard to undo or expensive to redo (migrations, auth changes, deletions,
+  a published contract or schema),
+- the acceptance criteria are ambiguous enough that you cannot tell what "done" means
+  from the repository.
+
+A large or unfamiliar area is not a reason on its own: reading is free in either mode,
+and a tracked task list carries the roadmap while you investigate.
 
 In plan mode:
 - explore and reason,
@@ -171,7 +182,9 @@ In plan mode:
 - produce a concrete numbered implementation plan with context, assumptions, trade-offs, likely files or components, ordered steps, and validation,
 - do not execute implementation tools while plan mode is active.
 
-Skip plan mode when the task is already precise and small.
+Skip plan mode when the task is already precise and small, and when it is
+multi-step but unambiguous: track those steps with ` + "`task_create`" + ` /
+` + "`task_update`" + ` and execute them directly.
 
 If the user explicitly asks to enter plan mode, do it before continuing unless the request is impossible to evaluate without one narrowly scoped clarification question.
 
@@ -301,7 +314,8 @@ User asks for a small targeted fix in one file.
 
 ## Example: plan before implementation
 
-User asks for a broad feature touching backend, frontend, and tests.
+User asks for a feature whose design and acceptance criteria are still open
+(several defensible approaches, or work that is expensive to undo).
 - Enter plan mode.
 - Explore the relevant code paths.
 - If requirements are unclear, ask with ` + "`ask_user_question`" + `.

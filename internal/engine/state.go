@@ -576,6 +576,15 @@ type MutableState struct {
 	// ContinuationNudgeCount is continuation nudge count
 	ContinuationNudgeCount int
 
+	// TaskNudgeCount counts the reminders sent this turn because the session's
+	// tracked task list still had unfinished items. Capped by
+	// LoopConfig.TaskNudgeLimit.
+	TaskNudgeCount int
+
+	// TaskNudgeKey is the open-task list as of the last reminder, so a model
+	// that ignores one is not asked twice about the same unchanged list.
+	TaskNudgeKey string
+
 	// Transition is the previous transition (undefined on first iteration)
 	Transition Transition
 
@@ -633,6 +642,8 @@ func NewMutableState(initialMessages []types.Message) *MutableState {
 		HasAttemptedReactiveCompact:  false,
 		MaxOutputTokensOverride:      0,
 		ContinuationNudgeCount:       0,
+		TaskNudgeCount:               0,
+		TaskNudgeKey:                 "",
 		Compacted:                    false,
 		Usage:                        nil,
 		StopReason:                   "",
@@ -670,6 +681,8 @@ func (s *MutableState) Clone() *MutableState {
 		HasAttemptedReactiveCompact:  s.HasAttemptedReactiveCompact,
 		MaxOutputTokensOverride:      s.MaxOutputTokensOverride,
 		ContinuationNudgeCount:       s.ContinuationNudgeCount,
+		TaskNudgeCount:               s.TaskNudgeCount,
+		TaskNudgeKey:                 s.TaskNudgeKey,
 		Transition:                   s.Transition,
 		StopHookActive:               s.StopHookActive,
 		TotalTurnTokens:              s.TotalTurnTokens,
