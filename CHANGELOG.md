@@ -9,6 +9,10 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Changed
+
+- **The runtime logo is the one from the regenerated Seshat AI identity kit.** `docs/brand` holds the new set (mark and horizontal lockup on light and dark, black and white, three icon tiles, favicon; the former `on-light.svg` and `on-dark.svg` are now `mark-on-light.svg` and `mark-on-dark.svg`), the README header shows the lockup, and the two terminal notification icons are the new dark tile (512 px PNG, same file names).
+
 ## [1.4.1] - 2026-10-11
 
 ### Fixed
