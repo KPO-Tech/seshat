@@ -228,7 +228,7 @@ func (s *Session) Draw(scr uv.Screen, area uv.Rectangle) *tea.Cursor {
 		t.Dialog.InputPrompt.GetVerticalFrameSize() + inputContentHeight +
 		t.Dialog.HelpView.GetVerticalFrameSize() +
 		t.Dialog.View.GetVerticalFrameSize()
-	s.input.SetWidth(max(0, innerWidth-t.Dialog.InputPrompt.GetHorizontalFrameSize()-1)) // (1) cursor padding
+	s.input.SetWidth(textInputWidth(t.Dialog.InputPrompt, innerWidth))
 	listHeight := height - heightOffset
 	listTotalHeight := s.list.TotalHeight()
 	listWidth := max(0, innerWidth-3) // Reserve space for scrollbar.

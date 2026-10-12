@@ -575,7 +575,7 @@ func (p *PlanReview) Draw(scr uv.Screen, area uv.Rectangle) *tea.Cursor {
 	if p.editorMode != planReviewModeView {
 		parts = append(parts, t.Dialog.SecondaryText.Render(editorLabel))
 		inputOffsetY = len(parts)
-		p.input.SetWidth(max(10, innerWidth-t.Dialog.InputPrompt.GetHorizontalFrameSize()-1))
+		p.input.SetWidth(max(10, textInputWidth(t.Dialog.InputPrompt, innerWidth)))
 		parts = append(parts, t.Dialog.InputPrompt.Render(p.input.View()))
 	}
 

@@ -1125,7 +1125,7 @@ func (s *Settings) Draw(scr uv.Screen, area uv.Rectangle) *tea.Cursor {
 	// Outer width — capped, respects dialog frame.
 	width := max(0, min(settingsDialogMaxWidth, area.Dx()-t.Dialog.View.GetHorizontalBorderSize()))
 	innerW := width - t.Dialog.View.GetHorizontalFrameSize()
-	inputW := max(0, innerW-t.Dialog.InputPrompt.GetHorizontalFrameSize()-1)
+	inputW := textInputWidth(t.Dialog.InputPrompt, innerW)
 
 	// Fixed height budget components.
 	titleH := t.Dialog.Title.GetVerticalFrameSize() + titleContentHeight
