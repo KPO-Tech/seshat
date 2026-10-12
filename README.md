@@ -1,6 +1,6 @@
 <p align="center">
-  <img src="docs/brand/on-light.svg#gh-light-mode-only" alt="seshat" width="120">
-  <img src="docs/brand/on-dark.svg#gh-dark-mode-only" alt="seshat" width="120">
+  <img src="docs/brand/lockup-on-light.svg#gh-light-mode-only" alt="Seshat Runtime" width="360">
+  <img src="docs/brand/lockup-on-dark.svg#gh-dark-mode-only" alt="Seshat Runtime" width="360">
 </p>
 
 <h1 align="center">Seshat</h1>

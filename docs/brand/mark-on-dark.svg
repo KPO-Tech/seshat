@@ -1,0 +1,32 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-label="Seshat Runtime">
+<defs>
+<linearGradient id="orange" x1="0" y1="0" x2="1" y2="1">
+  <stop offset="0" stop-color="#FF9B50"/>
+  <stop offset="0.48" stop-color="#EA7828"/>
+  <stop offset="1" stop-color="#C45A1F"/>
+</linearGradient>
+</defs>
+<path d="M126 349 L256 404 L386 349 L386 369 Q386 377 377 382 L264 432 Q256 436 248 432 L135 382 Q126 378 126 369 Z" fill="#C45A1F"/>
+<path d="M126 348 L256 404 L386 348 L256 394 Z" fill="#FF8B34"/>
+<path d="M126 323 L256 379 L386 323 L386 345 Q386 350 377 354 L264 407 Q256 410 248 407 L135 354 Q126 350 126 345 Z" fill="#E97426"/>
+<path d="M126 322 L256 378 L386 322 L256 366 Z" fill="#F99B51"/>
+<path d="M126 302 L256 250 L386 302 L386 323 Q386 329 377 333 L264 385 Q256 389 248 385 L135 333 Q126 329 126 323 Z" fill="#4A3F37"/>
+<path d="M126 302 L247 253 Q256 249 265 253 L386 302 L265 353 Q256 357 247 353 Z" fill="#6A5C51"/>
+<path d="M135 305 L256 352 L377 305" fill="none" stroke="#8E7E70" stroke-width="3" opacity="0.65"/>
+<g transform="translate(82 8) scale(0.68)">
+<path d="M 256 402 C 250 338 248 266 251 158 L 261 158 C 264 267 262 339 256 402 Z" fill="url(#orange)"/>
+<path d="M 256 117 C 276 133 277 151 256 170 C 235 151 236 133 256 117 Z" fill="url(#orange)"/>
+<path d="M 244 400 C 222 327 199 262 174 211 C 196 220 212 235 225 263 C 237 290 243 343 244 400 Z" fill="url(#orange)"/>
+<path d="M 268 400 C 290 327 313 262 338 211 C 316 220 300 235 287 263 C 275 290 269 343 268 400 Z" fill="url(#orange)"/>
+<path d="M 233 399 C 205 348 172 302 123 272 C 145 268 163 273 183 287 C 207 304 225 351 233 399 Z" fill="url(#orange)"/>
+<path d="M 279 399 C 307 348 340 302 389 272 C 367 268 349 273 329 287 C 305 304 287 351 279 399 Z" fill="url(#orange)"/>
+<path d="M 178 212 C 162 205 155 190 155 175 C 176 178 189 190 187 207 Z" fill="url(#orange)"/>
+<path d="M 334 212 C 350 205 357 190 357 175 C 336 178 323 190 325 207 Z" fill="url(#orange)"/>
+<path d="M 126 273 C 109 271 99 260 92 247 C 113 245 127 253 137 267 Z" fill="url(#orange)"/>
+<path d="M 386 273 C 403 271 413 260 420 247 C 399 245 385 253 375 267 Z" fill="url(#orange)"/>
+<path d="M 226 350 C 211 305 195 278 184 267" fill="none" stroke="#F9A269" stroke-width="4" opacity="0.6" stroke-linecap="round"/>
+<path d="M 286 350 C 301 305 317 278 328 267" fill="none" stroke="#F9A269" stroke-width="4" opacity="0.6" stroke-linecap="round"/>
+<circle cx="256" cy="416" r="18" fill="#813915"/>
+<circle cx="250" cy="410" r="5" fill="#E59A66" opacity="0.7"/>
+</g>
+</svg>
