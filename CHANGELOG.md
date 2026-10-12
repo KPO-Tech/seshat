@@ -9,6 +9,10 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added
+
+- **API keys are never displayed in the configuration dialogs.** The provider API key field (`Settings → Providers → LLM`) and the web search key field render their value as bullets from now on, both while a key is being typed and when one is already saved, so a secret stops being readable over a shoulder or in a screen recording. `ctrl+r` reveals the value while the field is edited, and the value is hidden again on tab, on validation and on save, so a key is only ever on screen when it was explicitly asked for.
+
 ## [1.5.0] - 2026-10-12
 
 ### Changed

@@ -53,6 +53,7 @@ type APIKeyInput struct {
 		Submit   key.Binding
 		Next     key.Binding
 		Previous key.Binding
+		Reveal   key.Binding
 		Close    key.Binding
 	}
 	apiKeyInput  textinput.Model
@@ -99,10 +100,9 @@ func NewAPIKeyInput(
 	}
 
 	innerWidth := m.width - t.Dialog.View.GetHorizontalFrameSize() - 2
-	inputWidth := max(0, innerWidth-t.Dialog.InputPrompt.GetHorizontalFrameSize()-1)
+	inputWidth := textInputWidth(t.Dialog.InputPrompt, innerWidth)
 
-	m.apiKeyInput = textinput.New()
-	m.apiKeyInput.SetVirtualCursor(false)
+	m.apiKeyInput = newSecretInput()
 	m.apiKeyInput.Placeholder = "Enter your API key..."
 	if m.existingAPIKey != "" {
 		m.apiKeyInput.Placeholder = "Leave blank to keep your saved API key"
@@ -139,6 +139,10 @@ func NewAPIKeyInput(
 		key.WithKeys("shift+tab", "up"),
 		key.WithHelp("shift+tab", "prev"),
 	)
+	m.keyMap.Reveal = key.NewBinding(
+		key.WithKeys("ctrl+r"),
+		key.WithHelp("ctrl+r", "reveal key"),
+	)
 	m.keyMap.Close = CloseKey
 
 	return &m, nil
@@ -151,6 +155,23 @@ func providerNeedsAPIKey(providerID string) bool {
 	default:
 		return true
 	}
+}
+
+// apiKeyVisible reports whether the API key field currently shows its value.
+func (m *APIKeyInput) apiKeyVisible() bool {
+	return m.apiKeyInput.EchoMode != textinput.EchoPassword
+}
+
+// setAPIKeyVisible shows or hides the API key value. The value is hidden by
+// default, and hidden again as soon as the field loses focus or the
+// configuration is validated, so a key is only ever on screen when the user
+// explicitly asks for it.
+func (m *APIKeyInput) setAPIKeyVisible(visible bool) {
+	if visible {
+		m.apiKeyInput.EchoMode = textinput.EchoNormal
+		return
+	}
+	m.apiKeyInput.EchoMode = textinput.EchoPassword
 }
 
 func (m *APIKeyInput) focusField(index int) {
@@ -217,10 +238,12 @@ func (m *APIKeyInput) HandleMsg(msg tea.Msg) Action {
 		case APIKeyInputStateInitial:
 			m.focusField(m.focused)
 		case APIKeyInputStateVerifying:
+			m.setAPIKeyVisible(false)
 			cmd := tea.Batch(m.spinner.Tick, m.verifyProviderConfig)
 			return ActionCmd{cmd}
 		case APIKeyInputStateVerified:
 			if m.hasAPIKey {
+				m.setAPIKeyVisible(false)
 				m.apiKeyInput.Blur()
 			}
 			m.baseURLInput.Blur()
@@ -248,10 +271,15 @@ func (m *APIKeyInput) HandleMsg(msg tea.Msg) Action {
 			}
 		case key.Matches(msg, m.keyMap.Next) && m.fieldCount() > 1:
 			m.state = APIKeyInputStateInitial
+			m.setAPIKeyVisible(false)
 			m.focusField(m.focused + 1)
 		case key.Matches(msg, m.keyMap.Previous) && m.fieldCount() > 1:
 			m.state = APIKeyInputStateInitial
+			m.setAPIKeyVisible(false)
 			m.focusField(m.focused - 1)
+		case key.Matches(msg, m.keyMap.Reveal) && m.hasAPIKey && m.focused == 0 &&
+			m.state != APIKeyInputStateVerifying && m.state != APIKeyInputStateVerified:
+			m.setAPIKeyVisible(!m.apiKeyVisible())
 		case key.Matches(msg, m.keyMap.Submit):
 			switch m.state {
 			case APIKeyInputStateInitial, APIKeyInputStateError:
@@ -439,6 +467,9 @@ func (m *APIKeyInput) FullHelp() [][]key.Binding {
 	if m.fieldCount() > 1 {
 		row = append(row, m.keyMap.Next, m.keyMap.Previous)
 	}
+	if m.hasAPIKey {
+		row = append(row, m.keyMap.Reveal)
+	}
 	row = append(row, m.keyMap.Close)
 	return [][]key.Binding{row}
 }
@@ -448,6 +479,9 @@ func (m *APIKeyInput) ShortHelp() []key.Binding {
 	help := []key.Binding{m.keyMap.Submit}
 	if m.fieldCount() > 1 {
 		help = append(help, m.keyMap.Next)
+	}
+	if m.hasAPIKey {
+		help = append(help, m.keyMap.Reveal)
 	}
 	help = append(help, m.keyMap.Close)
 	return help

@@ -3,13 +3,63 @@ package dialog
 import (
 	"image/color"
 	"strings"
+	"sync"
 
+	"charm.land/bubbles/v2/textinput"
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
 	"github.com/KPO-Tech/seshat-runtime/internal/seshattui/ui/common"
 	"github.com/KPO-Tech/seshat-runtime/internal/seshattui/ui/styles"
 	"github.com/charmbracelet/x/ansi"
 )
+
+// SecretMask is the character a secret input renders in place of its value.
+const SecretMask = '•'
+
+// textInputOverhead is how many columns a text input renders in addition to
+// the width it was given with SetWidth: its prompt and its cursor cell. It is
+// measured rather than assumed, so that a dependency update cannot silently
+// push the dialog borders out again.
+var textInputOverhead = sync.OnceValue(func() int {
+	const probe = 10
+	in := textinput.New()
+	in.SetVirtualCursor(false)
+	in.SetWidth(probe)
+	return lipgloss.Width(in.View()) - probe
+})
+
+// textInputWidth returns the width to give a text input so that, rendered
+// inside promptStyle, it fills exactly contentWidth columns and no more.
+func textInputWidth(promptStyle lipgloss.Style, contentWidth int) int {
+	return max(0, contentWidth-promptStyle.GetHorizontalFrameSize()-textInputOverhead())
+}
+
+// truncateLines truncates every line of s to width columns, so that no single
+// part can widen the dialog it is rendered into.
+func truncateLines(s string, width int) string {
+	if width <= 0 {
+		return s
+	}
+	if !strings.Contains(s, "\n") {
+		return ansi.Truncate(s, width, "")
+	}
+	lines := strings.Split(s, "\n")
+	for i, line := range lines {
+		lines[i] = ansi.Truncate(line, width, "")
+	}
+	return strings.Join(lines, "\n")
+}
+
+// newSecretInput returns a text input whose value is rendered as bullets, so
+// that an API key or another secret is never displayed on screen. Use
+// setSecretVisible (or EchoMode) to show the value again while it is edited.
+func newSecretInput() textinput.Model {
+	in := textinput.New()
+	in.SetVirtualCursor(false)
+	in.EchoMode = textinput.EchoPassword
+	in.EchoCharacter = SecretMask
+	return in
+}
 
 // InputCursor adjusts the cursor position for an input field within a dialog.
 func InputCursor(t *styles.Styles, cur *tea.Cursor) *tea.Cursor {
@@ -150,6 +200,13 @@ func (rc *RenderContext) Render() string {
 				parts = append(parts, make([]string, rc.Gap)...)
 			}
 		}
+	}
+
+	// No part may be wider than the content area, or it pushes the border out
+	// and leaves the separators short of it.
+	contentWidth := max(0, rc.Width-dialogStyle.GetHorizontalFrameSize())
+	for i, p := range parts {
+		parts[i] = truncateLines(p, contentWidth)
 	}
 
 	if len(rc.Help) > 0 {
