@@ -66,6 +66,7 @@ type KeyMap struct {
 	Sessions        key.Binding
 	Tab             key.Binding
 	ToggleYolo      key.Binding
+	TogglePlan      key.Binding
 	CopyLastMessage key.Binding
 }
 
@@ -106,6 +107,16 @@ func DefaultKeyMap() KeyMap {
 		ToggleYolo: key.NewBinding(
 			key.WithKeys("ctrl+y"),
 			key.WithHelp("ctrl+y", "toggle yolo"),
+		),
+		// shift+tab is the mode switch users already know from Claude Code,
+		// Cursor and Codex, where it is how plan mode is entered and left.
+		// Seshat only had --mode plan at start-up and the model's own
+		// enter_plan_mode, so the user had no way to ask for the
+		// collaboration. Dialogs bind shift+tab for their own navigation, and
+		// those handlers run before this global one.
+		TogglePlan: key.NewBinding(
+			key.WithKeys("shift+tab"),
+			key.WithHelp("shift+tab", "toggle plan mode"),
 		),
 		CopyLastMessage: key.NewBinding(
 			key.WithKeys("ctrl+u"),

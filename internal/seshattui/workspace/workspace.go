@@ -105,6 +105,11 @@ type Workspace interface {
 	AgentModel() AgentModel
 	AgentIsReady() bool
 	ExecutionMode() string
+	// SetPlanMode enters or leaves plan mode on the live session at the user's
+	// request, returning an error when there is no active session. This is the
+	// user's own way into plan mode - the collaboration surface for designing a
+	// plan - as opposed to the model calling enter_plan_mode itself.
+	SetPlanMode(on bool) error
 	// WorktreePath returns the active git worktree path for the current session,
 	// or empty string if no worktree is active.
 	WorktreePath() string

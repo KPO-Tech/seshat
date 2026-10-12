@@ -268,6 +268,39 @@ func (w *SeshatWorkspace) ExecutionMode() string {
 	return string(w.session.GetExecutionMode())
 }
 
+// SetPlanMode enters or leaves plan mode on the live session at the user's own
+// request. It is the user's way into plan mode - besides starting with
+// --mode plan - and it is what makes plan mode a collaboration surface for
+// designing a plan rather than a gate the agent opens by itself: the agent's
+// own enter_plan_mode is deliberately permission-free, so without this the user
+// had no way to ask for the collaboration.
+//
+// Both directions go through the SDK's public ForcePlanMode/ClearPlanMode,
+// which is the same state change enter_plan_mode.Call and exit_plan_mode.Call
+// make through their ContextModifiers. No approval is involved in either
+// direction: the user asked for it.
+func (w *SeshatWorkspace) SetPlanMode(on bool) error {
+	w.sessMu.Lock()
+	sess := w.session
+	w.sessMu.Unlock()
+	if sess == nil {
+		return fmt.Errorf("no active session")
+	}
+
+	mode := string(sdk.ExecutionModeExecute)
+	if on {
+		sess.ForcePlanMode()
+		mode = string(sdk.ExecutionModePlan)
+	} else {
+		sess.ClearPlanMode()
+	}
+	// Mirror what a RuntimeEventTypeExecutionModeChanged event does for the
+	// model-driven transitions, so ExecutionMode() reports the user's switch
+	// immediately instead of waiting for the next runtime event.
+	w.setLiveExecutionMode(string(sess.GetID()), mode)
+	return nil
+}
+
 func (w *SeshatWorkspace) WorktreePath() string {
 	w.sessMu.Lock()
 	sess := w.session
@@ -829,6 +862,13 @@ func (w *SeshatWorkspace) InitCoderAgent(_ context.Context) error           { re
 // so the TUI can include it in the approval message. This lets ctrl+y approval
 // skip the agent's verbose "plan approved!" preamble entirely.
 func (w *SeshatWorkspace) ApprovePlan(sessionID string) (string, error) {
+	// Record the user's decision first and unconditionally. It is a fact about
+	// the plan, not a consequence of the mode change below: exit_plan_mode opens
+	// on this record, and a session this workspace cannot drive must still see the
+	// approval it was given - otherwise the "Proceed" sent down the fallback path
+	// would promise the model an exit it is refused.
+	execution.MarkPlanApproved(types.SessionID(sessionID))
+
 	w.sessMu.Lock()
 	sess := w.session
 	w.sessMu.Unlock()

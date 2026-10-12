@@ -127,6 +127,12 @@ func (t *SubmitPlanTool) Call(
 		return tool.NewErrorResult(fmt.Errorf("failed to persist plan: %w", err)), nil
 	}
 
+	// The plan is now in front of the user. Record that, so exit_plan_mode can
+	// tell a plan nobody has decided on from one that was never submitted - the
+	// message below telling the model to wait is not on its own an enforcement
+	// point.
+	execution.MarkPlanSubmitted(sessionID)
+
 	// Emit runtime event so the frontend can show the plan artifact.
 	if emitter, ok := ctx.Value(types.RuntimeEventEmitterKey).(func(types.RuntimeEvent)); ok {
 		emitter(types.RuntimeEvent{

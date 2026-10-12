@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"sync"
 
 	"github.com/KPO-Tech/seshat-runtime/internal/types"
 	"github.com/KPO-Tech/seshat-runtime/pkg/runtimepath"
@@ -21,6 +22,14 @@ type State struct {
 	HasExitedPlanMode           bool
 	NeedsPlanModeExitAttachment bool
 	HasPlanFile                 bool
+
+	// reviewMu guards the two fields below. They are written from the goroutine
+	// that answers the plan review (the TUI, via submit_plan and the review
+	// dialog) and read from the goroutine running the tool call (exit_plan_mode's
+	// permission check), so they must not be plain shared booleans.
+	reviewMu      sync.RWMutex
+	planSubmitted bool
+	planApproved  bool
 }
 
 var planCache = NewModeCache(DefaultPlansDirectory, func() *State { return &State{} })
@@ -109,6 +118,16 @@ func EnterPlanMode(sessionID types.SessionID, agentID *types.AgentID) {
 	s.HasExitedPlanMode = false
 	s.NeedsPlanModeExitAttachment = false
 	s.HasPlanFile = PlanExists(sessionID, agentID)
+	// Entering starts a new plan cycle: an approval granted for an earlier plan
+	// says nothing about the plan written now.
+	ClearPlanReview(sessionID)
+}
+
+// ExitedPlanMode reports whether the session has left plan mode. It is how a
+// caller tells "the plan was approved and the mode moved on" from "the exit was
+// refused and the session is still in plan mode".
+func ExitedPlanMode(sessionID types.SessionID) bool {
+	return planCache.GetState(sessionID).HasExitedPlanMode
 }
 
 // ExitPlanMode applies state changes when leaving plan mode.
@@ -116,4 +135,56 @@ func ExitPlanMode(sessionID types.SessionID) {
 	s := planCache.GetState(sessionID)
 	s.HasExitedPlanMode = true
 	s.NeedsPlanModeExitAttachment = true
+}
+
+// ============================================================================
+// Plan Review
+// ============================================================================
+//
+// submit_plan can hand a plan to the user for review, and the user answers in
+// the review dialog. exit_plan_mode is gated on that answer: leaving plan mode
+// is what grants write access, so a plan nobody has accepted yet must not be
+// implemented. These accessors are the memory of that exchange.
+
+// MarkPlanSubmitted records that a plan was handed to the user for review. A
+// new submission also clears any earlier approval: a revised plan has to be
+// reviewed on its own.
+func MarkPlanSubmitted(sessionID types.SessionID) {
+	s := planCache.GetState(sessionID)
+	s.reviewMu.Lock()
+	s.planSubmitted = true
+	s.planApproved = false
+	s.reviewMu.Unlock()
+}
+
+// MarkPlanApproved records the user's acceptance of the submitted plan.
+func MarkPlanApproved(sessionID types.SessionID) {
+	s := planCache.GetState(sessionID)
+	s.reviewMu.Lock()
+	s.planApproved = true
+	s.reviewMu.Unlock()
+}
+
+// ClearPlanReview drops the review state so the next plan cycle starts clean.
+func ClearPlanReview(sessionID types.SessionID) {
+	s := planCache.GetState(sessionID)
+	s.reviewMu.Lock()
+	s.planSubmitted = false
+	s.planApproved = false
+	s.reviewMu.Unlock()
+}
+
+// PlanAwaitingApproval reports whether a plan was submitted and the user has not
+// approved it yet - the window in which leaving plan mode would run ahead of the
+// person reading the plan.
+//
+// A session that never submitted a plan is awaiting nothing. submit_plan is
+// optional (it is disabled when the host provides no persistence hook), and
+// without a submission there is no review surface to answer, so plan mode must
+// keep its exit rather than become a room with no door.
+func PlanAwaitingApproval(sessionID types.SessionID) bool {
+	s := planCache.GetState(sessionID)
+	s.reviewMu.RLock()
+	defer s.reviewMu.RUnlock()
+	return s.planSubmitted && !s.planApproved
 }
