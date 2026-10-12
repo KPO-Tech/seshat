@@ -5,7 +5,7 @@ package imageproviders
 import (
 	"net/http"
 
-	internalproviders "github.com/KPO-Tech/seshat/internal/image/providers"
+	internalproviders "github.com/KPO-Tech/seshat-runtime/internal/image/providers"
 )
 
 type (

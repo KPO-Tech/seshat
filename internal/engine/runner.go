@@ -3,14 +3,14 @@ package engine
 import (
 	"context"
 
-	"github.com/KPO-Tech/seshat/internal/execution"
-	"github.com/KPO-Tech/seshat/internal/hooks"
-	"github.com/KPO-Tech/seshat/internal/permissions"
-	"github.com/KPO-Tech/seshat/internal/prompt"
-	"github.com/KPO-Tech/seshat/internal/providers"
-	compact "github.com/KPO-Tech/seshat/internal/runtime/memory"
-	tool "github.com/KPO-Tech/seshat/internal/tools/registry"
-	"github.com/KPO-Tech/seshat/internal/types"
+	"github.com/KPO-Tech/seshat-runtime/internal/execution"
+	"github.com/KPO-Tech/seshat-runtime/internal/hooks"
+	"github.com/KPO-Tech/seshat-runtime/internal/permissions"
+	"github.com/KPO-Tech/seshat-runtime/internal/prompt"
+	"github.com/KPO-Tech/seshat-runtime/internal/providers"
+	compact "github.com/KPO-Tech/seshat-runtime/internal/runtime/memory"
+	tool "github.com/KPO-Tech/seshat-runtime/internal/tools/registry"
+	"github.com/KPO-Tech/seshat-runtime/internal/types"
 )
 
 // Runner executes a single turn through the canonical query loop.

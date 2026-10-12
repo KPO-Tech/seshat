@@ -6,11 +6,11 @@ import (
 	"log/slog"
 	"strings"
 
-	"github.com/KPO-Tech/seshat/internal/agent"
-	"github.com/KPO-Tech/seshat/internal/engine"
-	"github.com/KPO-Tech/seshat/internal/mailbox"
-	agentsTool "github.com/KPO-Tech/seshat/internal/tools/agents"
-	tool "github.com/KPO-Tech/seshat/internal/tools/registry"
+	"github.com/KPO-Tech/seshat-runtime/internal/agent"
+	"github.com/KPO-Tech/seshat-runtime/internal/engine"
+	"github.com/KPO-Tech/seshat-runtime/internal/mailbox"
+	agentsTool "github.com/KPO-Tech/seshat-runtime/internal/tools/agents"
+	tool "github.com/KPO-Tech/seshat-runtime/internal/tools/registry"
 )
 
 // AgentToolFactory builds per-session tools scoped to a specific agent.

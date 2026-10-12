@@ -1,6 +1,6 @@
 package reranker
 
-import internalreranker "github.com/KPO-Tech/seshat/internal/rag/reranker"
+import internalreranker "github.com/KPO-Tech/seshat-runtime/internal/rag/reranker"
 
 type (
 	// HTTPReranker speaks the Cohere-compatible rerank API shape, also

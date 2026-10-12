@@ -10,7 +10,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/KPO-Tech/seshat/internal/types"
+	"github.com/KPO-Tech/seshat-runtime/internal/types"
 )
 
 func Is529Error(resp *http.Response, err error) bool {

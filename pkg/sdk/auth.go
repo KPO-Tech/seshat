@@ -7,9 +7,9 @@ import (
 	"path/filepath"
 	"strings"
 
-	authstore "github.com/KPO-Tech/seshat/internal/auth/store"
-	authtypes "github.com/KPO-Tech/seshat/internal/auth/types"
-	publicoauth "github.com/KPO-Tech/seshat/pkg/auth/oauth"
+	authstore "github.com/KPO-Tech/seshat-runtime/internal/auth/store"
+	authtypes "github.com/KPO-Tech/seshat-runtime/internal/auth/types"
+	publicoauth "github.com/KPO-Tech/seshat-runtime/pkg/auth/oauth"
 )
 
 const DefaultOpenAIDeviceClientID = "app_EMoamEEZ73f0CkXaXp7hrann"

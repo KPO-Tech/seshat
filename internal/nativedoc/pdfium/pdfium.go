@@ -53,7 +53,7 @@ import (
 	"unicode/utf16"
 	"unsafe"
 
-	pdfsync "github.com/KPO-Tech/seshat/internal/nativedoc/pdfsync"
+	pdfsync "github.com/KPO-Tech/seshat-runtime/internal/nativedoc/pdfsync"
 )
 
 // Outline represents one entry in a PDF document outline (table of contents).

@@ -10,7 +10,7 @@ import (
 	"strings"
 	"time"
 
-	webcore "github.com/KPO-Tech/seshat/internal/web"
+	webcore "github.com/KPO-Tech/seshat-runtime/internal/web"
 )
 
 // HTTPClient defines the HTTP client interface

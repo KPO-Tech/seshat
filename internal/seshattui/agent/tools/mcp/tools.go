@@ -10,8 +10,8 @@ import (
 	"slices"
 	"strings"
 
-	"github.com/KPO-Tech/seshat/internal/seshattui/config"
-	"github.com/KPO-Tech/seshat/internal/seshattui/csync"
+	"github.com/KPO-Tech/seshat-runtime/internal/seshattui/config"
+	"github.com/KPO-Tech/seshat-runtime/internal/seshattui/csync"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 )
 

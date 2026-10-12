@@ -10,8 +10,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/KPO-Tech/seshat/pkg/documentreader"
-	"github.com/KPO-Tech/seshat/pkg/officetext"
+	"github.com/KPO-Tech/seshat-runtime/pkg/documentreader"
+	"github.com/KPO-Tech/seshat-runtime/pkg/officetext"
 )
 
 type fakeConverter struct {

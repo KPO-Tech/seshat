@@ -5,7 +5,7 @@ import (
 	"errors"
 	"time"
 
-	"github.com/KPO-Tech/seshat/pkg/dataflow"
+	"github.com/KPO-Tech/seshat-runtime/pkg/dataflow"
 )
 
 // ScheduleTrigger is the "schedule_trigger" node type: a graph's time-based

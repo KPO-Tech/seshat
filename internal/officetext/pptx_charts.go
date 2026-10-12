@@ -5,7 +5,7 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/KPO-Tech/seshat/internal/mdtable"
+	"github.com/KPO-Tech/seshat-runtime/internal/mdtable"
 )
 
 // chartTable turns a chart part (ppt/charts/chartN.xml, which Word and Excel use too) into the table of numbers it

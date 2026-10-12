@@ -5,12 +5,12 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/KPO-Tech/seshat/internal/documentreader"
-	"github.com/KPO-Tech/seshat/internal/providers"
-	"github.com/KPO-Tech/seshat/internal/rag"
-	engineconfig "github.com/KPO-Tech/seshat/pkg/config"
-	"github.com/KPO-Tech/seshat/pkg/dataflow"
-	"github.com/KPO-Tech/seshat/pkg/sdk"
+	"github.com/KPO-Tech/seshat-runtime/internal/documentreader"
+	"github.com/KPO-Tech/seshat-runtime/internal/providers"
+	"github.com/KPO-Tech/seshat-runtime/internal/rag"
+	engineconfig "github.com/KPO-Tech/seshat-runtime/pkg/config"
+	"github.com/KPO-Tech/seshat-runtime/pkg/dataflow"
+	"github.com/KPO-Tech/seshat-runtime/pkg/sdk"
 )
 
 // RunnerConfig is the base template used to build an SDK client for each

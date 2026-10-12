@@ -18,7 +18,7 @@ var (
 	BuildID = ""
 )
 
-// A user may install seshat using `go install github.com/KPO-Tech/seshat@latest`.
+// A user may install seshat using `go install github.com/KPO-Tech/seshat-runtime@latest`.
 // without -ldflags, in which case the version above is unset. As a workaround
 // we use the embedded build version that *is* set when using `go install` (and
 // is only set for `go install` and not for `go build`).

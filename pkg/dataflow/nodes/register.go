@@ -6,8 +6,8 @@
 package nodes
 
 import (
-	"github.com/KPO-Tech/seshat/pkg/dataflow"
-	"github.com/KPO-Tech/seshat/pkg/dataflow/expr"
+	"github.com/KPO-Tech/seshat-runtime/pkg/dataflow"
+	"github.com/KPO-Tech/seshat-runtime/pkg/dataflow/expr"
 )
 
 // Register adds every node type in this package to registry, sharing one

@@ -6,8 +6,8 @@ import (
 	"context"
 	"errors"
 
-	"github.com/KPO-Tech/seshat/pkg/documentreader"
-	"github.com/KPO-Tech/seshat/pkg/pdfsmart"
+	"github.com/KPO-Tech/seshat-runtime/pkg/documentreader"
+	"github.com/KPO-Tech/seshat-runtime/pkg/pdfsmart"
 )
 
 // ErrUnavailable is returned by the fallback build when the native document

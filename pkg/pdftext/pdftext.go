@@ -3,7 +3,7 @@
 // fallback the read_file tool uses.
 package pdftext
 
-import internalpdftext "github.com/KPO-Tech/seshat/internal/pdftext"
+import internalpdftext "github.com/KPO-Tech/seshat-runtime/internal/pdftext"
 
 // MinCharsPerPage mirrors internal/pdftext.MinCharsPerPage.
 const MinCharsPerPage = internalpdftext.MinCharsPerPage

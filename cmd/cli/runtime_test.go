@@ -9,10 +9,10 @@ import (
 	"strings"
 	"testing"
 
-	internalrag "github.com/KPO-Tech/seshat/internal/rag"
-	"github.com/KPO-Tech/seshat/internal/vector"
-	engineconfig "github.com/KPO-Tech/seshat/pkg/config"
-	"github.com/KPO-Tech/seshat/pkg/sdk"
+	internalrag "github.com/KPO-Tech/seshat-runtime/internal/rag"
+	"github.com/KPO-Tech/seshat-runtime/internal/vector"
+	engineconfig "github.com/KPO-Tech/seshat-runtime/pkg/config"
+	"github.com/KPO-Tech/seshat-runtime/pkg/sdk"
 )
 
 func TestResolveModelKeepsExplicitProviderPrefix(t *testing.T) {

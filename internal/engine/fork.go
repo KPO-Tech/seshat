@@ -3,10 +3,10 @@ package engine
 import (
 	"strings"
 
-	"github.com/KPO-Tech/seshat/internal/hooks"
-	"github.com/KPO-Tech/seshat/internal/prompt"
-	"github.com/KPO-Tech/seshat/internal/providers"
-	"github.com/KPO-Tech/seshat/internal/types"
+	"github.com/KPO-Tech/seshat-runtime/internal/hooks"
+	"github.com/KPO-Tech/seshat-runtime/internal/prompt"
+	"github.com/KPO-Tech/seshat-runtime/internal/providers"
+	"github.com/KPO-Tech/seshat-runtime/internal/types"
 )
 
 // Fork returns a new Engine configured for a specific agent persona. It shares

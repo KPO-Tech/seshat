@@ -7,8 +7,8 @@ import (
 	"fmt"
 	"time"
 
-	dbpkg "github.com/KPO-Tech/seshat/internal/db"
-	"github.com/KPO-Tech/seshat/internal/types"
+	dbpkg "github.com/KPO-Tech/seshat-runtime/internal/db"
+	"github.com/KPO-Tech/seshat-runtime/internal/types"
 )
 
 // dbCtx returns a context with a timeout for short DB operations.

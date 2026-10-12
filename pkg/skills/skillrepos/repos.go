@@ -3,7 +3,7 @@ package skillrepos
 import (
 	"context"
 
-	internalrepos "github.com/KPO-Tech/seshat/internal/tools/system/skills/skillrepos"
+	internalrepos "github.com/KPO-Tech/seshat-runtime/internal/tools/system/skills/skillrepos"
 )
 
 // Repo describes a remote git repository that contains skills.

@@ -4,11 +4,11 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/KPO-Tech/seshat/internal/seshattui/message"
-	"github.com/KPO-Tech/seshat/internal/seshattui/ui/styles"
-	planTool "github.com/KPO-Tech/seshat/internal/tools/system/plan"
-	skillsTool "github.com/KPO-Tech/seshat/internal/tools/system/skills"
-	taskTool "github.com/KPO-Tech/seshat/internal/tools/task"
+	"github.com/KPO-Tech/seshat-runtime/internal/seshattui/message"
+	"github.com/KPO-Tech/seshat-runtime/internal/seshattui/ui/styles"
+	planTool "github.com/KPO-Tech/seshat-runtime/internal/tools/system/plan"
+	skillsTool "github.com/KPO-Tech/seshat-runtime/internal/tools/system/skills"
+	taskTool "github.com/KPO-Tech/seshat-runtime/internal/tools/task"
 )
 
 func TestExtractMessageItemsSkipsHiddenPlanModeTools(t *testing.T) {

@@ -9,8 +9,11 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [1.5.0] - 2026-10-12
+
 ### Changed
 
+- **The repository and the Go module are now `seshat-runtime`.** The repository is `github.com/KPO-Tech/seshat-runtime` (the old `KPO-Tech/seshat` URLs redirect) and the module path is `github.com/KPO-Tech/seshat-runtime`, so the runtime has a name of its own next to SeshatOS and SeshatCloud. Imports change from `github.com/KPO-Tech/seshat/...` to `github.com/KPO-Tech/seshat-runtime/...`; packages, functions and behavior are the same, and the binaries are still called `seshat` and `seshat-grpc`. To migrate: `go get github.com/KPO-Tech/seshat-runtime@v1.5.0` and replace the old prefix in your imports (a `sed` over `*.go` and `go.mod` is enough). Releases up to v1.4.1 stay published under the old path. The serialized descriptor of the gRPC package names the new path.
 - **The runtime logo is the one from the regenerated Seshat AI identity kit.** `docs/brand` holds the new set (mark and horizontal lockup on light and dark, black and white, three icon tiles, favicon; the former `on-light.svg` and `on-dark.svg` are now `mark-on-light.svg` and `mark-on-dark.svg`), the README header shows the lockup, and the two terminal notification icons are the new dark tile (512 px PNG, same file names).
 
 ## [1.4.1] - 2026-10-11

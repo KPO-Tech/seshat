@@ -9,8 +9,8 @@
 package documentreader
 
 import (
-	internalreader "github.com/KPO-Tech/seshat/internal/documentreader"
-	"github.com/KPO-Tech/seshat/pkg/pdfsmart"
+	internalreader "github.com/KPO-Tech/seshat-runtime/internal/documentreader"
+	"github.com/KPO-Tech/seshat-runtime/pkg/pdfsmart"
 )
 
 // Config holds the shared configuration for every tool in this package.

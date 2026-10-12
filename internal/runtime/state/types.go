@@ -1,6 +1,6 @@
 package state
 
-import "github.com/KPO-Tech/seshat/internal/types"
+import "github.com/KPO-Tech/seshat-runtime/internal/types"
 
 // Checkpoint represents a session checkpoint for recovery.
 type Checkpoint struct {

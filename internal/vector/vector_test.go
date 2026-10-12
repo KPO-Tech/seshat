@@ -6,7 +6,7 @@ import (
 	"path/filepath"
 	"testing"
 
-	dbpkg "github.com/KPO-Tech/seshat/internal/db"
+	dbpkg "github.com/KPO-Tech/seshat-runtime/internal/db"
 )
 
 func TestMemoryStoreSearchRanksByCosineSimilarity(t *testing.T) {

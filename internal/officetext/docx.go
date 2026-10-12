@@ -7,7 +7,7 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/KPO-Tech/seshat/internal/mdtable"
+	"github.com/KPO-Tech/seshat-runtime/internal/mdtable"
 )
 
 // ExtractDOCX converts a Word document to markdown: headings (whatever language the styles are named in),

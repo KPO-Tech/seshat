@@ -26,14 +26,14 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/KPO-Tech/seshat/internal/sandbox"
-	bashTool "github.com/KPO-Tech/seshat/internal/tools/bash"
-	"github.com/KPO-Tech/seshat/internal/tools/files/grep"
-	"github.com/KPO-Tech/seshat/internal/tools/files/shared"
-	tool "github.com/KPO-Tech/seshat/internal/tools/registry"
-	"github.com/KPO-Tech/seshat/internal/tools/schema"
-	"github.com/KPO-Tech/seshat/internal/types"
-	officetext "github.com/KPO-Tech/seshat/pkg/officetext"
+	"github.com/KPO-Tech/seshat-runtime/internal/sandbox"
+	bashTool "github.com/KPO-Tech/seshat-runtime/internal/tools/bash"
+	"github.com/KPO-Tech/seshat-runtime/internal/tools/files/grep"
+	"github.com/KPO-Tech/seshat-runtime/internal/tools/files/shared"
+	tool "github.com/KPO-Tech/seshat-runtime/internal/tools/registry"
+	"github.com/KPO-Tech/seshat-runtime/internal/tools/schema"
+	"github.com/KPO-Tech/seshat-runtime/internal/types"
+	officetext "github.com/KPO-Tech/seshat-runtime/pkg/officetext"
 )
 
 const (

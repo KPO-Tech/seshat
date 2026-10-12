@@ -7,7 +7,7 @@ import (
 	"os"
 	"strings"
 
-	"github.com/KPO-Tech/seshat/internal/seshattui/shell"
+	"github.com/KPO-Tech/seshat-runtime/internal/seshattui/shell"
 	"github.com/tidwall/gjson"
 )
 

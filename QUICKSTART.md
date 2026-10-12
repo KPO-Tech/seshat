@@ -15,8 +15,8 @@ Get Seshat running in under 5 minutes.
 ## 1. Clone and build
 
 ```bash
-git clone https://github.com/KPO-Tech/seshat
-cd seshat
+git clone https://github.com/KPO-Tech/seshat-runtime
+cd seshat-runtime
 make build
 ```
 
@@ -91,7 +91,7 @@ These tools are registered automatically but only activate when the matching key
 ## 6. Run as a library (SDK)
 
 ```go
-import "github.com/KPO-Tech/seshat/pkg/sdk"
+import "github.com/KPO-Tech/seshat-runtime/pkg/sdk"
 
 client, err := sdk.NewClient(sdk.DefaultClientConfig())
 if err != nil { ... }

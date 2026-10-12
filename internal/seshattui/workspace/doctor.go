@@ -5,10 +5,10 @@ import (
 	"os"
 	"strings"
 
-	tuiconfig "github.com/KPO-Tech/seshat/internal/seshattui/config"
-	engineconfig "github.com/KPO-Tech/seshat/pkg/config"
-	"github.com/KPO-Tech/seshat/pkg/doctor"
-	"github.com/KPO-Tech/seshat/pkg/runtimepath"
+	tuiconfig "github.com/KPO-Tech/seshat-runtime/internal/seshattui/config"
+	engineconfig "github.com/KPO-Tech/seshat-runtime/pkg/config"
+	"github.com/KPO-Tech/seshat-runtime/pkg/doctor"
+	"github.com/KPO-Tech/seshat-runtime/pkg/runtimepath"
 )
 
 func (w *SeshatWorkspace) DoctorReport(ctx context.Context) doctor.Report {

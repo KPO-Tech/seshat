@@ -11,7 +11,7 @@ import (
 	"io"
 	"net/http"
 
-	"github.com/KPO-Tech/seshat/internal/image"
+	"github.com/KPO-Tech/seshat-runtime/internal/image"
 )
 
 const (

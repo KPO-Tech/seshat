@@ -6,7 +6,7 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/KPO-Tech/seshat/internal/seshattui/config"
+	"github.com/KPO-Tech/seshat-runtime/internal/seshattui/config"
 )
 
 // TestReadSkillReturnsRealContent guards H8 in TODO.md: SeshatWorkspace.ReadSkill

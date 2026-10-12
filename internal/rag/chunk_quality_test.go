@@ -10,7 +10,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/KPO-Tech/seshat/internal/utils"
+	"github.com/KPO-Tech/seshat-runtime/internal/utils"
 )
 
 // The documents in testdata/chunking are what the readers write for real files (a Portuguese statute as DOCX, a

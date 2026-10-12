@@ -3,8 +3,8 @@ package sdk
 import (
 	"context"
 
-	audioproviders "github.com/KPO-Tech/seshat/internal/audio/providers"
-	"github.com/KPO-Tech/seshat/internal/audio/stt"
+	audioproviders "github.com/KPO-Tech/seshat-runtime/internal/audio/providers"
+	"github.com/KPO-Tech/seshat-runtime/internal/audio/stt"
 )
 
 // TranscriptionResult mirrors internal/audio/stt.Response — re-exported so

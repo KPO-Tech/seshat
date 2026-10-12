@@ -5,8 +5,8 @@ import (
 	"errors"
 	"testing"
 
-	"github.com/KPO-Tech/seshat/internal/image"
-	tool "github.com/KPO-Tech/seshat/internal/tools/registry"
+	"github.com/KPO-Tech/seshat-runtime/internal/image"
+	tool "github.com/KPO-Tech/seshat-runtime/internal/tools/registry"
 )
 
 type fakeGenerator struct {

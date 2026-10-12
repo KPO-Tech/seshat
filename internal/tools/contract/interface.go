@@ -3,7 +3,7 @@ package contract
 import (
 	"context"
 
-	"github.com/KPO-Tech/seshat/internal/types"
+	"github.com/KPO-Tech/seshat-runtime/internal/types"
 )
 
 // Tool represents a tool that can be called by the AI.

@@ -4,9 +4,9 @@ import (
 	"encoding/json"
 	"strings"
 
-	"github.com/KPO-Tech/seshat/internal/model"
-	"github.com/KPO-Tech/seshat/internal/schema"
-	toolschema "github.com/KPO-Tech/seshat/internal/tools/schema"
+	"github.com/KPO-Tech/seshat-runtime/internal/model"
+	"github.com/KPO-Tech/seshat-runtime/internal/schema"
+	toolschema "github.com/KPO-Tech/seshat-runtime/internal/tools/schema"
 )
 
 // APIProvider represents the API provider being used

@@ -5,7 +5,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/KPO-Tech/seshat/pkg/dataflow"
+	"github.com/KPO-Tech/seshat-runtime/pkg/dataflow"
 )
 
 func TestWaitPassesInputThroughAfterDelay(t *testing.T) {

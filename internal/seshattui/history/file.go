@@ -3,7 +3,7 @@ package history
 import (
 	"context"
 
-	"github.com/KPO-Tech/seshat/internal/seshattui/pubsub"
+	"github.com/KPO-Tech/seshat-runtime/internal/seshattui/pubsub"
 )
 
 const (

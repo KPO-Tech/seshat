@@ -7,7 +7,7 @@ import (
 	"os"
 
 	tea "charm.land/bubbletea/v2"
-	"github.com/KPO-Tech/seshat/internal/seshattui/ui/anim"
+	"github.com/KPO-Tech/seshat-runtime/internal/seshattui/ui/anim"
 	"github.com/charmbracelet/x/ansi"
 )
 

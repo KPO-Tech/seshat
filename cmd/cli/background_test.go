@@ -8,7 +8,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/KPO-Tech/seshat/pkg/runtimepath"
+	"github.com/KPO-Tech/seshat-runtime/pkg/runtimepath"
 )
 
 func TestBackgroundSessionResolveByIDPrefixAndName(t *testing.T) {

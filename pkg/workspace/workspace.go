@@ -1,6 +1,6 @@
 package workspace
 
-import internalworkspace "github.com/KPO-Tech/seshat/internal/workspace"
+import internalworkspace "github.com/KPO-Tech/seshat-runtime/internal/workspace"
 
 const (
 	SubdirUploads   = internalworkspace.SubdirUploads

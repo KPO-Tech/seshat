@@ -3,8 +3,8 @@ package audioproviders
 import (
 	"testing"
 
-	publicstt "github.com/KPO-Tech/seshat/pkg/audio/stt"
-	publictts "github.com/KPO-Tech/seshat/pkg/audio/tts"
+	publicstt "github.com/KPO-Tech/seshat-runtime/pkg/audio/stt"
+	publictts "github.com/KPO-Tech/seshat-runtime/pkg/audio/tts"
 )
 
 func TestNewOpenAISTT_PublicWrapper(t *testing.T) {

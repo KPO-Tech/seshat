@@ -7,11 +7,11 @@ import (
 	"time"
 
 	"charm.land/lipgloss/v2"
-	"github.com/KPO-Tech/seshat/internal/seshattui/message"
-	"github.com/KPO-Tech/seshat/internal/seshattui/session"
-	"github.com/KPO-Tech/seshat/internal/seshattui/ui/list"
-	"github.com/KPO-Tech/seshat/internal/seshattui/ui/styles"
-	taskTool "github.com/KPO-Tech/seshat/internal/tools/task"
+	"github.com/KPO-Tech/seshat-runtime/internal/seshattui/message"
+	"github.com/KPO-Tech/seshat-runtime/internal/seshattui/session"
+	"github.com/KPO-Tech/seshat-runtime/internal/seshattui/ui/list"
+	"github.com/KPO-Tech/seshat-runtime/internal/seshattui/ui/styles"
+	taskTool "github.com/KPO-Tech/seshat-runtime/internal/tools/task"
 	"github.com/charmbracelet/x/ansi"
 )
 

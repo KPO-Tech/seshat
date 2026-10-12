@@ -11,7 +11,7 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/KPO-Tech/seshat/internal/storage"
+	"github.com/KPO-Tech/seshat-runtime/internal/storage"
 )
 
 const (

@@ -3,7 +3,7 @@ package skills
 import (
 	"context"
 
-	internalskills "github.com/KPO-Tech/seshat/internal/tools/system/skills"
+	internalskills "github.com/KPO-Tech/seshat-runtime/internal/tools/system/skills"
 )
 
 type (

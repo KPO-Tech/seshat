@@ -4,9 +4,9 @@ import (
 	"fmt"
 	"strings"
 
-	tool "github.com/KPO-Tech/seshat/internal/tools/contract"
-	"github.com/KPO-Tech/seshat/internal/types"
-	browsercore "github.com/KPO-Tech/seshat/internal/web/browser"
+	tool "github.com/KPO-Tech/seshat-runtime/internal/tools/contract"
+	"github.com/KPO-Tech/seshat-runtime/internal/types"
+	browsercore "github.com/KPO-Tech/seshat-runtime/internal/web/browser"
 )
 
 func browserProgressForResult(toolUse types.ToolUseContent, result tool.CallResult) *types.ToolProgress {

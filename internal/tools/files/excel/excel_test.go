@@ -9,10 +9,10 @@ import (
 
 	"github.com/xuri/excelize/v2"
 
-	fileReadTool "github.com/KPO-Tech/seshat/internal/tools/files/read"
-	tool "github.com/KPO-Tech/seshat/internal/tools/registry"
-	"github.com/KPO-Tech/seshat/internal/types"
-	officetext "github.com/KPO-Tech/seshat/pkg/officetext"
+	fileReadTool "github.com/KPO-Tech/seshat-runtime/internal/tools/files/read"
+	tool "github.com/KPO-Tech/seshat-runtime/internal/tools/registry"
+	"github.com/KPO-Tech/seshat-runtime/internal/types"
+	officetext "github.com/KPO-Tech/seshat-runtime/pkg/officetext"
 )
 
 func defaultToolCtx() tool.ToolUseContext {

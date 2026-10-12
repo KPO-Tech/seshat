@@ -11,12 +11,12 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/KPO-Tech/seshat/internal/sandbox"
-	bashTool "github.com/KPO-Tech/seshat/internal/tools/bash"
-	fileReadTool "github.com/KPO-Tech/seshat/internal/tools/files/read"
-	tool "github.com/KPO-Tech/seshat/internal/tools/registry"
-	"github.com/KPO-Tech/seshat/internal/tools/schema"
-	"github.com/KPO-Tech/seshat/internal/types"
+	"github.com/KPO-Tech/seshat-runtime/internal/sandbox"
+	bashTool "github.com/KPO-Tech/seshat-runtime/internal/tools/bash"
+	fileReadTool "github.com/KPO-Tech/seshat-runtime/internal/tools/files/read"
+	tool "github.com/KPO-Tech/seshat-runtime/internal/tools/registry"
+	"github.com/KPO-Tech/seshat-runtime/internal/tools/schema"
+	"github.com/KPO-Tech/seshat-runtime/internal/types"
 )
 
 const (

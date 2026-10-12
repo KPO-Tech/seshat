@@ -6,7 +6,7 @@ package audioproviders
 import (
 	"net/http"
 
-	internalproviders "github.com/KPO-Tech/seshat/internal/audio/providers"
+	internalproviders "github.com/KPO-Tech/seshat-runtime/internal/audio/providers"
 )
 
 type (

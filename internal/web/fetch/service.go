@@ -1,6 +1,6 @@
 package fetch
 
-import webcore "github.com/KPO-Tech/seshat/internal/web"
+import webcore "github.com/KPO-Tech/seshat-runtime/internal/web"
 
 var _ webcore.FetchService = (*Service)(nil)
 

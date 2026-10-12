@@ -3,7 +3,7 @@ package sdk
 import (
 	"context"
 
-	"github.com/KPO-Tech/seshat/internal/engine"
+	"github.com/KPO-Tech/seshat-runtime/internal/engine"
 )
 
 // Session represents a multi-turn conversation session.

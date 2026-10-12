@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"sync"
 
-	tool "github.com/KPO-Tech/seshat/internal/tools/contract"
+	tool "github.com/KPO-Tech/seshat-runtime/internal/tools/contract"
 )
 
 func (o *Orchestrator) executeConcurrentBatch(

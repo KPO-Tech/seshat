@@ -10,7 +10,7 @@ import (
 	"net/http"
 	"strings"
 
-	"github.com/KPO-Tech/seshat/internal/types"
+	"github.com/KPO-Tech/seshat-runtime/internal/types"
 )
 
 func (c *Client) buildGeminiRequestBody(req types.APIRequest) (io.Reader, error) {

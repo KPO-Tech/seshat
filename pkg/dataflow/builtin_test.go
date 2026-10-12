@@ -5,7 +5,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/KPO-Tech/seshat/pkg/workflow"
+	"github.com/KPO-Tech/seshat-runtime/pkg/workflow"
 )
 
 type stubAgentCaller struct {

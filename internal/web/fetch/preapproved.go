@@ -1,6 +1,6 @@
 package fetch
 
-import webcore "github.com/KPO-Tech/seshat/internal/web"
+import webcore "github.com/KPO-Tech/seshat-runtime/internal/web"
 
 // PreapprovedHosts re-exports the shared documentation host allowlist for backward compatibility.
 var PreapprovedHosts = webcore.PreapprovedHosts

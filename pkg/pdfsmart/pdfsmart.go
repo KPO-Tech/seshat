@@ -5,9 +5,9 @@ package pdfsmart
 import (
 	"context"
 
-	internalpdfsmart "github.com/KPO-Tech/seshat/internal/pdfsmart"
-	"github.com/KPO-Tech/seshat/internal/pdftext"
-	"github.com/KPO-Tech/seshat/pkg/documentreader"
+	internalpdfsmart "github.com/KPO-Tech/seshat-runtime/internal/pdfsmart"
+	"github.com/KPO-Tech/seshat-runtime/internal/pdftext"
+	"github.com/KPO-Tech/seshat-runtime/pkg/documentreader"
 )
 
 type (

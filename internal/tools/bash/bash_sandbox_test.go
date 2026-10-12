@@ -8,8 +8,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/KPO-Tech/seshat/internal/sandbox"
-	tool "github.com/KPO-Tech/seshat/internal/tools/registry"
+	"github.com/KPO-Tech/seshat-runtime/internal/sandbox"
+	tool "github.com/KPO-Tech/seshat-runtime/internal/tools/registry"
 )
 
 // TestMain lets this test binary double as a "hangs forever" fake docker

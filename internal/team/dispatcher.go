@@ -14,8 +14,8 @@ import (
 	"math/rand"
 	"strings"
 
-	"github.com/KPO-Tech/seshat/internal/agent"
-	"github.com/KPO-Tech/seshat/internal/mailbox"
+	"github.com/KPO-Tech/seshat-runtime/internal/agent"
+	"github.com/KPO-Tech/seshat-runtime/internal/mailbox"
 )
 
 // Dispatcher routes messages between agents using the mailbox as transport.

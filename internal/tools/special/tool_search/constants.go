@@ -1,6 +1,6 @@
 package toolsearch
 
-import "github.com/KPO-Tech/seshat/internal/tools/registry"
+import "github.com/KPO-Tech/seshat-runtime/internal/tools/registry"
 
 const ToolSearchToolName = "tool_search"
 

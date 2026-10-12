@@ -11,10 +11,10 @@ import (
 	"strings"
 	"time"
 
-	dbpkg "github.com/KPO-Tech/seshat/internal/db"
-	"github.com/KPO-Tech/seshat/pkg/config"
-	"github.com/KPO-Tech/seshat/pkg/runtimepath"
-	"github.com/KPO-Tech/seshat/pkg/sdk"
+	dbpkg "github.com/KPO-Tech/seshat-runtime/internal/db"
+	"github.com/KPO-Tech/seshat-runtime/pkg/config"
+	"github.com/KPO-Tech/seshat-runtime/pkg/runtimepath"
+	"github.com/KPO-Tech/seshat-runtime/pkg/sdk"
 )
 
 // Status is the outcome of a check: ok, warn, fail or skipped.

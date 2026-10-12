@@ -8,7 +8,7 @@ import (
 
 	"github.com/go-rod/rod"
 
-	"github.com/KPO-Tech/seshat/internal/types"
+	"github.com/KPO-Tech/seshat-runtime/internal/types"
 )
 
 const defaultBlankURL = "about:blank"

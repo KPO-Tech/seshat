@@ -9,7 +9,7 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/KPO-Tech/seshat/pkg/sdk"
+	"github.com/KPO-Tech/seshat-runtime/pkg/sdk"
 )
 
 func runWorkflow(ctx context.Context, args []string, stdout, stderr io.Writer) error {

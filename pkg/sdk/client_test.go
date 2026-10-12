@@ -12,11 +12,11 @@ import (
 	"testing"
 	"time"
 
-	"github.com/KPO-Tech/seshat/internal/providers"
-	"github.com/KPO-Tech/seshat/internal/sandbox"
-	tool "github.com/KPO-Tech/seshat/internal/tools/contract"
-	"github.com/KPO-Tech/seshat/internal/types"
-	"github.com/KPO-Tech/seshat/pkg/runtimepath"
+	"github.com/KPO-Tech/seshat-runtime/internal/providers"
+	"github.com/KPO-Tech/seshat-runtime/internal/sandbox"
+	tool "github.com/KPO-Tech/seshat-runtime/internal/tools/contract"
+	"github.com/KPO-Tech/seshat-runtime/internal/types"
+	"github.com/KPO-Tech/seshat-runtime/pkg/runtimepath"
 )
 
 type fakeTitleGenerator struct {

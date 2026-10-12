@@ -8,10 +8,10 @@ import (
 
 	"github.com/stretchr/testify/require"
 
-	longterm "github.com/KPO-Tech/seshat/internal/memory/longterm"
-	tool "github.com/KPO-Tech/seshat/internal/tools/registry"
-	memtool "github.com/KPO-Tech/seshat/internal/tools/special/memory"
-	"github.com/KPO-Tech/seshat/internal/types"
+	longterm "github.com/KPO-Tech/seshat-runtime/internal/memory/longterm"
+	tool "github.com/KPO-Tech/seshat-runtime/internal/tools/registry"
+	memtool "github.com/KPO-Tech/seshat-runtime/internal/tools/special/memory"
+	"github.com/KPO-Tech/seshat-runtime/internal/types"
 )
 
 // ─── fakeStore ────────────────────────────────────────────────────────────────

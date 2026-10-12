@@ -8,9 +8,9 @@ import (
 	"sort"
 	"strings"
 
-	tool "github.com/KPO-Tech/seshat/internal/tools/registry"
-	skills "github.com/KPO-Tech/seshat/internal/tools/system/skills"
-	"github.com/KPO-Tech/seshat/internal/types"
+	tool "github.com/KPO-Tech/seshat-runtime/internal/tools/registry"
+	skills "github.com/KPO-Tech/seshat-runtime/internal/tools/system/skills"
+	"github.com/KPO-Tech/seshat-runtime/internal/types"
 )
 
 type baseTool struct{}

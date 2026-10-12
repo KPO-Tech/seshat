@@ -8,7 +8,7 @@ import (
 	"strconv"
 	"strings"
 
-	tool "github.com/KPO-Tech/seshat/internal/tools/registry"
+	tool "github.com/KPO-Tech/seshat-runtime/internal/tools/registry"
 )
 
 // YouTube, through the Data API v3 with an API key. Searching costs 100 units of the daily quota and reading

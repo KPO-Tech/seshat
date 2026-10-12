@@ -5,10 +5,10 @@ import (
 	"testing"
 	"time"
 
-	"github.com/KPO-Tech/seshat/internal/seshattui/pubsub"
-	"github.com/KPO-Tech/seshat/internal/seshattui/session"
-	tasktool "github.com/KPO-Tech/seshat/internal/tools/task"
-	"github.com/KPO-Tech/seshat/pkg/sdk"
+	"github.com/KPO-Tech/seshat-runtime/internal/seshattui/pubsub"
+	"github.com/KPO-Tech/seshat-runtime/internal/seshattui/session"
+	tasktool "github.com/KPO-Tech/seshat-runtime/internal/tools/task"
+	"github.com/KPO-Tech/seshat-runtime/pkg/sdk"
 )
 
 func TestOnRuntimeEventPublishesPlanReviewSubmission(t *testing.T) {

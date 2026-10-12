@@ -9,7 +9,7 @@ import (
 	"testing"
 	"time"
 
-	dbpkg "github.com/KPO-Tech/seshat/internal/db"
+	dbpkg "github.com/KPO-Tech/seshat-runtime/internal/db"
 )
 
 // countingBackend counts SaveGoal calls and optionally blocks on a channel

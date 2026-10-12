@@ -5,10 +5,10 @@ import (
 	"strings"
 
 	"charm.land/lipgloss/v2"
-	"github.com/KPO-Tech/seshat/internal/seshattui/ui/common"
-	"github.com/KPO-Tech/seshat/internal/seshattui/ui/list"
-	"github.com/KPO-Tech/seshat/internal/seshattui/ui/styles"
-	"github.com/KPO-Tech/seshat/internal/seshattui/workspace"
+	"github.com/KPO-Tech/seshat-runtime/internal/seshattui/ui/common"
+	"github.com/KPO-Tech/seshat-runtime/internal/seshattui/ui/list"
+	"github.com/KPO-Tech/seshat-runtime/internal/seshattui/ui/styles"
+	"github.com/KPO-Tech/seshat-runtime/internal/seshattui/workspace"
 	"github.com/charmbracelet/x/ansi"
 	"github.com/sahilm/fuzzy"
 )

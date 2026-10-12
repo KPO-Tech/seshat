@@ -4,8 +4,8 @@ import (
 	"context"
 	"net/http"
 
-	providerretry "github.com/KPO-Tech/seshat/internal/providers/retry"
-	"github.com/KPO-Tech/seshat/internal/types"
+	providerretry "github.com/KPO-Tech/seshat-runtime/internal/providers/retry"
+	"github.com/KPO-Tech/seshat-runtime/internal/types"
 )
 
 type RetryStrategy = providerretry.RetryStrategy

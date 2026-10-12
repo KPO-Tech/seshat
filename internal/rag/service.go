@@ -9,9 +9,9 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/KPO-Tech/seshat/internal/rag/reranker"
-	"github.com/KPO-Tech/seshat/internal/storage"
-	"github.com/KPO-Tech/seshat/internal/vector"
+	"github.com/KPO-Tech/seshat-runtime/internal/rag/reranker"
+	"github.com/KPO-Tech/seshat-runtime/internal/storage"
+	"github.com/KPO-Tech/seshat-runtime/internal/vector"
 )
 
 // Reranking defaults, from the retrieval benchmark of SeshatCloud (seshat-intelligence/benchmarks/chunk_bench, rerank.py: 192

@@ -7,7 +7,7 @@ import (
 	"strings"
 	"testing"
 
-	tool "github.com/KPO-Tech/seshat/internal/tools/registry"
+	tool "github.com/KPO-Tech/seshat-runtime/internal/tools/registry"
 )
 
 // call runs a tool and returns its text, or the error it reported.

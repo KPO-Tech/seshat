@@ -3,7 +3,7 @@ package sandbox
 import (
 	"strings"
 
-	"github.com/KPO-Tech/seshat/internal/types"
+	"github.com/KPO-Tech/seshat-runtime/internal/types"
 )
 
 // PermissionDeniedError is returned when the sandbox denies an action outright.

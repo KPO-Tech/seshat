@@ -7,7 +7,7 @@ import (
 	"os"
 	"sync"
 
-	"github.com/KPO-Tech/seshat/pkg/runtimepath"
+	"github.com/KPO-Tech/seshat-runtime/pkg/runtimepath"
 )
 
 type StorageProvider interface {

@@ -9,7 +9,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/KPO-Tech/seshat/pkg/runtimepath"
+	"github.com/KPO-Tech/seshat-runtime/pkg/runtimepath"
 )
 
 // Profile is the persona of the optional companion: whether it is enabled, its name, style, traits and instructions, and when it was created and last updated.

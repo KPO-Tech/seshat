@@ -7,8 +7,8 @@ import (
 	"strings"
 	"unicode"
 
-	"github.com/KPO-Tech/seshat/internal/pagemark"
-	"github.com/KPO-Tech/seshat/internal/utils"
+	"github.com/KPO-Tech/seshat-runtime/internal/pagemark"
+	"github.com/KPO-Tech/seshat-runtime/internal/utils"
 )
 
 // markdownChunker is the engine behind HeadingChunker and TableChunker: it cuts a document, written as markdown (what

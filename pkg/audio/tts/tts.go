@@ -4,7 +4,7 @@
 // tool-calling loop in the way.
 package tts
 
-import internaltts "github.com/KPO-Tech/seshat/internal/audio/tts"
+import internaltts "github.com/KPO-Tech/seshat-runtime/internal/audio/tts"
 
 type (
 	// Generation is the core interface for text-to-speech providers.

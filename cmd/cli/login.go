@@ -6,7 +6,7 @@ import (
 	"fmt"
 	"io"
 
-	"github.com/KPO-Tech/seshat/internal/providers"
+	"github.com/KPO-Tech/seshat-runtime/internal/providers"
 )
 
 // runLogin implements: seshat login [--provider openai] [--client-id ID]

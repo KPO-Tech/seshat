@@ -5,11 +5,11 @@ import (
 	"errors"
 	"testing"
 
-	"github.com/KPO-Tech/seshat/pkg/dataflow"
-	"github.com/KPO-Tech/seshat/pkg/dataflow/nodes"
-	"github.com/KPO-Tech/seshat/pkg/sdk"
-	"github.com/KPO-Tech/seshat/pkg/types"
-	"github.com/KPO-Tech/seshat/pkg/workflow"
+	"github.com/KPO-Tech/seshat-runtime/pkg/dataflow"
+	"github.com/KPO-Tech/seshat-runtime/pkg/dataflow/nodes"
+	"github.com/KPO-Tech/seshat-runtime/pkg/sdk"
+	"github.com/KPO-Tech/seshat-runtime/pkg/types"
+	"github.com/KPO-Tech/seshat-runtime/pkg/workflow"
 )
 
 // fakeSession is a messageSubmitter test double — no real LLM call, matching

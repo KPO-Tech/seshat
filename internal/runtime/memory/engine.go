@@ -5,9 +5,9 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/KPO-Tech/seshat/internal/providers"
-	"github.com/KPO-Tech/seshat/internal/types"
-	"github.com/KPO-Tech/seshat/internal/utils"
+	"github.com/KPO-Tech/seshat-runtime/internal/providers"
+	"github.com/KPO-Tech/seshat-runtime/internal/types"
+	"github.com/KPO-Tech/seshat-runtime/internal/utils"
 )
 
 const (

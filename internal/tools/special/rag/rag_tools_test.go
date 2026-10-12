@@ -5,11 +5,11 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/KPO-Tech/seshat/internal/rag"
-	"github.com/KPO-Tech/seshat/internal/storage"
-	tool "github.com/KPO-Tech/seshat/internal/tools/registry"
-	ragtool "github.com/KPO-Tech/seshat/internal/tools/special/rag"
-	"github.com/KPO-Tech/seshat/internal/vector"
+	"github.com/KPO-Tech/seshat-runtime/internal/rag"
+	"github.com/KPO-Tech/seshat-runtime/internal/storage"
+	tool "github.com/KPO-Tech/seshat-runtime/internal/tools/registry"
+	ragtool "github.com/KPO-Tech/seshat-runtime/internal/tools/special/rag"
+	"github.com/KPO-Tech/seshat-runtime/internal/vector"
 )
 
 // stubEmbedder returns the same single-dimension vector for every text.

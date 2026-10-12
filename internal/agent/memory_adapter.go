@@ -3,7 +3,7 @@ package agent
 import (
 	"time"
 
-	corememory "github.com/KPO-Tech/seshat/internal/memory"
+	corememory "github.com/KPO-Tech/seshat-runtime/internal/memory"
 )
 
 // ---------------------------------------------------------------------------

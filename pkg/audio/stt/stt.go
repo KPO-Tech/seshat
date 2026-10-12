@@ -4,7 +4,7 @@
 // transcribe" feature) without an LLM tool-calling loop in the way.
 package stt
 
-import internalstt "github.com/KPO-Tech/seshat/internal/audio/stt"
+import internalstt "github.com/KPO-Tech/seshat-runtime/internal/audio/stt"
 
 type (
 	// SpeechToText is the core interface for transcription providers.

@@ -6,11 +6,11 @@ import (
 	"regexp"
 	"strings"
 
-	"github.com/KPO-Tech/seshat/internal/modes"
-	execution "github.com/KPO-Tech/seshat/internal/modes/execution"
-	tool "github.com/KPO-Tech/seshat/internal/tools/registry"
-	"github.com/KPO-Tech/seshat/internal/tools/schema"
-	"github.com/KPO-Tech/seshat/internal/types"
+	"github.com/KPO-Tech/seshat-runtime/internal/modes"
+	execution "github.com/KPO-Tech/seshat-runtime/internal/modes/execution"
+	tool "github.com/KPO-Tech/seshat-runtime/internal/tools/registry"
+	"github.com/KPO-Tech/seshat-runtime/internal/tools/schema"
+	"github.com/KPO-Tech/seshat-runtime/internal/types"
 )
 
 // PlanPersistFn is the callback the submit_plan tool uses to persist a plan document.

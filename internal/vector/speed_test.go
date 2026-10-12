@@ -13,7 +13,7 @@ import (
 	"testing"
 	"time"
 
-	dbpkg "github.com/KPO-Tech/seshat/internal/db"
+	dbpkg "github.com/KPO-Tech/seshat-runtime/internal/db"
 )
 
 // TestStoreSpeed measures every store on the same synthetic collection: how long the ingestion takes, and the latency of a

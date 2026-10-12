@@ -8,17 +8,17 @@ import (
 	"sync"
 	"time"
 
-	"github.com/KPO-Tech/seshat/internal/execution"
-	"github.com/KPO-Tech/seshat/internal/hooks"
-	"github.com/KPO-Tech/seshat/internal/memory"
-	"github.com/KPO-Tech/seshat/internal/monitoring"
-	"github.com/KPO-Tech/seshat/internal/permissions"
-	"github.com/KPO-Tech/seshat/internal/prompt"
-	"github.com/KPO-Tech/seshat/internal/providers"
-	compact "github.com/KPO-Tech/seshat/internal/runtime/memory"
-	tool "github.com/KPO-Tech/seshat/internal/tools/registry"
-	"github.com/KPO-Tech/seshat/internal/types"
-	browsercore "github.com/KPO-Tech/seshat/internal/web/browser"
+	"github.com/KPO-Tech/seshat-runtime/internal/execution"
+	"github.com/KPO-Tech/seshat-runtime/internal/hooks"
+	"github.com/KPO-Tech/seshat-runtime/internal/memory"
+	"github.com/KPO-Tech/seshat-runtime/internal/monitoring"
+	"github.com/KPO-Tech/seshat-runtime/internal/permissions"
+	"github.com/KPO-Tech/seshat-runtime/internal/prompt"
+	"github.com/KPO-Tech/seshat-runtime/internal/providers"
+	compact "github.com/KPO-Tech/seshat-runtime/internal/runtime/memory"
+	tool "github.com/KPO-Tech/seshat-runtime/internal/tools/registry"
+	"github.com/KPO-Tech/seshat-runtime/internal/types"
+	browsercore "github.com/KPO-Tech/seshat-runtime/internal/web/browser"
 )
 
 // SessionStore persists canonical session metadata and transcript state.

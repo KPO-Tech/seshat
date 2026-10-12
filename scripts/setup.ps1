@@ -10,7 +10,7 @@
 #   powershell -ExecutionPolicy Bypass -File scripts\setup.ps1
 #
 # NOTE: macOS and Windows support is not yet fully tested.
-# Report issues at https://github.com/KPO-Tech/seshat/issues
+# Report issues at https://github.com/KPO-Tech/seshat-runtime/issues
 
 $ErrorActionPreference = "Stop"
 

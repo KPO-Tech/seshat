@@ -16,7 +16,7 @@ import (
 	"google.golang.org/grpc/metadata"
 	"google.golang.org/grpc/status"
 
-	pb "github.com/KPO-Tech/seshat/pkg/grpc/seshat"
+	pb "github.com/KPO-Tech/seshat-runtime/pkg/grpc/seshat"
 )
 
 // The gRPC server runs an agent for whoever reaches it, and ConnectMCP can start a process: it must not be open by default.

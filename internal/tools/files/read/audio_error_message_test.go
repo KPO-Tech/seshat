@@ -9,7 +9,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/KPO-Tech/seshat/internal/documentreader"
+	"github.com/KPO-Tech/seshat-runtime/internal/documentreader"
 )
 
 // A real the configured document reader instance set up with the plain `the configured document reader` package

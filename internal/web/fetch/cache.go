@@ -3,7 +3,7 @@ package fetch
 import (
 	"time"
 
-	webcore "github.com/KPO-Tech/seshat/internal/web"
+	webcore "github.com/KPO-Tech/seshat-runtime/internal/web"
 )
 
 // CacheEntry represents a cached URL response.

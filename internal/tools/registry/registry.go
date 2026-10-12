@@ -8,8 +8,8 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/KPO-Tech/seshat/internal/tools/schema"
-	"github.com/KPO-Tech/seshat/internal/types"
+	"github.com/KPO-Tech/seshat-runtime/internal/tools/schema"
+	"github.com/KPO-Tech/seshat-runtime/internal/types"
 )
 
 // Registry manages tool registration and discovery

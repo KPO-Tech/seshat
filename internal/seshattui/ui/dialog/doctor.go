@@ -10,8 +10,8 @@ import (
 	"charm.land/bubbles/v2/viewport"
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
-	"github.com/KPO-Tech/seshat/internal/seshattui/ui/common"
-	"github.com/KPO-Tech/seshat/pkg/doctor"
+	"github.com/KPO-Tech/seshat-runtime/internal/seshattui/ui/common"
+	"github.com/KPO-Tech/seshat-runtime/pkg/doctor"
 	uv "github.com/charmbracelet/ultraviolet"
 )
 

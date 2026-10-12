@@ -5,8 +5,8 @@ import (
 	"sync"
 
 	"charm.land/glamour/v2"
-	"github.com/KPO-Tech/seshat/internal/seshattui/ui/styles"
-	"github.com/KPO-Tech/seshat/internal/seshattui/ui/xchroma"
+	"github.com/KPO-Tech/seshat-runtime/internal/seshattui/ui/styles"
+	"github.com/KPO-Tech/seshat-runtime/internal/seshattui/ui/xchroma"
 	"github.com/alecthomas/chroma/v2/formatters"
 )
 

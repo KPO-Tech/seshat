@@ -4,7 +4,7 @@ import (
 	"context"
 	"testing"
 
-	"github.com/KPO-Tech/seshat/internal/tools/registry"
+	"github.com/KPO-Tech/seshat-runtime/internal/tools/registry"
 )
 
 // wantRegistered lists a representative tool from each family wired in
