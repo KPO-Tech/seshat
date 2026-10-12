@@ -13,6 +13,10 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 - **API keys are never displayed in the configuration dialogs.** The provider API key field (`Settings → Providers → LLM`) and the web search key field render their value as bullets from now on, both while a key is being typed and when one is already saved, so a secret stops being readable over a shoulder or in a screen recording. `ctrl+r` reveals the value while the field is edited, and the value is hidden again on tab, on validation and on save, so a key is only ever on screen when it was explicitly asked for.
 
+### Changed
+
+- **The terminal wordmark spells SESHAT and no longer carries the Charm™ mark.** The big logo now draws the six letterforms S, E, S, H, A, T instead of the previous set, and the version row keeps its right-aligned place on the line above it. The `Charm™` label is gone from the wide logo, from the compact header and from the small render used by the sidebar, along with the three styles that colored it (`Header.Charm`, `Logo.CharmColor`, `Logo.SmallCharm`). The diagonals, the gradient and the stacked compact form are unchanged.
+
 ### Fixed
 
 - **A dialog with a filter or key field was one column wider than its own border, which left a small gap before the right edge.** The width handed to those fields reserved a single column for the cursor, but the field renders three: its prompt plus the cursor cell. The card therefore grew by one column while its separators stayed where they were, so the horizontal rules stopped one cell short of the border - visible in `Settings → Providers → LLM` and in the provider detail pane. The width now comes from one helper that measures the prompt and the cursor on the component itself rather than assuming them, and `RenderContext.Render` truncates every part to the dialog's inner width, so no part can widen a card again whatever it contains. A test renders all eleven Settings views off-screen and asserts that each one is exactly the card width with its separators touching the column before the border.

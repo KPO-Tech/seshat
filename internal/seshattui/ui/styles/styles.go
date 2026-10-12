@@ -62,7 +62,6 @@ const (
 type Styles struct {
 	// Header
 	Header struct {
-		Charm             lipgloss.Style // Style for "Charm™" label
 		Diagonals         lipgloss.Style // Style for diagonal separators (╱)
 		Percentage        lipgloss.Style // Style for context percentage
 		Hypercredit       lipgloss.Style // Style for Hypercredit count (◆ N)
@@ -143,9 +142,7 @@ type Styles struct {
 		FieldColor         color.Color
 		TitleColorA        color.Color
 		TitleColorB        color.Color
-		CharmColor         color.Color
 		VersionColor       color.Color
-		SmallCharm         lipgloss.Style // "Charm™" label in SmallRender
 		SmallDiagonals     lipgloss.Style // Diagonal line fill in SmallRender
 		GradCanvas         lipgloss.Style // Blank canvas for gradient painting
 		SmallGradFromColor color.Color    // Small "Seshat" wordmark gradient start

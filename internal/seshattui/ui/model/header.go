@@ -45,17 +45,7 @@ func newHeader(com *common.Common) *header {
 // after the theme changes.
 func (h *header) refresh() {
 	t := h.com.Styles
-	isHyper := h.com.IsHyper()
-	charm := "Charm™"
-	if !isHyper {
-		charm = " " + charm
-	}
-	name := "SESHAT"
-	if isHyper {
-		name = "SESHAT"
-	}
-	h.compactLogo = t.Header.Charm.Render(charm) + " " +
-		styles.ApplyBoldForegroundGrad(t.Header.LogoGradCanvas, name, t.Header.LogoGradFromColor, t.Header.LogoGradToColor) + " "
+	h.compactLogo = styles.ApplyBoldForegroundGrad(t.Header.LogoGradCanvas, "SESHAT", t.Header.LogoGradFromColor, t.Header.LogoGradToColor) + " "
 	// Force drawHeader to re-render the wide logo on the next frame.
 	h.width = 0
 	h.logo = ""
