@@ -355,20 +355,22 @@ func (t *ExitPlanModeTool) resolveSessionID(input tool.CallInput) (types.Session
 }
 
 // ExitPlanModePrompt is the system prompt for the ExitPlanMode tool.
-const ExitPlanModePrompt = `Use this tool to exit plan mode after the user has validated your plan.
+const ExitPlanModePrompt = `Use this tool to leave plan mode once the user has approved the plan you submitted with submit_plan.
 
-Call this ONLY after submit_plan has been approved.
-When the user clicks "Proceed" in the UI you will receive a confirmation — at that point call exit_plan_mode.
+Call it only when you are still in plan mode and the user has approved the plan. Approving exits plan
+mode in two possible ways, and the approval message tells you which one you are in:
+- the host may have already exited plan mode for you — then do NOT call this tool, just start implementing;
+- or you receive a plain approval — then call exit_plan_mode to leave the mode and begin.
 
 ## Do NOT call this tool when
 
 - You are not in plan mode
 - You have not yet called submit_plan
 - The user has not yet approved the plan
+- The approval already told you plan mode was exited for you
 
-## Immediately after exiting
+## After exiting
 
-Convert each implementation step from the approved plan into a task using task_create.
-Create ALL tasks upfront before starting any work — this is your execution checklist.
-Then work through the list in strict order: mark in_progress before starting each step,
-completed when done. Do not skip steps or work out of order.`
+Begin implementing the approved plan. Create or refresh the tracked task list with task_create
+so the user can watch each step, and update it as you go: mark a task in_progress before you
+start it and completed when it is done. Work through the list in order rather than skipping ahead.`

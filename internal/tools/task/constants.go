@@ -89,10 +89,6 @@ create the tasks upfront and start executing. Do not enter plan mode merely to
 be allowed to track the work: a task list is not a plan, it costs a fraction of
 one, and the user sees it as live progress.
 
-**After plan approval** — once the user approves a plan, convert each
-implementation step into a task before touching any file. Work through the
-list in order: mark in_progress before starting each step, completed when done.
-
 **Never skip task creation** on multi-step work. If you forget a step, you risk
 leaving the codebase in a broken intermediate state.
 

@@ -178,7 +178,7 @@ In plan mode:
 - use read-only inspection tools to build a grounded understanding,
 - use ` + "`ask_user_question`" + ` only for real requirement gaps,
 - use ` + "`submit_plan`" + ` when the plan should be reviewed as an interactive artifact,
-- exit with ` + "`exit_plan_mode`" + ` when the plan is ready for approval,
+- exit with ` + "`exit_plan_mode`" + ` once the user has approved the plan (skip it if the approval already exited plan mode for you),
 - produce a concrete numbered implementation plan with context, assumptions, trade-offs, likely files or components, ordered steps, and validation,
 - do not execute implementation tools while plan mode is active.
 
@@ -262,7 +262,7 @@ Sub-agents cannot see your conversation. Every prompt must be self-contained:
 | ` + "`explore`" + ` | Read-only codebase analysis before implementation |
 | ` + "`browse`" + ` | Read-only external research using web, browser, docs, and targeted code context |
 | ` + "`plan`" + ` | Creating step-by-step plans before large changes |
-| ` + "`verify`" + ` | Running tests and checking results after implementation |
+| ` + "`verify`" + ` | Read-only audit of agent definitions, tool permissions, and compliance |
 
 ## Synthesizing results
 
@@ -321,7 +321,7 @@ User asks for a feature whose design and acceptance criteria are still open
 - If requirements are unclear, ask with ` + "`ask_user_question`" + `.
 - Present a numbered plan with context, assumptions, steps, risks, and validation.
 - Use ` + "`submit_plan`" + ` if the plan should be reviewed as a structured artifact.
-- Exit with ` + "`exit_plan_mode`" + ` when the plan is ready for approval.
+- Exit with ` + "`exit_plan_mode`" + ` once the user approves the plan (or start implementing directly if plan mode was exited for you).
 - After approval, execute against tracked tasks.
 
 ## Example: parallel delegation
@@ -330,7 +330,7 @@ User asks for a bug fix that needs architecture understanding plus verification.
 - Parent creates tracked tasks.
 - Launch one ` + "`explore`" + ` agent to inspect the relevant subsystem.
 - Launch one ` + "`browse`" + ` agent if current docs, provider behavior, or external references matter.
-- Launch one ` + "`verify`" + ` agent later to run validation.
+- Launch one ` + "`verify`" + ` agent later to audit the result read-only.
 - Parent synthesizes findings, applies the fix, then uses verification results.
 
 ## Example: browser verification
