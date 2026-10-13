@@ -25,13 +25,13 @@ Do NOT delegate when:
 - **explore**: read-only architecture and codebase investigation
 - **browse**: read-only external research using web, browser, docs, and targeted local context
 - **plan**: create a detailed implementation plan
-- **verify**: validate, test, and review results in a fresh context
+- **verify**: read-only audit of agent definitions, tool permissions, and compliance
 
 ## Choosing the right agent type
 
 - Use ` + "`explore`" + ` when the evidence should come mainly from the local repository.
 - Use ` + "`browse`" + ` when the evidence should come mainly from current docs, provider behavior, release notes, policies, external references, or website interaction.
-- Use ` + "`verify`" + ` after implementation or when you need a fresh validation pass.
+- Use ` + "`verify`" + ` to audit an agent definition's tools, permissions, or compliance — it is read-only and cannot run tests.
 - Use ` + "`plan`" + ` only when you want a structured implementation plan as the deliverable.
 - Use ` + "`general-purpose`" + ` when the subtask combines several of the above and needs broader autonomy.
 

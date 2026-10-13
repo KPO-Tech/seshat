@@ -50,6 +50,10 @@ type Config struct {
 	// 0 = loop default (3).
 	ContinuationNudgeLimit int `json:"continuation_nudge_limit"`
 
+	// TaskNudgeLimit caps how many task-list reminders one turn sends. 0 = loop
+	// default (3); a negative value disables the reminder entirely.
+	TaskNudgeLimit int `json:"task_nudge_limit"`
+
 	// StopHooks are post-turn policy hooks that may request one more cycle.
 	StopHooks []StopHook `json:"-"`
 

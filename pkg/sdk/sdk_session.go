@@ -4,6 +4,7 @@ import (
 	"context"
 
 	"github.com/KPO-Tech/seshat-runtime/internal/engine"
+	modeexec "github.com/KPO-Tech/seshat-runtime/internal/modes/execution"
 )
 
 // Session represents a multi-turn conversation session.
@@ -124,6 +125,12 @@ func (s *Session) ForcePlanMode() {
 		return
 	}
 	s.session.ForcePlanMode()
+	// Entering starts a new plan cycle: a review left pending from a previous
+	// cycle must not stay "awaiting approval" and block exit_plan_mode before
+	// this cycle's plan has even been submitted. The engine-level setter cannot
+	// reach the plan review state, so it is reset here where the session id is
+	// known.
+	modeexec.ClearPlanReview(s.session.GetSessionID())
 }
 
 // ClearPlanMode exits plan mode in the session context, restoring the previous
@@ -134,6 +141,33 @@ func (s *Session) ClearPlanMode() {
 		return
 	}
 	s.session.ClearPlanMode()
+}
+
+// ApprovePlan records the user's acceptance of the plan the model submitted with
+// submit_plan, for the given session. exit_plan_mode is gated on that decision,
+// and the SDK exposes no review surface of its own, so a host that shows the plan
+// to the user calls this when the user accepts it - otherwise the model's
+// exit_plan_mode stays refused and the only way out is ClearPlanMode, which
+// leaves the mode without recording the decision. It does not itself leave plan
+// mode; the model's exit_plan_mode (or ClearPlanMode) applies that change.
+//
+// It is a package-level function, not only a Session method, because a host that
+// persists its sessions reloads them per turn: between turns there is no live
+// *Session to call it on, while the review state it settles is process-global
+// and keyed by session id - the plan approval a user clicks between two turns
+// still has to reach the next turn.
+func ApprovePlan(sessionID SessionID) {
+	modeexec.MarkPlanApproved(sessionID)
+}
+
+// ApprovePlan records the user's acceptance of the plan this session submitted
+// with submit_plan. See the package-level ApprovePlan. It does nothing on a nil
+// session.
+func (s *Session) ApprovePlan() {
+	if s == nil || s.session == nil {
+		return
+	}
+	ApprovePlan(s.session.GetSessionID())
 }
 
 // SetPermissionMode changes the permission mode of the session from the next tool call on. It does nothing on a nil session.

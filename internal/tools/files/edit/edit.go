@@ -412,7 +412,7 @@ func (e *Tool) CheckPermissions(ctx context.Context, input map[string]any, toolC
 			&types.PermissionDecisionReason{
 				Type:   types.PermissionDecisionReasonMode,
 				Source: "plan",
-				Reason: "plan mode is read-only - call exit_plan_mode first",
+				Reason: "plan mode is read-only - get the plan approved with submit_plan before editing",
 			},
 		)
 	}

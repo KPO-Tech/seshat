@@ -167,7 +167,9 @@ Version: %d
 The plan is now pending user review. Do NOT call exit_plan_mode yet.
 Wait for the user to review and either:
 - Send feedback (they will reply in the conversation — revise and call submit_plan again)
-- Approve with "Proceed" (you will receive a confirmation message — then call exit_plan_mode)`, id, filename, version)
+- Approve it. The approval message tells you what to do next: if it says plan mode has
+already been exited for you, just start implementing; if you receive a plain approval
+while still in plan mode, call exit_plan_mode to leave the mode and begin.`, id, filename, version)
 
 	result := tool.NewTextResult(msg)
 	result.Metadata = &tool.ResultMetadata{
@@ -281,5 +283,7 @@ understands exactly what will change and why.
 
 - The plan is persisted and shown to the user as an interactive artifact
 - You remain in plan mode — do NOT call exit_plan_mode yet
-- The user may send feedback (revise and resubmit) or approve via "Proceed"
-- On approval you will receive a confirmation — then call exit_plan_mode`
+- The user may send feedback (revise and resubmit) or approve it
+- On approval, follow the approval message: either it states plan mode was already
+  exited for you (then just implement), or you are still in plan mode and should
+  call exit_plan_mode`

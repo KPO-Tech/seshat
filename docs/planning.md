@@ -48,10 +48,22 @@ session, _ := client.CreateSession(ctx, &sdk.SessionConfig{
 **Flow in plan mode:**
 
 1. User sends a message.
-2. Agent reasons about the task and emits a structured plan (no tools called yet).
-3. Plan is shown to the user: list of proposed actions with arguments.
-4. User approves (`yes`), modifies, or rejects.
-5. On approval, the agent executes exactly the approved plan.
+2. Agent investigates read-only and designs the approach. It asks with
+   `ask_user_question` only for real requirement gaps, not for the plan itself.
+3. Agent submits the plan with `submit_plan` (no implementation tools called
+   yet). The plan is saved and shown to the user as an interactive artifact, and
+   the session stays in plan mode.
+4. User sends feedback — the agent revises and resubmits — or approves the plan.
+5. Approving records the decision, which is what unblocks `exit_plan_mode`. The
+   agent calls it to leave plan mode (or the host exits the mode for it), then
+   executes the approved plan.
+
+The approval is a gate rather than a label: `exit_plan_mode` is refused while the
+plan you were shown is still awaiting your answer, so the model cannot grant
+itself write access by leaving the mode before you have decided. Revising a plan
+after feedback puts it back in review, because a revised plan is a different plan.
+A session that never submitted anything keeps its `exit_plan_mode`: `submit_plan`
+is optional, and a gate that assumed otherwise would leave plan mode with no door.
 
 **Entering and leaving plan mode:**
 
@@ -60,6 +72,23 @@ it before touching a file is cheaper than settling it afterwards — not merely
 because a task is large. You can also toggle it yourself: `shift+tab` switches
 between plan and execute mode, and the `toggle_plan` command in the command
 palette does the same.
+
+**Recording the approval from your own UI:**
+
+A host that reviews plans outside the terminal has to record the answer itself,
+because the gate looks at what the user decided and not at the plan document:
+
+```go
+sdk.ApprovePlan(session.ID) // the user accepted the plan this session submitted
+```
+
+The package-level form takes a session id rather than a session because a host
+that persists its sessions reloads them per turn — between two turns there is no
+live `*sdk.Session` to call, while the review state is process-global and keyed by
+session id, so the answer a user clicks in a plan panel still has to reach the
+next turn's check. On a live session, `session.ApprovePlan()` is the same call.
+Leaving plan mode is still separate: the call records the decision only, and
+`exit_plan_mode` (or `ClearPlanMode`, which records nothing) applies the change.
 
 ---
 

@@ -4,6 +4,7 @@ import (
 	"context"
 	"strings"
 	"testing"
+	"unicode/utf8"
 
 	"github.com/KPO-Tech/seshat-runtime/internal/modes"
 	tasktool "github.com/KPO-Tech/seshat-runtime/internal/tools/task"
@@ -178,6 +179,56 @@ func TestMaybeNudgeForOpenTasksLeavesOtherTurnsAlone(t *testing.T) {
 	resetTaskNudge(used)
 	if used.TaskNudgeCount != 0 || used.TaskNudgeKey != "" {
 		t.Fatalf("expected resetTaskNudge to clear both fields, got %d/%q", used.TaskNudgeCount, used.TaskNudgeKey)
+	}
+}
+
+// A subject longer than the bound must be cut on a rune boundary: the previous
+// byte slice (subject[:maxOpenTaskChars-1]) landed inside a multi-byte rune for
+// accented or non-Latin text and produced a mangled trailing character.
+func TestTruncateTaskSubjectNeverSplitsARune(t *testing.T) {
+	accents := strings.Repeat("é", 200) // 2 bytes per rune
+	got := truncateTaskSubject(accents, maxOpenTaskChars)
+	if !utf8.ValidString(got) {
+		t.Fatalf("expected valid UTF-8 after truncation, got %q", got)
+	}
+	if !strings.HasSuffix(got, "...") {
+		t.Fatalf("expected an ellipsis, got %q", got)
+	}
+	if len(got) > maxOpenTaskChars {
+		t.Fatalf("expected at most %d bytes, got %d", maxOpenTaskChars, len(got))
+	}
+	if strings.ContainsRune(got, utf8.RuneError) {
+		t.Fatalf("expected no replacement character, got %q", got)
+	}
+
+	// A subject within the bound is untouched.
+	if short := "Add retry with backoff"; truncateTaskSubject(short, maxOpenTaskChars) != short {
+		t.Fatalf("expected a short subject to pass through unchanged")
+	}
+}
+
+// A non-positive limit disables the reminder: 0 means "use the default", but a
+// negative value is the explicit off switch a host opts into.
+func TestMaybeNudgeForOpenTasksDisabledByNegativeLimit(t *testing.T) {
+	newTaskStoreSession(t, "s1")
+	createOpenTask(t, "s1", "Add retry with backoff")
+
+	loop := newTaskNudgeTestLoop(-1)
+	state := &MutableState{}
+	if decision := loop.maybeNudgeForOpenTasks(context.Background(), state, RunRequest{SessionID: types.SessionID("s1")}); decision.continueLoop {
+		t.Fatalf("expected a negative limit to disable the nudge, got %q", decision.nudgeMessage)
+	}
+}
+
+func TestNormalizeLoopConfigTaskNudgeLimit(t *testing.T) {
+	if got := normalizeLoopConfig(&LoopConfig{}).TaskNudgeLimit; got != defaultTaskNudgeLimit {
+		t.Fatalf("expected an unset limit to default to %d, got %d", defaultTaskNudgeLimit, got)
+	}
+	if got := normalizeLoopConfig(&LoopConfig{TaskNudgeLimit: -1}).TaskNudgeLimit; got != -1 {
+		t.Fatalf("expected a negative limit to survive normalization, got %d", got)
+	}
+	if got := normalizeLoopConfig(&LoopConfig{TaskNudgeLimit: 5}).TaskNudgeLimit; got != 5 {
+		t.Fatalf("expected an explicit limit to survive normalization, got %d", got)
 	}
 }
 

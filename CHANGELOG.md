@@ -9,6 +9,24 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [1.7.0] - 2026-10-13
+
+### Added
+
+- **A host can record the user's plan approval, so `exit_plan_mode` is reachable outside the terminal.** The gate added in 1.6.0 refuses the exit while the plan you were shown is awaiting your answer, and that answer lived in a process-global review state no host could write — so a product that shows plans in its own UI could neither unblock the model nor leave the decision recorded (`ClearPlanMode`, its only way out, drops the mode without it). `sdk.ApprovePlan(sessionID)` records it, and `session.ApprovePlan()` is the same call on a live session. The package-level form takes an id because a host that persists its sessions reloads them per turn and has nothing to call the moment the user clicks: the answer still has to reach the next turn's check. It records the decision only — leaving the mode stays the model's `exit_plan_mode` or the host's `ClearPlanMode`.
+- **`ClientConfig.TaskNudgeLimit` bounds the task-list reminder.** The bound added in 1.6.0 (`LoopConfig.TaskNudgeLimit`, 3 by default) was reachable only by building an `engine.LoopConfig` by hand, which an embedding host cannot do without giving up the rest of the client configuration; it is now a client field with the same meaning.
+
+### Changed
+
+- **The plan-mode prompts describe the approval-first flow.** They still told the model to exit plan mode when the plan was ready for approval — the exact step the 1.6.0 gate now refuses — so the model's own instructions pointed at a call that was going to be rejected. The core prompt's plan stage, the `enter_plan_mode`/`exit_plan_mode`/`submit_plan` descriptions, the plan-mode instructions and `ask_user_question` all say to submit the plan with `submit_plan`, wait for the review, and call `exit_plan_mode` only if plan mode was not already left for the model. The refusal `write_file`/`edit_file` return in plan mode now points at `submit_plan` for the same reason.
+- **The `verify` agent type is described as the read-only audit it is.** The delegation table in the core prompt, the agent tool's prompt and the built-in agent list all called it a way to run tests and check results after implementation, which the profile cannot do — it has no execution tools. It is now described as a read-only audit of agent definitions, tool permissions and compliance, so a model stops delegating a test run to it and expecting one back.
+
+### Fixed
+
+- **Entering plan mode could refuse `exit_plan_mode` before the new plan had been submitted.** Entering again left the previous cycle's review pending, and the gate reads that state, so the first exit of the new cycle was rejected over a plan the user was never shown. `ForcePlanMode` now starts a fresh review cycle.
+- **The task-list reminder could mangle the last character of the subject it quoted.** A long subject was cut with a byte slice, which lands inside a multi-byte rune for accented or non-Latin text and leaves a replacement character in the text handed back to the model. It is now cut on a rune boundary, inside the same bound.
+- **`TaskNudgeLimit` could not be turned off.** Zero and every negative value were replaced by the default before the loop saw them, so a caller asking to disable the reminder got three. Zero now means "use the default" and a negative value is the explicit off switch, in `LoopConfig` and through `ClientConfig` alike.
+
 ## [1.6.0] - 2026-10-12
 
 ### Added
