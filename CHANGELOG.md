@@ -9,6 +9,8 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [1.7.0] - 2026-10-13
+
 ### Added
 
 - **A host can record the user's plan approval, so `exit_plan_mode` is reachable outside the terminal.** The gate added in 1.6.0 refuses the exit while the plan you were shown is awaiting your answer, and that answer lived in a process-global review state no host could write — so a product that shows plans in its own UI could neither unblock the model nor leave the decision recorded (`ClearPlanMode`, its only way out, drops the mode without it). `sdk.ApprovePlan(sessionID)` records it, and `session.ApprovePlan()` is the same call on a live session. The package-level form takes an id because a host that persists its sessions reloads them per turn and has nothing to call the moment the user clicks: the answer still has to reach the next turn's check. It records the decision only — leaving the mode stays the model's `exit_plan_mode` or the host's `ClearPlanMode`.
