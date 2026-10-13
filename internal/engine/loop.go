@@ -61,7 +61,8 @@ type LoopConfig struct {
 	MaxOutputTokensRecoveryLimit int  `json:"max_output_tokens_recovery_limit"`
 	ContinuationNudgeLimit       int  `json:"continuation_nudge_limit"`
 	// TaskNudgeLimit caps how many times one turn sends the model back to its
-	// own open tracked task list before letting the turn end. See
+	// own open tracked task list before letting the turn end. 0 = loop default
+	// (3); a negative value disables the reminder entirely. See
 	// maybeNudgeForOpenTasks (task_progress.go).
 	TaskNudgeLimit             int        `json:"task_nudge_limit"`
 	TurnTokenBudget            int        `json:"turn_token_budget,omitempty"`
@@ -118,7 +119,9 @@ func normalizeLoopConfig(config *LoopConfig) *LoopConfig {
 	if config.ContinuationNudgeLimit <= 0 {
 		config.ContinuationNudgeLimit = 3
 	}
-	if config.TaskNudgeLimit <= 0 {
+	// 0 means "use the default"; a negative value is left as-is so a caller can
+	// turn the reminder off (maybeNudgeForOpenTasks treats limit <= 0 as off).
+	if config.TaskNudgeLimit == 0 {
 		config.TaskNudgeLimit = defaultTaskNudgeLimit
 	}
 	if config.BudgetContinuationLimit <= 0 {

@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"strings"
+	"unicode/utf8"
 
 	"github.com/KPO-Tech/seshat-runtime/internal/modes"
 	tasktool "github.com/KPO-Tech/seshat-runtime/internal/tools/task"
@@ -127,7 +128,7 @@ func openTasksNudgeMessage(open []string) string {
 			break
 		}
 		if len(subject) > maxOpenTaskChars {
-			subject = subject[:maxOpenTaskChars-1] + "..."
+			subject = truncateTaskSubject(subject, maxOpenTaskChars)
 		}
 		listed = append(listed, fmt.Sprintf("%q", subject))
 	}
@@ -149,6 +150,25 @@ func openTasksNudgeMessage(open []string) string {
 			"needed, update the list with task_update.",
 		count, strings.Join(listed, ", "), more,
 	)
+}
+
+// truncateTaskSubject cuts a subject to at most maxBytes bytes, including an
+// appended ellipsis, and never splits a multi-byte rune: a plain s[:maxBytes]
+// slice can land inside a UTF-8 sequence and mangle the last character (the same
+// hazard truncateUTF8Safe guards against in internal/execution).
+func truncateTaskSubject(s string, maxBytes int) string {
+	const ellipsis = "..."
+	if maxBytes <= len(ellipsis) {
+		return ""
+	}
+	if len(s) <= maxBytes {
+		return s
+	}
+	cut := maxBytes - len(ellipsis)
+	for cut > 0 && !utf8.RuneStart(s[cut]) {
+		cut--
+	}
+	return s[:cut] + ellipsis
 }
 
 // resetTaskNudge gives a turn its full nudge budget back. Called where the
