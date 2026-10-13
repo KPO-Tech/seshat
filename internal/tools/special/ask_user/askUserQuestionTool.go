@@ -38,7 +38,7 @@ This tool is for real clarification, preference gathering, or decision points du
 - you already have enough information to proceed safely
 - you are only giving a status update
 - you are asking "should I continue?"
-- you are in plan mode and simply need plan approval; use ` + "`exit_plan_mode`" + ` for that
+- you are in plan mode and simply need plan approval; submit the plan with ` + "`submit_plan`" + ` for that
 - you could instead verify the answer from the repository or a reliable source
 
 ## Question design rules

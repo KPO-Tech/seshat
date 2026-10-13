@@ -101,6 +101,7 @@ type ClientConfig struct {
     TurnTokenBudget         int  // if set, pause when budget is exhausted per turn
     BudgetContinuationLimit int  // max budget-continuation cycles (0 = unlimited)
     ContinuationNudgeLimit  int  // max text nudges before giving up (default 3)
+    TaskNudgeLimit          int  // max task-list reminders per turn before the turn may end with tracked tasks still open (default 3; negative disables)
 
     // ── Permissions ───────────────────────────────────────────────────────
     PermissionMode PermissionMode // bypass | auto | acceptEdits | onRequest | never | granular
@@ -316,6 +317,15 @@ func (s *Session) SetPermissionMode(mode PermissionMode)
 func (s *Session) SetSystemPromptTemplate(text string)
 func (s *Session) SetAppendSystemPrompt(text string)
 func (s *Session) SetWorkingDirectory(path string)
+
+// Plan mode
+func (s *Session) ForcePlanMode() // enter plan mode, starting a fresh plan-review cycle
+func (s *Session) ClearPlanMode() // leave plan mode, restoring the previous permission mode
+func (s *Session) ApprovePlan()   // record the user's approval of the plan this session submitted
+
+// Plan approval for a host that persists its sessions and reloads them per turn,
+// so it has no live *Session at the moment the user decides (see docs/planning.md)
+func ApprovePlan(sessionID SessionID)
 
 // Callbacks (override client-level callbacks for this session)
 func (s *Session) SetResponseChunkFn(fn func(ResponseChunk))

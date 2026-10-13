@@ -83,6 +83,11 @@ func loopConfigFromConfig(config *Config) *LoopConfig {
 	if config.ContinuationNudgeLimit > 0 {
 		lc.ContinuationNudgeLimit = config.ContinuationNudgeLimit
 	}
+	// TaskNudgeLimit maps through whenever it is set: a negative value is how a
+	// caller disables the reminder, so it must not be swallowed as "unset".
+	if config.TaskNudgeLimit != 0 {
+		lc.TaskNudgeLimit = config.TaskNudgeLimit
+	}
 	if len(config.StopHooks) > 0 {
 		lc.StopHooks = config.StopHooks
 	}

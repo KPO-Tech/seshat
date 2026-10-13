@@ -110,13 +110,16 @@ In plan mode you should:
 1. Thoroughly explore the codebase using read-only tools (read_file, glob, grep, bash for ls/git log/cat/find)
 2. Clarify any ambiguous requirements with ask_user_question before designing
 3. Design a concrete, ordered implementation approach
-4. When ready, call exit_plan_mode and pass your full plan as the "plan" parameter
+4. When ready, call submit_plan with the full plan content and a short slug
+5. Wait for the user to review — they may send feedback or approve
 
 Your plan will be saved to: %s
 
 DO NOT edit or create source files during plan mode — this is a read-only exploration and planning phase.
-Once you call exit_plan_mode the plan will be presented to the user for approval.
-After approval you will receive the plan back and can start implementation with task_create/task_update.`, execution.GetDisplayPath(planFilePath))
+The plan is presented to the user as an interactive artifact for review.
+On approval, follow the approval message: start implementing directly if plan mode was already
+exited for you, or call exit_plan_mode if you are still in plan mode. Track the work with
+task_create/task_update.`, execution.GetDisplayPath(planFilePath))
 
 	result := tool.NewTextResult(instructions)
 	result.ContextModifier = func(ctx tool.ToolUseContext) tool.ToolUseContext {
@@ -269,7 +272,9 @@ request that is merely large and unambiguous belongs in execute mode.
 3. Design a concrete, ordered implementation plan
 4. Call ` + "`submit_plan`" + ` with the full plan content and a short slug
 5. Wait for the user to review — they may send feedback (revise and resubmit) or approve
-6. When you receive approval, call ` + "`exit_plan_mode`" + ` and immediately create your task list
+6. On approval, follow the approval message: implement directly if plan mode was
+   already exited for you, or call ` + "`exit_plan_mode`" + ` if you are still in plan
+   mode, then track the work with ` + "`task_create`" + ` / ` + "`task_update`" + `
 
 DO NOT edit or create source files while in plan mode.
 The plan is presented to the user as an interactive artifact for review and approval.`

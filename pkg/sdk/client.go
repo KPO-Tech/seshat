@@ -316,6 +316,7 @@ func buildEngineConfig(config *ClientConfig) *engine.Config {
 		TurnTokenBudget:          config.TurnTokenBudget,
 		BudgetContinuationLimit:  config.BudgetContinuationLimit,
 		ContinuationNudgeLimit:   config.ContinuationNudgeLimit,
+		TaskNudgeLimit:           config.TaskNudgeLimit,
 		StopHooks:                config.StopHooks,
 		MaxConsecutiveDenials:    config.MaxConsecutiveDenials,
 	}
