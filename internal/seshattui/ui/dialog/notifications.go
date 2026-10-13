@@ -170,7 +170,7 @@ func (n *Notifications) Draw(scr uv.Screen, area uv.Rectangle) *tea.Cursor {
 	t := n.com.Styles
 	width := max(0, min(notificationsDialogMaxWidth, area.Dx()-t.Dialog.View.GetHorizontalBorderSize()))
 	innerWidth := width - t.Dialog.View.GetHorizontalFrameSize()
-	inputW := max(0, innerWidth-t.Dialog.InputPrompt.GetHorizontalFrameSize()-1)
+	inputW := textInputWidth(t.Dialog.InputPrompt, innerWidth)
 
 	n.input.SetWidth(inputW)
 	n.help.SetWidth(innerWidth)

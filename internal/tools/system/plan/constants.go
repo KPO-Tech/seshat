@@ -17,6 +17,6 @@ const (
 // Descriptions
 const (
 	DescriptionEnterPlanMode = "Switch to plan mode to analyse the task and design an implementation approach before making any changes. Use when the task is complex, risky, or ambiguous."
-	DescriptionExitPlanMode  = "Exit plan mode after the user has approved the plan. Immediately create tasks with task_create to track each implementation step."
+	DescriptionExitPlanMode  = "Exit plan mode after the user has approved the plan. Immediately create or refresh the tracked task list with task_create so each implementation step is tracked."
 	DescriptionSubmitPlan    = "Submit the implementation plan for user review. Include context, trade-offs, ordered steps, files touched, and validation approach. The plan is shown as an interactive artifact; you remain in plan mode until the user approves."
 )

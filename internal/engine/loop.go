@@ -56,15 +56,19 @@ type LoopConfig struct {
 	// live session-turn limit is engine.Config.MaxTurns, enforced by
 	// Session.enforceMaxTurns (M3 in TODO.md - its default used to disagree
 	// with this one, 200 vs 100, despite neither mattering here).
-	MaxTurns                     int        `json:"max_turns"`
-	EnableStreaming              bool       `json:"enable_streaming"`
-	MaxOutputTokensRecoveryLimit int        `json:"max_output_tokens_recovery_limit"`
-	ContinuationNudgeLimit       int        `json:"continuation_nudge_limit"`
-	TurnTokenBudget              int        `json:"turn_token_budget,omitempty"`
-	BudgetContinuationLimit      int        `json:"budget_continuation_limit,omitempty"`
-	BudgetCompletionThreshold    float64    `json:"budget_completion_threshold,omitempty"`
-	BudgetDiminishingThreshold   int        `json:"budget_diminishing_threshold,omitempty"`
-	StopHooks                    []StopHook `json:"-"`
+	MaxTurns                     int  `json:"max_turns"`
+	EnableStreaming              bool `json:"enable_streaming"`
+	MaxOutputTokensRecoveryLimit int  `json:"max_output_tokens_recovery_limit"`
+	ContinuationNudgeLimit       int  `json:"continuation_nudge_limit"`
+	// TaskNudgeLimit caps how many times one turn sends the model back to its
+	// own open tracked task list before letting the turn end. See
+	// maybeNudgeForOpenTasks (task_progress.go).
+	TaskNudgeLimit             int        `json:"task_nudge_limit"`
+	TurnTokenBudget            int        `json:"turn_token_budget,omitempty"`
+	BudgetContinuationLimit    int        `json:"budget_continuation_limit,omitempty"`
+	BudgetCompletionThreshold  float64    `json:"budget_completion_threshold,omitempty"`
+	BudgetDiminishingThreshold int        `json:"budget_diminishing_threshold,omitempty"`
+	StopHooks                  []StopHook `json:"-"`
 	// StopHookConfig controls stop hook execution behavior
 	StopHookTimeout         int    `json:"stop_hook_timeout,omitempty"`           // milliseconds, 0 = no timeout
 	StopHookMode            string `json:"stop_hook_mode,omitempty"`              // "first" (default) or "all"
@@ -91,6 +95,7 @@ func DefaultLoopConfig() *LoopConfig {
 		EnableStreaming:              true,
 		MaxOutputTokensRecoveryLimit: 3,
 		ContinuationNudgeLimit:       3,
+		TaskNudgeLimit:               defaultTaskNudgeLimit,
 	})
 }
 
@@ -112,6 +117,9 @@ func normalizeLoopConfig(config *LoopConfig) *LoopConfig {
 	}
 	if config.ContinuationNudgeLimit <= 0 {
 		config.ContinuationNudgeLimit = 3
+	}
+	if config.TaskNudgeLimit <= 0 {
+		config.TaskNudgeLimit = defaultTaskNudgeLimit
 	}
 	if config.BudgetContinuationLimit <= 0 {
 		config.BudgetContinuationLimit = defaultBudgetContinuationLimit
@@ -521,6 +529,7 @@ func (l *Loop) handleToolUsesIteration(ctx context.Context, state *MutableState,
 		state.Messages = append(state.Messages, newContinuationMessage(req.TurnID, recoveryMessage))
 		state.ContinuationNudgeCount = 0
 		state.MaxOutputTokensRecoveryCount = 0
+		resetTaskNudge(state)
 		l.setTransition(state, ContinueWithRecovery("tool_loop_recovery", RecoveryTypeContinuationNudge))
 		return toolUsesOutcome{}
 	}
@@ -1530,6 +1539,15 @@ func (l *Loop) handleNoToolUses(ctx context.Context, state *MutableState, req Ru
 	if decision := l.maybeContinueForBudget(state, req, assistantMessage); decision.continueLoop {
 		state.Messages = append(state.Messages, newContinuationMessage(req.TurnID, decision.nudgeMessage))
 		l.setTransition(state, ContinueWithRecovery("token_budget_continuation", RecoveryTypeTokenBudget))
+		return true, nil
+	}
+	// The model is about to end the turn: if its own task list still has
+	// unfinished items, send it back to work instead. This is the enforcement
+	// half of the tracked list, and it sits after the token-budget decision
+	// because a budget stop is a deliberate stop.
+	if decision := l.maybeNudgeForOpenTasks(ctx, state, req); decision.continueLoop {
+		state.Messages = append(state.Messages, newContinuationMessage(req.TurnID, decision.nudgeMessage))
+		l.setTransition(state, ContinueWithRecovery("open_tasks_continuation", RecoveryTypeContinuationNudge))
 		return true, nil
 	}
 	stopHookResult, err := l.runStopHooks(ctx, state, req, types.StopReasonEndTurn)

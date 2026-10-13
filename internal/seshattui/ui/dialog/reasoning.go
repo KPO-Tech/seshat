@@ -160,7 +160,7 @@ func (r *Reasoning) Draw(scr uv.Screen, area uv.Rectangle) *tea.Cursor {
 	t := r.com.Styles
 	width := max(0, min(reasoningDialogMaxWidth, area.Dx()-t.Dialog.View.GetHorizontalBorderSize()))
 	innerWidth := width - t.Dialog.View.GetHorizontalFrameSize()
-	inputW := max(0, innerWidth-t.Dialog.InputPrompt.GetHorizontalFrameSize()-1)
+	inputW := textInputWidth(t.Dialog.InputPrompt, innerWidth)
 
 	r.input.SetWidth(inputW)
 	r.help.SetWidth(innerWidth)

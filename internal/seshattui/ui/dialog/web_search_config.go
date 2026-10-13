@@ -50,6 +50,7 @@ type WebSearchConfig struct {
 
 	keyMap struct {
 		Submit key.Binding
+		Reveal key.Binding
 		Close  key.Binding
 	}
 	input   textinput.Model
@@ -85,20 +86,22 @@ func NewWebSearchConfig(com *common.Common, providerID string) (*WebSearchConfig
 	}
 
 	innerWidth := m.width - com.Styles.Dialog.View.GetHorizontalFrameSize() - 2
-	inputWidth := max(0, innerWidth-com.Styles.Dialog.InputPrompt.GetHorizontalFrameSize()-1)
-	m.input = textinput.New()
-	m.input.SetVirtualCursor(false)
-	m.input.SetStyles(com.Styles.TextInput)
-	m.input.SetWidth(inputWidth)
-	if m.fieldKey == "api_key" {
+	inputWidth := textInputWidth(com.Styles.Dialog.InputPrompt, innerWidth)
+	if m.isSecretField() {
+		// API keys are never displayed: the field renders bullets instead.
+		m.input = newSecretInput()
 		m.input.Placeholder = "Enter your API key..."
 		if m.existing != "" {
 			m.input.Placeholder = "Leave blank to keep your saved API key"
 		}
 	} else {
+		m.input = textinput.New()
+		m.input.SetVirtualCursor(false)
 		m.input.Placeholder = "Enter the service base URL"
 		m.input.SetValue(m.existing)
 	}
+	m.input.SetStyles(com.Styles.TextInput)
+	m.input.SetWidth(inputWidth)
 	m.input.Focus()
 
 	m.spinner = spinner.New(
@@ -108,11 +111,31 @@ func NewWebSearchConfig(com *common.Common, providerID string) (*WebSearchConfig
 	m.help = help.New()
 	m.help.Styles = com.Styles.DialogHelpStyles()
 	m.keyMap.Submit = key.NewBinding(key.WithKeys("enter", "ctrl+y"), key.WithHelp("enter", "submit"))
+	m.keyMap.Reveal = key.NewBinding(key.WithKeys("ctrl+r"), key.WithHelp("ctrl+r", "reveal key"))
 	m.keyMap.Close = CloseKey
 	return m, nil
 }
 
 func (m *WebSearchConfig) ID() string { return WebSearchConfigID }
+
+// isSecretField reports whether this dialog edits a secret rather than a URL.
+func (m *WebSearchConfig) isSecretField() bool { return m.fieldKey == "api_key" }
+
+// secretVisible reports whether the secret field currently shows its value.
+func (m *WebSearchConfig) secretVisible() bool {
+	return m.input.EchoMode != textinput.EchoPassword
+}
+
+// setSecretVisible shows or hides the secret value. The value is hidden by
+// default, and hidden again as soon as validation starts, so a key is only ever
+// on screen when the user explicitly asks for it.
+func (m *WebSearchConfig) setSecretVisible(visible bool) {
+	if visible {
+		m.input.EchoMode = textinput.EchoNormal
+		return
+	}
+	m.input.EchoMode = textinput.EchoPassword
+}
 
 func (m *WebSearchConfig) HandleMsg(msg tea.Msg) Action {
 	switch msg := msg.(type) {
@@ -123,6 +146,7 @@ func (m *WebSearchConfig) HandleMsg(msg tea.Msg) Action {
 			m.input.Focus()
 		}
 		if m.state == webSearchConfigStateVerifying {
+			m.setSecretVisible(false)
 			return ActionCmd{tea.Batch(m.spinner.Tick, m.verify)}
 		}
 	case spinner.TickMsg:
@@ -146,7 +170,11 @@ func (m *WebSearchConfig) HandleMsg(msg tea.Msg) Action {
 			if m.state == webSearchConfigStateVerified {
 				return m.save()
 			}
+			m.setSecretVisible(false)
 			return webSearchConfigStateMsg{state: webSearchConfigStateVerifying}
+		case key.Matches(msg, m.keyMap.Reveal) && m.isSecretField() &&
+			m.state != webSearchConfigStateVerifying && m.state != webSearchConfigStateVerified:
+			m.setSecretVisible(!m.secretVisible())
 		default:
 			m.state = webSearchConfigStateInitial
 			m.err = nil
@@ -262,7 +290,11 @@ func (m *WebSearchConfig) Cursor() *tea.Cursor {
 }
 
 func (m *WebSearchConfig) ShortHelp() []key.Binding {
-	return []key.Binding{m.keyMap.Submit, m.keyMap.Close}
+	help := []key.Binding{m.keyMap.Submit}
+	if m.isSecretField() {
+		help = append(help, m.keyMap.Reveal)
+	}
+	return append(help, m.keyMap.Close)
 }
 
 func (m *WebSearchConfig) FullHelp() [][]key.Binding {

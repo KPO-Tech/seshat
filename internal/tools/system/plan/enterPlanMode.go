@@ -157,8 +157,24 @@ func (t *EnterPlanModeTool) CheckPermissions(ctx context.Context, input map[stri
 		return types.Deny("Already in plan mode")
 	}
 
-	// Requires user approval
-	return types.Ask("Enter plan mode to explore and design an implementation approach?")
+	// Deliberately not an approval point, and this used to say otherwise: the
+	// function returned types.Ask("Enter plan mode to explore and design an
+	// implementation approach?") for years without ever asking anybody. A bare
+	// Ask with no DecisionReason is replaced by an Allow inside
+	// resolveToolPermissions, and engine.isAlwaysSafeTool lists
+	// enter_plan_mode/exit_plan_mode in every mode but never - so the declared
+	// ask was unreachable twice over (pinned by
+	// internal/execution/enter_plan_mode_permission_test.go).
+	//
+	// That is the right outcome, not an oversight to repair. Entering plan mode
+	// is read-only, reversible with one keystroke, and it *reduces* what the
+	// agent can do, so a prompt here would guard the safe direction at the
+	// moment the agent knows least about the task. The human checkpoint belongs
+	// at the other end, on the plan itself: exit_plan_mode asks, and submit_plan
+	// offers the plan for review with comments. Claude Code draws the line in
+	// exactly the same place - its EnterPlanMode tool is documented as not
+	// requiring permission while ExitPlanMode requires it.
+	return types.Passthrough(input)
 }
 
 // IsConcurrencySafe returns whether this tool use can run concurrently.
@@ -221,11 +237,19 @@ If the user explicitly asks you to enter plan mode, call ` + "`enter_plan_mode`"
 
 ## Enter plan mode when
 
-- The task is a feature, refactor, migration, or broad bug fix
-- Multiple valid approaches exist and the right one is unclear
-- The change spans several files or subsystems and you need to explore first
-- The request is ambiguous enough that starting without alignment risks wasted work
-- The task involves risky or irreversible operations (DB migrations, auth changes, major deletions)
+This mode exists to obtain the user's alignment, not to organise work. Enter it when a
+choice belongs to the user and settling that choice before any file is touched costs less
+than settling it after:
+
+- Several defensible designs exist and the user has not indicated which one they want
+- The work is hard to undo or expensive to redo: data migrations, auth or permission
+  changes, deletions, a published interface or schema
+- The acceptance criteria themselves are ambiguous, so you cannot tell what "done" looks
+  like from the repository
+
+Investigating a wide, unfamiliar or multi-file area is NOT a reason on its own. Reading
+is free in either mode, and a tracked task list carries the roadmap while you read, so a
+request that is merely large and unambiguous belongs in execute mode.
 
 ## Do NOT enter plan mode when
 
@@ -233,6 +257,10 @@ If the user explicitly asks you to enter plan mode, call ` + "`enter_plan_mode`"
 - The user already gave you explicit step-by-step instructions
 - The request is pure research or reading with no planned implementation
 - You already have enough context to start immediately and the risk is low
+- The task is multi-step but unambiguous and the approach is not in question:
+  open a tracked task list with ` + "`task_create`" + ` and execute it directly. A
+  task list is not a plan, it needs no approval, and entering this mode just to
+  be able to track the steps costs a full round of alignment for nothing.
 
 ## What to do in plan mode
 

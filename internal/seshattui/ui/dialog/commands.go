@@ -10,6 +10,7 @@ import (
 	"charm.land/bubbles/v2/textinput"
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
+	"github.com/KPO-Tech/seshat-runtime/internal/modes"
 	"github.com/KPO-Tech/seshat-runtime/internal/seshattui/commands"
 	"github.com/KPO-Tech/seshat-runtime/internal/seshattui/config"
 	"github.com/KPO-Tech/seshat-runtime/internal/seshattui/ui/common"
@@ -278,7 +279,7 @@ func (c *Commands) Draw(scr uv.Screen, area uv.Rectangle) *tea.Cursor {
 
 	width := max(0, min(settingsCardMaxWidth, area.Dx()-t.Dialog.View.GetHorizontalBorderSize()))
 	innerWidth := width - t.Dialog.View.GetHorizontalFrameSize()
-	inputW := max(0, innerWidth-t.Dialog.InputPrompt.GetHorizontalFrameSize()-1)
+	inputW := textInputWidth(t.Dialog.InputPrompt, innerWidth)
 
 	c.input.SetWidth(inputW)
 	c.help.SetWidth(innerWidth)
@@ -554,6 +555,15 @@ func (c *Commands) defaultCommands() []*CommandItem {
 		verboseLabel = "Disable Verbose Agent Steps"
 	}
 	commands = append(commands, NewCommandItem(c.com.Styles, "toggle_verbose_steps", verboseLabel, "", ActionToggleVerboseSteps{}))
+
+	// Plan mode reads as the collaboration surface it is: entering it is the
+	// user's own decision, so the label says what will happen next rather than
+	// naming a state.
+	planLabel := "Enter Plan Mode"
+	if c.com.Workspace.ExecutionMode() == string(modes.ExecutionModePlan) {
+		planLabel = "Leave Plan Mode"
+	}
+	commands = append(commands, NewCommandItem(c.com.Styles, "toggle_plan", planLabel, "shift+tab", ActionTogglePlan{}))
 
 	commands = append(
 		commands,

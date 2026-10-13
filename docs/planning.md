@@ -53,6 +53,14 @@ session, _ := client.CreateSession(ctx, &sdk.SessionConfig{
 4. User approves (`yes`), modifies, or rejects.
 5. On approval, the agent executes exactly the approved plan.
 
+**Entering and leaving plan mode:**
+
+The agent enters plan mode on its own when a decision belongs to you and settling
+it before touching a file is cheaper than settling it afterwards — not merely
+because a task is large. You can also toggle it yourself: `shift+tab` switches
+between plan and execute mode, and the `toggle_plan` command in the command
+palette does the same.
+
 ---
 
 ## Permission engine

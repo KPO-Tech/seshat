@@ -26,6 +26,7 @@ import (
 	tea "charm.land/bubbletea/v2"
 	"charm.land/catwalk/pkg/catwalk"
 	"charm.land/lipgloss/v2"
+	"github.com/KPO-Tech/seshat-runtime/internal/modes"
 	"github.com/KPO-Tech/seshat-runtime/internal/seshattui/agent/hyper"
 	"github.com/KPO-Tech/seshat-runtime/internal/seshattui/agent/notify"
 	agenttools "github.com/KPO-Tech/seshat-runtime/internal/seshattui/agent/tools"
@@ -1646,6 +1647,9 @@ func (m *UI) handleDialogMsg(msg tea.Msg) tea.Cmd {
 		m.dialog.OpenDialog(dialog.NewDoctor(m.com, msg.Report))
 
 	// Command dialog messages.
+	case dialog.ActionTogglePlan:
+		m.dialog.CloseDialog(dialog.CommandsID)
+		cmds = append(cmds, m.togglePlanMode())
 	case dialog.ActionToggleYoloMode:
 		yolo := !m.com.Workspace.PermissionSkipRequests()
 		m.com.Workspace.PermissionSetSkipRequests(yolo)
@@ -1886,14 +1890,7 @@ func (m *UI) handleDialogMsg(msg tea.Msg) tea.Cmd {
 
 	case dialog.ActionPlanReviewSubmit:
 		m.dialog.CloseDialog(dialog.PlanReviewID)
-		if msg.Review.Approved && m.session != nil && m.com.Workspace != nil {
-			// Auto-exit plan mode immediately (mirrors exit_plan_mode tool call).
-			if _, err := m.com.Workspace.ApprovePlan(string(m.session.ID)); err == nil {
-				cmds = append(cmds, m.sendMessage(formatPlanApprovalMessage()))
-				break
-			}
-		}
-		cmds = append(cmds, m.sendMessage(formatPlanReviewResponse(msg.Review)))
+		cmds = append(cmds, m.handlePlanReviewSubmit(msg.Review))
 
 	case dialog.ActionFilePickerSelected:
 		cmds = append(cmds, tea.Sequence(
@@ -2139,7 +2136,8 @@ func (m *UI) handleKeyPressMsg(msg tea.KeyPressMsg) tea.Cmd {
 			m.status.ToggleHelp()
 			m.updateLayoutAndSize()
 			return true
-		case key.Matches(msg, m.keyMap.Commands):
+		// One action, two bindings: both keys open the same settings surface.
+		case key.Matches(msg, m.keyMap.Commands), key.Matches(msg, m.keyMap.Providers):
 			if cmd := m.openSettingsDialog(); cmd != nil {
 				cmds = append(cmds, cmd)
 			}
@@ -2156,11 +2154,6 @@ func (m *UI) handleKeyPressMsg(msg tea.KeyPressMsg) tea.Cmd {
 			return true
 		case key.Matches(msg, m.keyMap.CopyLastMessage) && m.hasSession():
 			cmds = append(cmds, m.copyLastUserMessage())
-			return true
-		case key.Matches(msg, m.keyMap.Providers):
-			if cmd := m.openSettingsDialog(); cmd != nil {
-				cmds = append(cmds, cmd)
-			}
 			return true
 		case key.Matches(msg, m.keyMap.Chat.Details) && m.isCompact:
 			m.detailsOpen = !m.detailsOpen
@@ -2193,6 +2186,9 @@ func (m *UI) handleKeyPressMsg(msg tea.KeyPressMsg) tea.Cmd {
 				return true
 			}
 			cmds = append(cmds, tea.Suspend)
+			return true
+		case key.Matches(msg, m.keyMap.TogglePlan):
+			cmds = append(cmds, m.togglePlanMode())
 			return true
 		case key.Matches(msg, m.keyMap.ToggleYolo):
 			yolo := !m.com.Workspace.PermissionSkipRequests()
@@ -3296,6 +3292,27 @@ func (m *UI) openEditor(value string) tea.Cmd {
 	})
 }
 
+// togglePlanMode enters or leaves plan mode on the live session at the user's
+// request. shift+tab is the mode switch users know from Claude Code, Cursor and
+// Codex, and this is the only way to ask for plan mode besides starting with
+// --mode plan: the agent's own enter_plan_mode is deliberately permission-free,
+// so without this the user could not propose the collaboration.
+func (m *UI) togglePlanMode() tea.Cmd {
+	if !m.hasSession() {
+		// Reported rather than dropped: a key that silently does nothing reads as
+		// a broken key, and this one has no visible surface to speak for it.
+		return util.ReportError(errors.New("no active session to switch plan mode on"))
+	}
+	entering := m.com.Workspace.ExecutionMode() != string(modes.ExecutionModePlan)
+	if err := m.com.Workspace.SetPlanMode(entering); err != nil {
+		return util.ReportError(err)
+	}
+	if entering {
+		return util.ReportInfo("Plan mode on: the agent reads and plans, and no file is edited until you approve a plan")
+	}
+	return util.ReportInfo("Plan mode off: the agent can make changes again")
+}
+
 // setEditorPrompt configures the textarea prompt function based on whether
 // yolo mode is enabled.
 func (m *UI) setEditorPrompt(yolo bool) {
@@ -4016,6 +4033,19 @@ func formatPlanApprovalMessage() string {
 	return "Plan approved. Plan mode has been exited automatically — do not call exit_plan_mode. Proceed with implementation."
 }
 
+// handlePlanReviewSubmit turns an answered plan review into the single message
+// the agent receives. Approving exits plan mode here and now - the same state
+// change exit_plan_mode makes - which is why the confirmation tells the agent
+// not to call that tool.
+func (m *UI) handlePlanReviewSubmit(review planreview.Review) tea.Cmd {
+	if review.Approved && m.session != nil && m.com.Workspace != nil {
+		if _, err := m.com.Workspace.ApprovePlan(string(m.session.ID)); err == nil {
+			return m.sendMessage(formatPlanApprovalMessage())
+		}
+	}
+	return m.sendMessage(formatPlanReviewResponse(review))
+}
+
 func formatPlanReviewResponse(review planreview.Review) string {
 	if review.Approved {
 		return "Proceed"
@@ -4566,7 +4596,6 @@ func renderLogo(t *styles.Styles, compact, hyper bool, width int) string {
 		FieldColor:   t.Logo.FieldColor,
 		TitleColorA:  t.Logo.TitleColorA,
 		TitleColorB:  t.Logo.TitleColorB,
-		CharmColor:   t.Logo.CharmColor,
 		VersionColor: t.Logo.VersionColor,
 		Width:        width,
 		Hyper:        hyper,

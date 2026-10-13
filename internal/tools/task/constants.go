@@ -78,19 +78,22 @@ Create a new task in the task list to track execution steps.
 
 Task tools are the execution-tracking layer that runs alongside implementation.
 They are separate from the Plan system: Plan is for user validation before you
-start; tasks are the checklist you follow once you have the green light.
+start; tasks are the checklist you follow while you work. Plan mode is NOT a
+prerequisite. Most work gets a task list directly, in execute mode.
 
 ## When to use task_create
 
-**After plan approval** — once the user approves your plan, convert each
+**Multi-step work whose approach is already clear** — if the task has 3+
+distinct steps and you do not need the user to validate the approach first,
+create the tasks upfront and start executing. Do not enter plan mode merely to
+be allowed to track the work: a task list is not a plan, it costs a fraction of
+one, and the user sees it as live progress.
+
+**After plan approval** — once the user approves a plan, convert each
 implementation step into a task before touching any file. Work through the
 list in order: mark in_progress before starting each step, completed when done.
 
-**For multi-step work without a formal plan** — if the task has 3+ distinct
-steps but does not require user approval first, create tasks upfront so you
-don't lose track mid-way.
-
-**Never skip task creation** on complex work. If you forget a step, you risk
+**Never skip task creation** on multi-step work. If you forget a step, you risk
 leaving the codebase in a broken intermediate state.
 
 ## When NOT to use task_create
@@ -118,6 +121,10 @@ Follow this sequence for every task in your list:
 2. Do the work
 3. Mark it **completed** only when the work is fully done and verified
 4. Move to the next task
+
+The user watches this list as your live progress, and it only moves when you
+call task_update. Update it after each step, before starting the next one —
+not once at the end when everything is already done.
 
 Never mark a task completed while another implementation step is pending.
 Never skip ahead — finish what you started before moving on.

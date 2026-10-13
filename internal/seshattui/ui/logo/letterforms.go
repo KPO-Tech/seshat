@@ -323,6 +323,92 @@ func LetterSAlt(stretch bool) string {
 	)
 }
 
+// LetterS renders the letter S in a stylized way. It takes an integer that
+// determines how many cells to stretch the letter. If the stretch is less than
+// 1, it defaults to no stretching.
+func LetterS(stretch bool) string {
+	// Here's what we're making:
+	//
+	// ▄▀▀▀▀
+	// ▀▀▀▀█
+	// ▀▀▀▀▀
+
+	left := heredoc.Doc(`
+		▄
+		▀
+		▀
+	`)
+	center := heredoc.Doc(`
+		▀
+		▀
+		▀
+	`)
+	right := heredoc.Doc(`
+		▀
+		█
+	`)
+	return joinLetterform(
+		left,
+		stretchLetterformPart(center, letterformProps{
+			stretch:    stretch,
+			width:      2,
+			minStretch: 6,
+			maxStretch: 10,
+		}),
+		right,
+	)
+}
+
+// LetterA renders the letter A in a stylized way. It takes an integer that
+// determines how many cells to stretch the letter. If the stretch is less than
+// 1, it defaults to no stretching.
+func LetterA(stretch bool) string {
+	// Here's what we're making:
+	//
+	// ▄   ▄
+	// █▀▀▀█
+	// ▀   ▀
+
+	side := heredoc.Doc(`
+		▄
+		█
+		▀`)
+	middle := heredoc.Doc(`
+
+		▀
+	`)
+	return joinLetterform(
+		side,
+		stretchLetterformPart(middle, letterformProps{
+			stretch:    stretch,
+			width:      3,
+			minStretch: 8,
+			maxStretch: 12,
+		}),
+		side,
+	)
+}
+
+// LetterT renders the letter T in a stylized way. It takes an integer that
+// determines how many cells to stretch the letter. If the stretch is less than
+// 1, it defaults to no stretching.
+func LetterT(stretch bool) string {
+	// Here's what we're making:
+	//
+	// ▀▀▀▀▀
+	//   █
+	//   ▀
+
+	top := stretchLetterformPart("▀", letterformProps{
+		stretch:    stretch,
+		width:      5,
+		minStretch: 8,
+		maxStretch: 12,
+	})
+	pad := strings.Repeat(" ", max(0, (lipgloss.Width(top)-1)/2))
+	return lipgloss.JoinVertical(lipgloss.Left, top, pad+"█", pad+"▀")
+}
+
 // LetterU renders the letter U in a stylized way. It takes an integer that
 // determines how many cells to stretch the letter. If the stretch is less than
 // 1, it defaults to no stretching.
