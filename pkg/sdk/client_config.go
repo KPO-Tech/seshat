@@ -198,7 +198,11 @@ type ClientConfig struct {
 	TurnTokenBudget         int `json:"turn_token_budget"`
 	BudgetContinuationLimit int `json:"budget_continuation_limit"`
 	ContinuationNudgeLimit  int `json:"continuation_nudge_limit"`
-	MaxConsecutiveDenials   int `json:"max_consecutive_denials"`
+	// TaskNudgeLimit caps how many task-list reminders one turn sends before the
+	// turn is allowed to end while tracked tasks are still open. 0 = default (3);
+	// a negative value disables the reminder entirely.
+	TaskNudgeLimit        int `json:"task_nudge_limit"`
+	MaxConsecutiveDenials int `json:"max_consecutive_denials"`
 
 	// System prompt
 	SystemPromptTemplate string             `json:"system_prompt_template"`
