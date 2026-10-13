@@ -9,6 +9,8 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [1.6.0] - 2026-10-12
+
 ### Added
 
 - **`shift+tab` enters and leaves plan mode, so you can design a plan with the agent.** Plan mode was reachable only by starting the session with `--mode plan` or by letting the model call `enter_plan_mode` — leaving you no way to *ask* for the collaboration the mode exists for. The key is the one Claude Code, Cursor and Codex already use for it, the command palette offers the same action as `toggle_plan` (labelled "Enter Plan Mode" / "Leave Plan Mode"), and the switch goes through the same state change the model's own transition makes (`ForcePlanMode`/`ClearPlanMode`), so leaving restores the previous permission mode and the write tools keep refusing while it is active. Saved sessions keep the mode, as before.
