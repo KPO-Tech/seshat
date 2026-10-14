@@ -98,6 +98,10 @@ leaving the codebase in a broken intermediate state.
 - Pure read/research tasks with no implementation
 - When the user gave you a literal list of commands to run
 
+## Several tasks at once
+
+Pass the "tasks" field (a list of subject/description items) to create the whole list in one call, in order, instead of one call per task.
+
 ## Task Fields
 
 - **subject**: Brief, actionable title in imperative form ("Add JWT validation")
@@ -133,6 +137,10 @@ Never skip ahead — finish what you started before moving on.
 - **any → deleted**: Task is no longer needed (scope change, duplicate, etc.)
 
 Only mark **completed** when FULLY accomplished. Partial work stays in_progress.
+
+## Several tasks at once
+
+Pass the "updates" field (a list of items, each with taskId and the fields to change) to update several tasks in one call, in order. The usual use: mark the finished task completed and the next one in_progress together.
 
 ## Fields
 

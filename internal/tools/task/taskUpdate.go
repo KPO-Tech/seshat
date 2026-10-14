@@ -3,6 +3,7 @@ package task
 import (
 	"context"
 	"fmt"
+	"strings"
 
 	tool "github.com/KPO-Tech/seshat-runtime/internal/tools/registry"
 	"github.com/KPO-Tech/seshat-runtime/internal/tools/schema"
@@ -68,30 +69,86 @@ func (t *TaskUpdateTool) Definition() tool.Definition {
 					"type":        "object",
 					"description": "Metadata keys to merge (set to null to delete)",
 				},
+				"updates": map[string]any{
+					"type":        "array",
+					"description": "Update several tasks in one call, in order (for example complete one task and start the next). Each item has taskId and the fields to change. Use this instead of one call per task.",
+					"items": map[string]any{
+						"type": "object",
+						"properties": map[string]any{
+							"taskId":      map[string]any{"type": "string", "description": "The ID of the task to update"},
+							"subject":     map[string]any{"type": "string", "description": "New subject for the task"},
+							"description": map[string]any{"type": "string", "description": "New description for the task"},
+							"activeForm":  map[string]any{"type": "string", "description": "Present continuous form shown in spinner when in_progress"},
+							"status":      map[string]any{"type": "string", "enum": []string{"pending", "in_progress", "completed", "deleted"}, "description": "New status for the task"},
+							"owner":       map[string]any{"type": "string", "description": "New owner for the task"},
+						},
+						"required": []string{"taskId"},
+					},
+				},
 			},
-			"required": []string{"taskId"},
 		}),
 	}
 }
 
-// Call executes the TaskUpdate tool
+// Call executes the TaskUpdate tool: one task from the top-level fields, or
+// several from "updates", applied in order.
 func (t *TaskUpdateTool) Call(ctx context.Context, input tool.CallInput, permissionCheck types.CanUseToolFn) (tool.CallResult, error) {
 	parsed := input.Parsed
 	if parsed == nil {
 		parsed = make(map[string]any)
 	}
 
-	taskID, ok := parsed["taskId"].(string)
-	if !ok || taskID == "" {
-		return tool.CallResult{
-			Error: fmt.Errorf("taskId is required"),
-		}, nil
-	}
-
 	sessionID, err := resolveTaskSessionID(input)
 	if err != nil {
 		return tool.CallResult{Error: err}, nil
 	}
+
+	if raw, ok := parsed["updates"].([]any); ok && len(raw) > 0 {
+		return t.callBatch(ctx, sessionID, raw), nil
+	}
+
+	taskID, ok := parsed["taskId"].(string)
+	if !ok || taskID == "" {
+		return tool.CallResult{
+			Error: fmt.Errorf("taskId is required (or pass updates to change several tasks at once)"),
+		}, nil
+	}
+	output, err := updateOneTask(ctx, sessionID, parsed)
+	if err != nil {
+		return tool.CallResult{Error: err}, nil
+	}
+	return tool.CallResult{Data: output}, nil
+}
+
+// callBatch applies each update in order. A task that cannot be updated is
+// reported in its own result and does not stop the ones after it.
+func (t *TaskUpdateTool) callBatch(ctx context.Context, sessionID string, raw []any) tool.CallResult {
+	results := make([]map[string]any, 0, len(raw))
+	allOK := true
+	for i, entry := range raw {
+		item, _ := entry.(map[string]any)
+		taskID, _ := item["taskId"].(string)
+		if item == nil || taskID == "" {
+			results = append(results, map[string]any{"success": false, "error": fmt.Sprintf("updates[%d] needs a taskId", i)})
+			allOK = false
+			continue
+		}
+		output, err := updateOneTask(ctx, sessionID, item)
+		if err != nil {
+			output = map[string]any{"success": false, "taskId": taskID, "error": err.Error()}
+		}
+		if ok, _ := output["success"].(bool); !ok {
+			allOK = false
+		}
+		results = append(results, output)
+	}
+	return tool.CallResult{Data: map[string]any{"success": allOK, "results": results}}
+}
+
+// updateOneTask applies one update. Its error is an internal failure; a task
+// that does not exist comes back as a result with success false.
+func updateOneTask(ctx context.Context, sessionID string, parsed map[string]any) (map[string]any, error) {
+	taskID, _ := parsed["taskId"].(string)
 
 	// Check if task exists
 	existingTask, err := GlobalTaskStore().GetTask(ctx, sessionID, taskID)
@@ -102,9 +159,7 @@ func (t *TaskUpdateTool) Call(ctx context.Context, input tool.CallInput, permiss
 			"updatedFields": []string{},
 			"error":         "Task not found",
 		}
-		return tool.CallResult{
-			Data: output,
-		}, nil
+		return output, nil
 	}
 
 	updatedFields := make([]string, 0)
@@ -142,9 +197,7 @@ func (t *TaskUpdateTool) Call(ctx context.Context, input tool.CallInput, permiss
 					"updatedFields": []string{},
 					"error":         "Failed to delete task",
 				}
-				return tool.CallResult{
-					Data: output,
-				}, nil
+				return output, nil
 			}
 			emitTaskRuntimeEvent(ctx, sessionID, "delete", &Task{ID: taskID, SessionID: sessionID, Subject: existingTask.Subject, Status: TaskStatusDeleted})
 			output := map[string]any{
@@ -156,9 +209,7 @@ func (t *TaskUpdateTool) Call(ctx context.Context, input tool.CallInput, permiss
 					"to":   TaskStatusDeleted,
 				},
 			}
-			return tool.CallResult{
-				Data: output,
-			}, nil
+			return output, nil
 		}
 		oldStatus = existingTask.Status
 		newStatus = status
@@ -202,9 +253,7 @@ func (t *TaskUpdateTool) Call(ctx context.Context, input tool.CallInput, permiss
 	if len(updates) > 0 {
 		_, err := GlobalTaskStore().UpdateTask(ctx, sessionID, taskID, updates)
 		if err != nil {
-			return tool.CallResult{
-				Error: fmt.Errorf("failed to update task: %w", err),
-			}, nil
+			return nil, fmt.Errorf("failed to update task: %w", err)
 		}
 	}
 
@@ -227,9 +276,7 @@ func (t *TaskUpdateTool) Call(ctx context.Context, input tool.CallInput, permiss
 		}
 	}
 
-	return tool.CallResult{
-		Data: output,
-	}, nil
+	return output, nil
 }
 
 // Description returns a human-readable description
@@ -244,9 +291,12 @@ func (t *TaskUpdateTool) ValidateInput(ctx context.Context, input map[string]any
 
 // CheckPermissions checks permissions (always allowed)
 func (t *TaskUpdateTool) CheckPermissions(ctx context.Context, input map[string]any, toolCtx tool.ToolUseContext) types.PermissionResult {
+	if updates, ok := input["updates"].([]any); ok && len(updates) > 0 {
+		return types.PermissionResult{Behavior: types.PermissionBehaviorAllow}
+	}
 	taskID, ok := input["taskId"].(string)
 	if !ok || taskID == "" {
-		return types.Deny("taskId is required")
+		return types.Deny("taskId is required (or pass updates)")
 	}
 	return types.PermissionResult{Behavior: types.PermissionBehaviorAllow}
 }
@@ -273,6 +323,9 @@ func (t *TaskUpdateTool) FormatResult(data any) string {
 	}
 
 	if m, ok := data.(map[string]any); ok {
+		if results, ok := m["results"].([]map[string]any); ok {
+			return formatBatchUpdate(results)
+		}
 		success, _ := m["success"].(bool)
 		taskID, _ := m["taskId"].(string)
 		updatedFields, _ := m["updatedFields"].([]string)
@@ -303,4 +356,20 @@ func JoinFields(fields []string) string {
 		result += f
 	}
 	return result
+}
+
+// formatBatchUpdate renders the results of an "updates" call, one line each.
+func formatBatchUpdate(results []map[string]any) string {
+	lines := make([]string, 0, len(results))
+	for _, r := range results {
+		taskID, _ := r["taskId"].(string)
+		if ok, _ := r["success"].(bool); !ok {
+			msg, _ := r["error"].(string)
+			lines = append(lines, fmt.Sprintf("Task #%s not updated: %s", taskID, msg))
+			continue
+		}
+		fields, _ := r["updatedFields"].([]string)
+		lines = append(lines, fmt.Sprintf("Updated task #%s %s", taskID, JoinFields(fields)))
+	}
+	return strings.Join(lines, "\n")
 }

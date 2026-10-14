@@ -25,7 +25,7 @@ Core behavior:
 
 Use this tool when you already have a specific URL and need to extract information from that page.
 
-Prefer WebFetch over WebSearch when:
+Prefer web_fetch over web_search when:
 - you already know the page to inspect
 - you need details from one or a few exact pages
 - you want a targeted extraction prompt instead of broad discovery
@@ -40,7 +40,7 @@ Usage guidance:
 - keep the prompt focused on the page, not on general background knowledge
 - ask for concrete fields, statements, dates, compatibility notes, or quoted policy details when those matter
 - if the page redirects, follow the returned redirect URL in a new request
-- for GitHub URLs, prefer gh via Bash when appropriate
+- for GitHub URLs, prefer gh via bash when appropriate
 - if an MCP-provided fetch tool exists, prefer it when it is a better fit
 - when verifying a sensitive claim, use this tool to confirm the exact wording or details on the source page
 

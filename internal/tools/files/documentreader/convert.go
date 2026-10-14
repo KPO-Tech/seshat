@@ -29,13 +29,13 @@ const (
 	// ConvertDescription is the description of the convert_document tool.
 	ConvertDescription = "Convert a local file to markdown using the configured document reader: OCR, layout analysis, table structure, and audio transcription.\n\n" +
 		"## When to use\n\n" +
-		"- A scanned/image-only PDF that FileRead reports as having little or no extractable text\n" +
-		"- A PPTX slide deck — most slide decks are mostly visual (screenshots, diagrams, charts) with only a title or two of real text, so FileRead's native extraction routinely \"succeeds\" while missing almost everything that actually matters. FileRead already auto-falls-back to the document reader for a PPTX whose extracted text is sparse relative to its slide count, but if you're unsure or FileRead returned something that looks thin, don't hesitate to call this directly rather than trying to work around it with other tools (terminal, ad-hoc scripts, per-slide image extraction, etc.) — none of that gets better OCR than a whole-document reader does in one shot\n" +
+		"- A scanned/image-only PDF that read_file reports as having little or no extractable text\n" +
+		"- A PPTX slide deck — most slide decks are mostly visual (screenshots, diagrams, charts) with only a title or two of real text, so read_file's native extraction routinely \"succeeds\" while missing almost everything that actually matters. read_file already auto-falls-back to the document reader for a PPTX whose extracted text is sparse relative to its slide count, but if you're unsure or read_file returned something that looks thin, don't hesitate to call this directly rather than trying to work around it with other tools (terminal, ad-hoc scripts, per-slide image extraction, etc.) — none of that gets better OCR than a whole-document reader does in one shot\n" +
 		"- Audio files (WAV, MP3) that need transcription\n" +
-		"- A DOCX/PPTX/XLSX that FileRead's native extraction failed on\n\n" +
+		"- A DOCX/PPTX/XLSX that read_file's native extraction failed on\n\n" +
 		"## When NOT to use\n\n" +
-		"- Plain text-native PDFs, or text-heavy DOCX/XLSX — use FileRead instead, it extracts them natively without the network round-trip to an external document-reader service\n" +
-		"- FileRead already tries the document reader automatically as a last resort for unreadable or sparse files, so you usually don't need this tool for a first read. Reach for it when you want deliberate control: forcing a reconversion, or converting a file FileRead didn't route to documentreader.\n\n" +
+		"- Plain text-native PDFs, or text-heavy DOCX/XLSX — use read_file instead, it extracts them natively without the network round-trip to an external document-reader service\n" +
+		"- read_file already tries the document reader automatically as a last resort for unreadable or sparse files, so you usually don't need this tool for a first read. Reach for it when you want deliberate control: forcing a reconversion, or converting a file read_file didn't route to documentreader.\n\n" +
 		"## Rules\n\n" +
 		"- Requires a document reader to be configured (document_reader_url) or injected by the host.\n" +
 		"- Pass the whole file in one call (`path` is the deck/document itself, e.g. \"deck.pptx\") — the document reader converts every slide/page in a single request. Never split a deck into individual slide images and OCR them one at a time: it's slower, it's more tool calls, and it throws away the layout/reading-order/table-structure analysis a whole-document reader does for a whole document at once.\n"

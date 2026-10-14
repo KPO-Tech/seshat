@@ -1005,29 +1005,29 @@ The working directory persists between commands but shell state does not. The en
 
 ## When to use
 
-Use Bash when no dedicated tool covers the operation: running build systems, package managers, git commands, test runners, CLI tools, process management, or one-off scripts.
+Use bash when no dedicated tool covers the operation: running build systems, package managers, git commands, test runners, CLI tools, process management, or one-off scripts.
 
 ## When NOT to use
 
-Prefer dedicated tools over Bash whenever a dedicated tool exists — they are safer, parse output correctly, and respect permission boundaries:
-- File discovery: use Glob (not find or ls)
-- Content search: use Grep (not grep or rg)
-- Read files: use FileRead (not cat/head/tail)
-- Edit files: use FileEdit (not sed/awk)
-- Write files: use FileWrite (not echo > / cat <<EOF)
-- MCP tools: if an MCP-provided tool covers the same operation, prefer the MCP tool over a Bash equivalent
+Prefer dedicated tools over bash whenever a dedicated tool exists — they are safer, parse output correctly, and respect permission boundaries:
+- File discovery: use glob (not find or ls)
+- Content search: use grep (not shell grep or rg)
+- Read files: use read_file (not cat/head/tail)
+- Edit files: use edit_file (not sed/awk)
+- Write files: use write_file (not echo > / cat <<EOF)
+- MCP tools: if an MCP-provided tool covers the same operation, prefer the MCP tool over a bash equivalent
 
 Instructions:
 - description is required: a clear, 5-10 word summary in active, present tense (e.g. "Lists files in current directory", "Runs the test suite"). It's shown to the user in place of the raw command whenever the tool call is collapsed, so avoid vague filler like "Runs a command".
 - If your command will create new directories or files, first use this tool to run ls to verify the parent directory exists and is the correct location.
 - Always quote file paths that contain spaces with double quotes in your command.
 - Try to maintain your current working directory throughout the session by using absolute paths and avoiding cd. You may use cd if the user explicitly requests it.
-- You may specify an optional timeout in milliseconds (up to 300000ms / 5 minutes). By default, your command times out after 30000ms.
+- You may specify an optional timeout in seconds (up to 300, which is 5 minutes). By default, your command times out after 30 seconds.
 - You can use run_in_background to run the command in the background and return immediately.
 
 When issuing multiple commands:
-- If the commands are independent and can run in parallel, make multiple Bash tool calls in a single message.
-- If the commands depend on each other and must run sequentially, use a single Bash call with && to chain them together.
+- If the commands are independent and can run in parallel, make multiple bash calls in a single message.
+- If the commands depend on each other and must run sequentially, use a single bash call with && to chain them together.
 - Use ; only when you need to run commands sequentially but do not care if earlier commands fail.
 - Do not use newlines to separate commands.
 
@@ -1058,7 +1058,7 @@ Avoid unnecessary sleep commands:
 - Do not retry failing commands in a sleep loop - diagnose the root cause.
 - If you must sleep, keep the duration short (1-5 seconds).
 
-Use the gh command via Bash for GitHub-related tasks such as issues, pull requests, checks, and releases.`
+Use the gh command via bash for GitHub-related tasks such as issues, pull requests, checks, and releases.`
 
 // SearchHint is a hint for tool search functionality.
 const SearchHint = "run shell commands in the terminal"

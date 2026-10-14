@@ -149,11 +149,8 @@ func quickStyle(o quickStyleOpts) Styles {
 		},
 		H1: ansi.StyleBlock{
 			StylePrimitive: ansi.StylePrimitive{
-				Prefix:          " ",
-				Suffix:          " ",
-				Color:           hex(o.warningSubtle),
-				BackgroundColor: hex(o.primary),
-				Bold:            new(true),
+				Color: hex(o.primary),
+				Bold:  new(true),
 			},
 		},
 		H2: ansi.StyleBlock{
