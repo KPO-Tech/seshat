@@ -168,5 +168,8 @@ func (c *Client) sendStreamRequest(ctx context.Context, req types.APIRequest) (*
 		}
 		return nil, err
 	}
+	// The body is bounded by the context only; a connection that goes silent
+	// must not hold the turn for ever.
+	resp.Body = newIdleBody(resp.Body, streamIdleTimeout())
 	return resp, nil
 }
