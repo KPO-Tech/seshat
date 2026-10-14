@@ -7,21 +7,13 @@ import (
 	"github.com/KPO-Tech/seshat-runtime/internal/types"
 )
 
-// legacyClaude35Date is the release-date suffix of the 2024 Claude 3.5
-// Sonnet/Haiku snapshots, shared by every default/fallback/alias below that
-// still points at them (Anthropic's own fallback chain, plus the Bedrock,
-// Vertex, and Foundry alias maps - each spells the model ID in its own
-// provider-specific format, but all six should move together, not drift
-// out of sync one literal at a time).
-const legacyClaude35Date = "20241022"
-
-// DefaultLegacySonnetModel and DefaultLegacyHaikuModel are the 2024 Claude 3.5
-// model identifiers used as defaults across the engine, SDK, and the
-// Anthropic/Foundry alias maps below. They still resolve in the model
-// catalog; this only consolidates the literal so it isn't duplicated.
+// DefaultSonnetModel and DefaultHaikuModel are the Claude identifiers used as
+// defaults across the engine, SDK, and the Anthropic/Foundry alias maps below.
+// Bedrock prefixes them with "anthropic."; Vertex and Foundry use them as is.
 const (
-	DefaultLegacySonnetModel = "claude-3-5-sonnet-" + legacyClaude35Date
-	DefaultLegacyHaikuModel  = "claude-3-5-haiku-" + legacyClaude35Date
+	DefaultSonnetModel = "claude-sonnet-5-5"
+	DefaultHaikuModel  = "claude-haiku-5-5"
+	DefaultOpusModel   = "claude-opus-5-5"
 )
 
 // RoutingConfig defines provider routing and fallback behavior.
@@ -56,16 +48,16 @@ func DefaultConfigs() map[types.APIProvider]*Config {
 			Provider: types.APIProviderAnthropic,
 			BaseURL:  "https://api.anthropic.com",
 			ModelAliasMapping: map[string]string{
-				"sonnet":   "claude-sonnet-4-20250514",
-				"haiku":    DefaultLegacyHaikuModel,
-				"opus":     "claude-3-opus-20240229",
-				"sonnet-3": DefaultLegacySonnetModel,
+				"sonnet": DefaultSonnetModel,
+				"haiku":  DefaultHaikuModel,
+				"opus":   DefaultOpusModel,
+				"fable":  "claude-fable-5-1",
 			},
 			Routing: &RoutingConfig{
 				Priority: 1,
 				FallbackModels: []types.ModelIdentifier{
-					{Provider: types.APIProviderAnthropic, Model: DefaultLegacySonnetModel},
-					{Provider: types.APIProviderAnthropic, Model: DefaultLegacyHaikuModel},
+					{Provider: types.APIProviderAnthropic, Model: DefaultSonnetModel},
+					{Provider: types.APIProviderAnthropic, Model: DefaultHaikuModel},
 				},
 				// No default FallbackProviders: a session that picked
 				// Anthropic must not silently continue on a different
@@ -79,18 +71,13 @@ func DefaultConfigs() map[types.APIProvider]*Config {
 			Provider: types.APIProviderOpenAI,
 			BaseURL:  "https://api.openai.com/v1",
 			ModelAliasMapping: map[string]string{
-				"gpt-5.5":      "gpt-5.5",
-				"gpt-5.4":      "gpt-5.4",
-				"gpt-5.4-mini": "gpt-5.4-mini",
-				"default":      "gpt-5.5",
-				"mini":         "gpt-5.4-mini",
-				"gpt-4o":       "gpt-4o",
-				"gpt-4o-mini":  "gpt-4o-mini",
-				"gpt-4-turbo":  "gpt-4-turbo",
-				"o1":           "o1",
-				"o1-mini":      "o1-mini",
-				"o3":           "o3-mini",
-				"o3-mini":      "o3-mini",
+				"default": "gpt-6.1-sol",
+				"gpt-6.1": "gpt-6.1-sol",
+				"sol":     "gpt-6.1-sol",
+				"astra":   "gpt-6-astra",
+				"mini":    "gpt-6-luna",
+				"luna":    "gpt-6-luna",
+				"gpt-5.5": "gpt-5.5",
 			},
 		},
 		types.APIProviderOllama: {
@@ -109,9 +96,9 @@ func DefaultConfigs() map[types.APIProvider]*Config {
 			Provider: types.APIProviderBedrock,
 			Region:   getEnvOrDefault("AWS_REGION", "us-east-1"),
 			ModelAliasMapping: map[string]string{
-				"sonnet": "anthropic." + DefaultLegacySonnetModel,
-				"haiku":  "anthropic." + DefaultLegacyHaikuModel,
-				"opus":   "anthropic.claude-3-opus-20240229",
+				"sonnet": "anthropic." + DefaultSonnetModel,
+				"haiku":  "anthropic." + DefaultHaikuModel,
+				"opus":   "anthropic." + DefaultOpusModel,
 			},
 		},
 		types.APIProviderVertex: {
@@ -119,9 +106,9 @@ func DefaultConfigs() map[types.APIProvider]*Config {
 			ProjectID: os.Getenv("ANTHROPIC_VERTEX_PROJECT_ID"),
 			Region:    getEnvOrDefault("CLOUD_ML_REGION", "us-east5"),
 			ModelAliasMapping: map[string]string{
-				"sonnet": "claude-3-5-sonnet@" + legacyClaude35Date,
-				"haiku":  "claude-3-5-haiku@" + legacyClaude35Date,
-				"opus":   "claude-3-opus@20240229",
+				"sonnet": DefaultSonnetModel,
+				"haiku":  DefaultHaikuModel,
+				"opus":   DefaultOpusModel,
 			},
 		},
 		types.APIProviderFoundry: {
@@ -129,46 +116,50 @@ func DefaultConfigs() map[types.APIProvider]*Config {
 			BaseURL:  getEnvOrDefault("ANTHROPIC_FOUNDRY_BASE_URL", "https://your-resource.services.ai.azure.com/anthropic/v1"),
 			Region:   getEnvOrDefault("ANTHROPIC_FOUNDRY_RESOURCE", ""),
 			ModelAliasMapping: map[string]string{
-				"sonnet": DefaultLegacySonnetModel,
-				"haiku":  DefaultLegacyHaikuModel,
+				"sonnet": DefaultSonnetModel,
+				"haiku":  DefaultHaikuModel,
+				"opus":   DefaultOpusModel,
 			},
 		},
 		types.APIProviderGemini: {
 			Provider: types.APIProviderGemini,
 			BaseURL:  "https://generativelanguage.googleapis.com/v1beta",
 			ModelAliasMapping: map[string]string{
-				"gemini-pro":   "gemini-1.5-pro",
-				"gemini-flash": "gemini-1.5-flash",
-				"gemini-2":     "gemini-2.0-flash",
-				"gemini-2-pro": "gemini-2.0-pro",
+				"default":      "gemini-4-argon",
+				"gemini-pro":   "gemini-3.1-pro-preview",
+				"gemini-flash": "gemini-3.8-flash",
+				"flash":        "gemini-3.8-flash",
+				"flash-lite":   "gemini-3.5-flash-lite",
+				"gemini-2.5":   "gemini-2.5-pro",
 			},
 		},
 		types.APIProviderZAi: {
 			Provider: types.APIProviderZAi,
 			BaseURL:  "https://api.z.ai/api/paas/v4",
 			ModelAliasMapping: map[string]string{
-				"glm-5":       "glm-5.1",
-				"glm-5-turbo": "glm-5-turbo",
-				"glm-4.5":     "glm-4.5",
-				"glm-4.7":     "glm-4.7",
-				"glm-4.6":     "glm-4.6",
-				"glm4.5":      "glm-4.5",
-				"glm4":        "glm-4.5",
-				"glm-4":       "glm-4-flash", // Try flash
-				"glm4-flash":  "glm-4-flash",
+				"default": "glm-5.3",
+				"glm-5":   "glm-5",
+				"glm-5.3": "glm-5.3",
+				"flash":   "glm-5.3-flash",
+				"flashx":  "glm-5.3-flashx",
+				"glm-4.7": "glm-4.7",
 			},
 		},
 		types.APIProviderOpenRouter: {
 			Provider: types.APIProviderOpenRouter,
 			BaseURL:  "https://openrouter.ai/api/v1",
 			ModelAliasMapping: map[string]string{
-				"opus":     "anthropic/claude-3-opus",
-				"sonnet":   "anthropic/claude-3.5-sonnet",
-				"haiku":    "anthropic/claude-3-haiku",
-				"gpt-4o":   "openai/gpt-4o",
-				"deepseek": "deepseek/deepseek-r1",
-				"qwen":     "qwen/qwen2.5-coder-32b",
-				"llama":    "meta-llama/llama-3.1-70b-instruct",
+				"opus":     "anthropic/claude-opus-5.5",
+				"sonnet":   "anthropic/claude-sonnet-5.5",
+				"haiku":    "anthropic/claude-haiku-5.5",
+				"gpt":      "openai/gpt-6.1-sol",
+				"gemini":   "google/gemini-4-argon",
+				"grok":     "x-ai/grok-4.7",
+				"deepseek": "deepseek/deepseek-v4-pro",
+				"kimi":     "moonshotai/kimi-k3",
+				"glm":      "z-ai/glm-5.3",
+				"minimax":  "minimax/minimax-m3",
+				"qwen":     "qwen/qwen3.8-max-0902",
 			},
 		},
 		types.APIProviderMiniMax: {
@@ -182,6 +173,8 @@ func DefaultConfigs() map[types.APIProvider]*Config {
 			// every other OpenAI-compatible provider here.
 			BaseURL: "https://api.minimax.io/v1",
 			ModelAliasMapping: map[string]string{
+				"m3":        "MiniMax-M3",
+				"default":   "MiniMax-M3",
 				"m2.7":      "MiniMax-M2.7",
 				"m2.7-fast": "MiniMax-M2.7-highspeed",
 				"m2.5":      "MiniMax-M2.5",
@@ -199,19 +192,22 @@ func DefaultConfigs() map[types.APIProvider]*Config {
 			// URL, not just a header value.
 			ProjectID: os.Getenv("CLOUDFLARE_ACCOUNT_ID"),
 			ModelAliasMapping: map[string]string{
-				"llama":    "@cf/meta/llama-3.1-70b-instruct",
-				"deepseek": "@cf/deepseek-ai/deepseek-r1",
-				"qwen":     "@cf/qwen/qwen2.5-coder-7b",
+				"glm":      "@cf/zai-org/glm-5.3",
+				"kimi":     "@cf/moonshotai/kimi-k2.6",
+				"gpt-oss":  "@cf/openai/gpt-oss-120b",
+				"llama":    "@cf/meta/llama-4-scout-17b-16e-instruct",
+				"deepseek": "@cf/deepseek-ai/deepseek-r1-distill-qwen-32b",
 			},
 		},
 		types.APIProviderMistral: {
 			Provider: types.APIProviderMistral,
 			BaseURL:  "https://api.mistral.ai/v1",
 			ModelAliasMapping: map[string]string{
-				"large":  "mistral-large-latest",
-				"small":  "mistral-small-latest",
-				"7b":     "open-mistral-7b",
-				"medium": "mistral-small-latest",
+				"large":    "mistral-large-latest",
+				"medium":   "mistral-medium-latest",
+				"small":    "mistral-small-latest",
+				"code":     "codestral-latest",
+				"devstral": "devstral-latest",
 			},
 		},
 		types.APIProviderKimi: {
@@ -222,13 +218,13 @@ func DefaultConfigs() map[types.APIProvider]*Config {
 			// guessed from the "kimi"/"moonshot" name alone.
 			BaseURL: "https://api.moonshot.ai/v1",
 			ModelAliasMapping: map[string]string{
-				"k3":       "kimi-k3",
-				"default":  "kimi-k3",
-				"k2.7":     "kimi-k2.7-code",
-				"k2.7code": "kimi-k2.7-code",
-				"code":     "kimi-k2.7-code",
-				"k2.6":     "kimi-k2.6",
-				"k2.5":     "kimi-k2.5",
+				"k3":        "kimi-k3",
+				"default":   "kimi-k3",
+				"k2.7":      "kimi-k2.7-code",
+				"k2.7code":  "kimi-k2.7-code",
+				"code":      "kimi-k2.7-code",
+				"k2.6":      "kimi-k2.6",
+				"k2.7-fast": "kimi-k2.7-code-highspeed",
 			},
 		},
 		types.APIProviderCodex: {
@@ -243,6 +239,8 @@ func DefaultConfigs() map[types.APIProvider]*Config {
 			ModelAliasMapping: map[string]string{
 				"default":    "gpt-5.6-sol",
 				"codex":      "gpt-5.6-sol",
+				"terra":      "gpt-5.6-terra",
+				"luna":       "gpt-5.6-luna",
 				"mini":       "gpt-5.4-mini",
 				"codex-mini": "gpt-5.4-mini",
 				"5.5":        "gpt-5.5",
@@ -256,22 +254,29 @@ func DefaultConfigs() map[types.APIProvider]*Config {
 			// pricing docs (api-docs.deepseek.com, checked 2026-08-28) list
 			// only the V4 lineup below, with no mention of the old names.
 			ModelAliasMapping: map[string]string{
-				"default":  "deepseek-v4-flash",
-				"chat":     "deepseek-v4-flash",
-				"flash":    "deepseek-v4-flash",
+				"default":  "deepseek-flash",
+				"chat":     "deepseek-flash",
+				"flash":    "deepseek-flash",
 				"pro":      "deepseek-v4-pro",
 				"reasoner": "deepseek-v4-pro",
-				"vision":   "deepseek-v4-flash-vision-exp",
+				"vision":   "deepseek-flash",
+				// Retired by DeepSeek but still accepted; point at the
+				// current ID so catalogs and sessions converge on it.
+				"deepseek-v4-flash":            "deepseek-flash",
+				"deepseek-v4-flash-vision-exp": "deepseek-flash",
 			},
 		},
 		types.APIProviderOpenCode: {
 			Provider: types.APIProviderOpenCode,
 			BaseURL:  "https://opencode.ai/zen/v1",
 			ModelAliasMapping: map[string]string{
-				"default": "claude-sonnet-4",
-				"sonnet":  "claude-sonnet-4",
+				"default": "claude-sonnet-5-5",
+				"sonnet":  "claude-sonnet-5-5",
+				"opus":    "claude-opus-5-5",
+				"haiku":   "claude-haiku-5-5",
+				"gpt":     "gpt-6.1-sol",
 				"codex":   "gpt-5.3-codex",
-				"glm":     "glm-5.1",
+				"glm":     "glm-5.3",
 			},
 		},
 	}

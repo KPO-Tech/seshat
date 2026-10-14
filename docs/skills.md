@@ -113,7 +113,7 @@ Names are matched exactly (or by glob pattern) against the tool's real registere
 `string` — Intended to override the session model for this skill (e.g. a smaller/faster model for skills that don't need full reasoning power).
 
 ```yaml
-model: "claude-3-5-haiku-20241022"
+model: "claude-haiku-5-5"
 ```
 
 Not yet applied: for `context: fork` the value reaches the forked agent's definition, but nothing downstream uses it to actually select a different provider/model; for the default `inline` context it isn't read at all. Declare it for self-documentation, but the skill still runs on the session's own model today.
@@ -242,7 +242,7 @@ name: "security-audit"
 description: "Run a static security scan on the codebase."
 when_to_use: "Use before any release or when security issues are suspected."
 context: fork
-model: "claude-3-5-haiku-20241022"
+model: "claude-haiku-5-5"
 allowed-tools:
   - bash
   - read_file

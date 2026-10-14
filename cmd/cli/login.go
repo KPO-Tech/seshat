@@ -53,6 +53,6 @@ func runLogin(ctx context.Context, args []string, stdout, stderr io.Writer) erro
 	}
 
 	fmt.Fprintf(stdout, "\nAuthenticated! Your token is saved to ~/.seshat/auth.json\n")
-	fmt.Fprintf(stdout, "You can now use: seshat chat --model openai:gpt-5.5\n\n")
+	fmt.Fprintf(stdout, "You can now use: seshat chat --model openai:gpt-6.1-sol\n\n")
 	return nil
 }

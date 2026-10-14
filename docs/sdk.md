@@ -15,7 +15,7 @@ import "github.com/KPO-Tech/seshat-runtime/pkg/sdk"
 ```go
 client, err := sdk.NewClient(&sdk.ClientConfig{
     APIKey: os.Getenv("ANTHROPIC_API_KEY"),
-    Model:  sdk.ModelIdentifier{Provider: "anthropic", Model: "claude-sonnet-4-20250514"},
+    Model:  sdk.ModelIdentifier{Provider: "anthropic", Model: "claude-sonnet-5-5"},
 })
 if err != nil {
     log.Fatal(err)
@@ -85,7 +85,7 @@ client, err := sdk.NewClient(&sdk.ClientConfig{
 type ClientConfig struct {
     // ── Provider ──────────────────────────────────────────────────────────
     APIKey    string               // required for cloud providers
-    Model     ModelIdentifier      // {Provider: "anthropic", Model: "claude-sonnet-4-20250514"}
+    Model     ModelIdentifier      // {Provider: "anthropic", Model: "claude-sonnet-5-5"}
     MaxTokens int                  // max output tokens (default 8192)
 
     // Injected per-request resolver — takes precedence over APIKey.
@@ -178,7 +178,7 @@ Example — restrict bash to read-only and activate plan stage:
 ```go
 client, _ := sdk.NewClient(&sdk.ClientConfig{
     APIKey: os.Getenv("ANTHROPIC_API_KEY"),
-    Model:  sdk.ModelIdentifier{Provider: "anthropic", Model: "claude-sonnet-4-20250514"},
+    Model:  sdk.ModelIdentifier{Provider: "anthropic", Model: "claude-sonnet-5-5"},
     PromptConfig: &sdk.PromptConfig{
         Stage: sdk.StagePlan,
         ToolHints: map[string]string{

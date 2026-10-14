@@ -381,13 +381,13 @@ func TestProviderForModelUsesCatalog(t *testing.T) {
 	if provider := ProviderForModel("gpt-5.5"); provider != sdk.APIProviderOpenAI {
 		t.Fatalf("unexpected provider: got %q", provider)
 	}
-	if provider := ProviderForModel("@cf/meta/llama-3.1-70b-instruct"); provider != sdk.APIProviderWorkersAI {
+	if provider := ProviderForModel("@cf/zai-org/glm-5.3"); provider != sdk.APIProviderWorkersAI {
 		t.Fatalf("unexpected provider: got %q", provider)
 	}
-	if provider := ProviderForModel("deepseek-v4-flash"); provider != sdk.APIProviderDeepSeek {
+	if provider := ProviderForModel("deepseek-flash"); provider != sdk.APIProviderDeepSeek {
 		t.Fatalf("unexpected provider: got %q", provider)
 	}
-	if provider := ProviderForModel("claude-sonnet-4"); provider != sdk.APIProviderOpenCode {
+	if provider := ProviderForModel("grok-4.7"); provider != sdk.APIProviderOpenCode {
 		t.Fatalf("unexpected provider: got %q", provider)
 	}
 }
