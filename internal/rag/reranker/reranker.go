@@ -49,12 +49,21 @@ type Config struct {
 	// single-model servers like TEI, required by LangSearch/Cohere/vLLM.
 	Model string
 
+	// Style selects the request shape of a hosted provider (StyleCohere,
+	// StyleVoyage); empty sends the fields of every known server, which is
+	// what a self-hosted endpoint wants.
+	Style string
+
 	Timeout time.Duration
 }
 
 // FromEnv reads reranker configuration from environment variables:
 //
-//	RAG_RERANK_URL      — full rerank endpoint URL (self-hosted TEI/vLLM, or any Cohere-compatible service)
+//	RAG_RERANK_PROVIDER — a provider of the catalog (cohere, voyage, openrouter, langsearch): its endpoint,
+//	                      request shape, default model and key variable (COHERE_API_KEY, VOYAGE_API_KEY,
+//	                      OPENROUTER_API_KEY, LANGSEARCH_API_KEY) are used
+//	RAG_RERANK_URL      — full rerank endpoint URL (self-hosted TEI/vLLM, or any Cohere-compatible service);
+//	                      wins over the provider's endpoint
 //	RAG_RERANK_MODEL    — model name (ignored by single-model servers such as TEI)
 //	RAG_RERANK_API_KEY  — optional; omit for a self-hosted server that doesn't require auth
 //
@@ -63,6 +72,11 @@ type Config struct {
 // backward compatibility. Returns a zero Config (IsConfigured() == false)
 // when neither is configured.
 func FromEnv() Config {
+	if id := strings.TrimSpace(os.Getenv("RAG_RERANK_PROVIDER")); id != "" {
+		if cfg, ok := fromProvider(id); ok {
+			return cfg
+		}
+	}
 	url := strings.TrimSpace(os.Getenv("RAG_RERANK_URL"))
 	if url != "" {
 		return Config{
@@ -75,6 +89,35 @@ func FromEnv() Config {
 		return Config{BaseURL: langSearchBaseURL, APIKey: lsKey, Model: langSearchModel}
 	}
 	return Config{}
+}
+
+// fromProvider builds the configuration of a catalog provider. The explicit
+// RAG_RERANK_* variables still override the endpoint, the model and the key.
+// ok is false for an unknown provider, so the caller falls back to the other
+// variables instead of silently running without a reranker.
+func fromProvider(id string) (Config, bool) {
+	profile, ok := ProfileFor(id)
+	if !ok {
+		return Config{}, false
+	}
+	cfg := Config{BaseURL: profile.URL, Model: profile.DefaultModel(), Style: profile.Style}
+	if v := strings.TrimSpace(os.Getenv("RAG_RERANK_URL")); v != "" {
+		cfg.BaseURL = v
+	}
+	if v := strings.TrimSpace(os.Getenv("RAG_RERANK_MODEL")); v != "" {
+		cfg.Model = v
+	}
+	cfg.APIKey = strings.TrimSpace(os.Getenv("RAG_RERANK_API_KEY"))
+	for _, name := range profile.EnvVars {
+		if cfg.APIKey != "" {
+			break
+		}
+		cfg.APIKey = strings.TrimSpace(os.Getenv(name))
+	}
+	if cfg.APIKey == "" {
+		return Config{}, false // a hosted provider without a key cannot answer
+	}
+	return cfg, true
 }
 
 // HTTPReranker reranks documents via a Cohere-compatible (or TEI-compatible)
@@ -110,7 +153,7 @@ func (r *HTTPReranker) IsConfigured() bool {
 // topN caps the returned list; pass 0 to return all.
 func (r *HTTPReranker) Rerank(ctx context.Context, query string, docs []string, topN int) ([]int, []float32, error) {
 	if !r.IsConfigured() {
-		return nil, nil, fmt.Errorf("reranker: no rerank endpoint configured (set RAG_RERANK_URL or LANGSEARCH_API_KEY)")
+		return nil, nil, fmt.Errorf("reranker: no rerank endpoint configured (set RAG_RERANK_PROVIDER, RAG_RERANK_URL or LANGSEARCH_API_KEY)")
 	}
 	if len(docs) == 0 {
 		return nil, nil, nil
@@ -119,17 +162,7 @@ func (r *HTTPReranker) Rerank(ctx context.Context, query string, docs []string, 
 	// Both "documents" (Cohere/LangSearch/vLLM) and "texts" (TEI) point at
 	// the same array so one request works against either server shape -
 	// each side ignores the field name it doesn't recognize.
-	payload := map[string]any{
-		"query":     query,
-		"documents": docs,
-		"texts":     docs,
-	}
-	if r.cfg.Model != "" {
-		payload["model"] = r.cfg.Model
-	}
-	if topN > 0 {
-		payload["top_n"] = topN
-	}
+	payload := r.payload(query, docs, topN)
 
 	body, err := json.Marshal(payload)
 	if err != nil {
@@ -174,6 +207,31 @@ func (r *HTTPReranker) Rerank(ctx context.Context, query string, docs []string, 
 	return indices, scores, nil
 }
 
+// payload builds the request body: exactly the fields of a hosted provider that
+// validates its schema, or the union of every known shape for an unknown server.
+func (r *HTTPReranker) payload(query string, docs []string, topN int) map[string]any {
+	payload := map[string]any{"query": query, "documents": docs}
+	if r.cfg.Model != "" {
+		payload["model"] = r.cfg.Model
+	}
+	switch r.cfg.Style {
+	case StyleVoyage:
+		if topN > 0 {
+			payload["top_k"] = topN
+		}
+	case StyleCohere:
+		if topN > 0 {
+			payload["top_n"] = topN
+		}
+	default:
+		payload["texts"] = docs
+		if topN > 0 {
+			payload["top_n"] = topN
+		}
+	}
+	return payload
+}
+
 type rerankItem struct {
 	Index int
 	Score float32
@@ -203,9 +261,15 @@ func (r rawRerankResult) score() float32 {
 func parseRerankResponse(raw []byte) ([]rerankItem, error) {
 	var wrapped struct {
 		Results []rawRerankResult `json:"results"`
+		Data    []rawRerankResult `json:"data"` // Voyage
 	}
-	if err := json.Unmarshal(raw, &wrapped); err == nil && len(wrapped.Results) > 0 {
-		return toRerankItems(wrapped.Results), nil
+	if err := json.Unmarshal(raw, &wrapped); err == nil {
+		if len(wrapped.Results) > 0 {
+			return toRerankItems(wrapped.Results), nil
+		}
+		if len(wrapped.Data) > 0 {
+			return toRerankItems(wrapped.Data), nil
+		}
 	}
 
 	var bare []rawRerankResult

@@ -40,3 +40,16 @@ func NewFromEnv() *HTTPReranker {
 func NewLangSearchRerankerWithKey(apiKey string) *LangSearchReranker {
 	return internalreranker.NewLangSearchRerankerWithKey(apiKey)
 }
+
+type (
+	// Profile describes a hosted rerank provider: endpoint, key variables,
+	// request shape and models (the first model is the default).
+	Profile = internalreranker.Profile
+)
+
+// Profiles returns the rerank providers this build knows (Cohere, Voyage AI,
+// OpenRouter, LangSearch). RAG_RERANK_PROVIDER selects one from the environment.
+func Profiles() []Profile { return internalreranker.Profiles() }
+
+// ProfileFor returns the rerank profile of a provider ID.
+func ProfileFor(id string) (Profile, bool) { return internalreranker.ProfileFor(id) }

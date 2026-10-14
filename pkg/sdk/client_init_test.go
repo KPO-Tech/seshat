@@ -186,3 +186,18 @@ func TestAudioEndpoint_ElevenLabsFromCatalog(t *testing.T) {
 		t.Fatalf("expected ElevenLabs clients from the catalog, got %v / %v", speak, listen)
 	}
 }
+
+func TestInitImageGenerator_OpenRouterFromCatalog(t *testing.T) {
+	t.Setenv("OPENROUTER_API_KEY", "or-test")
+	gen := initImageGenerator(&ClientConfig{ImageGeneration: &ImageGenerationConfig{Provider: "OpenRouter", Model: "black-forest-labs/flux-3-image"}})
+	if gen == nil || gen.Provider() != "openrouter" {
+		t.Fatalf("expected an OpenRouter image client from the catalog, got %v", gen)
+	}
+}
+
+func TestInitImageGenerator_CustomOpenAICompatibleServer(t *testing.T) {
+	gen := initImageGenerator(&ClientConfig{ImageGeneration: &ImageGenerationConfig{Provider: "local-sd", BaseURL: "http://localhost:7860"}})
+	if gen == nil || gen.Provider() != "local-sd" {
+		t.Fatalf("an unlisted provider with a base URL must work without a key, got %v", gen)
+	}
+}

@@ -154,6 +154,21 @@ In Go, `embedder.NewFromEnv()` (package `pkg/rag/embedder`) returns an embedder,
 
 ---
 
+## Rerank models
+
+An optional second pass reorders the retrieved chunks with a rerank model. Choose a hosted provider with `RAG_RERANK_PROVIDER` (its endpoint, request shape and default model come with it, the key is read from the provider's variable or `RAG_RERANK_API_KEY`), or point `RAG_RERANK_URL` at a self-hosted server (TEI, vLLM). `RAG_RERANK_URL`, `RAG_RERANK_MODEL` and `RAG_RERANK_API_KEY` override what the provider sets. A provider named without its key, or unknown, is skipped and the other settings apply.
+
+| `RAG_RERANK_PROVIDER` | Models (first is the default) | Key variable |
+|---|---|---|
+| `cohere` | `rerank-v3.5`, `rerank-v4.0-pro` | `COHERE_API_KEY` |
+| `voyage` | `rerank-2.5`, `rerank-2.5-lite` | `VOYAGE_API_KEY` |
+| `openrouter` | `cohere/rerank-v3.5`, `cohere/rerank-4-pro`, `cohere/rerank-4-fast`, `voyageai/rerank-2.5`, `voyageai/rerank-2.5-lite`, `qwen/qwen3-reranker-8b`, `nvidia/llama-nemotron-rerank-vl-1b-v2:free` | `OPENROUTER_API_KEY` |
+| `langsearch` | `langsearch-reranker-v1` | `LANGSEARCH_API_KEY` |
+
+For a free local setup, serve `BAAI/bge-reranker-v2-m3` with TEI and set `RAG_RERANK_URL=http://localhost:8080/rerank`.
+
+---
+
 ## Agent tools
 
 `rag_ingest`, `rag_search` and `rag_delete` are registered when a RAG service is attached (`ClientConfig.RAGService`). `rag_search` takes `corpus_id`, `query`, `top_k` (default 5), `hybrid_weight` and an optional metadata `filter`.
