@@ -1,6 +1,13 @@
 package builtin
 
-import "testing"
+import (
+	"regexp"
+	"sort"
+	"strings"
+	"testing"
+
+	"github.com/KPO-Tech/seshat-runtime/internal/prompt"
+)
 
 // registeredBySDK are the general agent's tools that the SDK registers after
 // the engine is built, so they are not in the builtin registry.
@@ -31,5 +38,50 @@ func TestGeneralAgentToolNamesIsASmallSurface(t *testing.T) {
 	// not an accident: raise this bound on purpose.
 	if n := len(GeneralAgentToolNames()); n > 30 {
 		t.Errorf("general agent offers %d tools; keep the core small", n)
+	}
+}
+
+func TestGeneralAgentPromptMentionsOnlyToolsTheAgentHas(t *testing.T) {
+	known := map[string]bool{}
+	for _, name := range GeneralAgentToolNames() {
+		known[name] = true
+	}
+
+	// Backticked words that are not tools: agent types and shell commands.
+	allowedNonTool := map[string]bool{
+		"browse":          true,
+		"explore":         true,
+		"general-purpose": true,
+		"plan":            true,
+		"verify":          true,
+		"rm":              true,
+	}
+
+	re := regexp.MustCompile("`([^`]+)`")
+	var unknown []string
+	seen := map[string]bool{}
+	for _, match := range re.FindAllStringSubmatch(prompt.SeshatCoreStablePrompt(), -1) {
+		name := strings.TrimSpace(match[1])
+		if name == "" || seen[name] {
+			continue
+		}
+		seen[name] = true
+		if !strings.ContainsAny(name, "abcdefghijklmnopqrstuvwxyz") || strings.ContainsAny(name, "/.:") {
+			continue // "#", "##", paths, URLs
+		}
+		if known[name] || allowedNonTool[name] {
+			continue
+		}
+		unknown = append(unknown, name)
+	}
+	sort.Strings(unknown)
+	if len(unknown) > 0 {
+		t.Fatalf("the general agent's prompt mentions names that are not in its tool list: %v", unknown)
+	}
+}
+
+func TestGeneralAgentPromptDescribesNoBrowserTool(t *testing.T) {
+	if strings.Contains(prompt.SeshatCoreStablePrompt(), "browser_") {
+		t.Fatal("the general agent has no browser tools; its prompt must not describe them")
 	}
 }

@@ -105,7 +105,8 @@ type CacheSafePrompt struct {
 	SystemPromptBlocks []types.SystemPromptBlock `json:"system_prompt_blocks,omitempty"`
 }
 
-// Seshat prompt sections and SeshatCoreStablePrompt() are defined in seshatcore.go.
+// The stable prompt sections and SeshatCoreStablePrompt() are defined in agents.go;
+// the text itself lives in prompts/*.md.
 
 var dynamicBoundarySection = Section{
 	Type:            SectionTypeDefault,
@@ -129,7 +130,7 @@ var runtimeContextSection = Section{
 var runtimeGuidanceSection = Section{
 	Type:      SectionTypeDynamic,
 	Name:      "runtime_guidance",
-	Content:   "# Runtime guidance\n\n- The stable system prompt prefix ends before {{prompt_cache_boundary}} and must remain deterministic across turns.\n- Treat the listed tool surface as canonical for this turn.\n- If a needed capability is not listed, use `tool_search` to discover deferred tools before concluding it is unavailable.\n- Use runtime context fields as live session data, not durable policy.",
+	Content:   "# Runtime guidance\n\n- The stable system prompt prefix ends before {{prompt_cache_boundary}} and must remain deterministic across turns.\n- Treat the listed tool surface as canonical for this turn.\n- If a needed capability is not listed, say it is unavailable rather than guessing a tool name. Use `tool_search` for deferred tools only when it is in the tool list.\n- Use runtime context fields as live session data, not durable policy.",
 	Priority:  780,
 	Cacheable: false,
 	Enabled:   true,
