@@ -58,7 +58,7 @@ OLLAMA_API_KEY=...            # optional, only needed if Ollama requires auth
 ### Runtime configuration
 
 ```bash
-SESHAT_MODEL=anthropic:claude-sonnet-4-6   # default model (provider:model)
+SESHAT_MODEL=anthropic:claude-sonnet-5-5   # default model (provider:model)
 SESHAT_API_KEY=...                          # alternative to provider-specific key
 SESHAT_CWD=/path/to/working/directory      # agent working directory
 SESHAT_DB_PATH=/tmp/seshat/seshat.sqlite     # SQLite database path
@@ -129,7 +129,7 @@ grpcurl \
   -plaintext \
   -import-path pkg/grpc/proto \
   -proto seshat.proto \
-  -d '{"prompt":"hello","model":"anthropic:claude-sonnet-4-6"}' \
+  -d '{"prompt":"hello","model":"anthropic:claude-sonnet-5-5"}' \
   localhost:50051 seshat.SeshatService/Query
 ```
 
@@ -148,7 +148,7 @@ grpcurl \
   -plaintext \
   -import-path pkg/grpc/proto \
   -proto seshat.proto \
-  -d '{"prompt":"hello","model":"anthropic:claude-sonnet-4-6"}' \
+  -d '{"prompt":"hello","model":"anthropic:claude-sonnet-5-5"}' \
   localhost:50051 seshat.SeshatService/QueryStream
 ```
 

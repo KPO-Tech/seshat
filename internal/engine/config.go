@@ -104,7 +104,7 @@ func DefaultConfig() *Config {
 		PermissionMode: types.PermissionModeOnRequest,
 		Model: types.ModelIdentifier{
 			Provider: types.APIProviderAnthropic,
-			Model:    providers.DefaultLegacySonnetModel,
+			Model:    providers.DefaultSonnetModel,
 		},
 		MaxTokens:            8192,
 		SystemPromptTemplate: "",

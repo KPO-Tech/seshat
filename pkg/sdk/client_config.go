@@ -338,7 +338,7 @@ func DefaultClientConfig() *ClientConfig {
 	return &ClientConfig{
 		Model: ModelIdentifier{
 			Provider: APIProviderAnthropic,
-			Model:    providers.DefaultLegacySonnetModel,
+			Model:    providers.DefaultSonnetModel,
 		},
 		PermissionMode:    PermissionModeOnRequest,
 		MaxTurns:          100,

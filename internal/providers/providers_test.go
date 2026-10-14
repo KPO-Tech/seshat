@@ -3596,14 +3596,15 @@ func TestDeepSeekCatalogUsesCurrentModelIDs(t *testing.T) {
 	}
 
 	wantIDs := map[string]bool{
-		"deepseek-v4-flash":            false,
-		"deepseek-v4-pro":              false,
-		"deepseek-v4-flash-vision-exp": false,
+		"deepseek-flash":  false,
+		"deepseek-v4-pro": false,
 	}
 	staleIDs := map[string]bool{
-		"deepseek-chat":     true,
-		"deepseek-reasoner": true,
-		"deepseek-coder-v2": true,
+		"deepseek-v4-flash":            true,
+		"deepseek-v4-flash-vision-exp": true,
+		"deepseek-chat":                true,
+		"deepseek-reasoner":            true,
+		"deepseek-coder-v2":            true,
 	}
 	for _, m := range info.Models {
 		if _, isStale := staleIDs[m.Identifier]; isStale {

@@ -136,6 +136,20 @@ RAG_EMBEDDING_API_KEY=...        # not needed for Ollama
 RAG_EMBEDDING_PROVIDER=ollama    # "openai" or "ollama", detected if empty
 ```
 
+Models worth trying (IDs checked against OpenRouter's embeddings list, 2026-10; any OpenAI-compatible `/embeddings` endpoint works, for example `RAG_EMBEDDING_URL=https://openrouter.ai/api/v1`):
+
+| Model | Where | Notes |
+|---|---|---|
+| `nomic-embed-text`, `bge-m3`, `qwen3-embedding` | Ollama (local) | Free, no key; `bge-m3` is multilingual (8K context). |
+| `openai/text-embedding-3-small` / `-large` | OpenRouter, OpenAI | Cheap default / higher quality. |
+| `qwen/qwen3-embedding-8b` | OpenRouter | 32K context, very cheap. |
+| `google/gemini-embedding-2` | OpenRouter, Gemini | Multimodal-capable, 8K context. |
+| `voyageai/voyage-4` (`-lite`, `-large`, `voyage-code-4`) | OpenRouter, Voyage | 32K context; `voyage-code-4` for code. |
+| `mistralai/mistral-embed-2312` | OpenRouter, Mistral | Rejects oversized batches; lower `BatchSize`. |
+| `nvidia/nemotron-3-embed-1b:free`, `liquid/lfm-2.5-embedding-350m:free` | OpenRouter (free) | Rate-limited; fine for tests. |
+
+Changing the model changes the vector size: re-ingest a corpus after switching.
+
 In Go, `embedder.NewFromEnv()` (package `pkg/rag/embedder`) returns an embedder, or `nil` when the variables are not set, which gives keyword-only search.
 
 ---

@@ -210,7 +210,7 @@ go install github.com/KPO-Tech/seshat-runtime/cmd/cli@latest
 
 ```bash
 seshat config --provider anthropic --api-key sk-ant-...
-seshat config --model anthropic:claude-sonnet-4-20250514
+seshat config --model anthropic:claude-sonnet-5-5
 seshat config --print
 ```
 
@@ -269,7 +269,7 @@ import "github.com/KPO-Tech/seshat-runtime/pkg/sdk"
 
 client, err := sdk.NewClient(&sdk.ClientConfig{
     APIKey: os.Getenv("ANTHROPIC_API_KEY"),
-    Model:  sdk.ModelIdentifier{Provider: "anthropic", Model: "claude-sonnet-4-20250514"},
+    Model:  sdk.ModelIdentifier{Provider: "anthropic", Model: "claude-sonnet-5-5"},
 })
 if err != nil {
     log.Fatal(err)
@@ -386,7 +386,7 @@ curl -fsSL https://raw.githubusercontent.com/KPO-Tech/seshat-runtime/main/script
 
 # 2. Configure your provider
 seshat config --provider anthropic --api-key sk-ant-...
-seshat config --model anthropic:claude-sonnet-4-20250514
+seshat config --model anthropic:claude-sonnet-5-5
 
 # 3. Start chatting
 seshat chat                          # new session (opens TUI)

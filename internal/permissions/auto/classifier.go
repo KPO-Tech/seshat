@@ -157,7 +157,7 @@ type TwoStageConfig struct {
 
 func DefaultTwoStageConfig() *TwoStageConfig {
 	return &TwoStageConfig{
-		Model:              "claude-sonnet-4-20250514",
+		Model:              "claude-sonnet-5-5",
 		TwoStageMode:       TwoStageModeBoth,
 		MaxTranscriptChars: MaxTranscriptChars,
 		UseCacheControl:    true,

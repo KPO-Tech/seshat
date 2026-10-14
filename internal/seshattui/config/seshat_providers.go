@@ -115,7 +115,7 @@ func buildSeshatProviders() []catwalk.Provider {
 	for _, p := range sdkProviders {
 		pid := string(p.Name)
 
-		// Convert SDK base models (3 per provider) to catwalk.Model.
+		// Convert SDK catalog models to catwalk.Model.
 		baseModels := make([]catwalk.Model, 0, len(p.Models))
 		seen := make(map[string]struct{}, len(p.Models))
 		for _, m := range p.Models {

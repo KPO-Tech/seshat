@@ -249,11 +249,22 @@ Always registered; `IsEnabled()` returns `false` when no provider is configured.
 
 | Tool | Env var | Description |
 |---|---|---|
-| `generate_image` | `OPENAI_API_KEY` | Generate an image from a text prompt. Returns base64 or URL. |
-| `text_to_speech` | `OPENAI_API_KEY` | Synthesise speech audio from text. Returns base64-encoded audio. |
-| `speech_to_text` | `OPENAI_API_KEY` | Transcribe audio to text via Whisper. Input: base64-encoded audio. |
+| `generate_image` | `OPENAI_API_KEY` / Gemini key | Generate an image from a text prompt. Returns base64 or URL. |
+| `text_to_speech` | provider key | Synthesise speech audio from text. Returns base64-encoded audio. |
+| `speech_to_text` | provider key | Transcribe audio to text. Input: base64-encoded audio. |
 
-Provider implemented: **OpenAI** (DALL-E 3 for images, TTS-1/TTS-1-HD for synthesis, Whisper for transcription).
+Speech is configured like a chat provider: `text_to_speech` and `speech_to_text` in the configuration name a `provider`, an optional `model`, and optionally a `base_url` and `api_key` (otherwise the provider's entry in `providers`, then its environment variable, is used). The audio catalog (`internal/audio/providers/catalog.go`, also `audioproviders.Profiles()` in the SDK) lists what each provider offers; the first model is the default:
+
+| Provider | Speech to text | Text to speech | Key |
+|---|---|---|---|
+| `openai` | `whisper-1` (segments and timings), `gpt-transcribe`, `gpt-4o-transcribe`, `gpt-4o-mini-transcribe` | `gpt-4o-mini-tts`, `tts-1`, `tts-1-hd` | `OPENAI_API_KEY` |
+| `groq` | `whisper-large-v3-turbo`, `whisper-large-v3` | — | `GROQ_API_KEY` |
+| `mistral` | `voxtral-mini-latest` | — | `MISTRAL_API_KEY` |
+| `elevenlabs` | `scribe_v2` (word timings) | `eleven_multilingual_v2`, `eleven_v4`, `eleven_v4_turbo`, `eleven_v3`, `eleven_flash_v2_5`, `eleven_flash_v2` | `ELEVENLABS_API_KEY` |
+
+Any other ID works when `base_url` points at an OpenAI-compatible server (`/audio/transcriptions`, `/audio/speech`), for example a local whisper.cpp server, and then needs no key. ElevenLabs has its own API and its own clients (`internal/audio/providers/elevenlabs.go`): `voice` is an ElevenLabs `voice_id` (without one, the first voice of the account is used), `format` takes `mp3`, `wav`, `opus`, `pcm` or a full ElevenLabs `output_format` such as `mp3_44100_192`. A provider with yet another API (Deepgram) needs its own client in the same folder. The transcription request asks for `verbose_json` from Whisper models and `json` from the others, which reject `verbose_json` and so return text without segments.
+
+Image generation: **OpenAI** (DALL-E 3) and **Gemini**.
 
 ---
 
