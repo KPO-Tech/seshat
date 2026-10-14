@@ -160,6 +160,8 @@ func DefaultConfigs() map[types.APIProvider]*Config {
 				"glm":      "z-ai/glm-5.3",
 				"minimax":  "minimax/minimax-m3",
 				"qwen":     "qwen/qwen3.8-max-0902",
+				"nemotron": "nvidia/nemotron-3-ultra-550b-a55b:free",
+				"free":     "openrouter/free",
 			},
 		},
 		types.APIProviderMiniMax: {

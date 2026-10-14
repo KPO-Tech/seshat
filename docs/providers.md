@@ -90,8 +90,8 @@
 | `x-ai/grok-4.7` | 500K | 128K | — | Grok 4.7 via OpenRouter. |
 | `deepseek/deepseek-v4-pro` | 1M | 384K | — | DeepSeek V4 Pro via OpenRouter. |
 | `moonshotai/kimi-k3` | 1M | 131K | — | Kimi K3 via OpenRouter. |
-| `z-ai/glm-5.3` | 1M | 131K | — | GLM-5.3 via OpenRouter. |
-| `minimax/minimax-m3` | 1M | 131K | — | MiniMax M3 via OpenRouter. |
+| `nvidia/nemotron-3-ultra-550b-a55b:free` | 1M | 65K | — | NVIDIA Nemotron 3 Ultra 550B (free tier, rate-limited) via OpenRouter. 1M con... |
+| `openrouter/free` | 200K | 32K | — | OpenRouter Free router — picks a free model that supports the request (tool... |
 | `anthropic/claude-haiku-5.5` | 1M | 128K | — | Claude Haiku 5.5 via OpenRouter — fast and cheap. |
 
 ### Codex (`codex`)
