@@ -9,6 +9,10 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Security
+
+- **`web_fetch` dials the address it checked, not the name (DNS rebinding).** The network policy resolved the host, found every address public, and then the transport's dialer resolved the same name a second time to open the connection. A DNS record with a zero TTL answers a public address to the first question and `127.0.0.1` or a cloud metadata address (`169.254.169.254`) to the second, which got past the check. Found by an audit. `web.ResolveDialTarget` now returns the checked addresses and the transport dials one of them, in order, so nothing is resolved twice; the certificate is still verified against the host of the URL. `RejectLocalDialTarget` keeps its signature and uses the same function. With a proxy configured the transport dials the proxy and not the target, so the target is checked only where the URL is validated, as before; that is documented in the code.
+
 ### Changed
 
 - **The `read_file` description says what the tool does with PDFs and office files.** It claimed that without a configured document reader a PDF fell back to "raw PDF bytes" and that DOCX, PPTX and XLSX needed a reader. The code reads a PDF's text layer page by page without any service (`pdfsmart.ReadPages`), reads DOCX, PPTX and XLSX natively (`officetext.Extract`), uses a document reader only for scanned pages, for the pictures of a deck and for WAV/MP3 transcription, and reports the pages that have no readable text. The model was being told to expect a degraded result that it does not get. `seshat doctor` already said the right thing.
