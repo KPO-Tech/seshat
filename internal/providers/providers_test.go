@@ -2957,6 +2957,9 @@ func TestCreateMessageStreamResultReturnsNativeRateLimitErrors(t *testing.T) {
 
 			client := NewClientWithConfig("test-key", &Config{Provider: tc.provider, BaseURL: server.URL})
 			client.SetHTTPClient(server.Client())
+			// A stream is retried on a 429, so the server answers 429 until the
+			// attempts run out; keep that fast.
+			client.SetRetryConfig(types.RetryConfig{MaxAttempts: 2, InitialBackoff: 1, MaxBackoff: 2, BackoffMultiplier: 1})
 
 			_, err := client.CreateMessageStreamResult(context.Background(), types.APIRequest{
 				Model:     types.ModelIdentifier{Provider: tc.provider, Model: tc.model},
