@@ -271,7 +271,10 @@ func resolveAudioEndpoint(config *ClientConfig, capability, toolName, providerID
 		}
 	}
 	if baseURL := resolveCapabilityBaseURL(config, providerID, explicitURL); baseURL != "" {
-		ep.baseURL = ensureOpenAIBaseURL(baseURL)
+		if profile.API == "" {
+			baseURL = ensureOpenAIBaseURL(baseURL)
+		}
+		ep.baseURL = baseURL
 		ep.custom = true
 	} else if known {
 		ep.baseURL = profile.BaseURL
@@ -289,6 +292,35 @@ func resolveAudioEndpoint(config *ClientConfig, capability, toolName, providerID
 	return ep, true
 }
 
+func newElevenLabsTTS(ep audioEndpoint, cfg *TextToSpeechConfig) tts.Generation {
+	opts := []audioproviders.ElevenLabsTTSOption{audioproviders.WithElevenLabsTTSBaseURL(ep.baseURL)}
+	model := strings.TrimSpace(cfg.Model)
+	if model == "" {
+		model = ep.profile.TTS.DefaultModel()
+	}
+	opts = append(opts, audioproviders.WithElevenLabsTTSModel(model))
+	if voice := strings.TrimSpace(cfg.Voice); voice != "" {
+		opts = append(opts, audioproviders.WithElevenLabsTTSVoice(voice))
+	}
+	if format := strings.TrimSpace(cfg.Format); format != "" {
+		opts = append(opts, audioproviders.WithElevenLabsTTSFormat(format))
+	}
+	return audioproviders.NewElevenLabsTTS(ep.apiKey, opts...)
+}
+
+func newElevenLabsSTT(ep audioEndpoint, cfg *SpeechToTextConfig) stt.SpeechToText {
+	opts := []audioproviders.ElevenLabsSTTOption{audioproviders.WithElevenLabsSTTBaseURL(ep.baseURL)}
+	model := strings.TrimSpace(cfg.Model)
+	if model == "" {
+		model = ep.profile.STT.DefaultModel()
+	}
+	opts = append(opts, audioproviders.WithElevenLabsSTTModel(model))
+	if language := strings.TrimSpace(cfg.Language); language != "" {
+		opts = append(opts, audioproviders.WithElevenLabsSTTLanguage(language))
+	}
+	return audioproviders.NewElevenLabsSTT(ep.apiKey, opts...)
+}
+
 func initTextToSpeechGenerator(config *ClientConfig) tts.Generation {
 	cfg := config.TextToSpeech
 	if cfg == nil || strings.TrimSpace(cfg.Provider) == "" {
@@ -299,6 +331,9 @@ func initTextToSpeechGenerator(config *ClientConfig) tts.Generation {
 		func(p audioproviders.Profile) *audioproviders.Capability { return p.TTS })
 	if !ok {
 		return nil
+	}
+	if ep.profile.API == audioproviders.APIElevenLabs {
+		return newElevenLabsTTS(ep, cfg)
 	}
 	opts := []audioproviders.OpenAITTSOption{
 		audioproviders.WithTTSProviderName(providerID),
@@ -330,6 +365,9 @@ func initSpeechToTextTranscriber(config *ClientConfig) stt.SpeechToText {
 		func(p audioproviders.Profile) *audioproviders.Capability { return p.STT })
 	if !ok {
 		return nil
+	}
+	if ep.profile.API == audioproviders.APIElevenLabs {
+		return newElevenLabsSTT(ep, cfg)
 	}
 	opts := []audioproviders.OpenAISTTOption{
 		audioproviders.WithSTTProviderName(providerID),

@@ -177,3 +177,12 @@ func TestAudioEndpoint_UnknownProviderNeedsABaseURL(t *testing.T) {
 		t.Fatalf("a custom endpoint should work without a key, got %v", gen)
 	}
 }
+
+func TestAudioEndpoint_ElevenLabsFromCatalog(t *testing.T) {
+	t.Setenv("ELEVENLABS_API_KEY", "xi-test")
+	speak := initTextToSpeechGenerator(&ClientConfig{TextToSpeech: &TextToSpeechConfig{Provider: "elevenlabs", Voice: "v1"}})
+	listen := initSpeechToTextTranscriber(&ClientConfig{SpeechToText: &SpeechToTextConfig{Provider: "ElevenLabs"}})
+	if speak == nil || speak.Provider() != "elevenlabs" || listen == nil || listen.Provider() != "elevenlabs" {
+		t.Fatalf("expected ElevenLabs clients from the catalog, got %v / %v", speak, listen)
+	}
+}

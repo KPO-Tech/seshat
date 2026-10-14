@@ -2,15 +2,18 @@ package audioproviders
 
 import "strings"
 
-// Profile describes one provider that serves speech over the OpenAI-compatible
-// audio API (/audio/transcriptions, /audio/speech). It is the audio counterpart
+// Profile describes one provider of speech: the OpenAI-compatible audio API
+// (/audio/transcriptions, /audio/speech) or ElevenLabs, see API. It is the audio counterpart
 // of the chat catalog in internal/providers: the SDK looks a provider up here
 // instead of hard-coding "openai", and a provider that is not listed still works
 // when the host gives its base URL.
 type Profile struct {
 	ID          string
 	DisplayName string
-	BaseURL     string
+	// API names the wire protocol: "" is the OpenAI-compatible audio API,
+	// APIElevenLabs is ElevenLabs' own.
+	API     string
+	BaseURL string
 	// EnvVars are the environment variables that can carry the API key,
 	// read when the host passes none.
 	EnvVars []string
@@ -21,6 +24,9 @@ type Profile struct {
 	// "" chooses from the model, ResponseFormatOmit sends none.
 	STTResponseFormat string
 }
+
+// APIElevenLabs marks a profile served by the ElevenLabs clients.
+const APIElevenLabs = "elevenlabs"
 
 // Capability lists the models of one direction. The first model is the default.
 type Capability struct {
@@ -59,7 +65,18 @@ var profiles = []Profile{
 		STT:               &Capability{Models: []string{"voxtral-mini-latest"}},
 		STTResponseFormat: ResponseFormatOmit,
 	},
+	{
+		// ElevenLabs has its own API; see elevenlabs.go. The default
+		// text-to-speech model is the API default; eleven_v4 is the newest.
+		ID: "elevenlabs", DisplayName: "ElevenLabs", API: APIElevenLabs, BaseURL: "https://api.elevenlabs.io",
+		EnvVars: []string{"ELEVENLABS_API_KEY", "ELEVEN_API_KEY"},
+		STT:     &Capability{Models: []string{"scribe_v2"}},
+		TTS:     &Capability{Models: []string{"eleven_multilingual_v2", "eleven_v4", "eleven_v4_turbo", "eleven_v3", "eleven_flash_v2_5", "eleven_flash_v2"}},
+	},
 }
+
+// OpenAICompatible reports whether the provider speaks the OpenAI audio API.
+func (p Profile) OpenAICompatible() bool { return p.API == "" }
 
 // Profiles returns the audio providers this build knows.
 func Profiles() []Profile {
