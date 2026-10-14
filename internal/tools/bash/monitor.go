@@ -24,9 +24,9 @@ Use this for:
 - Watching build output
 - Observing long-running processes
 
-For one-shot "wait until done" commands, prefer Bash tool with run_in_background instead.
+For one-shot "wait until done" commands, prefer bash tool with run_in_background instead.
 
-This tool is similar to Bash with run_in_background, but specifically designed for
+This tool is similar to bash with run_in_background, but specifically designed for
 continuous monitoring with streaming notifications.
 `
 

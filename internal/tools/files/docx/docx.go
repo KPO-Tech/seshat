@@ -37,13 +37,13 @@ const (
 	ToolDescription = "Create a new Word (.docx) document, or find/replace edit an existing one's text.\n\n" +
 		"## When to use\n\n" +
 		"- Creating a new .docx from plain text — omit old_string; new_string becomes the document body (lines starting with \"#\".. \"######\" become headings, blank lines become paragraph breaks)\n" +
-		"- Editing text in an existing .docx — provide old_string (the exact text to find) and new_string (its replacement), same as FileEdit\n\n" +
+		"- Editing text in an existing .docx — provide old_string (the exact text to find) and new_string (its replacement), same as edit_file\n\n" +
 		"## When NOT to use\n\n" +
-		"- Reading .docx content — use FileRead instead (extracts it natively, no need to write anything first)\n" +
+		"- Reading .docx content — use read_file instead (extracts it natively, no need to write anything first)\n" +
 		"- Complex formatting, images, or tables — this only handles plain paragraph/heading text\n\n" +
 		"## Rules\n\n" +
-		"- Same read-before-edit rule as FileEdit: an existing file must have been read with FileRead first.\n" +
-		"- old_string must match a run of actual document text exactly (or closely — a fuzzy fallback with a diff kicks in if the exact match fails, same as FileEdit).\n" +
+		"- Same read-before-edit rule as edit_file: an existing file must have been read with read_file first.\n" +
+		"- old_string must match a run of actual document text exactly (or closely — a fuzzy fallback with a diff kicks in if the exact match fails, same as edit_file).\n" +
 		"- Set replace_all if old_string appears more than once and you want every occurrence replaced.\n"
 )
 

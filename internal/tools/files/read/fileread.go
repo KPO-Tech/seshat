@@ -1078,7 +1078,7 @@ Usage:
 - PDFs: the text layer is read without any service. A configured document reader adds OCR for scanned pages, and keeps tables, headings and layout in the markdown. Without one, a page that has no text layer is reported as having no readable text.
 - This tool can read Jupyter notebooks (.ipynb files) and returns all cells with their outputs, combining code, text, and visualizations.
 - DOCX, PPTX and XLSX documents are read directly. A configured document reader can add the text of pictures when a document is mostly images, and it is needed to transcribe WAV/MP3 audio files.
-- This tool can only read files, not directories. To read a directory, use an ls command via the Bash tool.
+- This tool can only read files, not directories. To read a directory, use glob or an ls command via the bash tool.
 - You will regularly be asked to read screenshots. If the user provides a path to a screenshot, always use this tool to view the file at the path.
 - If you read a file that exists but has empty contents you will receive a warning in place of file contents.`, MaxLinesToRead)
 

@@ -33,11 +33,11 @@ const (
 		"- Appending content to an existing PDF — provide content for an existing file; it's rendered and added as new page(s) at the end\n" +
 		"- Deleting pages from an existing PDF — provide delete_pages (e.g. \"2\", \"2-4\", \"2,4-6\")\n\n" +
 		"## When NOT to use\n\n" +
-		"- Reading PDF content — use FileRead instead\n" +
+		"- Reading PDF content — use read_file instead\n" +
 		"- Editing existing text in place, images, or complex layout — this only appends/deletes whole pages, it cannot find/replace text inside a PDF (unlike docx_edit) because PDF text isn't addressable the same way\n\n" +
 		"## Rules\n\n" +
 		"- content and delete_pages are mutually exclusive in a single call.\n" +
-		"- Modifying an existing file (content-append or delete_pages) requires it to have been read with FileRead first, same as other write tools.\n"
+		"- Modifying an existing file (content-append or delete_pages) requires it to have been read with read_file first, same as other write tools.\n"
 )
 
 // Tool implements the write_pdf tool.
