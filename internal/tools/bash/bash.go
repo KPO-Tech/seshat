@@ -282,7 +282,10 @@ func (t *Tool) Call(
 		// is either on the explicit allowlist or is a pure read/state-change command.
 		// Both cases bypass the global approval pipeline entirely.
 		// Mirrors Codex's ExecApprovalRequirement::Skip.
-		skipApproval := policyResult.Decision == sandbox.DecisionAllow
+		// The policy reads the line as a whole: "ls\nrm -rf x" and "cat x | bash"
+		// are classified as plain reads. Only a single simple command skips the
+		// approval, never a chain, a substitution or a redirection.
+		skipApproval := policyResult.Decision == sandbox.DecisionAllow && isSingleSimpleCommand(command)
 
 		// Mode-specific fast-path (e.g. AcceptEdits allows certain writes).
 		if !skipApproval {
