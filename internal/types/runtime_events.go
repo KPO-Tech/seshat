@@ -22,6 +22,12 @@ const (
 	RuntimeEventTypeExecutionModeChanged   RuntimeEventType = "execution_mode.changed"
 	RuntimeEventTypeTaskChanged            RuntimeEventType = "task.changed"
 
+	// RuntimeEventTypeProviderRetry is emitted before the runtime waits to retry a
+	// request the provider refused or dropped (a rate limit, an overload, a reset
+	// connection), so that a client can say what it is waiting for instead of a
+	// spinner that looks frozen.
+	RuntimeEventTypeProviderRetry RuntimeEventType = "provider.retry"
+
 	// RuntimeEventTypeStage marks a named phase of pre-generation turn setup
 	// (loading tools, resuming a session, searching knowledge) so a client can
 	// show what's happening instead of a generic spinner during the otherwise
@@ -86,6 +92,9 @@ type RuntimeEvent struct {
 
 	// StageEvent carries structured payload for turn.stage events.
 	StageEvent *StageRuntimeEvent `json:"stage_event,omitempty"`
+
+	// ProviderRetryEvent carries structured payload for provider.retry events.
+	ProviderRetryEvent *ProviderRetryRuntimeEvent `json:"provider_retry_event,omitempty"`
 
 	// CompactionEvent carries structured payload for context.compacted events.
 	CompactionEvent *CompactionRuntimeEvent `json:"compaction_event,omitempty"`
@@ -191,4 +200,17 @@ type BrowserRuntimeEvent struct {
 	PersistedPath string `json:"persisted_path,omitempty"`
 	PersistedSize int    `json:"persisted_size,omitempty"`
 	FullPage      bool   `json:"full_page,omitempty"`
+}
+
+// ProviderRetryRuntimeEvent is the structured payload for provider.retry events.
+type ProviderRetryRuntimeEvent struct {
+	// Attempt is the number of the attempt about to be made (2 for the first retry).
+	Attempt int `json:"attempt"`
+	// MaxAttempts is the number of attempts the runtime makes in all.
+	MaxAttempts int `json:"max_attempts"`
+	// WaitMs is how long the runtime waits before that attempt, in milliseconds.
+	WaitMs int64 `json:"wait_ms"`
+	// Reason says why the request is retried: "rate limited (429)", "server error (503)",
+	// "connection error".
+	Reason string `json:"reason"`
 }

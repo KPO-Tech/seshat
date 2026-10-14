@@ -15,7 +15,7 @@ import (
 // sendMessageWithRetry sends a message request with retry logic
 // This implements actual retry with exponential backoff, circuit breaker, and rate limit handling
 func (c *Client) sendMessageWithRetry(ctx context.Context, req types.APIRequest) (*http.Response, error) {
-	return providerretry.RetryHTTP(
+	return providerretry.RetryHTTPNotify(
 		ctx,
 		c.retryConfig,
 		func(ctx context.Context) (*http.Response, error) {
@@ -30,6 +30,7 @@ func (c *Client) sendMessageWithRetry(ctx context.Context, req types.APIRequest)
 			return err
 		},
 		IsCircuitBreakerOpenError,
+		retryNotifier(ctx),
 	)
 }
 
@@ -172,4 +173,25 @@ func (c *Client) sendStreamRequest(ctx context.Context, req types.APIRequest) (*
 	// must not hold the turn for ever.
 	resp.Body = newIdleBody(resp.Body, streamIdleTimeout())
 	return resp, nil
+}
+
+// retryNotifier turns the waits of a retry into provider.retry runtime events,
+// when the request runs inside a turn that listens for them (the emitter is on
+// the context). Without it a rate limit looks like a model that is thinking.
+func retryNotifier(ctx context.Context) providerretry.RetryNotifier {
+	emit, ok := ctx.Value(types.RuntimeEventEmitterKey).(func(types.RuntimeEvent))
+	if !ok || emit == nil {
+		return nil
+	}
+	return func(notice providerretry.RetryNotice) {
+		emit(types.RuntimeEvent{
+			Type: types.RuntimeEventTypeProviderRetry,
+			ProviderRetryEvent: &types.ProviderRetryRuntimeEvent{
+				Attempt:     notice.Attempt,
+				MaxAttempts: notice.MaxAttempts,
+				WaitMs:      notice.Wait.Milliseconds(),
+				Reason:      notice.Reason,
+			},
+		})
+	}
 }

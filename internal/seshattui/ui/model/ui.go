@@ -3622,15 +3622,29 @@ func (m *UI) renderWorkingStatusLine(width int) string {
 	if elapsed < 0 {
 		elapsed = 0
 	}
-	dots := []string{".", "..", "..."}[elapsed%3]
-	var dStr string
-	if elapsed < 60 {
-		dStr = fmt.Sprintf("%ds", elapsed)
-	} else {
-		dStr = fmt.Sprintf("%dm%ds", elapsed/60, elapsed%60)
+	notice := ""
+	if m.session != nil {
+		notice = m.session.Notice
 	}
-	text := fmt.Sprintf("%s%s (%s)", m.workPhase, dots, dStr)
-	return m.com.Styles.Editor.WorkingStatus.Width(width).Render(text)
+	return m.com.Styles.Editor.WorkingStatus.Width(width).Render(workingStatusText(m.workPhase, elapsed, notice))
+}
+
+// workingStatusText is the line shown above the input while the agent works: the
+// phase with a moving ellipsis and the time it has lasted, or, while the runtime
+// waits to retry a request the provider refused, what it is waiting for. A wait
+// of that kind looks like a model that is thinking and has stopped.
+func workingStatusText(phase string, elapsed int, notice string) string {
+	var duration string
+	if elapsed < 60 {
+		duration = fmt.Sprintf("%ds", elapsed)
+	} else {
+		duration = fmt.Sprintf("%dm%ds", elapsed/60, elapsed%60)
+	}
+	if notice != "" {
+		return fmt.Sprintf("%s (%s)", notice, duration)
+	}
+	dots := []string{".", "..", "..."}[elapsed%3]
+	return fmt.Sprintf("%s%s (%s)", phase, dots, duration)
 }
 
 func (m *UI) editorAttachmentsHeight(width int) int {

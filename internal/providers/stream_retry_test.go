@@ -133,3 +133,45 @@ func TestAStreamDoesNotRetryABadRequest(t *testing.T) {
 		t.Errorf("a client error must not be retried, got %d requests", got)
 	}
 }
+
+// The wait of a retry is told to whoever listens on the turn, so that a client
+// can say "rate limited, retrying in 1 s" instead of showing a frozen spinner.
+func TestARetryTellsTheTurnWhatItWaitsFor(t *testing.T) {
+	server, _ := streamServer(t, []int{http.StatusTooManyRequests}, map[string]string{"Retry-After": "1"}, `{"error":{"message":"slow down"}}`)
+	var events []types.RuntimeEvent
+	ctx := context.WithValue(context.Background(), types.RuntimeEventEmitterKey, func(event types.RuntimeEvent) {
+		events = append(events, event)
+	})
+
+	client := NewClientWithConfig("test-key", &Config{Provider: types.APIProviderOpenAI, BaseURL: server.URL})
+	client.SetHTTPClient(server.Client())
+	client.SetRetryConfig(types.RetryConfig{MaxAttempts: 4, InitialBackoff: 5, MaxBackoff: 20, BackoffMultiplier: 1})
+	if _, err := client.CreateMessageStreamResult(ctx, types.APIRequest{
+		Model:     types.ModelIdentifier{Provider: types.APIProviderOpenAI, Model: "gpt-4o-mini"},
+		MaxTokens: 64,
+		Messages:  []types.Message{types.UserMessage("msg-1", "hello")},
+	}); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if len(events) != 1 {
+		t.Fatalf("want one provider.retry event, got %d", len(events))
+	}
+	retry := events[0].ProviderRetryEvent
+	if events[0].Type != types.RuntimeEventTypeProviderRetry || retry == nil {
+		t.Fatalf("unexpected event %+v", events[0])
+	}
+	if retry.Attempt != 2 || retry.MaxAttempts != 4 || retry.WaitMs != 1000 || retry.Reason != "rate limited (429)" {
+		t.Errorf("unexpected payload %+v", retry)
+	}
+}
+
+func TestARetryWithNoListenerStillWorks(t *testing.T) {
+	server, requests := streamServer(t, []int{http.StatusServiceUnavailable}, nil, `{"error":{"message":"overloaded"}}`)
+	if _, err := streamOnce(t, server); err != nil {
+		t.Fatalf("a retry needs no listener: %v", err)
+	}
+	if requests.Load() != 2 {
+		t.Errorf("want 2 requests, got %d", requests.Load())
+	}
+}

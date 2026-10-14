@@ -402,6 +402,24 @@ func ParseRetryAfterHeader(resp *http.Response) time.Duration {
 	return 0
 }
 
+// RetryNotice describes a wait before a retry, for a client that wants to say
+// what it is waiting for.
+type RetryNotice struct {
+	// Attempt is the number of the attempt about to be made (2 for the first retry).
+	Attempt int
+	// MaxAttempts is the number of attempts made in all.
+	MaxAttempts int
+	// Wait is how long the retry waits before that attempt.
+	Wait time.Duration
+	// Reason says why the request is retried.
+	Reason string
+}
+
+// RetryNotifier is called before each wait.
+type RetryNotifier func(RetryNotice)
+
+// RetryHTTP sends a request and retries it as RetryHTTPNotify does, without
+// telling anyone about the waits.
 func RetryHTTP(
 	ctx context.Context,
 	config types.RetryConfig,
@@ -409,9 +427,37 @@ func RetryHTTP(
 	buildResponseError HTTPResponseErrorFunc,
 	isCircuitOpen CircuitOpenChecker,
 ) (*http.Response, error) {
+	return RetryHTTPNotify(ctx, config, send, buildResponseError, isCircuitOpen, nil)
+}
+
+// RetryHTTPNotify sends a request and retries it on a refused or reset
+// connection, a 429 and a 5xx, with the wait the provider asks for in
+// Retry-After or an exponential one. notify, when set, is called before each
+// wait.
+func RetryHTTPNotify(
+	ctx context.Context,
+	config types.RetryConfig,
+	send HTTPRequestFunc,
+	buildResponseError HTTPResponseErrorFunc,
+	isCircuitOpen CircuitOpenChecker,
+	notify RetryNotifier,
+) (*http.Response, error) {
 	maxAttempts := config.MaxAttempts
 	if maxAttempts <= 0 {
 		maxAttempts = types.DefaultRetryConfig().MaxAttempts
+	}
+
+	// wait tells the client, then waits for delay or for the context.
+	wait := func(attempt int, delay time.Duration, reason string) error {
+		if notify != nil {
+			notify(RetryNotice{Attempt: attempt + 1, MaxAttempts: maxAttempts, Wait: delay, Reason: reason})
+		}
+		select {
+		case <-ctx.Done():
+			return types.WrapError(types.ErrCodeAPITimeout, "request cancelled during backoff", ctx.Err())
+		case <-time.After(delay):
+			return nil
+		}
 	}
 
 	var lastErr error
@@ -430,11 +476,8 @@ func RetryHTTP(
 			}
 			classification := ClassifyHTTPError(err, 0)
 			if ShouldRetryHTTP(config, classification, attempt) {
-				delay := CalculateHTTPBackoff(config, attempt)
-				select {
-				case <-ctx.Done():
-					return nil, types.WrapError(types.ErrCodeAPITimeout, "request cancelled during backoff", ctx.Err())
-				case <-time.After(delay):
+				if waitErr := wait(attempt, CalculateHTTPBackoff(config, attempt), "connection error"); waitErr != nil {
+					return nil, waitErr
 				}
 				continue
 			}
@@ -458,29 +501,22 @@ func RetryHTTP(
 		}
 
 		classification := ClassifyHTTPError(nil, resp.StatusCode)
-		if resp.StatusCode == http.StatusTooManyRequests && ShouldRetryHTTP(config, classification, attempt) {
-			delay := ParseRetryAfterHeader(resp)
-			if delay > MaxRetryAfter {
-				// The provider asks for more than a person waits at a prompt.
-				return nil, lastErr
-			}
-			if delay <= 0 {
-				delay = CalculateHTTPBackoff(config, attempt)
-			}
-			select {
-			case <-ctx.Done():
-				return nil, types.WrapError(types.ErrCodeAPITimeout, "request cancelled during backoff", ctx.Err())
-			case <-time.After(delay):
-			}
-			continue
-		}
-
 		if ShouldRetryHTTP(config, classification, attempt) {
 			delay := CalculateHTTPBackoff(config, attempt)
-			select {
-			case <-ctx.Done():
-				return nil, types.WrapError(types.ErrCodeAPITimeout, "request cancelled during backoff", ctx.Err())
-			case <-time.After(delay):
+			reason := fmt.Sprintf("server error (%d)", resp.StatusCode)
+			if resp.StatusCode == http.StatusTooManyRequests {
+				reason = "rate limited (429)"
+				delay = ParseRetryAfterHeader(resp)
+				if delay > MaxRetryAfter {
+					// The provider asks for more than a person waits at a prompt.
+					return nil, lastErr
+				}
+				if delay <= 0 {
+					delay = CalculateHTTPBackoff(config, attempt)
+				}
+			}
+			if waitErr := wait(attempt, delay, reason); waitErr != nil {
+				return nil, waitErr
 			}
 			continue
 		}
