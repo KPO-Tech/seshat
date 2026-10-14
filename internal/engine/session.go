@@ -336,6 +336,8 @@ func (s *Session) submitWithMessage(ctx context.Context, userMsg types.Message, 
 		}
 		// Do NOT call AdvanceTurn on error: counting an errored loop as a
 		// completed turn would increment TurnNumber and prematurely exhaust MaxTurns.
+		// The work the turn did is kept, though: see keepInterruptedTurn.
+		s.keepInterruptedTurn(loopResult.Messages, persistedMessages, loopResult.Error)
 		return nil, fmt.Errorf("query loop failed: %w", loopResult.Error)
 	}
 	s.state.RegisterDiscoveredDeferredTools(loopResult.DiscoveredDeferred)
