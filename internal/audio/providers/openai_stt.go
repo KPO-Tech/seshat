@@ -9,6 +9,7 @@ import (
 	"mime/multipart"
 	"net/http"
 	"path/filepath"
+	"strings"
 
 	"github.com/KPO-Tech/seshat-runtime/internal/audio/stt"
 )
@@ -18,11 +19,15 @@ const (
 	openAISTTDefaultModel = "whisper-1"
 )
 
-// OpenAISTT transcribes audio using OpenAI Whisper.
+// OpenAISTT transcribes audio through an OpenAI-compatible
+// /audio/transcriptions endpoint: OpenAI itself, Groq, Mistral, or any
+// self-hosted server that speaks the same API (see the profiles in catalog.go).
 type OpenAISTT struct {
+	name       string // provider name reported by Provider()
 	apiKey     string
 	baseURL    string
 	model      string
+	respFormat string // "" = choose from the model, ResponseFormatOmit = send none
 	language   string // IETF tag, empty = auto-detect
 	httpClient *http.Client
 }
@@ -37,10 +42,43 @@ func WithSTTHTTPClient(hc *http.Client) OpenAISTTOption {
 	return func(c *OpenAISTT) { c.httpClient = hc }
 }
 
+// WithSTTProviderName sets the name Provider() reports (default "openai").
+func WithSTTProviderName(name string) OpenAISTTOption {
+	return func(c *OpenAISTT) { c.name = name }
+}
+
+// WithSTTResponseFormat forces the response_format sent with the request.
+// Empty means "choose from the model" (verbose_json for Whisper models, which
+// carry segments and timings; json for the others, which reject verbose_json);
+// ResponseFormatOmit sends no response_format at all, for servers that do not
+// take one.
+func WithSTTResponseFormat(format string) OpenAISTTOption {
+	return func(c *OpenAISTT) { c.respFormat = format }
+}
+
+// ResponseFormatOmit tells a client not to send a response_format field.
+const ResponseFormatOmit = "omit"
+
+// sttResponseFormat returns the response_format to send, or "" for none.
+func sttResponseFormat(configured, model string) string {
+	switch configured {
+	case "":
+		if strings.Contains(strings.ToLower(model), "whisper") {
+			return "verbose_json"
+		}
+		return "json"
+	case ResponseFormatOmit:
+		return ""
+	default:
+		return configured
+	}
+}
+
 // NewOpenAISTT creates an OpenAI Whisper STT client.
 // audioData passed to Transcribe may be MP3, MP4, MPEG, MPGA, M4A, WAV, or WebM.
 func NewOpenAISTT(apiKey string, opts ...OpenAISTTOption) *OpenAISTT {
 	c := &OpenAISTT{
+		name:       "openai",
 		apiKey:     apiKey,
 		baseURL:    openAISTTBaseURL,
 		model:      openAISTTDefaultModel,
@@ -52,7 +90,7 @@ func NewOpenAISTT(apiKey string, opts ...OpenAISTTOption) *OpenAISTT {
 	return c
 }
 
-func (c *OpenAISTT) Provider() string { return "openai" }
+func (c *OpenAISTT) Provider() string { return c.name }
 
 func (c *OpenAISTT) Transcribe(ctx context.Context, audioData []byte) (*stt.Response, error) {
 	var buf bytes.Buffer
@@ -66,7 +104,9 @@ func (c *OpenAISTT) Transcribe(ctx context.Context, audioData []byte) (*stt.Resp
 		return nil, fmt.Errorf("openai stt: write audio: %w", err)
 	}
 	_ = mw.WriteField("model", c.model)
-	_ = mw.WriteField("response_format", "verbose_json")
+	if format := sttResponseFormat(c.respFormat, c.model); format != "" {
+		_ = mw.WriteField("response_format", format)
+	}
 	if c.language != "" {
 		_ = mw.WriteField("language", filepath.Base(c.language))
 	}

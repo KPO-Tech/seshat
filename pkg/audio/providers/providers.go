@@ -68,3 +68,36 @@ func WithTTSBaseURL(url string) OpenAITTSOption { return internalproviders.WithT
 func WithTTSHTTPClient(hc *http.Client) OpenAITTSOption {
 	return internalproviders.WithTTSHTTPClient(hc)
 }
+
+type (
+	// Profile describes a provider that serves speech over the OpenAI-compatible
+	// audio API: its endpoint, key variables and STT/TTS models.
+	Profile = internalproviders.Profile
+	// Capability lists the models a provider offers for one direction.
+	Capability = internalproviders.Capability
+)
+
+// ResponseFormatOmit makes an STT client send no response_format field.
+const ResponseFormatOmit = internalproviders.ResponseFormatOmit
+
+// Profiles returns the audio providers this build knows (OpenAI, Groq, Mistral).
+func Profiles() []Profile { return internalproviders.Profiles() }
+
+// ProfileFor returns the audio profile of a provider ID.
+func ProfileFor(id string) (Profile, bool) { return internalproviders.ProfileFor(id) }
+
+// WithSTTProviderName sets the name an STT client reports from Provider().
+func WithSTTProviderName(name string) OpenAISTTOption {
+	return internalproviders.WithSTTProviderName(name)
+}
+
+// WithSTTResponseFormat forces the response_format an STT client sends; empty
+// chooses from the model, ResponseFormatOmit sends none.
+func WithSTTResponseFormat(format string) OpenAISTTOption {
+	return internalproviders.WithSTTResponseFormat(format)
+}
+
+// WithTTSProviderName sets the name a TTS client reports from Provider().
+func WithTTSProviderName(name string) OpenAITTSOption {
+	return internalproviders.WithTTSProviderName(name)
+}

@@ -16,7 +16,7 @@ import (
 
 const (
 	openAITTSBaseURL      = "https://api.openai.com/v1"
-	openAITTSDefaultModel = "tts-1"
+	openAITTSDefaultModel = "gpt-4o-mini-tts"
 	openAITTSDefaultVoice = "alloy"
 	openAITTSDefaultFmt   = "mp3"
 )
@@ -29,10 +29,19 @@ var openAIVoices = []tts.Voice{
 	{ID: "onyx", Name: "Onyx", Language: "en-US", Description: "Deep, authoritative voice"},
 	{ID: "nova", Name: "Nova", Language: "en-US", Description: "Energetic, bright voice"},
 	{ID: "shimmer", Name: "Shimmer", Language: "en-US", Description: "Soft, expressive voice"},
+	{ID: "ash", Name: "Ash", Language: "en-US", Description: "Clear, steady voice"},
+	{ID: "coral", Name: "Coral", Language: "en-US", Description: "Friendly, warm voice"},
+	{ID: "sage", Name: "Sage", Language: "en-US", Description: "Calm, measured voice"},
+	// ballad, verse, marin and cedar are only offered by gpt-4o-mini-tts.
+	{ID: "ballad", Name: "Ballad", Language: "en-US", Description: "Expressive voice (gpt-4o-mini-tts)"},
+	{ID: "verse", Name: "Verse", Language: "en-US", Description: "Dynamic voice (gpt-4o-mini-tts)"},
+	{ID: "marin", Name: "Marin", Language: "en-US", Description: "Highest-quality voice (gpt-4o-mini-tts)"},
+	{ID: "cedar", Name: "Cedar", Language: "en-US", Description: "Highest-quality voice (gpt-4o-mini-tts)"},
 }
 
 // OpenAITTS generates speech using the OpenAI TTS API.
 type OpenAITTS struct {
+	name       string // provider name reported by Provider()
 	apiKey     string
 	baseURL    string
 	model      string
@@ -52,10 +61,17 @@ func WithTTSHTTPClient(hc *http.Client) OpenAITTSOption {
 	return func(c *OpenAITTS) { c.httpClient = hc }
 }
 
+// WithTTSProviderName sets the name Provider() reports (default "openai").
+func WithTTSProviderName(name string) OpenAITTSOption {
+	return func(c *OpenAITTS) { c.name = name }
+}
+
 // NewOpenAITTS creates an OpenAI TTS client.
-// Supported models: tts-1, tts-1-hd. Voices: alloy, echo, fable, onyx, nova, shimmer.
+// Models: gpt-4o-mini-tts (default), tts-1, tts-1-hd; any OpenAI-compatible
+// /audio/speech server works through WithTTSBaseURL.
 func NewOpenAITTS(apiKey string, opts ...OpenAITTSOption) *OpenAITTS {
 	c := &OpenAITTS{
+		name:       "openai",
 		apiKey:     apiKey,
 		baseURL:    openAITTSBaseURL,
 		model:      openAITTSDefaultModel,
@@ -69,7 +85,7 @@ func NewOpenAITTS(apiKey string, opts ...OpenAITTSOption) *OpenAITTS {
 	return c
 }
 
-func (c *OpenAITTS) Provider() string { return "openai" }
+func (c *OpenAITTS) Provider() string { return c.name }
 
 func (c *OpenAITTS) GenerateAudio(ctx context.Context, text string) (*tts.Response, error) {
 	body, err := json.Marshal(map[string]any{

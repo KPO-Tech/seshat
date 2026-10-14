@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"log"
+	"os"
 	"strings"
 
 	audioproviders "github.com/KPO-Tech/seshat-runtime/internal/audio/providers"
@@ -235,42 +236,88 @@ func logCapabilityUnknownProvider(capability, toolName, providerID string) {
 	log.Printf("[sdk] %s configured with unrecognized provider %q; %s will stay disabled", capability, providerID, toolName)
 }
 
+// audioEndpoint is what the text-to-speech and speech-to-text tools need to
+// reach a provider: where to send the request and with which key.
+type audioEndpoint struct {
+	profile audioproviders.Profile
+	known   bool
+	apiKey  string
+	// baseURL is the OpenAI-compatible API root, already completed with /v1
+	// when the host gave a custom one.
+	baseURL string
+	// custom is true when the host named the endpoint itself.
+	custom bool
+}
+
+// resolveAudioEndpoint looks a provider up in the audio catalog
+// (internal/audio/providers) instead of accepting only "openai": a listed
+// provider gets its default endpoint and environment key, and any other ID works
+// when the host gives its base URL (a self-hosted OpenAI-compatible server).
+// ok is false, after a log line, when the tool must stay disabled.
+func resolveAudioEndpoint(config *ClientConfig, capability, toolName, providerID, explicitKey, explicitURL string, direction func(audioproviders.Profile) *audioproviders.Capability) (audioEndpoint, bool) {
+	profile, known := audioproviders.ProfileFor(providerID)
+	if known && direction(profile) == nil {
+		log.Printf("[sdk] %s configured with provider %q, which does not offer it; %s will stay disabled", capability, providerID, toolName)
+		return audioEndpoint{}, false
+	}
+	ep := audioEndpoint{profile: profile, known: known}
+	ep.apiKey = resolveCapabilityAPIKey(config, providerID, explicitKey)
+	if ep.apiKey == "" {
+		for _, name := range profile.EnvVars {
+			if value := strings.TrimSpace(os.Getenv(name)); value != "" {
+				ep.apiKey = value
+				break
+			}
+		}
+	}
+	if baseURL := resolveCapabilityBaseURL(config, providerID, explicitURL); baseURL != "" {
+		ep.baseURL = ensureOpenAIBaseURL(baseURL)
+		ep.custom = true
+	} else if known {
+		ep.baseURL = profile.BaseURL
+	} else {
+		logCapabilityUnknownProvider(capability, toolName, providerID)
+		return audioEndpoint{}, false
+	}
+	// A custom endpoint is usually a self-hosted server that does not check the
+	// Authorization header, so requiring a cloud key there would block a valid
+	// local-only setup. Only a catalog endpoint needs a key.
+	if ep.apiKey == "" && !ep.custom {
+		logCapabilityCredentialsMissing(capability, toolName, providerID)
+		return audioEndpoint{}, false
+	}
+	return ep, true
+}
+
 func initTextToSpeechGenerator(config *ClientConfig) tts.Generation {
 	cfg := config.TextToSpeech
 	if cfg == nil || strings.TrimSpace(cfg.Provider) == "" {
 		return nil
 	}
 	providerID := strings.ToLower(strings.TrimSpace(cfg.Provider))
-	apiKey := resolveCapabilityAPIKey(config, providerID, strings.TrimSpace(cfg.APIKey))
-	baseURL := resolveCapabilityBaseURL(config, providerID, strings.TrimSpace(cfg.BaseURL))
-
-	switch providerID {
-	case "openai":
-		// See initImageGenerator's matching comment — a custom BaseURL means
-		// a self-hosted, OpenAI-API-compatible server, which doesn't require
-		// a real cloud API key.
-		if apiKey == "" && baseURL == "" {
-			logCapabilityCredentialsMissing("text-to-speech", "text_to_speech", providerID)
-			return nil
-		}
-		opts := []audioproviders.OpenAITTSOption{}
-		if model := strings.TrimSpace(cfg.Model); model != "" {
-			opts = append(opts, audioproviders.WithTTSModel(model))
-		}
-		if voice := strings.TrimSpace(cfg.Voice); voice != "" {
-			opts = append(opts, audioproviders.WithTTSVoice(voice))
-		}
-		if format := strings.TrimSpace(cfg.Format); format != "" {
-			opts = append(opts, audioproviders.WithTTSFormat(format))
-		}
-		if baseURL != "" {
-			opts = append(opts, audioproviders.WithTTSBaseURL(ensureOpenAIBaseURL(baseURL)))
-		}
-		return audioproviders.NewOpenAITTS(apiKey, opts...)
-	default:
-		logCapabilityUnknownProvider("text-to-speech", "text_to_speech", providerID)
+	ep, ok := resolveAudioEndpoint(config, "text-to-speech", "text_to_speech", providerID, strings.TrimSpace(cfg.APIKey), strings.TrimSpace(cfg.BaseURL),
+		func(p audioproviders.Profile) *audioproviders.Capability { return p.TTS })
+	if !ok {
 		return nil
 	}
+	opts := []audioproviders.OpenAITTSOption{
+		audioproviders.WithTTSProviderName(providerID),
+		audioproviders.WithTTSBaseURL(ep.baseURL),
+	}
+	model := strings.TrimSpace(cfg.Model)
+	if model == "" {
+		model = ep.profile.TTS.DefaultModel()
+	}
+	if model != "" {
+		opts = append(opts, audioproviders.WithTTSModel(model))
+	}
+	if voice := strings.TrimSpace(cfg.Voice); voice != "" {
+		opts = append(opts, audioproviders.WithTTSVoice(voice))
+	}
+	if format := strings.TrimSpace(cfg.Format); format != "" {
+		opts = append(opts, audioproviders.WithTTSFormat(format))
+	}
+	return audioproviders.NewOpenAITTS(ep.apiKey, opts...)
 }
 
 func initSpeechToTextTranscriber(config *ClientConfig) stt.SpeechToText {
@@ -279,33 +326,29 @@ func initSpeechToTextTranscriber(config *ClientConfig) stt.SpeechToText {
 		return nil
 	}
 	providerID := strings.ToLower(strings.TrimSpace(cfg.Provider))
-	apiKey := resolveCapabilityAPIKey(config, providerID, strings.TrimSpace(cfg.APIKey))
-	baseURL := resolveCapabilityBaseURL(config, providerID, strings.TrimSpace(cfg.BaseURL))
-
-	switch providerID {
-	case "openai":
-		// See initImageGenerator's matching comment - this is what lets a
-		// locally running whisper.cpp server (OpenAI-API-compatible, no auth
-		// checked) power this tool with BaseURL set and no APIKey at all.
-		if apiKey == "" && baseURL == "" {
-			logCapabilityCredentialsMissing("speech-to-text", "speech_to_text", providerID)
-			return nil
-		}
-		opts := []audioproviders.OpenAISTTOption{}
-		if model := strings.TrimSpace(cfg.Model); model != "" {
-			opts = append(opts, audioproviders.WithSTTModel(model))
-		}
-		if language := strings.TrimSpace(cfg.Language); language != "" {
-			opts = append(opts, audioproviders.WithSTTLanguage(language))
-		}
-		if baseURL != "" {
-			opts = append(opts, audioproviders.WithSTTBaseURL(ensureOpenAIBaseURL(baseURL)))
-		}
-		return audioproviders.NewOpenAISTT(apiKey, opts...)
-	default:
-		logCapabilityUnknownProvider("speech-to-text", "speech_to_text", providerID)
+	ep, ok := resolveAudioEndpoint(config, "speech-to-text", "speech_to_text", providerID, strings.TrimSpace(cfg.APIKey), strings.TrimSpace(cfg.BaseURL),
+		func(p audioproviders.Profile) *audioproviders.Capability { return p.STT })
+	if !ok {
 		return nil
 	}
+	opts := []audioproviders.OpenAISTTOption{
+		audioproviders.WithSTTProviderName(providerID),
+		audioproviders.WithSTTBaseURL(ep.baseURL),
+	}
+	if ep.known {
+		opts = append(opts, audioproviders.WithSTTResponseFormat(ep.profile.STTResponseFormat))
+	}
+	model := strings.TrimSpace(cfg.Model)
+	if model == "" {
+		model = ep.profile.STT.DefaultModel()
+	}
+	if model != "" {
+		opts = append(opts, audioproviders.WithSTTModel(model))
+	}
+	if language := strings.TrimSpace(cfg.Language); language != "" {
+		opts = append(opts, audioproviders.WithSTTLanguage(language))
+	}
+	return audioproviders.NewOpenAISTT(ep.apiKey, opts...)
 }
 
 func resolveCapabilityAPIKey(config *ClientConfig, providerID, explicit string) string {
