@@ -286,11 +286,7 @@ func providerEnvVar(provider types.APIProvider) string {
 }
 
 func defaultAuthPath() string {
-	if path := os.Getenv("SESHAT_AUTH_PATH"); path != "" {
-		return path
-	}
-	homeDir, _ := os.UserHomeDir()
-	return fmt.Sprintf("%s/.seshat/auth.json", homeDir)
+	return store.ResolvePath("")
 }
 
 // ============================================================================

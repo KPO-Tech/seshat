@@ -20,7 +20,6 @@ const modulePkg = "github.com/KPO-Tech/seshat-runtime/pkg/"
 //
 // pkg/runtimepath is the shared leaf (paths of the runtime root, standard library only) and is the one that is expected to stay.
 var legacyPkgImports = map[string][]string{
-	"internal/auth/loader.go":                            {"pkg/runtimepath"},
 	"internal/automation/dataflow_adapter.go":            {"pkg/dataflow", "pkg/sdk", "pkg/types", "pkg/workflow"},
 	"internal/automation/job.go":                         {"pkg/dataflow"},
 	"internal/automation/job_scheduler.go":               {"pkg/dataflow", "pkg/sdk"},
