@@ -56,7 +56,6 @@ var knownComplex = map[string]int{
 	"internal/tools/math/engine/expression.go ExpressionCalculator.mathFunctions":     36,
 	"internal/tools/notebook/edit.go runEdit":                                         38,
 	"internal/tools/task/taskList.go TaskListTool.Call":                               43,
-	"internal/tools/task/taskUpdate.go TaskUpdateTool.Call":                           33,
 	"internal/vector/hnsw_index.go loadHNSWIndex":                                     33,
 	"pkg/sdk/client.go NewClient":                                                     33,
 }

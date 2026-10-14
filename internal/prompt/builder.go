@@ -121,7 +121,7 @@ var dynamicBoundarySection = Section{
 var runtimeContextSection = Section{
 	Type:      SectionTypeDynamic,
 	Name:      "runtime_context",
-	Content:   "# Runtime context\n\nsession_id: {{session_id}}\nturn_number: {{turn_number}}\nworking_directory: {{working_directory}}\nadditional_working_directories: {{additional_working_directories}}\nmodel: {{model}}\nprovider: {{provider}}\navailable_tools: {{available_tools}}\ntool_count: {{tool_count}}\nmcp_client_count: {{mcp_client_count}}\nprompt_cache_boundary: {{prompt_cache_boundary}}\nstable_tool_names: {{stable_tool_names}}\n\n<available-deferred-tools>\n{{available_deferred_tools}}\n</available-deferred-tools>",
+	Content:   "# Runtime context\n\nsession_id: {{session_id}}\nturn_number: {{turn_number}}\nworking_directory: {{working_directory}}\nadditional_working_directories: {{additional_working_directories}}\nmodel: {{model}}\nprovider: {{provider}}\navailable_tools: {{available_tools}}\ntool_count: {{tool_count}}\nmcp_client_count: {{mcp_client_count}}\nprompt_cache_boundary: {{prompt_cache_boundary}}\nstable_tool_names: {{stable_tool_names}}\n\n<available-deferred-tools>\n{{available_deferred_tools}}\n</available-deferred-tools>\n\n{{git_context_block}}",
 	Priority:  800,
 	Cacheable: false,
 	Enabled:   true,
@@ -434,12 +434,12 @@ func (b *Builder) FetchSystemPromptParts(
 	// ========================================================================
 	// CACHE INTEGRATION: Try cache for stable sections first
 	// ========================================================================
-	stableSectionNames := []string{"identity", "runtime_contract", "working_rules", "factual_discipline", "tool_use", "tool_priority", "workflow", "modes", "orchestration", "browser_use", "workflow_examples", "verification_examples", "output_discipline"}
+	cacheSectionNames := stableSectionNames()
 
 	if b.config.EnableCaching {
 		// Try to get from cache
 		if cached, hit := b.cache.GetSectionCache(
-			stableSectionNames,
+			cacheSectionNames,
 			input.Tools,
 			input.Model,
 			promptVariables,
@@ -478,7 +478,7 @@ func (b *Builder) FetchSystemPromptParts(
 	// ========================================================================
 	if b.config.EnableCaching {
 		b.cache.SetSectionCache(
-			stableSectionNames,
+			cacheSectionNames,
 			stableResult.StaticText,
 			input.Tools,
 			input.Model,
@@ -542,6 +542,7 @@ func buildSystemContext(
 		"prompt_cache_boundary":      promptVariables["prompt_cache_boundary"],
 		"memory_context_block":       memoryBlock,
 		"project_instructions_block": projectInstructionsBlock,
+		"git_context_block":          gitContextBlock(resolvePromptWorkingDirectory(input.WorkingDirectory)),
 	}
 }
 

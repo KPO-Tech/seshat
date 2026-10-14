@@ -47,7 +47,7 @@ func TestGeneralAgentPromptMentionsOnlyToolsTheAgentHas(t *testing.T) {
 		known[name] = true
 	}
 
-	// Backticked words that are not tools: agent types and shell commands.
+	// Backticked words that are not tools: agent types, shell commands and tool parameters.
 	allowedNonTool := map[string]bool{
 		"browse":          true,
 		"explore":         true,
@@ -55,6 +55,8 @@ func TestGeneralAgentPromptMentionsOnlyToolsTheAgentHas(t *testing.T) {
 		"plan":            true,
 		"verify":          true,
 		"rm":              true,
+		"tasks":           true,
+		"updates":         true,
 	}
 
 	re := regexp.MustCompile("`([^`]+)`")

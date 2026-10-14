@@ -76,3 +76,13 @@ func SeshatCoreStablePrompt() string {
 	}
 	return strings.Join(parts, "\n\n")
 }
+
+// stableSectionNames lists the names of the stable sections, in prompt order.
+// The prompt cache is keyed by them.
+func stableSectionNames() []string {
+	names := make([]string, 0, len(stableSystemPromptSections))
+	for _, s := range stableSystemPromptSections {
+		names = append(names, s.Name)
+	}
+	return names
+}

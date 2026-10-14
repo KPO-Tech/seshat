@@ -318,10 +318,10 @@ Available when long-term memory is configured.
 
 | Tool | Description |
 |---|---|
-| `task_create` | Create a session-scoped tracked task for execution progress. |
+| `task_create` | Create a session-scoped tracked task for execution progress. Pass `tasks` to create a whole list in one call. |
 | `task_list` | List tracked session tasks and, when requested, background runtime tasks. |
 | `task_get` | Fetch details for a tracked session task. |
-| `task_update` | Update tracked task status, details, and dependencies. |
+| `task_update` | Update tracked task status, details, and dependencies. Pass `updates` to change several tasks in one call (finish one, start the next). |
 | `task_stop` | Stop tracking a session task. |
 | `task_output` | Get the output of a background runtime task. |
 
