@@ -151,3 +151,22 @@ type retryableStatusError struct {
 func (e *retryableStatusError) Error() string {
 	return fmt.Sprintf("retryable status %d", e.statusCode)
 }
+
+// sendStreamRequest opens a streaming request. Until the first byte of the
+// response the request is retried as a request without streaming is: a 429 or a
+// 5xx, a refused or reset connection, with the wait the provider asks for in
+// Retry-After or an exponential one. The streaming entry points called
+// sendMessage directly, so only the retry of the loop (3 attempts, 250 ms, 500 ms
+// and 1 s) stood between a rate limit and a failed turn, and Retry-After was
+// never read. Once the response is open, the stream itself is not retried here:
+// a body that breaks half way is the loop's to recover.
+func (c *Client) sendStreamRequest(ctx context.Context, req types.APIRequest) (*http.Response, error) {
+	resp, err := c.sendMessageWithRetry(ctx, req)
+	if err != nil {
+		if resp != nil && resp.Body != nil {
+			resp.Body.Close()
+		}
+		return nil, err
+	}
+	return resp, nil
+}

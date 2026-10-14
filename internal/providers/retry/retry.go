@@ -30,13 +30,36 @@ func IsRateLimitError(resp *http.Response) bool {
 	return resp != nil && resp.StatusCode == http.StatusTooManyRequests
 }
 
+// MaxRetryAfter is the longest wait a provider can ask for in Retry-After and
+// still be waited for. A longer one fails the request with the provider's own
+// message, so that the user reads it instead of watching a spinner.
+const MaxRetryAfter = 2 * time.Minute
+
+// quotaExhaustedMarkers are what providers say when a 429 is a spent quota or
+// balance and not a burst of requests.
+var quotaExhaustedMarkers = []string{
+	"limit: 0",
+	"exceeded your current quota",
+	"insufficient_quota",
+	"insufficient balance",
+	"insufficient credits",
+	"no resource package",
+	"free-models-per-day",
+	"per-day",
+	"daily limit",
+}
+
 func IsQuotaExhaustedError(err error, resp *http.Response) bool {
-	if err == nil {
+	if err == nil || resp == nil || resp.StatusCode != http.StatusTooManyRequests {
 		return false
 	}
 	errMsg := strings.ToLower(err.Error())
-	return resp != nil && resp.StatusCode == http.StatusTooManyRequests &&
-		(strings.Contains(errMsg, "limit: 0") || strings.Contains(errMsg, "exceeded your current quota"))
+	for _, marker := range quotaExhaustedMarkers {
+		if strings.Contains(errMsg, marker) {
+			return true
+		}
+	}
+	return false
 }
 
 // IsModelDeprecatedError returns true when the provider signals that the
@@ -428,9 +451,19 @@ func RetryHTTP(
 			lastErr = types.NewError(types.ErrCodeAPIRequest, fmt.Sprintf("http status %d", resp.StatusCode))
 		}
 
+		// A quota that is spent does not come back in a few seconds: waiting and
+		// asking again only delays the message that says so.
+		if IsQuotaExhaustedError(lastErr, resp) {
+			return nil, lastErr
+		}
+
 		classification := ClassifyHTTPError(nil, resp.StatusCode)
 		if resp.StatusCode == http.StatusTooManyRequests && ShouldRetryHTTP(config, classification, attempt) {
 			delay := ParseRetryAfterHeader(resp)
+			if delay > MaxRetryAfter {
+				// The provider asks for more than a person waits at a prompt.
+				return nil, lastErr
+			}
 			if delay <= 0 {
 				delay = CalculateHTTPBackoff(config, attempt)
 			}

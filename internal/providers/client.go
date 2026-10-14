@@ -388,7 +388,7 @@ func (c *Client) CreateMessageStream(ctx context.Context, req types.APIRequest) 
 	req.Stream = true
 
 	// Send request
-	resp, err := c.sendMessage(ctx, req)
+	resp, err := c.sendStreamRequest(ctx, req)
 	if err != nil {
 		return nil, err
 	}

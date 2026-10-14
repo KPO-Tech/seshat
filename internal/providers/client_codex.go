@@ -185,7 +185,7 @@ func codexTools(tools []types.APIToolDefinition) []map[string]any {
 
 func (c *Client) createCodexStreamResult(ctx context.Context, req types.APIRequest, onChunk func(types.APIResponseChunk)) (*types.APIStreamResult, error) {
 	req.Stream = true
-	resp, err := c.sendMessage(ctx, req)
+	resp, err := c.sendStreamRequest(ctx, req)
 	if err != nil {
 		return nil, err
 	}
