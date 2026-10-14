@@ -528,7 +528,9 @@ func TestResolverSessionAutoApprovalPersistence(t *testing.T) {
 		t.Fatalf("failed to create permissions dir: %v", err)
 	}
 
-	mockPerms := map[string]bool{"bash": true}
+	// What "always allow" writes for a shell command: the program, not the tool
+	// (the old whole-tool key "bash" no longer approves commands).
+	mockPerms := map[string]bool{"bash:cmd:echo": true}
 	data, err := json.Marshal(mockPerms)
 	if err != nil {
 		t.Fatalf("failed to marshal mock perms: %v", err)

