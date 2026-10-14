@@ -3,6 +3,7 @@ package oauth
 import (
 	"context"
 	"fmt"
+	"html"
 	"log"
 	"net"
 	"net/http"
@@ -22,6 +23,8 @@ type Server struct {
 	result   *TokenResponse
 	err      error
 	received chan struct{}
+	// receivedOnce makes closing received safe when the callback is hit twice.
+	receivedOnce sync.Once
 }
 
 // ServerConfig represents server configuration
@@ -136,8 +139,8 @@ func (s *Server) handleCallback(w http.ResponseWriter, r *http.Request) {
 <h1>✗ Authentication failed</h1>
 <p>%s</p>
 </div>
-</body></html>`, errDesc)
-		close(s.received)
+</body></html>`, html.EscapeString(errDesc))
+		s.finish()
 		return
 	}
 
@@ -167,7 +170,7 @@ func (s *Server) handleCallback(w http.ResponseWriter, r *http.Request) {
 <p>You can close this window and return to your terminal.</p>
 </div>
 </body></html>`)
-	close(s.received)
+	s.finish()
 }
 
 // handleHealth handles health checks
@@ -315,4 +318,10 @@ func (a *SimpleAuthenticator) WaitDeviceFlow(ctx context.Context) (*Token, error
 		return nil, err
 	}
 	return tokenResp.ToToken(), nil
+}
+
+// finish tells the waiting caller that a callback arrived. The callback can be
+// hit twice (a reload, a second redirect); closing the channel twice panics.
+func (s *Server) finish() {
+	s.receivedOnce.Do(func() { close(s.received) })
 }
