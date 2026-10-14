@@ -623,10 +623,14 @@ func (w *SeshatWorkspace) AgentRun(ctx context.Context, sessionID, prompt string
 			}
 		}
 
-		cur.Parts = append(cur.Parts, message.Finish{
+		finish := message.Finish{
 			Reason: finishReason,
 			Time:   time.Now().UnixMilli(),
-		})
+		}
+		if finishReason == message.FinishReasonError {
+			finish.Message, finish.Details = finishErrorText(err)
+		}
+		cur.Parts = append(cur.Parts, finish)
 		cur.UpdatedAt = time.Now().UnixMilli()
 		w.updateMsg(sessionID, *cur)
 		w.msgBroker.Publish(pubsub.UpdatedEvent, *cur)
@@ -2794,4 +2798,22 @@ func (d *msgDebounce) forceFlush() {
 	d.dirty = false
 	d.mu.Unlock()
 	d.flush(msg, sess)
+}
+
+// finishErrorText turns the error that ended a turn into the title and the
+// details of the ERROR block in the chat. Without them the block is an empty
+// red badge and the user cannot tell a provider timeout from a bug.
+func finishErrorText(err error) (title, details string) {
+	if err == nil {
+		return "The turn ended with an error", ""
+	}
+	details = strings.TrimSpace(err.Error())
+	title = details
+	if i := strings.IndexByte(title, '\n'); i >= 0 {
+		title = title[:i]
+	}
+	if title == "" {
+		title = "The turn ended with an error"
+	}
+	return title, details
 }

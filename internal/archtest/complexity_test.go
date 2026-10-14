@@ -33,7 +33,7 @@ var knownComplex = map[string]int{
 	"internal/seshattui/config/load.go Config.configureProviders":                     59,
 	"internal/seshattui/config/load.go configureSelectedModels":                       32,
 	"internal/seshattui/shell/jq.go handleJQ":                                         44,
-	"internal/seshattui/ui/chat/ask_user.go askUserRenderContext.RenderTool":          55,
+	"internal/seshattui/ui/chat/ask_user.go askUserRenderContext.RenderTool":          50,
 	"internal/seshattui/ui/chat/docker_mcp.go DockerMCPToolRenderContext.RenderTool":  34,
 	"internal/seshattui/ui/chat/tools.go NewToolMessageItem":                          60,
 	"internal/seshattui/ui/chat/tools.go baseToolMessageItem.formatParametersForCopy": 47,

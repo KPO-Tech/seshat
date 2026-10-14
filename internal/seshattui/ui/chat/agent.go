@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"strings"
+	"time"
 
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
@@ -37,6 +38,7 @@ type AgentToolMessageItem struct {
 	nestedTools       []ToolMessageItem
 	subAgentReasoning string
 	subAgentContent   string
+	startedAt         time.Time
 }
 
 var (
@@ -51,7 +53,7 @@ func NewAgentToolMessageItem(
 	result *message.ToolResult,
 	canceled bool,
 ) *AgentToolMessageItem {
-	t := &AgentToolMessageItem{}
+	t := &AgentToolMessageItem{startedAt: time.Now()}
 	t.baseToolMessageItem = newBaseToolMessageItem(sty, toolCall, result, &AgentToolRenderContext{agent: t}, canceled)
 	// For the agent tool we keep spinning until the tool call is finished.
 	t.spinningFunc = func(state SpinningState) bool {
@@ -176,6 +178,7 @@ func renderNestedAgentBlock(
 	subAgentContent string,
 	opts *ToolRenderOpts,
 	cappedWidth int,
+	statusLine string,
 ) string {
 	remainingWidth := max(20, cappedWidth-7)
 	isRunning := !opts.HasResult() && !opts.IsCanceled()
@@ -268,7 +271,10 @@ func renderNestedAgentBlock(
 			parts = append(parts, tailBlock)
 		}
 
-		parts = append(parts, "", indentString(opts.Anim.Render(), 4))
+		if statusLine == "" {
+			statusLine = opts.Anim.Render()
+		}
+		parts = append(parts, "", indentString(statusLine, 4))
 	}
 
 	result := lipgloss.JoinVertical(lipgloss.Left, parts...)
@@ -278,6 +284,42 @@ func renderNestedAgentBlock(
 		return joinToolParts(result, body)
 	}
 	return result
+}
+
+// subAgentSpinnerFrames is a calm braille spinner, one frame every 100 ms.
+var subAgentSpinnerFrames = []string{"⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"}
+
+// subAgentStatusLine is the line under a running sub-agent: a calm spinner, who
+// is working, for how long, and how many tools it has run so far. A sub-agent
+// can run for minutes without printing anything new, and this line is what
+// says it is still working. It returns "" when startedAt is unset.
+func subAgentStatusLine(sty *styles.Styles, name string, startedAt time.Time, toolCount int) string {
+	if startedAt.IsZero() {
+		return ""
+	}
+	elapsed := time.Since(startedAt)
+	frame := subAgentSpinnerFrames[int(elapsed/(100*time.Millisecond))%len(subAgentSpinnerFrames)]
+	text := fmt.Sprintf("%s working · %s", name, formatElapsed(elapsed))
+	switch {
+	case toolCount == 1:
+		text += " · 1 tool"
+	case toolCount > 1:
+		text += fmt.Sprintf(" · %d tools", toolCount)
+	}
+	return sty.Tool.StateWaiting.Render(frame + " " + text)
+}
+
+// formatElapsed renders a duration as "12s", "2m05s" or "1h03m".
+func formatElapsed(d time.Duration) string {
+	s := int(d.Seconds())
+	switch {
+	case s < 60:
+		return fmt.Sprintf("%ds", s)
+	case s < 3600:
+		return fmt.Sprintf("%dm%02ds", s/60, s%60)
+	default:
+		return fmt.Sprintf("%dh%02dm", s/3600, (s%3600)/60)
+	}
 }
 
 func getPromptHeaderSummary(prompt string) string {
@@ -415,6 +457,7 @@ func (r *AgentToolRenderContext) RenderTool(sty *styles.Styles, width int, opts 
 	return renderNestedAgentBlock(
 		sty, header,
 		r.agent.nestedTools, r.agent.subAgentReasoning, r.agent.subAgentContent, opts, cappedWidth,
+		subAgentStatusLine(sty, displayName, r.agent.startedAt, len(r.agent.nestedTools)),
 	)
 }
 
@@ -429,6 +472,7 @@ type AgenticFetchToolMessageItem struct {
 	nestedTools       []ToolMessageItem
 	subAgentReasoning string
 	subAgentContent   string
+	startedAt         time.Time
 }
 
 var (
@@ -443,7 +487,7 @@ func NewAgenticFetchToolMessageItem(
 	result *message.ToolResult,
 	canceled bool,
 ) *AgenticFetchToolMessageItem {
-	t := &AgenticFetchToolMessageItem{}
+	t := &AgenticFetchToolMessageItem{startedAt: time.Now()}
 	t.baseToolMessageItem = newBaseToolMessageItem(sty, toolCall, result, &AgenticFetchToolRenderContext{fetch: t}, canceled)
 	// For the agentic fetch tool we keep spinning until the tool call is finished.
 	t.spinningFunc = func(state SpinningState) bool {
@@ -559,6 +603,7 @@ func (r *AgenticFetchToolRenderContext) RenderTool(sty *styles.Styles, width int
 	return renderNestedAgentBlock(
 		sty, header,
 		r.fetch.nestedTools, r.fetch.subAgentReasoning, r.fetch.subAgentContent, opts, cappedWidth,
+		subAgentStatusLine(sty, "Agentic Fetch", r.fetch.startedAt, len(r.fetch.nestedTools)),
 	)
 }
 

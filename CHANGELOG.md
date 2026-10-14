@@ -16,6 +16,13 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - **`task_create` and `task_update` take a list.** Keeping a five-step list took 15 calls (five `task_create`, then two `task_update` per step), each one a round trip to the model, which on a slow provider costs more than the work being tracked. `task_create` now accepts `tasks` (the whole list in one call) and `task_update` accepts `updates` (for example complete one task and start the next together). The single-task form is unchanged. The terminal UI's task list reads both forms, and the permission check no longer refuses an update that has no top-level `taskId`.
 - **The runtime context gives the git branch and the size of the working tree.** `git_root` and `git_branch` were set to empty strings and used nowhere, so the agent had to run a command to learn the branch. The context now has `branch:` and `working tree:` (clean, or how many files are modified or untracked). It names no file and only passes a branch name made of ordinary characters: both come from the repository, and the runtime context is part of the system prompt, which the project-trust check does not cover.
 
+### Fixed
+
+- **A pick-one question moves on by itself.** In the terminal UI's question panel each answer had to be followed by Tab before the next question showed. Choosing an option (Enter, or a click) now goes to the next question, and Enter on the last one sends the answers. Multi-select questions still wait for Tab, and "Other" opens the text field first. A click on the last question selects it and Enter sends it: a click cannot return the command that sends the answers.
+- **A running sub-agent shows that it is working.** Its only sign of life was a scrambling-characters animation. It now shows a calm spinner with the agent's name, the elapsed time and the number of tools it has run (`⠹ Explore Agent working · 2m05s · 53 tools`), so a sub-agent that is quiet for minutes still reads as working.
+- **The ERROR block in the chat says what the error was.** When a turn ended with an error the block was an empty red badge: the error was dropped when the turn was recorded. Its first line is now the title and the whole error the details.
+- **Level-1 headings are no longer a solid block.** They were drawn with a filled orange background that hid the text. Headings are bold and coloured, and a test checks all three themes.
+
 ### Changed
 
 - **The prompt cache is keyed by the real section names.** It listed the thirteen names of the old prompt sections; it now takes them from the sections that exist.
