@@ -2,11 +2,9 @@ package auth
 
 import (
 	"context"
-	"os"
 
 	"github.com/KPO-Tech/seshat-runtime/internal/auth/store"
 	"github.com/KPO-Tech/seshat-runtime/internal/auth/types"
-	"github.com/KPO-Tech/seshat-runtime/pkg/runtimepath"
 )
 
 // ============================================================================
@@ -144,11 +142,8 @@ func Default() (*Loader, error) {
 	return defaultLoader, nil
 }
 
-// DefaultConfigPath returns the default config path
+// DefaultConfigPath returns the default config path. It is the same file as everywhere else (store.ResolvePath):
+// SESHAT_AUTH_PATH, or auth.json in the .seshat folder of the user's home.
 func DefaultConfigPath() string {
-	if path := os.Getenv("SESHAT_AUTH_PATH"); path != "" {
-		return path
-	}
-
-	return runtimepath.Join("", "auth.json")
+	return store.ResolvePath("")
 }

@@ -9,6 +9,15 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Changed
+
+- **The `read_file` description says what the tool does with PDFs and office files.** It claimed that without a configured document reader a PDF fell back to "raw PDF bytes" and that DOCX, PPTX and XLSX needed a reader. The code reads a PDF's text layer page by page without any service (`pdfsmart.ReadPages`), reads DOCX, PPTX and XLSX natively (`officetext.Extract`), uses a document reader only for scanned pages, for the pictures of a deck and for WAV/MP3 transcription, and reports the pages that have no readable text. The model was being told to expect a degraded result that it does not get. `seshat doctor` already said the right thing.
+- **The sign-in file has one default path, decided in one place.** `store.ResolvePath` returns the explicit path, otherwise `SESHAT_AUTH_PATH`, otherwise `~/.seshat/auth.json`. The provider client and the SDK already used that default; `internal/auth.DefaultConfigPath` (not used by any other package) pointed to `auth.json` in the runtime folder instead, so two defaults existed. The three now call `ResolvePath`.
+
+### Removed
+
+- **`internal/providers/fastmode`.** A package that picked a small model for background tasks, with an `SESHAT_FAST_MODEL` variable. Nothing imported it, so the variable changed nothing. Removed rather than left as a setting that looks like it works.
+
 ## [1.7.0] - 2026-10-13
 
 ### Added

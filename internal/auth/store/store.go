@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"sync"
 	"time"
 
@@ -216,8 +217,21 @@ func (s *MemoryStore) ListProviders(ctx context.Context) ([]string, error) {
 // Helper Functions
 // ============================================================================
 
-// DefaultStorePath returns the default store path
+// DefaultStorePath returns the default store path: auth.json in the .seshat folder of the user's home.
 func DefaultStorePath() string {
 	homeDir, _ := os.UserHomeDir()
 	return filepath.Join(homeDir, ".seshat", "auth.json")
+}
+
+// ResolvePath returns the path of the sign-in file. It is the single place that decides it: explicit when it
+// is not blank, otherwise the SESHAT_AUTH_PATH environment variable, otherwise DefaultStorePath. The terminal
+// interface, the provider client and the SDK all read the file from here, so they never disagree.
+func ResolvePath(explicit string) string {
+	if value := strings.TrimSpace(explicit); value != "" {
+		return value
+	}
+	if value := strings.TrimSpace(os.Getenv("SESHAT_AUTH_PATH")); value != "" {
+		return value
+	}
+	return DefaultStorePath()
 }
