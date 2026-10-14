@@ -15,7 +15,7 @@ import (
 // sendMessageWithRetry sends a message request with retry logic
 // This implements actual retry with exponential backoff, circuit breaker, and rate limit handling
 func (c *Client) sendMessageWithRetry(ctx context.Context, req types.APIRequest) (*http.Response, error) {
-	return providerretry.RetryHTTP(
+	return providerretry.RetryHTTPNotify(
 		ctx,
 		c.retryConfig,
 		func(ctx context.Context) (*http.Response, error) {
@@ -30,6 +30,7 @@ func (c *Client) sendMessageWithRetry(ctx context.Context, req types.APIRequest)
 			return err
 		},
 		IsCircuitBreakerOpenError,
+		retryNotifier(ctx),
 	)
 }
 
@@ -150,4 +151,47 @@ type retryableStatusError struct {
 
 func (e *retryableStatusError) Error() string {
 	return fmt.Sprintf("retryable status %d", e.statusCode)
+}
+
+// sendStreamRequest opens a streaming request. Until the first byte of the
+// response the request is retried as a request without streaming is: a 429 or a
+// 5xx, a refused or reset connection, with the wait the provider asks for in
+// Retry-After or an exponential one. The streaming entry points called
+// sendMessage directly, so only the retry of the loop (3 attempts, 250 ms, 500 ms
+// and 1 s) stood between a rate limit and a failed turn, and Retry-After was
+// never read. Once the response is open, the stream itself is not retried here:
+// a body that breaks half way is the loop's to recover.
+func (c *Client) sendStreamRequest(ctx context.Context, req types.APIRequest) (*http.Response, error) {
+	resp, err := c.sendMessageWithRetry(ctx, req)
+	if err != nil {
+		if resp != nil && resp.Body != nil {
+			resp.Body.Close()
+		}
+		return nil, err
+	}
+	// The body is bounded by the context only; a connection that goes silent
+	// must not hold the turn for ever.
+	resp.Body = newIdleBody(resp.Body, streamIdleTimeout())
+	return resp, nil
+}
+
+// retryNotifier turns the waits of a retry into provider.retry runtime events,
+// when the request runs inside a turn that listens for them (the emitter is on
+// the context). Without it a rate limit looks like a model that is thinking.
+func retryNotifier(ctx context.Context) providerretry.RetryNotifier {
+	emit, ok := ctx.Value(types.RuntimeEventEmitterKey).(func(types.RuntimeEvent))
+	if !ok || emit == nil {
+		return nil
+	}
+	return func(notice providerretry.RetryNotice) {
+		emit(types.RuntimeEvent{
+			Type: types.RuntimeEventTypeProviderRetry,
+			ProviderRetryEvent: &types.ProviderRetryRuntimeEvent{
+				Attempt:     notice.Attempt,
+				MaxAttempts: notice.MaxAttempts,
+				WaitMs:      notice.Wait.Milliseconds(),
+				Reason:      notice.Reason,
+			},
+		})
+	}
 }

@@ -5,19 +5,48 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/KPO-Tech/seshat-runtime/internal/shellparse"
 	"github.com/KPO-Tech/seshat-runtime/internal/tools/files/shared"
 	"github.com/KPO-Tech/seshat-runtime/internal/types"
 )
 
-// AcceptEditsWriteCommands are commands auto-allowed in AcceptEdits mode.
+// AcceptEditsWriteCommands are commands auto-allowed in AcceptEdits mode, with
+// the options listed in acceptEditsWriteOptions. sed is not one of them: with an
+// editing script it writes where the script says (w, e), so a script has to be
+// read to know what it does; the edit_file tool is the way to edit a file.
 var AcceptEditsWriteCommands = []string{
-	"mkdir", "touch", "rm", "rmdir", "mv", "cp", "sed",
+	"mkdir", "touch", "rm", "rmdir", "mv", "cp",
 }
 
-// AcceptEditsReadOnlyCommands are read-only commands auto-allowed in AcceptEdits mode.
+// AcceptEditsReadOnlyCommands are read-only commands auto-allowed in AcceptEdits
+// mode. uniq is not one of them: its second argument is a file it writes.
 var AcceptEditsReadOnlyCommands = []string{
 	"grep", "cat", "ls", "find", "head", "tail", "echo",
-	"pwd", "wc", "sort", "uniq", "diff",
+	"pwd", "wc", "sort", "diff",
+}
+
+// acceptEditsWriteOptions are the options a write command may carry and still be
+// approved by the mode. Anything else (cp -t /etc, mv -T, rm --no-preserve-root)
+// changes where the command writes or what it is allowed to touch, and asks.
+var acceptEditsWriteOptions = map[string]map[string]bool{
+	"mkdir": setOf("-p", "-v"),
+	"touch": setOf("-a", "-m", "-c"),
+	"rm":    setOf("-r", "-R", "-f", "-v", "-d", "-rf", "-fr", "-rv", "-vr", "--recursive", "--force"),
+	"rmdir": setOf("-p", "-v"),
+	"mv":    setOf("-v", "-n", "-f", "-i"),
+	"cp":    setOf("-r", "-R", "-v", "-n", "-p", "-f", "-a", "--recursive"),
+}
+
+// findWriteOptions are the options of find that delete, run a command or write a
+// file: a find that carries one is not a read.
+var findWriteOptions = setOf("-delete", "-exec", "-execdir", "-ok", "-okdir", "-fprint", "-fprint0", "-fprintf", "-fls")
+
+func setOf(values ...string) map[string]bool {
+	set := make(map[string]bool, len(values))
+	for _, v := range values {
+		set[v] = true
+	}
+	return set
 }
 
 // checkPermissionsMode applies mode-specific permission logic before the
@@ -32,24 +61,82 @@ func checkPermissionsMode(command string, mode types.PermissionMode, workingDir 
 	}
 	switch mode {
 	case types.PermissionModeAcceptEdits:
-		return checkAcceptEditsMode(command, baseCmd, workingDir)
+		return checkAcceptEditsMode(command, workingDir)
 	default:
 		return types.Passthrough(nil)
 	}
 }
 
 // checkAcceptEditsMode implements AcceptEdits-mode permission logic.
-func checkAcceptEditsMode(command, baseCmd, workingDir string) types.PermissionResult {
+//
+// The mode approves one simple command at a time. It used to look at the first
+// word of the line only, so "ls\nrm -rf .", "cat x | bash" and "ls | tee
+// /etc/foo" were approved as if they were "ls" and "cat".
+func checkAcceptEditsMode(command, workingDir string) types.PermissionResult {
+	analysis := shellparse.Analyze(command)
+	if analysis.Unsafe || len(analysis.Segments) != 1 {
+		return types.Ask("a line with several commands, a substitution or a redirection requires approval in AcceptEdits mode")
+	}
+	segment := analysis.Segments[0]
+	baseCmd := extractBaseCmd(segment)
 	if isAcceptEditsWriteCmd(baseCmd) {
-		return checkAcceptEditsWriteCommand(command, baseCmd, workingDir)
+		return checkAcceptEditsWriteCommand(segment, baseCmd, workingDir)
 	}
 	if isAcceptEditsReadOnlyCmd(baseCmd) {
-		return checkAcceptEditsReadOnlyCommand(command)
+		return checkAcceptEditsReadOnlyCommand(segment, baseCmd)
 	}
 	return types.Ask(fmt.Sprintf("command '%s' requires approval in AcceptEdits mode", baseCmd))
 }
 
+// isSingleSimpleCommand reports whether a command line is one simple command with
+// nothing that runs something else or writes somewhere.
+func isSingleSimpleCommand(command string) bool {
+	analysis := shellparse.Analyze(command)
+	return !analysis.Unsafe && len(analysis.Segments) == 1
+}
+
+// writeCommandNeedsApproval reports why a write command cannot be approved by the
+// mode from its text alone, or "".
+func writeCommandNeedsApproval(command, baseCmd string) string {
+	// The paths of the command are read from its words. A quote or a backslash
+	// means a word is not what it looks like.
+	if strings.ContainsAny(command, "\"'\\") {
+		return "a quoted or escaped argument"
+	}
+	allowed := acceptEditsWriteOptions[baseCmd]
+	endOfOptions := false
+	for _, arg := range extractArgs(command) {
+		switch {
+		case endOfOptions:
+		case arg == "--":
+			endOfOptions = true
+			continue
+		case strings.HasPrefix(arg, "-") && arg != "-":
+			if !allowed[arg] {
+				return fmt.Sprintf("the option %s", arg)
+			}
+			continue
+		}
+		// A path that the shell expands cannot be placed inside the working
+		// directory by reading it: $HOME/x, ~/x, `x`, {/etc/x,y}.
+		if strings.ContainsAny(arg, "$~`{") {
+			return fmt.Sprintf("the path %s", arg)
+		}
+	}
+	return ""
+}
+
 func checkAcceptEditsWriteCommand(command, baseCmd, workingDir string) types.PermissionResult {
+	if reason := writeCommandNeedsApproval(command, baseCmd); reason != "" {
+		return types.AskWithDecisionReason(
+			fmt.Sprintf("%s requires approval in AcceptEdits mode: %s", baseCmd, reason),
+			&types.PermissionDecisionReason{
+				Type:   types.PermissionDecisionReasonSafetyCheck,
+				Source: "acceptEdits",
+				Reason: reason,
+			},
+		)
+	}
 	if baseCmd == "rm" || baseCmd == "rmdir" {
 		for _, arg := range extractArgs(command) {
 			if err := shared.CheckDangerousRemovalPath(arg, workingDir); err != nil {
@@ -112,7 +199,37 @@ func checkAcceptEditsWriteCommand(command, baseCmd, workingDir string) types.Per
 	})
 }
 
-func checkAcceptEditsReadOnlyCommand(command string) types.PermissionResult {
+// readOnlyOptionWrites reports the option that makes a command of the read-only
+// list write or run something, or "": find -delete / -exec, sort -o /
+// --compress-program.
+func readOnlyOptionWrites(command, baseCmd string) string {
+	for _, arg := range extractArgs(command) {
+		switch baseCmd {
+		case "find":
+			if findWriteOptions[arg] {
+				return arg
+			}
+		case "sort":
+			if arg == "-o" || arg == "--output" || strings.HasPrefix(arg, "--output=") ||
+				strings.HasPrefix(arg, "--compress-program") ||
+				(strings.HasPrefix(arg, "-o") && !strings.HasPrefix(arg, "--")) {
+				return arg
+			}
+		}
+	}
+	return ""
+}
+
+func checkAcceptEditsReadOnlyCommand(command, baseCmd string) types.PermissionResult {
+	if option := readOnlyOptionWrites(command, baseCmd); option != "" {
+		return types.AskWithDecisionReason(
+			fmt.Sprintf("%s %s writes or runs something and requires approval", baseCmd, option),
+			&types.PermissionDecisionReason{
+				Type:   types.PermissionDecisionReasonSafetyCheck,
+				Source: "acceptEdits",
+				Reason: fmt.Sprintf("the option %s", option),
+			})
+	}
 	if hasRedirection(command) {
 		return types.AskWithDecisionReason("read-only command with shell redirection requires approval",
 			&types.PermissionDecisionReason{
@@ -168,19 +285,26 @@ func extractPathsFrom(command, workingDir string) []string {
 		if strings.HasPrefix(arg, "-") {
 			continue
 		}
-		if strings.HasPrefix(arg, "\"") || strings.HasPrefix(arg, "'") {
-			continue
-		}
-		if strings.ContainsAny(arg, "=|&") {
-			continue
-		}
-		if filepath.IsAbs(arg) {
+		// Every word is a path to check, whatever it contains: an argument with an
+		// "=" in it used to be skipped, so "touch /etc/x=y" was never looked at.
+		if isAbsolutePathWord(arg) {
 			paths = append(paths, arg)
 		} else {
 			paths = append(paths, filepath.Join(workingDir, arg))
 		}
 	}
 	return paths
+}
+
+// isAbsolutePathWord reports whether a word of a shell command names a path from
+// the root. The commands run in a POSIX shell (Git Bash on Windows), so "/etc/x"
+// is absolute there even though filepath.IsAbs says no on Windows, where it was
+// joined to the working directory and read as a path inside it.
+func isAbsolutePathWord(arg string) bool {
+	if filepath.IsAbs(arg) || strings.HasPrefix(arg, "/") || strings.HasPrefix(arg, `\`) {
+		return true
+	}
+	return len(arg) >= 2 && arg[1] == ':' && (arg[0] >= 'a' && arg[0] <= 'z' || arg[0] >= 'A' && arg[0] <= 'Z')
 }
 
 func isAcceptEditsWriteCmd(cmd string) bool {

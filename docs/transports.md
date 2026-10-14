@@ -66,6 +66,7 @@ SESHAT_DEBUG=true                          # verbose logging
 SESHAT_PROVIDER_BASE_URL=...               # custom provider base URL
 WEB_SEARCH_PROVIDER=tavily                # web search provider
 ENABLE_TOOL_SEARCH=true                   # hide deferred tools (MCP, skill) behind the tool_search tool; pkg/sdk.ClientConfig.EnableToolSearch overrides this when set to true
+SESHAT_STREAM_IDLE_TIMEOUT=180            # seconds a streamed response may stay silent before the request is given up on and retried (default 180; 0 turns it off)
 ```
 
 The config loader reads, in order: environment variables → `.env` in the current directory → `~/.seshat.yaml`.
