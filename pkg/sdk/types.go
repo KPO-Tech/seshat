@@ -54,24 +54,25 @@ type (
 	// another module could name ToolHook itself but not the type its own
 	// Execute method must return, making AddToolHook unusable from outside
 	// this module.
-	ToolHookResult         = execution.ToolHookResult
-	ToolHookStop           = execution.ToolHookStop
-	ToolProgress           = types.ToolProgress
-	ToolProgressStage      = types.ToolProgressStage
-	ResponseChunk          = types.APIResponseChunk
-	ResponseChunkType      = types.APIChunkType
-	ThinkingContent        = types.ThinkingContent
-	TranscriptEntry        = types.TranscriptEntry
-	TurnID                 = types.TurnID
-	ToolResultContent      = types.ToolResultContent
-	ToolUseContent         = types.ToolUseContent
-	Role                   = types.Role
-	RuntimeEvent           = types.RuntimeEvent
-	RuntimeEventType       = types.RuntimeEventType
-	PlanRuntimeEvent       = types.PlanRuntimeEvent
-	TaskRuntimeEvent       = types.TaskRuntimeEvent
-	StageRuntimeEvent      = types.StageRuntimeEvent
-	CompactionRuntimeEvent = types.CompactionRuntimeEvent
+	ToolHookResult            = execution.ToolHookResult
+	ToolHookStop              = execution.ToolHookStop
+	ToolProgress              = types.ToolProgress
+	ToolProgressStage         = types.ToolProgressStage
+	ResponseChunk             = types.APIResponseChunk
+	ResponseChunkType         = types.APIChunkType
+	ThinkingContent           = types.ThinkingContent
+	TranscriptEntry           = types.TranscriptEntry
+	TurnID                    = types.TurnID
+	ToolResultContent         = types.ToolResultContent
+	ToolUseContent            = types.ToolUseContent
+	Role                      = types.Role
+	RuntimeEvent              = types.RuntimeEvent
+	RuntimeEventType          = types.RuntimeEventType
+	PlanRuntimeEvent          = types.PlanRuntimeEvent
+	TaskRuntimeEvent          = types.TaskRuntimeEvent
+	StageRuntimeEvent         = types.StageRuntimeEvent
+	ProviderRetryRuntimeEvent = types.ProviderRetryRuntimeEvent
+	CompactionRuntimeEvent    = types.CompactionRuntimeEvent
 
 	// Lifecycle hooks
 	HookEvent        = types.HookEvent
@@ -210,6 +211,7 @@ const (
 	RuntimeEventTypeBrowserSnapshot      = types.RuntimeEventTypeBrowserSnapshot
 	RuntimeEventTypeBrowserScreenshot    = types.RuntimeEventTypeBrowserScreenshot
 	RuntimeEventTypeStage                = types.RuntimeEventTypeStage
+	RuntimeEventTypeProviderRetry        = types.RuntimeEventTypeProviderRetry
 	RuntimeEventTypeCompaction           = types.RuntimeEventTypeCompaction
 
 	// HookEvent constants — lifecycle events emitted throughout the engine.

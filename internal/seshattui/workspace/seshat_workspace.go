@@ -1929,6 +1929,10 @@ func (w *SeshatWorkspace) OnRuntimeEvent(ev sdk.RuntimeEvent) {
 		w.handleSubAgentResponseChunk(ev.AgentToolUseID, ev.Chunk)
 	}
 
+	if ev.AgentToolUseID == "" && w.trackProviderRetry(ev) {
+		return
+	}
+
 	switch ev.Type {
 	case sdk.RuntimeEventTypeTaskChanged:
 		sessionID := string(ev.SessionID)
@@ -2816,4 +2820,60 @@ func finishErrorText(err error) (title, details string) {
 		title = "The turn ended with an error"
 	}
 	return title, details
+}
+
+// trackProviderRetry keeps the live notice of a session in step with the
+// runtime: it is set while the runtime waits to retry a request the provider
+// refused, and cleared once the turn moves again. It reports whether it
+// handled the event, which is so for provider.retry only.
+func (w *SeshatWorkspace) trackProviderRetry(ev sdk.RuntimeEvent) bool {
+	sessionID := string(ev.SessionID)
+	if sessionID == "" {
+		return false
+	}
+	switch ev.Type {
+	case sdk.RuntimeEventTypeProviderRetry:
+		if ev.ProviderRetryEvent != nil {
+			w.setSessionNotice(sessionID, providerRetryNotice(ev.ProviderRetryEvent))
+		}
+		return true
+	case sdk.RuntimeEventTypeResponseChunk, sdk.RuntimeEventTypeTurnStarted,
+		sdk.RuntimeEventTypeTurnCompleted, sdk.RuntimeEventTypeTurnFailed:
+		w.setSessionNotice(sessionID, "")
+	}
+	return false
+}
+
+// providerRetryNotice words a provider.retry event for the status line.
+func providerRetryNotice(ev *sdk.ProviderRetryRuntimeEvent) string {
+	wait := time.Duration(ev.WaitMs) * time.Millisecond
+	return fmt.Sprintf("%s, retrying in %s (attempt %d/%d)", ev.Reason, formatNoticeWait(wait), ev.Attempt, ev.MaxAttempts)
+}
+
+// formatNoticeWait renders a wait as "800ms", "12s" or "1m30s".
+func formatNoticeWait(d time.Duration) string {
+	switch {
+	case d < time.Second:
+		return fmt.Sprintf("%dms", d.Milliseconds())
+	case d < time.Minute:
+		return fmt.Sprintf("%ds", int((d+500*time.Millisecond)/time.Second))
+	default:
+		seconds := int((d + 500*time.Millisecond) / time.Second)
+		return fmt.Sprintf("%dm%02ds", seconds/60, seconds%60)
+	}
+}
+
+// setSessionNotice sets the live notice of a session and tells the UI. A notice
+// that is already the one shown is not published again: response chunks arrive
+// by the hundred and each one clears a notice that is already empty.
+func (w *SeshatWorkspace) setSessionNotice(sessionID, notice string) {
+	w.sessionsMu.Lock()
+	defer w.sessionsMu.Unlock()
+	s, ok := w.sessStore[sessionID]
+	if !ok || s.Notice == notice {
+		return
+	}
+	s.Notice = notice
+	w.sessStore[sessionID] = s
+	w.sessBroker.Publish(pubsub.UpdatedEvent, s)
 }

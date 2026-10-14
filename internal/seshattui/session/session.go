@@ -54,8 +54,12 @@ type Session struct {
 	SummaryMessageID string
 	Cost             float64
 	Todos            []Todo
-	CreatedAt        int64
-	UpdatedAt        int64
+	// Notice is a transient line about the live turn, such as "rate limited (429),
+	// retrying in 12s". The workspace sets it while the runtime waits and clears it
+	// when the response resumes; it is never stored.
+	Notice    string
+	CreatedAt int64
+	UpdatedAt int64
 }
 
 type Service interface {

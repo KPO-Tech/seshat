@@ -127,28 +127,6 @@ func (i *Integrator) ResolverWithContext(
 		// paths (nothing to match a request_permissions grant against).
 		grantKeys := filesystemGrantLookupKeys(request.Metadata)
 
-		if requestSessionID != "" {
-			// A request_permissions call with scope=session also gets a second,
-			// content-scoped lookup key (see requestPermissionsSessionKey) — a
-			// session grant for that tool must only cover the exact escalation
-			// that was approved (same paths/access/targets), not every future
-			// request_permissions call regardless of what it's asking for.
-			lookupKeys := []string{toolName}
-			if key := requestPermissionsSessionKey(toolName, toolInput); key != "" {
-				lookupKeys = append(lookupKeys, key)
-			}
-
-			allowed := i.sessionAllows(requestSessionID, requestTurnID, lookupKeys, grantKeys)
-
-			if allowed {
-				return types.AllowWithInputAndDecisionReason("auto-approved for session", utils.CloneInput(toolInput), &types.PermissionDecisionReason{
-					Type:   types.PermissionDecisionReasonMode,
-					Source: "session",
-					Reason: "auto-approved for session",
-				})
-			}
-		}
-
 		metadata := clonePermissionMetadata(request.Metadata)
 		if metadata == nil {
 			metadata = make(map[string]any)
@@ -182,6 +160,19 @@ func (i *Integrator) ResolverWithContext(
 			if v, ok := metadata["should_avoid_permission_prompts"].(bool); ok {
 				pctx.ShouldAvoidPermissionPrompts = v
 			}
+		}
+
+		// What the user approved for the session applies unless a deny rule does:
+		// a rule written to forbid something must outlast a click on "always
+		// allow". An ask rule does not outrank it: that is how a tool is made to ask,
+		// and "always allow" is the answer to it.
+		if requestSessionID != "" && !i.engine.hasDenyRule(ctx, pctx) &&
+			i.sessionApproves(requestSessionID, requestTurnID, toolName, toolInput, grantKeys) {
+			return types.AllowWithInputAndDecisionReason("auto-approved for session", utils.CloneInput(toolInput), &types.PermissionDecisionReason{
+				Type:   types.PermissionDecisionReasonMode,
+				Source: "session",
+				Reason: "auto-approved for session",
+			})
 		}
 
 		result, err := i.engine.CheckPermission(ctx, pctx)
@@ -342,13 +333,13 @@ func (i *Integrator) sessionAllows(sessionID types.SessionID, turnID types.TurnI
 	return allowed
 }
 
-// recordApproval remembers what the user just approved and returns the reason to give for the decision: "always" persists the tool for
+// recordApproval remembers what the user just approved and returns the reason to give for the decision: "always" persists the tool (for a shell tool: the program or the exact line, see rememberApproval) for
 // the session, a request_permissions call with scope=session persists under its content-scoped key, and the filesystem escalation it
 // asked for is registered for the session or, by default, for the turn only.
 func (i *Integrator) recordApproval(sessionID types.SessionID, turnID types.TurnID, toolName string, toolInput, metadata map[string]any, always bool) string {
 	reason := "user approved"
 	if always && sessionID != "" {
-		i.persistSessionApproval(sessionID, toolName)
+		i.rememberApproval(sessionID, toolName, toolInput)
 		reason = "always approved for session"
 	}
 	// request_permissions itself asked for scope=session — persist under

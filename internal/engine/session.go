@@ -304,6 +304,14 @@ func (s *Session) submitWithMessage(ctx context.Context, userMsg types.Message, 
 
 	turnCtx, cancel := context.WithCancel(ctx)
 	emitter := func(event types.RuntimeEvent) {
+		// What runs inside the turn (a provider retrying, a tool) does not know
+		// which session it is in.
+		if event.SessionID == "" {
+			event.SessionID = s.state.SessionID
+		}
+		if event.TurnID == "" {
+			event.TurnID = s.state.TurnID
+		}
 		s.emitRuntimeEvent(event)
 	}
 	turnCtx = context.WithValue(turnCtx, types.RuntimeEventEmitterKey, emitter)

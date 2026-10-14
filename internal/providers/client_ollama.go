@@ -87,7 +87,7 @@ func decodeOllamaResponse(body io.Reader, model types.ModelIdentifier) (types.AP
 
 func (c *Client) createOllamaStreamResult(ctx context.Context, req types.APIRequest, onChunk func(types.APIResponseChunk)) (*types.APIStreamResult, error) {
 	req.Stream = true
-	resp, err := c.sendMessage(ctx, req)
+	resp, err := c.sendStreamRequest(ctx, req)
 	if err != nil {
 		return nil, err
 	}
