@@ -41,6 +41,7 @@ import (
 	"github.com/KPO-Tech/seshat-runtime/internal/seshattui/pubsub"
 	"github.com/KPO-Tech/seshat-runtime/internal/seshattui/session"
 	"github.com/KPO-Tech/seshat-runtime/internal/seshattui/skills"
+	"github.com/KPO-Tech/seshat-runtime/internal/tools/builtin"
 	worktreePkg "github.com/KPO-Tech/seshat-runtime/internal/tools/special/worktree"
 	tasktool "github.com/KPO-Tech/seshat-runtime/internal/tools/task"
 	"github.com/KPO-Tech/seshat-runtime/internal/types"
@@ -931,6 +932,7 @@ func (w *SeshatWorkspace) UpdateAgentModel(ctx context.Context) error {
 		Monitoring:               w.monitoring,
 		PlanStore:                w.planStore,
 		TrustProjectInstructions: config.IsTrustedProjectFile,
+		MainAgentTools:           builtin.GeneralAgentToolNames(),
 	})
 	if err != nil {
 		return fmt.Errorf("rebuild SDK client: %w", err)

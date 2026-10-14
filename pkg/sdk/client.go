@@ -319,6 +319,7 @@ func buildEngineConfig(config *ClientConfig) *engine.Config {
 		TaskNudgeLimit:           config.TaskNudgeLimit,
 		StopHooks:                config.StopHooks,
 		MaxConsecutiveDenials:    config.MaxConsecutiveDenials,
+		MainAgentTools:           config.MainAgentTools,
 	}
 	if pc := config.PromptConfig; pc != nil {
 		if pc.SystemPrompt != nil {

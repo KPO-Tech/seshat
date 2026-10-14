@@ -122,10 +122,16 @@ func (e *Engine) NewSessionFromState(
 	}
 
 	surfaceBuilder := tool.NewSurfaceBuilder(e.toolRegistry)
+	surfaceProfile := sessionToolSurfaceProfile(metadata)
+	var allowedNames []string
+	if surfaceProfile == tool.ToolSurfaceProfileMonoRun {
+		allowedNames = e.config.MainAgentTools
+	}
 	tools, err := surfaceBuilder.BuildToolMap(ctx, tool.SurfaceBuildRequest{
 		IncludeReadOnly:    true,
 		IncludeDestructive: true,
-		SurfaceProfile:     sessionToolSurfaceProfile(metadata),
+		SurfaceProfile:     surfaceProfile,
+		AllowedNames:       allowedNames,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("failed to build tool surface: %w", err)

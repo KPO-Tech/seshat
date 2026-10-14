@@ -120,6 +120,7 @@ type ClientConfig struct {
     EnableMonitoring       bool // Prometheus metrics, default true
     DisableTitleGeneration bool // disable background session title generation (default false)
     EnableToolSearch       bool // hide deferred tools (MCP, skill) behind the tool_search tool instead of listing them all upfront (default false; ENABLE_TOOL_SEARCH env var is the fallback when this is false)
+    MainAgentTools         []string // limit the main agent to exactly these tool names (sub-agents keep the whole registry); empty offers every enabled tool
 
     // ── MCP ───────────────────────────────────────────────────────────────
     MCPServers []MCPServerConfig // MCP servers to connect on startup

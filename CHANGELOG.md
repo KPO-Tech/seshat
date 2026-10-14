@@ -9,6 +9,10 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added
+
+- **`ClientConfig.MainAgentTools` limits the tools the main agent is offered.** With no list the main agent still sees every enabled tool, about 94 of them (roughly 26,000 tokens of descriptions and schemas on every request). The terminal UI now passes `builtin.GeneralAgentToolNames()`, a core of about 27 tools (files, shell, web, plan and questions, tasks, sub-agents, skills and MCP). Sub-agents are not limited by it, so a `browse` sub-agent keeps its browser tools. The rest stay registered for specialised agents.
+
 ### Changed
 
 - **The `read_file` description says what the tool does with PDFs and office files.** It claimed that without a configured document reader a PDF fell back to "raw PDF bytes" and that DOCX, PPTX and XLSX needed a reader. The code reads a PDF's text layer page by page without any service (`pdfsmart.ReadPages`), reads DOCX, PPTX and XLSX natively (`officetext.Extract`), uses a document reader only for scanned pages, for the pictures of a deck and for WAV/MP3 transcription, and reports the pages that have no readable text. The model was being told to expect a degraded result that it does not get. `seshat doctor` already said the right thing.
