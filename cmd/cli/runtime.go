@@ -444,12 +444,12 @@ func resolveModel(config engineconfig.Config) sdk.ModelIdentifier {
 		provider = model.Provider
 	}
 	model.Provider = provider
-	// No model was configured or remembered: take the provider default rather than
-	// starting on a provider name with an empty model.
-	if strings.TrimSpace(model.Model) == "" {
-		if model.Provider == "" {
-			model.Provider = sdk.APIProviderAnthropic
-		}
+	// A provider is known but no model was configured or remembered: take the
+	// provider default rather than starting on a provider name with an empty
+	// model. With no provider either, nothing is configured yet and the
+	// terminal interface guides the user (see validateProviderSetup), so the
+	// identifier stays empty.
+	if model.Provider != "" && strings.TrimSpace(model.Model) == "" {
 		if def, ok := providers.DefaultModelIdentifier(model.Provider); ok {
 			model.Model = def.Model
 		}

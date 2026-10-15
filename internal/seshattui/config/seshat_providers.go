@@ -6,6 +6,8 @@ import (
 	"strings"
 
 	"charm.land/catwalk/pkg/catwalk"
+	internalproviders "github.com/KPO-Tech/seshat-runtime/internal/providers"
+	"github.com/KPO-Tech/seshat-runtime/internal/types"
 	engineconfig "github.com/KPO-Tech/seshat-runtime/pkg/config"
 )
 
@@ -115,17 +117,23 @@ func buildSeshatProviders() []catwalk.Provider {
 	for _, p := range sdkProviders {
 		pid := string(p.Name)
 
-		// Convert SDK catalog models to catwalk.Model.
-		baseModels := make([]catwalk.Model, 0, len(p.Models))
+		// Convert the registry models to catwalk.Model, in registry order: the
+		// first is the default, the last the small model. The catalog view in
+		// pkg/config sorts them by name, which would make the default the
+		// alphabetically first one.
+		var baseModels []catwalk.Model
 		seen := make(map[string]struct{}, len(p.Models))
-		for _, m := range p.Models {
-			baseModels = append(baseModels, catwalk.Model{
-				ID:               m.Identifier,
-				Name:             m.Identifier,
-				ContextWindow:    int64(m.ContextWindow),
-				DefaultMaxTokens: int64(m.MaxOutput),
-			})
-			seen[m.Identifier] = struct{}{}
+		if info, ok := internalproviders.GetProviderInfo(types.APIProvider(pid)); ok {
+			for _, m := range info.Models {
+				baseModels = append(baseModels, catwalk.Model{
+					ID:               m.Identifier,
+					Name:             m.Identifier,
+					ContextWindow:    int64(m.ContextWindow),
+					DefaultMaxTokens: int64(m.MaxOutput),
+					SupportsImages:   m.Capabilities.Vision,
+				})
+				seen[m.Identifier] = struct{}{}
+			}
 		}
 
 		// Append extra models that aren't already in the base list.
@@ -146,8 +154,12 @@ func buildSeshatProviders() []catwalk.Provider {
 		if len(baseModels) > 0 {
 			defaultLarge = baseModels[0].ID
 		}
-		if len(baseModels) > 1 {
+		// A provider with only two models has no model that is clearly the small
+		// one: keep the same one for both rather than the more expensive.
+		if len(baseModels) > 2 {
 			defaultSmall = baseModels[len(baseModels)-1].ID
+		} else if len(baseModels) > 0 {
+			defaultSmall = baseModels[0].ID
 		}
 
 		out = append(out, catwalk.Provider{
