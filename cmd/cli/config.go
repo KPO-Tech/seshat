@@ -12,6 +12,7 @@ import (
 	"strings"
 
 	"github.com/KPO-Tech/seshat-runtime/internal/db"
+	"github.com/KPO-Tech/seshat-runtime/internal/providers"
 	engineconfig "github.com/KPO-Tech/seshat-runtime/pkg/config"
 	"github.com/KPO-Tech/seshat-runtime/pkg/sdk"
 )
@@ -446,6 +447,24 @@ func loadCredsIntoConfig(database *db.DB, config *engineconfig.Config) {
 		}
 	}
 
+	// Still no model: take the first provider (catalog order) whose key is in the
+	// credentials DB, on its default model, unless an environment variable already
+	// names a provider. A user who added a key from the interface but never picked
+	// a model otherwise starts on nothing and is told to configure a provider.
+	if strings.TrimSpace(config.Model) == "" {
+		if _, fromEnv := engineconfig.EffectiveAPIKeyAndProvider(*config); fromEnv == "" {
+			for _, provider := range engineconfig.AvailableProviders() {
+				if loadCred(credKeyAPIKey+":"+string(provider.Name)) == "" {
+					continue
+				}
+				if def, ok := providers.DefaultModelIdentifier(provider.Name); ok {
+					config.Model = string(provider.Name) + ":" + def.Model
+					break
+				}
+			}
+		}
+	}
+
 	// Determine the active provider from the config model string.
 	// We use the raw model string to avoid circularity in resolveModel.
 	activeProvider := ""
@@ -556,7 +575,13 @@ func applyField(config *engineconfig.Config, key, value string) {
 	}
 }
 
+// defaultModelForProvider returns the default model of a provider: the first of
+// its registry list. The catalog view in pkg/config sorts the models by name, so
+// its first entry is not the default.
 func defaultModelForProvider(provider engineconfig.ProviderInfo) string {
+	if def, ok := providers.DefaultModelIdentifier(provider.Name); ok {
+		return def.Model
+	}
 	if len(provider.Models) > 0 {
 		return provider.Models[0].Identifier
 	}
