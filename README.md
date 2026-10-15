@@ -120,7 +120,9 @@ If you want a ready-to-use product built on this engine, see [SeshatOS](https://
   </tr>
 </table>
 
-> **Keyboard shortcuts:** `ctrl+p` settings · `ctrl+m` models · `ctrl+s` sessions · `ctrl+,` providers · `ctrl+n` new session · `ctrl+t` tasks · `ctrl+u` copy last response · `ctrl+y` toggle yolo · `ctrl+o` open editor · `ctrl+g` help · `ctrl+c` quit
+> **Keyboard shortcuts:** `ctrl+p` settings · `ctrl+l` models · `ctrl+s` sessions · `ctrl+,` providers · `ctrl+n` new session · `ctrl+t` tasks · `ctrl+u` copy last response · `ctrl+y` toggle yolo · `ctrl+o` open editor · `ctrl+g` help · `ctrl+c` quit
+>
+> **New line in the prompt:** `ctrl+j` works in every terminal. `shift+Enter` and `ctrl+Enter` need a terminal that tells them apart from `Enter`; Windows Terminal and the VS Code terminal do not by default, so run `seshat terminal-setup` (the setup scripts offer it): it writes the key bindings into their settings, after backing the file up, and `--check` previews it. Terminals with a keyboard protocol (kitty, WezTerm, Ghostty, foot, recent Alacritty, iTerm2) need nothing.
 
 > **Clipboard note (Linux):** selection copy works best when `wl-clipboard` (Wayland) or `xclip`/`xsel` (X11) is installed. Without a system clipboard backend, Seshat can request terminal clipboard access but cannot guarantee a real system copy.
 

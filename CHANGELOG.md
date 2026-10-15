@@ -26,6 +26,8 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- **`seshat terminal-setup` makes shift+Enter and ctrl+Enter insert a newline in Windows Terminal and the VS Code terminal.** A terminal sends the same byte for Enter, shift+Enter and ctrl+Enter, so the interface could only offer `ctrl+j`. The command writes the key bindings that make the terminal send the sequences the interface already decodes (`ESC [ 13 ; 2 u` and `ESC [ 13 ; 5 u`): the `actions` and `keybindings` of Windows Terminal (stable, preview and unpackaged) and the terminal key bindings of VS Code on Windows, macOS and Linux. The files are JSON with comments, so they are patched as text: what the user wrote and the comments are kept, a backup (`*.bak-before-seshat-keys`) is made first and kept as the very first original, nothing is written unless the result still parses, and a shift+enter binding the user already has is left alone. Running it twice changes nothing. `--check` shows what would change. `scripts/setup.ps1` and `scripts/setup.sh` offer it (`SESHAT_SETUP_YES=1` accepts, no console means no). The help at the bottom of the screen still says `ctrl+j`.
+
 - **`ClientConfig.MainAgentTools` limits the tools the main agent is offered.** With no list the main agent still sees every enabled tool, about 94 of them (roughly 26,000 tokens of descriptions and schemas on every request). The terminal UI now passes `builtin.GeneralAgentToolNames()`, a core of about 27 tools (files, shell, web, plan and questions, tasks, sub-agents, skills and MCP). Sub-agents are not limited by it, so a `browse` sub-agent keeps its browser tools. The rest stay registered for specialised agents.
 
 - **`task_create` and `task_update` take a list.** Keeping a five-step list took 15 calls (five `task_create`, then two `task_update` per step), each one a round trip to the model, which on a slow provider costs more than the work being tracked. `task_create` now accepts `tasks` (the whole list in one call) and `task_update` accepts `updates` (for example complete one task and start the next together). The single-task form is unchanged. The terminal UI's task list reads both forms, and the permission check no longer refuses an update that has no top-level `taskId`.
@@ -34,6 +36,8 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 
 ### Fixed
+
+- **`scripts/setup.ps1` could not run on Windows PowerShell 5.1.** The file is UTF-8 without a byte order mark and held em dashes and box-drawing characters; PowerShell 5.1 reads such a file as ANSI, where byte `0x94` of those characters is a typographic double quote, which broke the strings (`Missing closing '}'`, `The string is missing the terminator`). It is now plain ASCII and parses.
 
 - **Running several tools at once could kill the whole process with "fatal error: concurrent map iteration and map write".** The tools of a concurrent batch each received the same `Metadata` map: the tool context was copied by value, the map was not. Each tool wrote `transcript_messages` into it while another was reading it to ask for its permission (`cloneMetadata`). A concurrent map read and write is a fatal error in Go: it ends the process, a `recover` cannot catch it, and the session ended with a stack trace in the terminal. It needs two or more tools launched in the same turn, so it appeared after a long run and then not again. Each tool now gets its own copy of the metadata. A test fails without the fix (it also reproduces "concurrent map writes").
 

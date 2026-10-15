@@ -132,6 +132,25 @@ else
     warn "No .githooks/ directory found — skipping"
 fi
 
+# ── 5. Terminal keys ──────────────────────────────────────────────────────────
+# ctrl+j inserts a newline in every terminal. Terminals with a keyboard protocol
+# (kitty, WezTerm, Ghostty, foot, recent Alacritty, iTerm2) also send shift+Enter
+# by themselves; the VS Code terminal has to be told to. Asked only on a console,
+# and the settings file is backed up first.
+step "Terminal keys (shift+Enter, ctrl+Enter)..."
+
+if [ -n "${SESHAT_SETUP_YES:-}" ]; then
+    answer="y"
+elif [ -t 0 ]; then
+    read -r -p "  Make shift+Enter and ctrl+Enter insert a newline in the VS Code terminal, if found? [Y/n] " answer || answer="n"
+else
+    answer="n"
+fi
+case "$answer" in
+    ""|y|Y|yes|YES) "$REPO_ROOT/bin/seshat" terminal-setup || warn "terminal-setup failed" ;;
+    *) info "Skipped. Run it later with: seshat terminal-setup   (add --check to preview)" ;;
+esac
+
 # ── Done ──────────────────────────────────────────────────────────────────────
 echo ""
 echo -e "${BOLD}${GREEN}  Setup complete!${NC}"
