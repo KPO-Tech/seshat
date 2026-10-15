@@ -87,11 +87,11 @@
 | `anthropic/claude-opus-5.5` | 1M | 128K | — | Claude Opus 5.5 via OpenRouter. |
 | `openai/gpt-6.1-sol` | 1M | 128K | — | GPT-6.1 Sol via OpenRouter. |
 | `google/gemini-4-argon` | 1M | 65K | — | Gemini 4 Argon via OpenRouter. |
-| `x-ai/grok-4.7` | 500K | 128K | — | Grok 4.7 via OpenRouter. |
 | `deepseek/deepseek-v4-pro` | 1M | 384K | — | DeepSeek V4 Pro via OpenRouter. |
 | `moonshotai/kimi-k3` | 1M | 131K | — | Kimi K3 via OpenRouter. |
-| `nvidia/nemotron-3-ultra-550b-a55b:free` | 1M | 65K | — | NVIDIA Nemotron 3 Ultra 550B (free tier, rate-limited) via OpenRouter. 1M con... |
-| `openrouter/free` | 200K | 32K | — | OpenRouter Free router — picks a free model that supports the request (tool... |
+| `nvidia/nemotron-3-super-120b-a12b:free` | 262K | 65K | — | NVIDIA Nemotron 3 Super 120B (free tier, rate-limited) via OpenRouter. Tested... |
+| `cohere/north-mini-code:free` | 256K | 64K | — | Cohere North Mini Code (free tier, rate-limited) via OpenRouter. Agentic codi... |
+| `nvidia/nemotron-3.5-lightning:free` | 1M | 65K | — | NVIDIA Nemotron 3.5 Lightning (free tier, rate-limited) via OpenRouter. 1M co... |
 | `anthropic/claude-haiku-5.5` | 1M | 128K | — | Claude Haiku 5.5 via OpenRouter — fast and cheap. |
 
 ### Codex (`codex`)
