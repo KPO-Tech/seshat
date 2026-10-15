@@ -339,7 +339,7 @@ Available when long-term memory is configured.
 |---|---|
 | `task_create` | Create a session-scoped tracked task for execution progress. Pass `tasks` to create a whole list in one call. |
 | `task_list` | List tracked session tasks and, when requested, background runtime tasks. |
-| `task_get` | Fetch details for a tracked session task. |
+| `task_get` | Fetch details for a tracked session task, or for a background task or agent. With `wait_seconds` (up to 600) it waits for a background agent to finish and returns its final answer, so there is no need to sleep in a shell; a task that is still running when the time is up comes back with `timedOut`. |
 | `task_update` | Update tracked task status, details, and dependencies. Pass `updates` to change several tasks in one call (finish one, start the next). |
 | `task_stop` | Stop tracking a session task. |
 | `task_output` | Get the output of a background runtime task. |

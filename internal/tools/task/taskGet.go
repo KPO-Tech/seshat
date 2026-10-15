@@ -13,12 +13,35 @@ import (
 
 // TaskDetails represents detailed information about a background task.
 type TaskDetails struct {
-	ID        string `json:"id"`
-	Command   string `json:"command"`
-	Status    string `json:"status"`
-	StartTime int64  `json:"startTime"`
-	EndTime   *int64 `json:"endTime,omitempty"`
-	ExitCode  *int   `json:"exitCode,omitempty"`
+	ID      string `json:"id"`
+	Command string `json:"command"`
+	// Description is what the task was asked to do: the prompt of a background agent,
+	// which has no command.
+	Description string `json:"description,omitempty"`
+	Status      string `json:"status"`
+	StartTime   int64  `json:"startTime"`
+	EndTime     *int64 `json:"endTime,omitempty"`
+	ExitCode    *int   `json:"exitCode,omitempty"`
+}
+
+const (
+	// maxWaitSeconds caps wait_seconds.
+	maxWaitSeconds = 600
+	// maxTaskOutputRunes caps the output returned for a finished background task.
+	maxTaskOutputRunes = 20000
+)
+
+func isTerminalRuntimeStatus(status RuntimeTaskStatus) bool {
+	return status == RuntimeTaskStatusCompleted || status == RuntimeTaskStatusFailed || status == RuntimeTaskStatusKilled
+}
+
+// truncateRunes keeps the first n runes of s and says so when it cuts.
+func truncateRunes(s string, n int) (string, bool) {
+	runes := []rune(s)
+	if len(runes) <= n {
+		return s, false
+	}
+	return string(runes[:n]), true
 }
 
 // TaskGetTool implements the TaskGet tool for getting task details.
@@ -49,6 +72,12 @@ func (t *TaskGetTool) Definition() tool.Definition {
 					"type":        "string",
 					"enum":        []string{"todo", "background"},
 					"description": "Optional task kind override. Defaults to todo first, then background fallback.",
+				},
+				"wait_seconds": map[string]any{
+					"type":        "integer",
+					"minimum":     1,
+					"maximum":     maxWaitSeconds,
+					"description": "For a background task or agent: wait up to this many seconds for it to finish before answering. Use it instead of sleeping in a shell. If it is still running when the time is up, the current status comes back.",
 				},
 			},
 			"required": []string{"task_id"},
@@ -114,19 +143,48 @@ func (t *TaskGetTool) Call(ctx context.Context, input tool.CallInput, permission
 	if err != nil {
 		return tool.CallResult{Data: map[string]any{"task": nil}}, nil
 	}
+	// A background agent has no way to be waited for other than polling it, which is
+	// how a session ended up running "Start-Sleep 120" in a shell between checks.
+	timedOut := false
+	if wait, ok := parsed["wait_seconds"].(float64); ok && wait >= 1 && !isTerminalRuntimeStatus(backgroundTask.Status) {
+		if wait > maxWaitSeconds {
+			wait = maxWaitSeconds
+		}
+		waited, waitErr := runtime.WaitForTask(ctx, taskID, time.Duration(wait)*time.Second)
+		if waited != nil {
+			backgroundTask = waited
+		}
+		timedOut = waitErr != nil && !isTerminalRuntimeStatus(backgroundTask.Status)
+	}
 	details := runtimeTaskDetails(backgroundTask)
+	task := map[string]any{
+		"type":      "background",
+		"id":        details.ID,
+		"command":   details.Command,
+		"status":    details.Status,
+		"startTime": details.StartTime,
+		"endTime":   details.EndTime,
+		"exitCode":  details.ExitCode,
+	}
+	if details.Description != "" {
+		task["description"] = details.Description
+	}
+	if timedOut {
+		task["timedOut"] = true
+	}
+	// Once it is over, the model needs what it produced: for an agent that is its
+	// final answer, which until now could only be found by reading its output file.
+	if isTerminalRuntimeStatus(backgroundTask.Status) {
+		if output, readErr := runtime.ReadTaskOutput(ctx, taskID); readErr == nil && output != "" {
+			text, cut := truncateRunes(output, maxTaskOutputRunes)
+			task["output"] = text
+			if cut {
+				task["outputTruncated"] = true
+			}
+		}
+	}
 	return tool.CallResult{
-		Data: map[string]any{
-			"task": map[string]any{
-				"type":      "background",
-				"id":        details.ID,
-				"command":   details.Command,
-				"status":    details.Status,
-				"startTime": details.StartTime,
-				"endTime":   details.EndTime,
-				"exitCode":  details.ExitCode,
-			},
-		},
+		Data: map[string]any{"task": task},
 		Metadata: &tool.ResultMetadata{Additional: map[string]any{
 			"task_get": taskGetRenderMetadata{TaskType: "background", Background: details},
 		}},
@@ -156,10 +214,11 @@ func runtimeTaskDetails(task *RuntimeTask) *TaskDetails {
 		return nil
 	}
 	details := &TaskDetails{
-		ID:        task.ID,
-		Command:   task.Command,
-		Status:    string(task.Status),
-		StartTime: task.CreatedAt.Unix(),
+		ID:          task.ID,
+		Command:     task.Command,
+		Description: task.Description,
+		Status:      string(task.Status),
+		StartTime:   task.CreatedAt.Unix(),
 	}
 	if task.StartedAt != nil {
 		details.StartTime = task.StartedAt.Unix()

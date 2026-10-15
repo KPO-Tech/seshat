@@ -7,6 +7,7 @@ import (
 	"time"
 
 	coreagent "github.com/KPO-Tech/seshat-runtime/internal/agent"
+	"github.com/KPO-Tech/seshat-runtime/internal/runtime/tasks"
 	tool "github.com/KPO-Tech/seshat-runtime/internal/tools/registry"
 	"github.com/KPO-Tech/seshat-runtime/internal/tools/schema"
 	"github.com/KPO-Tech/seshat-runtime/internal/types"
@@ -16,7 +17,7 @@ const waitAgentName = "wait_agent"
 const waitAgentSearchHint = "wait for a background agent to complete and retrieve its result"
 const waitAgentDescription = `Block until a previously spawned agent finishes, then return its result.
 
-Use the ` + "`agent_id`" + ` returned by ` + "`spawn_agent`" + `. Specify ` + "`timeout_seconds`" + ` (default 300) to cap the wait.
+Use the ` + "`agent_id`" + ` returned by ` + "`spawn_agent`" + `, or the task ID returned by ` + "`agent`" + ` when it ran in the background. Specify ` + "`timeout_seconds`" + ` (default 300) to cap the wait.
 If the agent is already done when you call this, it returns immediately.
 
 The result includes:
@@ -104,6 +105,12 @@ func (t *WaitAgentTool) Call(
 
 	ag, err := t.manager.GetAgent(agentID)
 	if err != nil {
+		// An agent started with agent in the background is a task of the task
+		// manager, not an agent of spawn_agent, and the model naturally passes its id
+		// here: wait for it instead of answering "agent not found".
+		if res, ok := waitBackgroundTask(ctx, agentID, timeout); ok {
+			return res, nil
+		}
 		// Help the LLM distinguish agent_id (from spawn_agent) from tool_use_id.
 		hint := ""
 		if len(agentID) > 10 && (agentID[8] == '-' || agentID[4] == '-') {
@@ -220,4 +227,71 @@ func formatWaitSummary(ag *coreagent.AsyncAgent) string {
 	default:
 		return fmt.Sprintf("Agent %s finished with status: %s", ag.ID, status)
 	}
+}
+
+// maxBackgroundOutputRunes caps the answer of a background agent returned by wait_agent.
+const maxBackgroundOutputRunes = 20000
+
+// waitBackgroundTask waits for a task of the task manager and returns its answer. ok is
+// false when the id is not a task, so the caller can report the agent as unknown.
+func waitBackgroundTask(ctx context.Context, id string, timeout time.Duration) (tool.CallResult, bool) {
+	manager := tasks.GlobalManager()
+	if manager == nil {
+		return tool.CallResult{}, false
+	}
+	task, err := manager.GetTask(tasks.TaskID(id))
+	if err != nil {
+		return tool.CallResult{}, false
+	}
+	terminal := func(t *tasks.Task) bool {
+		return t.Status == tasks.TaskStatusCompleted || t.Status == tasks.TaskStatusFailed || t.Status == tasks.TaskStatusKilled
+	}
+	if !terminal(task) {
+		waited, waitErr := manager.WaitForTask(ctx, tasks.TaskID(id), timeout)
+		if waited != nil {
+			task = waited
+		}
+		if waitErr != nil && !terminal(task) {
+			resp := map[string]any{
+				"agent_id":  id,
+				"status":    "running",
+				"timed_out": true,
+				"message":   fmt.Sprintf("Timeout after %.0fs - the agent is still running. Call wait_agent again.", timeout.Seconds()),
+			}
+			res := tool.NewJSONResult(resp)
+			res.Content = fmt.Sprintf("Agent %s still running after %.0fs timeout.", id, timeout.Seconds())
+			return res, true
+		}
+	}
+
+	status := map[tasks.TaskStatus]string{
+		tasks.TaskStatusCompleted: "completed",
+		tasks.TaskStatusFailed:    "errored",
+		tasks.TaskStatusKilled:    "shutdown",
+	}[task.Status]
+	resp := map[string]any{"agent_id": id, "status": status}
+	if task.StartedAt != nil && task.CompletedAt != nil {
+		resp["elapsed_seconds"] = task.CompletedAt.Sub(*task.StartedAt).Seconds()
+	}
+	output, _ := manager.ReadTaskOutput(tasks.TaskID(id))
+	if runes := []rune(output); len(runes) > maxBackgroundOutputRunes {
+		output = string(runes[:maxBackgroundOutputRunes])
+		resp["output_truncated"] = true
+	}
+	if output != "" {
+		resp["output"] = output
+	}
+	if task.Error != "" {
+		resp["error"] = task.Error
+	}
+	res := tool.NewJSONResult(resp)
+	switch status {
+	case "completed":
+		res.Content = fmt.Sprintf("Agent %s completed:\n%s", id, output)
+	case "errored":
+		res.Content = fmt.Sprintf("Agent %s failed: %s", id, task.Error)
+	default:
+		res.Content = fmt.Sprintf("Agent %s finished with status: %s", id, status)
+	}
+	return res, true
 }

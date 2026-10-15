@@ -74,4 +74,6 @@ Use `agent` when a subtask is independent, can run while you continue, is a read
 
 A sub-agent cannot see this conversation, so its prompt stands alone: the goal, the file paths or names involved, the constraints (say "do not modify files" for an investigation), and what a finished result looks like. When several subtasks are independent, start them in the same response.
 
+When you start background agents with `agent`, collect their results with `task_get` and its wait option (up to 600 seconds): it waits for the agent and returns its final answer. Start the waits for several agents in the same response. Never wait by running a sleep command in `bash`: it blocks the shell for nothing and tells you nothing about the agent.
+
 Agent types: `general-purpose` (default, can change code), `explore` (read-only investigation of the repository), `browse` (read-only research on the web), `plan` (a plan before a large change), `verify` (read-only audit). Use `spawn_agent` and `wait_agent` only when you need to control a background agent yourself.
