@@ -1,6 +1,7 @@
 package execution
 
 import (
+	"context"
 	"fmt"
 	"sync"
 	"testing"
@@ -54,4 +55,49 @@ func TestConcurrentToolsPreparedFromOneBatchContext(t *testing.T) {
 		}(i)
 	}
 	wg.Wait()
+}
+
+// The crash seen in a long session, end to end: several concurrency-safe tools in
+// one turn, a transcript, and a permission check that reads the tool metadata.
+// Run with -race: without the per-tool copy of the metadata it reports the race
+// (and, without -race, the runtime may stop the process with a fatal error).
+func TestConcurrentBatchWithTranscriptAndPermissionCheck(t *testing.T) {
+	const tools = 8
+	allow := func(ctx context.Context, request types.ToolPermissionRequest) types.PermissionResult {
+		// What the real permission engine does with the request metadata.
+		for range request.Metadata {
+		}
+		return types.AllowWithInput("allow", nil)
+	}
+	stub := &stubTool{
+		isConcurrencySafe: func(map[string]any) bool { return true },
+		isReadOnly:        func(map[string]any) bool { return true },
+		call: func(ctx context.Context, input tool.CallInput, _ types.CanUseToolFn) (tool.CallResult, error) {
+			// A tool may read what the engine put in its context.
+			_ = input.ToolContext.Metadata["transcript_messages"]
+			return tool.NewTextResult("ok"), nil
+		},
+	}
+
+	for round := 0; round < 30; round++ {
+		uses := make([]types.ToolUseContent, tools)
+		for i := range uses {
+			uses[i] = types.ToolUseContent{ID: fmt.Sprintf("t%d-%d", round, i), Name: "stub", Input: map[string]any{"i": i}}
+		}
+		result, err := NewOrchestrator().Execute(context.Background(), ExecuteRequest{
+			ToolUses:        uses,
+			Tools:           map[string]tool.Tool{"stub": stub},
+			PermissionCheck: allow,
+			SessionID:       types.SessionID("s"),
+			TurnID:          types.TurnID("t"),
+			PermissionMode:  types.PermissionModeOnRequest,
+			Transcript:      []types.Message{{}, {}},
+		})
+		if err != nil {
+			t.Fatalf("round %d: %v", round, err)
+		}
+		if len(result.Results) != tools {
+			t.Fatalf("round %d: %d results, want %d", round, len(result.Results), tools)
+		}
+	}
 }
