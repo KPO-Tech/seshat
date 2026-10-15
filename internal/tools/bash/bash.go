@@ -164,7 +164,7 @@ func (t *Tool) Definition() tool.Definition {
 		Name:        ToolName,
 		DisplayName: "Bash",
 		SearchHint:  SearchHint,
-		Description: Description,
+		Description: Description + shellNote(runtime.GOOS, t.shell),
 		Category:    "filesystem",
 		InputSchema: schema.FromMap(map[string]any{
 			"type": "object",
@@ -633,7 +633,7 @@ func (t *Tool) executeLocalCommand(ctx context.Context, execCtx *ExecutionContex
 		return t.executeViaSandbox(cmdCtx, execCtx, actualCommand, startTime)
 	}
 
-	cmdPath, cmdArgs, sandboxEnv, sandboxed := commandWithLandlock(t.shell, []string{"-c", actualCommand}, execCtx.WorkingDirectory)
+	cmdPath, cmdArgs, sandboxEnv, sandboxed := commandWithLandlock(t.shell, shellArgs(t.shell, actualCommand), execCtx.WorkingDirectory)
 
 	if execCtx.WorkingDirectory != "" && !sandboxed && t.config != nil && t.config.RequireSandbox {
 		return nil, fmt.Errorf("sandbox required but unavailable on this host: refusing to run the command unconfined")
@@ -899,16 +899,6 @@ func (t *Tool) SandboxKind() sandbox.EnvironmentKind {
 		return t.sandboxExecutor.Kind()
 	}
 	return sandbox.EnvironmentLocal
-}
-
-// DetectShell picks the best available shell, cached at startup.
-func DetectShell() string {
-	for _, sh := range []string{"bash", "sh", "zsh"} {
-		if _, err := exec.LookPath(sh); err == nil {
-			return sh
-		}
-	}
-	return "sh"
 }
 
 // ── cappedBuffer — head + tail biased truncation ───────────────────────────────

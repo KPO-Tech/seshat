@@ -93,7 +93,7 @@ Require a document reader/renderer to be configured on `ClientConfig` (`Document
 
 | Tool | Description |
 |---|---|
-| `bash` | Execute a shell command. Captures stdout/stderr, supports background jobs and timeouts. Includes a safety scanner for dangerous patterns. |
+| `bash` | Execute a shell command. Captures stdout/stderr, supports background jobs and timeouts. Includes a safety scanner for dangerous patterns. On Windows it runs commands in Git Bash (never the WSL launcher), or in PowerShell when Git Bash is missing; `SESHAT_BASH_SHELL` names another shell. |
 | `bash_write_stdin` | Write data to a running background job's stdin. |
 | `bash_job_output` | Read buffered stdout/stderr from a background job. |
 | `bash_job_kill` | Send SIGTERM/SIGKILL to a background job. |
