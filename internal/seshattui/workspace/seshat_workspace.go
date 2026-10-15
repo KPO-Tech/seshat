@@ -361,31 +361,12 @@ func (w *SeshatWorkspace) ListSessions(_ context.Context) ([]session.Session, er
 	if err != nil {
 		return nil, err
 	}
-	result := make([]session.Session, 0, len(infos))
-	for _, info := range infos {
-		if info == nil {
-			continue
-		}
-		now := time.Now().UnixMilli()
-		updAt := info.UpdatedAt * 1000
-		if updAt == 0 {
-			updAt = now
-		}
-		creAt := info.CreatedAt * 1000
-		if creAt == 0 {
-			creAt = now
-		}
-		s := session.Session{
-			ID:        string(info.ID),
-			Title:     info.Title,
-			CreatedAt: creAt,
-			UpdatedAt: updAt,
-		}
-		w.sessionsMu.Lock()
+	result := conversationSessions(infos, time.Now())
+	w.sessionsMu.Lock()
+	for _, s := range result {
 		w.sessStore[s.ID] = s
-		w.sessionsMu.Unlock()
-		result = append(result, s)
 	}
+	w.sessionsMu.Unlock()
 	return result, nil
 }
 
@@ -410,6 +391,14 @@ func (w *SeshatWorkspace) DeleteSession(_ context.Context, sessionID string) err
 	if sdkSess != nil {
 		_ = sdkSess.Interrupt()
 		_ = sdkSess.Close()
+	}
+	// The sessions this one launched are not listed, so they could not be deleted
+	// on their own any more: they go with it. Best effort, the conversation is what
+	// the user asked to delete.
+	if infos, listErr := w.client.ListSessions(); listErr == nil {
+		for _, child := range descendantSessionIDs(infos, sessionID) {
+			_ = w.client.DeleteSession(sdk.SessionID(child))
+		}
 	}
 	if err := w.client.DeleteSession(sdk.SessionID(sessionID)); err != nil {
 		return err

@@ -9,6 +9,29 @@ type contextKeyRuntimeEventEmitter struct{}
 // event emitter into sub-agent calls, enabling streaming bridge from sub-agent to parent.
 var RuntimeEventEmitterKey = contextKeyRuntimeEventEmitter{}
 
+// contextKeyCallingSession carries the id of the session whose tool call is running.
+type contextKeyCallingSession struct{}
+
+// WithCallingSessionID returns a context carrying the id of the session that is
+// calling a tool. Whatever the tool starts (a sub-agent, a background task, a
+// skill fork) reads it to record which session it belongs to, so the session
+// list can show the conversation and not every sub-agent it launched.
+func WithCallingSessionID(ctx context.Context, id SessionID) context.Context {
+	if id == "" {
+		return ctx
+	}
+	return context.WithValue(ctx, contextKeyCallingSession{}, id)
+}
+
+// CallingSessionIDFromContext returns the id set by WithCallingSessionID, or "".
+func CallingSessionIDFromContext(ctx context.Context) SessionID {
+	if ctx == nil {
+		return ""
+	}
+	id, _ := ctx.Value(contextKeyCallingSession{}).(SessionID)
+	return id
+}
+
 // contextKeySubAgentMaxDepth carries the per-request configured maximum sub-agent
 // spawn depth. Injected by the API query handler from the user's preferences.
 type contextKeySubAgentMaxDepth struct{}
