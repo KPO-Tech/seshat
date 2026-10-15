@@ -65,11 +65,25 @@ after feedback puts it back in review, because a revised plan is a different pla
 A session that never submitted anything keeps its `exit_plan_mode`: `submit_plan`
 is optional, and a gate that assumed otherwise would leave plan mode with no door.
 
-**Entering and leaving plan mode:**
+**Proposing a plan without plan mode:**
 
-The agent enters plan mode on its own when a decision belongs to you and settling
-it before touching a file is cheaper than settling it afterwards — not merely
-because a task is large. You can also toggle it yourself: `shift+tab` switches
+`submit_plan` works in any mode. In execute mode the agent calls it when a choice
+belongs to you and is cheaper to settle before it starts (several defensible
+designs, work that is hard to undo, no clear definition of "done"), or when you
+asked to validate the plan first (a research you want to approve, a large change).
+The plan opens in the same review screen; you approve it or ask for changes, and
+the agent carries on after your answer. There is no mode to leave: the approval
+message says "Proceed with the plan". Before this, `submit_plan` refused outside
+plan mode, so an agent in execute mode could only write the plan as text and ask
+"do you approve?", with no screen and no button to answer.
+
+**What plan mode is for:**
+
+Plan mode adds one thing to that: a guard. While it is on the agent cannot change
+files, only read, investigate and design. Use it when you want that guarantee
+(an unfamiliar repository, a sensitive environment, "design it, change nothing
+yet"). The agent does not need it to propose a plan and does not enter it for that;
+it enters it only when you ask. You can toggle it yourself: `shift+tab` switches
 between plan and execute mode, and the `toggle_plan` command in the command
 palette does the same.
 

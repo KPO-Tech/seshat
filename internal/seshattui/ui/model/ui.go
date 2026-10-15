@@ -4041,10 +4041,11 @@ func (m *UI) openFilesDialog() tea.Cmd {
 }
 
 // formatPlanApprovalMessage builds the message sent to the agent when the user
-// approves the plan via ctrl+y. Plan mode has already been exited by the time
-// this message is sent, so the agent should NOT call exit_plan_mode.
+// approves the plan via ctrl+y. If plan mode was on it has already been exited by
+// the time this message is sent, so the agent should NOT call exit_plan_mode; a
+// plan submitted in execute mode has no mode to leave.
 func formatPlanApprovalMessage() string {
-	return "Plan approved. Plan mode has been exited automatically — do not call exit_plan_mode. Proceed with implementation."
+	return "Plan approved. If plan mode was on, it has been exited automatically: do not call exit_plan_mode. Proceed with the plan."
 }
 
 // handlePlanReviewSubmit turns an answered plan review into the single message
