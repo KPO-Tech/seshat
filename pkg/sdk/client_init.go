@@ -179,44 +179,68 @@ func initImageGenerator(config *ClientConfig) image.Generation {
 		return nil
 	}
 	providerID := strings.ToLower(strings.TrimSpace(cfg.Provider))
+	profile, known := imageproviders.ProfileFor(providerID)
 	apiKey := resolveCapabilityAPIKey(config, providerID, strings.TrimSpace(cfg.APIKey))
+	if apiKey == "" {
+		for _, name := range profile.EnvVars {
+			if value := strings.TrimSpace(os.Getenv(name)); value != "" {
+				apiKey = value
+				break
+			}
+		}
+	}
 	baseURL := resolveCapabilityBaseURL(config, providerID, strings.TrimSpace(cfg.BaseURL))
+	custom := baseURL != ""
+	// A provider that is not in the catalog is taken for an OpenAI-compatible
+	// image server, which needs the host to say where it is.
+	api := profile.API
+	if !known {
+		if !custom {
+			logCapabilityUnknownProvider("image generation", "generate_image", providerID)
+			return nil
+		}
+		api = imageproviders.APIOpenAI
+	}
+	// A custom endpoint is usually a self-hosted server that does not check the
+	// Authorization header, so requiring a cloud key there would block a valid
+	// local-only setup. Only a catalog endpoint needs a key.
+	if apiKey == "" && !custom {
+		logCapabilityCredentialsMissing("image generation", "generate_image", providerID)
+		return nil
+	}
+	model := strings.TrimSpace(cfg.Model)
+	if model == "" {
+		model = profile.DefaultModel()
+	}
 
-	switch providerID {
-	case "openai":
-		// A custom BaseURL means a self-hosted, OpenAI-API-compatible server
-		// (e.g. a local model server) rather than the real OpenAI cloud —
-		// those don't check the Authorization header, so requiring a cloud
-		// API key here would block a perfectly valid local-only setup. Only
-		// bail out when there's neither a key nor an explicit endpoint.
-		if apiKey == "" && baseURL == "" {
-			logCapabilityCredentialsMissing("image generation", "generate_image", providerID)
-			return nil
-		}
-		opts := []imageproviders.OpenAIOption{}
-		if model := strings.TrimSpace(cfg.Model); model != "" {
-			opts = append(opts, imageproviders.WithOpenAIModel(model))
-		}
-		if baseURL != "" {
-			opts = append(opts, imageproviders.WithOpenAIBaseURL(ensureOpenAIBaseURL(baseURL)))
-		}
-		return imageproviders.NewOpenAI(apiKey, opts...)
-	case "gemini":
-		if apiKey == "" && baseURL == "" {
-			logCapabilityCredentialsMissing("image generation", "generate_image", providerID)
-			return nil
-		}
+	switch api {
+	case imageproviders.APIGemini:
 		opts := []imageproviders.GeminiOption{}
-		if model := strings.TrimSpace(cfg.Model); model != "" {
+		if model != "" {
 			opts = append(opts, imageproviders.WithGeminiModel(model))
 		}
-		if baseURL != "" {
+		if custom {
 			opts = append(opts, imageproviders.WithGeminiBaseURL(ensureGeminiBaseURL(baseURL)))
 		}
 		return imageproviders.NewGemini(apiKey, opts...)
+	case imageproviders.APIOpenRouter:
+		opts := []imageproviders.OpenRouterOption{}
+		if model != "" {
+			opts = append(opts, imageproviders.WithOpenRouterModel(model))
+		}
+		if custom {
+			opts = append(opts, imageproviders.WithOpenRouterBaseURL(ensureOpenAIBaseURL(baseURL)))
+		}
+		return imageproviders.NewOpenRouter(apiKey, opts...)
 	default:
-		logCapabilityUnknownProvider("image generation", "generate_image", providerID)
-		return nil
+		opts := []imageproviders.OpenAIOption{imageproviders.WithOpenAIProviderName(providerID)}
+		if model != "" {
+			opts = append(opts, imageproviders.WithOpenAIModel(model))
+		}
+		if custom {
+			opts = append(opts, imageproviders.WithOpenAIBaseURL(ensureOpenAIBaseURL(baseURL)))
+		}
+		return imageproviders.NewOpenAI(apiKey, opts...)
 	}
 }
 

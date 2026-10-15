@@ -10,20 +10,24 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"strings"
 
 	"github.com/KPO-Tech/seshat-runtime/internal/image"
 )
 
 const (
 	openAIDefaultBaseURL     = "https://api.openai.com/v1"
-	openAIDefaultModel       = "dall-e-3"
+	openAIDefaultModel       = "gpt-image-2.5-flare"
 	openAIDefaultSize        = "1024x1024"
-	openAIDefaultQuality     = "standard"
 	openAIDefaultResponseFmt = "b64_json"
 )
 
-// OpenAIClient generates images using OpenAI DALL-E (dall-e-3, dall-e-2).
+// OpenAIClient generates images through an OpenAI-compatible
+// /images/generations endpoint: the GPT Image models (gpt-image-2.5-flare,
+// gpt-image-2.5-sunburst, ...) and the older DALL-E ones. The two families take
+// different parameters, see isGPTImage.
 type OpenAIClient struct {
+	name       string // provider name reported by Provider()
 	apiKey     string
 	baseURL    string
 	model      string
@@ -35,13 +39,18 @@ type OpenAIClient struct {
 // OpenAIOption configures an OpenAIClient.
 type OpenAIOption func(*OpenAIClient)
 
-// WithOpenAIModel sets the DALL-E model (e.g. "dall-e-3", "dall-e-2").
+// WithOpenAIProviderName sets the name Provider() reports (default "openai").
+func WithOpenAIProviderName(name string) OpenAIOption { return func(c *OpenAIClient) { c.name = name } }
+
+// WithOpenAIModel sets the model (e.g. "gpt-image-2.5-flare", or "dall-e-3").
 func WithOpenAIModel(model string) OpenAIOption { return func(c *OpenAIClient) { c.model = model } }
 
 // WithOpenAISize sets the image dimensions (e.g. "1024x1024", "1792x1024").
 func WithOpenAISize(size string) OpenAIOption { return func(c *OpenAIClient) { c.size = size } }
 
-// WithOpenAIQuality sets the quality ("standard" or "hd").
+// WithOpenAIQuality sets the quality. GPT Image models take low, medium, high
+// (the 2.5 ones also xhigh and max) or auto, the default; dall-e-3 takes
+// standard (its default) or hd.
 func WithOpenAIQuality(q string) OpenAIOption { return func(c *OpenAIClient) { c.quality = q } }
 
 // WithOpenAIBaseURL overrides the default endpoint (useful for proxies).
@@ -55,11 +64,11 @@ func WithOpenAIHTTPClient(hc *http.Client) OpenAIOption {
 // NewOpenAI creates an OpenAI DALL-E image generation client.
 func NewOpenAI(apiKey string, opts ...OpenAIOption) *OpenAIClient {
 	c := &OpenAIClient{
+		name:       "openai",
 		apiKey:     apiKey,
 		baseURL:    openAIDefaultBaseURL,
 		model:      openAIDefaultModel,
 		size:       openAIDefaultSize,
-		quality:    openAIDefaultQuality,
 		httpClient: &http.Client{Timeout: requestTimeout},
 	}
 	for _, opt := range opts {
@@ -69,18 +78,37 @@ func NewOpenAI(apiKey string, opts ...OpenAIOption) *OpenAIClient {
 }
 
 // Provider implements image.Generation.
-func (c *OpenAIClient) Provider() string { return "openai" }
+func (c *OpenAIClient) Provider() string { return c.name }
+
+// isGPTImage reports whether the model belongs to the GPT Image family. These
+// models always answer base64 and reject response_format, and their quality
+// scale is low/medium/high/auto; DALL-E asks for response_format and takes
+// standard/hd.
+func isGPTImage(model string) bool {
+	return strings.HasPrefix(strings.ToLower(model), "gpt-image")
+}
+
+// requestBody builds the /images/generations body for the configured model.
+func (c *OpenAIClient) requestBody(prompt string) map[string]any {
+	body := map[string]any{"model": c.model, "prompt": prompt, "size": c.size, "n": 1}
+	quality := c.quality
+	if isGPTImage(c.model) {
+		if quality == "" || quality == "standard" || quality == "hd" {
+			quality = "auto" // a DALL-E value is not valid here
+		}
+	} else {
+		body["response_format"] = openAIDefaultResponseFmt
+		if quality == "" {
+			quality = "standard"
+		}
+	}
+	body["quality"] = quality
+	return body
+}
 
 // GenerateImage calls the OpenAI Images API and returns the result.
 func (c *OpenAIClient) GenerateImage(ctx context.Context, prompt string) (*image.GenerationResponse, error) {
-	body, err := json.Marshal(map[string]any{
-		"model":           c.model,
-		"prompt":          prompt,
-		"size":            c.size,
-		"quality":         c.quality,
-		"response_format": openAIDefaultResponseFmt,
-		"n":               1,
-	})
+	body, err := json.Marshal(c.requestBody(prompt))
 	if err != nil {
 		return nil, fmt.Errorf("openai image: marshal request: %w", err)
 	}
