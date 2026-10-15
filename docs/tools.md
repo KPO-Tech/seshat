@@ -264,7 +264,15 @@ Speech is configured like a chat provider: `text_to_speech` and `speech_to_text`
 
 Any other ID works when `base_url` points at an OpenAI-compatible server (`/audio/transcriptions`, `/audio/speech`), for example a local whisper.cpp server, and then needs no key. ElevenLabs has its own API and its own clients (`internal/audio/providers/elevenlabs.go`): `voice` is an ElevenLabs `voice_id` (without one, the first voice of the account is used), `format` takes `mp3`, `wav`, `opus`, `pcm` or a full ElevenLabs `output_format` such as `mp3_44100_192`. A provider with yet another API (Deepgram) needs its own client in the same folder. The transcription request asks for `verbose_json` from Whisper models and `json` from the others, which reject `verbose_json` and so return text without segments.
 
-Image generation: **OpenAI** (DALL-E 3) and **Gemini**.
+Image generation is configured the same way (`image_generation`: `provider`, `model`, `base_url`, `api_key`), from the catalog in `internal/image/providers/catalog.go`; the first model is the default:
+
+| Provider | Models | Key |
+|---|---|---|
+| `openai` | `gpt-image-2.5-flare` (fast), `gpt-image-2.5-sunburst` (precise edits), `gpt-image-2`, `gpt-image-1`, `gpt-image-1-mini`; `dall-e-3` still works when named | `OPENAI_API_KEY` |
+| `gemini` | `gemini-nano-banana-2.1`, `gemini-3.1-flash-image`, `gemini-3-pro-image`, `gemini-3.1-flash-lite-image`; an `imagen-*` model uses the Imagen call | `GOOGLE_API_KEY` |
+| `openrouter` | `google/gemini-nano-banana-2.1`, `openai/gpt-image-2.5-flare`, `openai/gpt-image-2.5-sunburst`, `black-forest-labs/flux-3-image`, `bytedance-seed/seedream-5-0-pro`, `recraft/recraft-v4.1`, `x-ai/grok-imagine-image-2.0`, `qwen/qwen-image-3` (the full list: `GET https://openrouter.ai/api/v1/images/models`) | `OPENROUTER_API_KEY` |
+
+Any other ID works as an OpenAI-compatible image server when `base_url` is given, without a key. The GPT Image models take quality `low`, `medium`, `high` or `auto` (the 2.5 ones also `xhigh` and `max`) and no `response_format`; DALL-E takes `standard` or `hd`.
 
 ---
 
