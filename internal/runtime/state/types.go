@@ -25,4 +25,11 @@ type SessionInfo struct {
 	// Preview is the first user message text, truncated to ~120 runes.
 	// Empty for sessions saved before this field was introduced.
 	Preview string `json:"preview,omitempty"`
+	// Subagent is true for a session that a sub-agent or a background agent task
+	// ran in, as opposed to a conversation the user opened. Such a session is not
+	// something to resume from a list of conversations.
+	Subagent bool `json:"subagent,omitempty"`
+	// ParentID is the session that launched this one, when it was recorded. Empty
+	// for a conversation, and for a sub-agent session saved before it was recorded.
+	ParentID types.SessionID `json:"parent_id,omitempty"`
 }

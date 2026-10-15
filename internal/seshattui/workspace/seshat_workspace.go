@@ -41,6 +41,7 @@ import (
 	"github.com/KPO-Tech/seshat-runtime/internal/seshattui/pubsub"
 	"github.com/KPO-Tech/seshat-runtime/internal/seshattui/session"
 	"github.com/KPO-Tech/seshat-runtime/internal/seshattui/skills"
+	"github.com/KPO-Tech/seshat-runtime/internal/tools/builtin"
 	worktreePkg "github.com/KPO-Tech/seshat-runtime/internal/tools/special/worktree"
 	tasktool "github.com/KPO-Tech/seshat-runtime/internal/tools/task"
 	"github.com/KPO-Tech/seshat-runtime/internal/types"
@@ -360,31 +361,12 @@ func (w *SeshatWorkspace) ListSessions(_ context.Context) ([]session.Session, er
 	if err != nil {
 		return nil, err
 	}
-	result := make([]session.Session, 0, len(infos))
-	for _, info := range infos {
-		if info == nil {
-			continue
-		}
-		now := time.Now().UnixMilli()
-		updAt := info.UpdatedAt * 1000
-		if updAt == 0 {
-			updAt = now
-		}
-		creAt := info.CreatedAt * 1000
-		if creAt == 0 {
-			creAt = now
-		}
-		s := session.Session{
-			ID:        string(info.ID),
-			Title:     info.Title,
-			CreatedAt: creAt,
-			UpdatedAt: updAt,
-		}
-		w.sessionsMu.Lock()
+	result := conversationSessions(infos, time.Now())
+	w.sessionsMu.Lock()
+	for _, s := range result {
 		w.sessStore[s.ID] = s
-		w.sessionsMu.Unlock()
-		result = append(result, s)
 	}
+	w.sessionsMu.Unlock()
 	return result, nil
 }
 
@@ -409,6 +391,14 @@ func (w *SeshatWorkspace) DeleteSession(_ context.Context, sessionID string) err
 	if sdkSess != nil {
 		_ = sdkSess.Interrupt()
 		_ = sdkSess.Close()
+	}
+	// The sessions this one launched are not listed, so they could not be deleted
+	// on their own any more: they go with it. Best effort, the conversation is what
+	// the user asked to delete.
+	if infos, listErr := w.client.ListSessions(); listErr == nil {
+		for _, child := range descendantSessionIDs(infos, sessionID) {
+			_ = w.client.DeleteSession(sdk.SessionID(child))
+		}
 	}
 	if err := w.client.DeleteSession(sdk.SessionID(sessionID)); err != nil {
 		return err
@@ -622,10 +612,14 @@ func (w *SeshatWorkspace) AgentRun(ctx context.Context, sessionID, prompt string
 			}
 		}
 
-		cur.Parts = append(cur.Parts, message.Finish{
+		finish := message.Finish{
 			Reason: finishReason,
 			Time:   time.Now().UnixMilli(),
-		})
+		}
+		if finishReason == message.FinishReasonError {
+			finish.Message, finish.Details = finishErrorText(err)
+		}
+		cur.Parts = append(cur.Parts, finish)
 		cur.UpdatedAt = time.Now().UnixMilli()
 		w.updateMsg(sessionID, *cur)
 		w.msgBroker.Publish(pubsub.UpdatedEvent, *cur)
@@ -931,6 +925,7 @@ func (w *SeshatWorkspace) UpdateAgentModel(ctx context.Context) error {
 		Monitoring:               w.monitoring,
 		PlanStore:                w.planStore,
 		TrustProjectInstructions: config.IsTrustedProjectFile,
+		MainAgentTools:           builtin.GeneralAgentToolNames(),
 	})
 	if err != nil {
 		return fmt.Errorf("rebuild SDK client: %w", err)
@@ -1229,8 +1224,25 @@ func (w *SeshatWorkspace) currentSpeechToTextConfig() *sdk.SpeechToTextConfig {
 
 // ─── Config mutations (stubs — UI writes, we ignore) ─────────────────────────
 
-func (w *SeshatWorkspace) UpdatePreferredModel(_ config.Scope, _ config.SelectedModelType, m config.SelectedModel) error {
+// credKeyModel is the credentials-DB key under which the selected model is kept;
+// cmd/cli reads it back at startup (loadCredsIntoConfig) when no model is set
+// elsewhere, so it must stay the same string as there.
+const credKeyModel = "model"
+
+// UpdatePreferredModel records the model the user picked. Only the large model
+// is the one the session runs on: the interface also sets a small model right
+// after a large one is chosen (for titles and summaries), and that call must not
+// replace it. The choice is written to the credentials DB so the next start
+// opens on it instead of on the provider default.
+func (w *SeshatWorkspace) UpdatePreferredModel(_ config.Scope, modelType config.SelectedModelType, m config.SelectedModel) error {
+	if modelType != config.SelectedModelTypeLarge {
+		return nil
+	}
+	if strings.TrimSpace(m.Provider) == "" || strings.TrimSpace(m.Model) == "" {
+		return nil
+	}
 	w.model = m.Provider + ":" + m.Model
+	w.persistCredential(credKeyModel, w.model)
 	w.cfgMu.Lock()
 	w.cfg = nil // invalidate cached config
 	w.cfgMu.Unlock()
@@ -1921,6 +1933,10 @@ func (w *SeshatWorkspace) OnRuntimeEvent(ev sdk.RuntimeEvent) {
 	// Sub-agent response chunks: forward streaming reasoning and text.
 	if ev.AgentToolUseID != "" && ev.Type == sdk.RuntimeEventTypeResponseChunk && ev.Chunk != nil {
 		w.handleSubAgentResponseChunk(ev.AgentToolUseID, ev.Chunk)
+	}
+
+	if ev.AgentToolUseID == "" && w.trackProviderRetry(ev) {
+		return
 	}
 
 	switch ev.Type {
@@ -2792,4 +2808,78 @@ func (d *msgDebounce) forceFlush() {
 	d.dirty = false
 	d.mu.Unlock()
 	d.flush(msg, sess)
+}
+
+// finishErrorText turns the error that ended a turn into the title and the
+// details of the ERROR block in the chat. Without them the block is an empty
+// red badge and the user cannot tell a provider timeout from a bug.
+func finishErrorText(err error) (title, details string) {
+	if err == nil {
+		return "The turn ended with an error", ""
+	}
+	details = strings.TrimSpace(err.Error())
+	title = details
+	if i := strings.IndexByte(title, '\n'); i >= 0 {
+		title = title[:i]
+	}
+	if title == "" {
+		title = "The turn ended with an error"
+	}
+	return title, details
+}
+
+// trackProviderRetry keeps the live notice of a session in step with the
+// runtime: it is set while the runtime waits to retry a request the provider
+// refused, and cleared once the turn moves again. It reports whether it
+// handled the event, which is so for provider.retry only.
+func (w *SeshatWorkspace) trackProviderRetry(ev sdk.RuntimeEvent) bool {
+	sessionID := string(ev.SessionID)
+	if sessionID == "" {
+		return false
+	}
+	switch ev.Type {
+	case sdk.RuntimeEventTypeProviderRetry:
+		if ev.ProviderRetryEvent != nil {
+			w.setSessionNotice(sessionID, providerRetryNotice(ev.ProviderRetryEvent))
+		}
+		return true
+	case sdk.RuntimeEventTypeResponseChunk, sdk.RuntimeEventTypeTurnStarted,
+		sdk.RuntimeEventTypeTurnCompleted, sdk.RuntimeEventTypeTurnFailed:
+		w.setSessionNotice(sessionID, "")
+	}
+	return false
+}
+
+// providerRetryNotice words a provider.retry event for the status line.
+func providerRetryNotice(ev *sdk.ProviderRetryRuntimeEvent) string {
+	wait := time.Duration(ev.WaitMs) * time.Millisecond
+	return fmt.Sprintf("%s, retrying in %s (attempt %d/%d)", ev.Reason, formatNoticeWait(wait), ev.Attempt, ev.MaxAttempts)
+}
+
+// formatNoticeWait renders a wait as "800ms", "12s" or "1m30s".
+func formatNoticeWait(d time.Duration) string {
+	switch {
+	case d < time.Second:
+		return fmt.Sprintf("%dms", d.Milliseconds())
+	case d < time.Minute:
+		return fmt.Sprintf("%ds", int((d+500*time.Millisecond)/time.Second))
+	default:
+		seconds := int((d + 500*time.Millisecond) / time.Second)
+		return fmt.Sprintf("%dm%02ds", seconds/60, seconds%60)
+	}
+}
+
+// setSessionNotice sets the live notice of a session and tells the UI. A notice
+// that is already the one shown is not published again: response chunks arrive
+// by the hundred and each one clears a notice that is already empty.
+func (w *SeshatWorkspace) setSessionNotice(sessionID, notice string) {
+	w.sessionsMu.Lock()
+	defer w.sessionsMu.Unlock()
+	s, ok := w.sessStore[sessionID]
+	if !ok || s.Notice == notice {
+		return
+	}
+	s.Notice = notice
+	w.sessStore[sessionID] = s
+	w.sessBroker.Publish(pubsub.UpdatedEvent, s)
 }

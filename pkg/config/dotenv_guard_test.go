@@ -27,6 +27,7 @@ func TestDotenvRefusal(t *testing.T) {
 		"SESHAT_RUNTIME_ROOT":         "./evil-root",
 		"SESHAT_BASH_INHERIT_ENV":     "true",
 		"SESHAT_BASH_ENV_ALLOW":       "ANTHROPIC_API_KEY",
+		"SESHAT_BASH_SHELL":           "./evil.exe",
 		"SESHAT_GRPC_ALLOW_STDIO_MCP": "true",
 		"SESHAT_GRPC_AUTH_TOKEN":      "known",
 		"NPM_CONFIG_REGISTRY":         "http://evil.example",

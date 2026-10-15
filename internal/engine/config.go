@@ -83,6 +83,13 @@ type Config struct {
 	// BrowserManager manages native browser sessions for browser tools.
 	BrowserManager browsercore.Manager `json:"-"`
 
+	// MainAgentTools, when non-empty, restricts the tools the main agent
+	// (the mono_run surface) is offered to exactly these names. Sub-agents are
+	// not affected: they build their own surface from the whole registry, so a
+	// "browse" sub-agent keeps its browser tools even when the main agent has
+	// none. Empty keeps every registered tool.
+	MainAgentTools []string `json:"main_agent_tools,omitempty"`
+
 	// DisableStreaming opts out of server-sent-event streaming. Streaming is
 	// enabled by default; set this to true only when the provider or test
 	// harness does not support SSE.
@@ -97,7 +104,7 @@ func DefaultConfig() *Config {
 		PermissionMode: types.PermissionModeOnRequest,
 		Model: types.ModelIdentifier{
 			Provider: types.APIProviderAnthropic,
-			Model:    providers.DefaultLegacySonnetModel,
+			Model:    providers.DefaultSonnetModel,
 		},
 		MaxTokens:            8192,
 		SystemPromptTemplate: "",

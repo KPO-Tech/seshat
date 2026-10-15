@@ -172,12 +172,12 @@ func (c *ProviderConfig) SetupGitHubCopilot() {
 
 type ImageGenerationConfig struct {
 	Provider string `json:"provider,omitempty" jsonschema:"description=Provider ID used for image generation,example=openai"`
-	Model    string `json:"model,omitempty" jsonschema:"description=Optional model override for image generation,example=dall-e-3"`
+	Model    string `json:"model,omitempty" jsonschema:"description=Optional model override for image generation,example=gpt-image-2.5-flare"`
 }
 
 type TextToSpeechConfig struct {
 	Provider string `json:"provider,omitempty" jsonschema:"description=Provider ID used for text-to-speech,example=openai"`
-	Model    string `json:"model,omitempty" jsonschema:"description=Optional model override for text-to-speech,example=tts-1"`
+	Model    string `json:"model,omitempty" jsonschema:"description=Optional model override for text-to-speech,example=gpt-4o-mini-tts"`
 	Voice    string `json:"voice,omitempty" jsonschema:"description=Optional voice override for text-to-speech,example=alloy"`
 	Format   string `json:"format,omitempty" jsonschema:"description=Optional output format override for text-to-speech,example=mp3"`
 }

@@ -39,13 +39,13 @@ const (
 		"- Updating specific cells or a block of cells in an existing spreadsheet\n" +
 		"- Writing formulas (any value starting with \"=\" is set as a formula, e.g. \"=SUM(A1:A10)\")\n\n" +
 		"## When NOT to use\n\n" +
-		"- Reading spreadsheet content — use FileRead instead (it extracts .xlsx natively, no need to write anything first)\n" +
-		"- Plain CSV/text data — use FileWrite\n\n" +
+		"- Reading spreadsheet content — use read_file instead (it extracts .xlsx natively, no need to write anything first)\n" +
+		"- Plain CSV/text data — use write_file\n\n" +
 		"## Rules\n\n" +
 		"- values is a 2D array (rows of cells): [[\"Name\", \"Score\"], [\"Alice\", 90], [\"Bob\", 85]]\n" +
 		"- range is the top-left cell to start writing at (e.g. \"B2\"); values fills out from there row by row, column by column. Omit it to start at A1.\n" +
 		"- sheet defaults to the workbook's first sheet; naming a sheet that doesn't exist yet creates it.\n" +
-		"- If the file already exists, you must read it with FileRead first (same rule as FileWrite) — this tool errors otherwise, since a spreadsheet write can silently clobber other cells' formulas/formatting if made blind.\n"
+		"- If the file already exists, you must read it with read_file first (same rule as write_file) — this tool errors otherwise, since a spreadsheet write can silently clobber other cells' formulas/formatting if made blind.\n"
 )
 
 // Tool implements the excel_edit tool.
@@ -222,7 +222,7 @@ func (t *Tool) Call(
 	}
 
 	// Mark as read post-write (same convention as write_file), so a
-	// follow-up edit in the same session doesn't need a fresh FileRead call.
+	// follow-up edit in the same session doesn't need a fresh read_file call.
 	if info, statErr := os.Stat(absolutePath); statErr == nil {
 		fileReadTool.RecordExternalRead(absolutePath, info.ModTime(), "", true)
 	}

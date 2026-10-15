@@ -24,7 +24,7 @@ var (
 		"BASH_ENV": true, "ENV": true, "IFS": true, "PROMPT_COMMAND": true, "PS4": true, "SYSTEMROOT": true, "WINDIR": true,
 		"NODE_OPTIONS": true, "NODE_PATH": true, "RUBYOPT": true, "RUBYLIB": true, "CLASSPATH": true, "JAVA_TOOL_OPTIONS": true, "_JAVA_OPTIONS": true,
 		"EDITOR": true, "VISUAL": true, "PAGER": true, "BROWSER": true, "SSH_ASKPASS": true, "SUDO_ASKPASS": true,
-		"SESHAT_RUNTIME_ROOT": true, "SESHAT_BASH_INHERIT_ENV": true, "SESHAT_BASH_ENV_ALLOW": true,
+		"SESHAT_RUNTIME_ROOT": true, "SESHAT_BASH_INHERIT_ENV": true, "SESHAT_BASH_ENV_ALLOW": true, "SESHAT_BASH_SHELL": true,
 	}
 	dotenvBlockedPrefixes = []string{
 		"LD_", "DYLD_", "GIT_", "PYTHON", "PERL", "NPM_CONFIG_", "SESHAT_GRPC_ALLOW_", "SESHAT_GRPC_AUTH_", "SESHAT_GRPC_TLS_",

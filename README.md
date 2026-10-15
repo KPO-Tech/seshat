@@ -120,7 +120,9 @@ If you want a ready-to-use product built on this engine, see [SeshatOS](https://
   </tr>
 </table>
 
-> **Keyboard shortcuts:** `ctrl+p` settings · `ctrl+m` models · `ctrl+s` sessions · `ctrl+,` providers · `ctrl+n` new session · `ctrl+t` tasks · `ctrl+u` copy last response · `ctrl+y` toggle yolo · `ctrl+o` open editor · `ctrl+g` help · `ctrl+c` quit
+> **Keyboard shortcuts:** `ctrl+p` settings · `ctrl+l` models · `ctrl+s` sessions · `ctrl+,` providers · `ctrl+n` new session · `ctrl+t` tasks · `ctrl+u` copy last response · `ctrl+y` toggle yolo · `ctrl+o` open editor · `ctrl+g` help · `ctrl+c` quit
+>
+> **New line in the prompt:** `ctrl+j` works in every terminal. `shift+Enter` and `ctrl+Enter` need a terminal that tells them apart from `Enter`; Windows Terminal and the VS Code terminal do not by default, so run `seshat terminal-setup` (the setup scripts offer it): it writes the key bindings into their settings, after backing the file up, and `--check` previews it. Terminals with a keyboard protocol (kitty, WezTerm, Ghostty, foot, recent Alacritty, iTerm2) need nothing.
 
 > **Clipboard note (Linux):** selection copy works best when `wl-clipboard` (Wayland) or `xclip`/`xsel` (X11) is installed. Without a system clipboard backend, Seshat can request terminal clipboard access but cannot guarantee a real system copy.
 
@@ -210,7 +212,7 @@ go install github.com/KPO-Tech/seshat-runtime/cmd/cli@latest
 
 ```bash
 seshat config --provider anthropic --api-key sk-ant-...
-seshat config --model anthropic:claude-sonnet-4-20250514
+seshat config --model anthropic:claude-sonnet-5-5
 seshat config --print
 ```
 
@@ -269,7 +271,7 @@ import "github.com/KPO-Tech/seshat-runtime/pkg/sdk"
 
 client, err := sdk.NewClient(&sdk.ClientConfig{
     APIKey: os.Getenv("ANTHROPIC_API_KEY"),
-    Model:  sdk.ModelIdentifier{Provider: "anthropic", Model: "claude-sonnet-4-20250514"},
+    Model:  sdk.ModelIdentifier{Provider: "anthropic", Model: "claude-sonnet-5-5"},
 })
 if err != nil {
     log.Fatal(err)
@@ -386,7 +388,7 @@ curl -fsSL https://raw.githubusercontent.com/KPO-Tech/seshat-runtime/main/script
 
 # 2. Configure your provider
 seshat config --provider anthropic --api-key sk-ant-...
-seshat config --model anthropic:claude-sonnet-4-20250514
+seshat config --model anthropic:claude-sonnet-5-5
 
 # 3. Start chatting
 seshat chat                          # new session (opens TUI)

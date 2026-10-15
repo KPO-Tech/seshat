@@ -44,16 +44,16 @@ const (
 	SearchHint = "start a cancellable background content search over a large directory tree"
 
 	// ToolDescription is the description of the search_start tool.
-	ToolDescription = "Start a content search as a background job instead of blocking until it finishes - use this instead of Grep for a search that might be slow (huge directory, expensive regex) or where you want to see partial results / cancel early.\n\n" +
+	ToolDescription = "Start a content search as a background job instead of blocking until it finishes - use this instead of grep for a search that might be slow (huge directory, expensive regex) or where you want to see partial results / cancel early.\n\n" +
 		"## When to use\n\n" +
-		"- Large repositories or directory trees where a Grep call might take a while\n" +
+		"- Large repositories or directory trees where a grep call might take a while\n" +
 		"- You want to start a search, do something else, and check back on it later\n" +
-		"- You want to search inside .docx/.xlsx file contents too — Grep can't (they're zipped XML, not plain text), search_start extracts and searches their text natively\n\n" +
+		"- You want to search inside .docx/.xlsx file contents too — grep can't (they're zipped XML, not plain text), search_start extracts and searches their text natively\n\n" +
 		"## When NOT to use\n\n" +
-		"- A quick, targeted search in a small area — Grep is simpler and returns results directly\n\n" +
+		"- A quick, targeted search in a small area — grep is simpler and returns results directly\n\n" +
 		"## Workflow\n\n" +
 		"1. search_start returns a job_id immediately, plus any Office-document (.docx/.xlsx) matches found right away (a fast, separate pass).\n" +
-		"2. job_output(job_id) reads ripgrep's matches as they accumulate — offset works the same as FileRead (negative = tail, i.e. last N matches).\n" +
+		"2. job_output(job_id) reads ripgrep's matches as they accumulate — offset works the same as read_file (negative = tail, i.e. last N matches).\n" +
 		"3. job_kill(job_id) cancels the search early once you have enough, or if it's taking too long.\n" +
 		"4. task_list shows all running searches (and other background jobs).\n"
 )

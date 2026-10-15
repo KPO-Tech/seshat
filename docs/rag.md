@@ -136,7 +136,36 @@ RAG_EMBEDDING_API_KEY=...        # not needed for Ollama
 RAG_EMBEDDING_PROVIDER=ollama    # "openai" or "ollama", detected if empty
 ```
 
+Models worth trying (IDs checked against OpenRouter's embeddings list, 2026-10; any OpenAI-compatible `/embeddings` endpoint works, for example `RAG_EMBEDDING_URL=https://openrouter.ai/api/v1`):
+
+| Model | Where | Notes |
+|---|---|---|
+| `nomic-embed-text`, `bge-m3`, `qwen3-embedding` | Ollama (local) | Free, no key; `bge-m3` is multilingual (8K context). |
+| `openai/text-embedding-3-small` / `-large` | OpenRouter, OpenAI | Cheap default / higher quality. |
+| `qwen/qwen3-embedding-8b` | OpenRouter | 32K context, very cheap. |
+| `google/gemini-embedding-2` | OpenRouter, Gemini | Multimodal-capable, 8K context. |
+| `voyageai/voyage-4` (`-lite`, `-large`, `voyage-code-4`) | OpenRouter, Voyage | 32K context; `voyage-code-4` for code. |
+| `mistralai/mistral-embed-2312` | OpenRouter, Mistral | Rejects oversized batches; lower `BatchSize`. |
+| `nvidia/nemotron-3-embed-1b:free`, `liquid/lfm-2.5-embedding-350m:free` | OpenRouter (free) | Rate-limited; fine for tests. |
+
+Changing the model changes the vector size: re-ingest a corpus after switching.
+
 In Go, `embedder.NewFromEnv()` (package `pkg/rag/embedder`) returns an embedder, or `nil` when the variables are not set, which gives keyword-only search.
+
+---
+
+## Rerank models
+
+An optional second pass reorders the retrieved chunks with a rerank model. Choose a hosted provider with `RAG_RERANK_PROVIDER` (its endpoint, request shape and default model come with it, the key is read from the provider's variable or `RAG_RERANK_API_KEY`), or point `RAG_RERANK_URL` at a self-hosted server (TEI, vLLM). `RAG_RERANK_URL`, `RAG_RERANK_MODEL` and `RAG_RERANK_API_KEY` override what the provider sets. A provider named without its key, or unknown, is skipped and the other settings apply.
+
+| `RAG_RERANK_PROVIDER` | Models (first is the default) | Key variable |
+|---|---|---|
+| `cohere` | `rerank-v3.5`, `rerank-v4.0-pro` | `COHERE_API_KEY` |
+| `voyage` | `rerank-2.5`, `rerank-2.5-lite` | `VOYAGE_API_KEY` |
+| `openrouter` | `cohere/rerank-v3.5`, `cohere/rerank-4-pro`, `cohere/rerank-4-fast`, `voyageai/rerank-2.5`, `voyageai/rerank-2.5-lite`, `qwen/qwen3-reranker-8b`, `nvidia/llama-nemotron-rerank-vl-1b-v2:free` | `OPENROUTER_API_KEY` |
+| `langsearch` | `langsearch-reranker-v1` | `LANGSEARCH_API_KEY` |
+
+For a free local setup, serve `BAAI/bge-reranker-v2-m3` with TEI and set `RAG_RERANK_URL=http://localhost:8080/rerank`.
 
 ---
 

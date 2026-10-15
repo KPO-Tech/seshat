@@ -98,10 +98,12 @@ func (t *SubmitPlanTool) Call(
 		return tool.NewErrorResult(err), nil
 	}
 
+	// submit_plan works in any mode. It used to refuse outside plan mode, so an
+	// agent in execute mode that wanted the user's approval of a plan could only
+	// write it as text and ask "do you approve?", with no review screen and no
+	// button to answer. The review and its approval do not depend on the mode.
 	toolCtx := input.ToolContextValue()
-	if !modes.IsPlanModeString(toolCtx.ExecutionMode) {
-		return tool.NewErrorResult(fmt.Errorf("submit_plan can only be called in plan mode")), nil
-	}
+	inPlanMode := modes.IsPlanModeString(toolCtx.ExecutionMode)
 
 	slug, _ := input.Parsed["slug"].(string)
 	slug = sanitizeSlug(slug)
@@ -164,12 +166,11 @@ Plan ID: %s
 Filename: %s
 Version: %d
 
-The plan is now pending user review. Do NOT call exit_plan_mode yet.
-Wait for the user to review and either:
-- Send feedback (they will reply in the conversation — revise and call submit_plan again)
-- Approve it. The approval message tells you what to do next: if it says plan mode has
-already been exited for you, just start implementing; if you receive a plain approval
-while still in plan mode, call exit_plan_mode to leave the mode and begin.`, id, filename, version)
+The plan is now pending user review. Stop here and wait: do not start the work yet.
+The user will either:
+- Send feedback (they reply in the conversation: revise and call submit_plan again)
+- Approve it. Then follow the approval message: start the work. If you are in plan mode
+and the message does not say it was exited for you, call exit_plan_mode first.%s`, id, filename, version, planModeNote(inPlanMode))
 
 	result := tool.NewTextResult(msg)
 	result.Metadata = &tool.ResultMetadata{
@@ -182,6 +183,14 @@ while still in plan mode, call exit_plan_mode to leave the mode and begin.`, id,
 		},
 	}
 	return result, nil
+}
+
+// planModeNote adds the plan-mode instruction only when plan mode is on.
+func planModeNote(inPlanMode bool) string {
+	if !inPlanMode {
+		return ""
+	}
+	return "\nPlan mode is on: do NOT call exit_plan_mode before the approval."
 }
 
 func (t *SubmitPlanTool) Description(ctx context.Context) (string, error) {
@@ -253,12 +262,16 @@ func buildFilename(slug string) string {
 }
 
 // SubmitPlanPrompt is the system prompt for the SubmitPlan tool.
-const SubmitPlanPrompt = `Use this tool to submit your implementation plan for user review while in plan mode.
+const SubmitPlanPrompt = `Use this tool to put a plan in front of the user for review and approval before you start. It works in any mode, execute or plan: you do not need plan mode to propose a plan.
 
 ## When to call
 
+- When a choice belongs to the user and is cheaper to settle before you touch anything: several defensible designs, work that is hard to undo, no clear definition of "done"
+- When the user asked to validate the plan first (a research they want to approve, a large change)
 - When your plan is complete and ready for the user to review
 - You can call it multiple times to revise based on user feedback
+
+Never write a plan as plain text and ask "do you approve?": the user has no review screen and no button to answer. Send it with this tool.
 
 ## Parameters
 
@@ -282,8 +295,8 @@ understands exactly what will change and why.
 ## After calling submit_plan
 
 - The plan is persisted and shown to the user as an interactive artifact
-- You remain in plan mode — do NOT call exit_plan_mode yet
+- Stop and wait for the answer: do not start the work before the approval
 - The user may send feedback (revise and resubmit) or approve it
-- On approval, follow the approval message: either it states plan mode was already
-  exited for you (then just implement), or you are still in plan mode and should
-  call exit_plan_mode`
+- On approval, follow the approval message and start. If plan mode was on, the message
+  says whether it was already exited for you; if you are still in plan mode, call
+  exit_plan_mode before you start`

@@ -134,6 +134,13 @@ func (o *Orchestrator) newRuntimeStateFromPrepared(prepared preparedToolUse, req
 	resolvedToolCtx := toolCtx
 	resolvedToolCtx.ToolUseID = prepared.toolUse.ID
 	resolvedToolCtx.CanUseTool = req.PermissionCheck
+	// The context is copied by value but its Metadata map is not: every tool of
+	// a concurrent batch received the same map, and each one wrote
+	// transcript_messages into it while another was reading it (the permission
+	// probe copies it). A concurrent map read and write is a fatal error in Go,
+	// which no recover can catch, so it took the whole process down. Each tool
+	// gets its own copy.
+	resolvedToolCtx.Metadata = cloneMetadata(toolCtx.Metadata)
 	if len(req.Transcript) > 0 {
 		if resolvedToolCtx.Metadata == nil {
 			resolvedToolCtx.Metadata = make(map[string]any)

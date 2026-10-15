@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"os"
-	"path/filepath"
 	"strings"
 
 	authstore "github.com/KPO-Tech/seshat-runtime/internal/auth/store"
@@ -278,14 +277,7 @@ func oauthConfigFromCredentials(provider string, creds *authtypes.Credentials) *
 }
 
 func resolveSDKAuthPath(explicit string) string {
-	if value := strings.TrimSpace(explicit); value != "" {
-		return value
-	}
-	if value := strings.TrimSpace(os.Getenv("SESHAT_AUTH_PATH")); value != "" {
-		return value
-	}
-	homeDir, _ := os.UserHomeDir()
-	return filepath.Join(homeDir, ".seshat", "auth.json")
+	return authstore.ResolvePath(explicit)
 }
 
 func normalizeAuthProvider(provider string) string {

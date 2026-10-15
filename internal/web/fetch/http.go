@@ -27,14 +27,39 @@ func DefaultHTTPClient(resolver webcore.HostResolver) *http.Client {
 			return http.ErrUseLastResponse
 		},
 		Transport: &http.Transport{
-			Proxy: http.ProxyFromEnvironment,
-			DialContext: func(ctx context.Context, network string, address string) (net.Conn, error) {
-				if err := webcore.RejectLocalDialTarget(ctx, address, resolver); err != nil {
-					return nil, err
-				}
-				return dialer.DialContext(ctx, network, address)
-			},
+			Proxy:       http.ProxyFromEnvironment,
+			DialContext: guardedDialContext(resolver, dialer.DialContext),
 		},
+	}
+}
+
+// guardedDialContext returns a DialContext that opens the connection to an
+// address that passed the network policy, not to the name it was asked for.
+// Validating the name and then letting the dialer resolve it again leaves a gap:
+// a DNS record with a zero TTL answers a public address to the check and a
+// private one to the dial (DNS rebinding). The addresses are tried in order, as
+// the dialer would try those of a name.
+//
+// With a proxy configured the transport dials the proxy, not the target, so the
+// target is only checked where the URL is validated; that gap is the proxy's.
+func guardedDialContext(resolver webcore.HostResolver, dial func(ctx context.Context, network, address string) (net.Conn, error)) func(ctx context.Context, network, address string) (net.Conn, error) {
+	return func(ctx context.Context, network string, address string) (net.Conn, error) {
+		targets, err := webcore.ResolveDialTarget(ctx, address, resolver)
+		if err != nil {
+			return nil, err
+		}
+		var lastErr error
+		for _, target := range targets {
+			conn, err := dial(ctx, network, target)
+			if err == nil {
+				return conn, nil
+			}
+			lastErr = err
+			if ctx.Err() != nil {
+				break
+			}
+		}
+		return nil, lastErr
 	}
 }
 

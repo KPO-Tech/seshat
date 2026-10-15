@@ -127,7 +127,7 @@ func (m *BackgroundTaskManager) StartBackgroundTask(
 		return nil, fmt.Errorf("create output file: %w", err)
 	}
 
-	cmdPath, cmdArgs, sandboxEnv, _ := commandWithLandlock(shell, []string{"-c", command}, workingDir)
+	cmdPath, cmdArgs, sandboxEnv, _ := commandWithLandlock(shell, shellArgs(shell, command), workingDir)
 	cmd := exec.CommandContext(ctx, cmdPath, cmdArgs...)
 	if workingDir != "" {
 		cmd.Dir = workingDir

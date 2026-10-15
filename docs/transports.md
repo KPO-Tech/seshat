@@ -58,7 +58,7 @@ OLLAMA_API_KEY=...            # optional, only needed if Ollama requires auth
 ### Runtime configuration
 
 ```bash
-SESHAT_MODEL=anthropic:claude-sonnet-4-6   # default model (provider:model)
+SESHAT_MODEL=anthropic:claude-sonnet-5-5   # default model (provider:model)
 SESHAT_API_KEY=...                          # alternative to provider-specific key
 SESHAT_CWD=/path/to/working/directory      # agent working directory
 SESHAT_DB_PATH=/tmp/seshat/seshat.sqlite     # SQLite database path
@@ -66,6 +66,7 @@ SESHAT_DEBUG=true                          # verbose logging
 SESHAT_PROVIDER_BASE_URL=...               # custom provider base URL
 WEB_SEARCH_PROVIDER=tavily                # web search provider
 ENABLE_TOOL_SEARCH=true                   # hide deferred tools (MCP, skill) behind the tool_search tool; pkg/sdk.ClientConfig.EnableToolSearch overrides this when set to true
+SESHAT_STREAM_IDLE_TIMEOUT=180            # seconds a streamed response may stay silent before the request is given up on and retried (default 180; 0 turns it off)
 ```
 
 The config loader reads, in order: environment variables → `.env` in the current directory → `~/.seshat.yaml`.
@@ -128,7 +129,7 @@ grpcurl \
   -plaintext \
   -import-path pkg/grpc/proto \
   -proto seshat.proto \
-  -d '{"prompt":"hello","model":"anthropic:claude-sonnet-4-6"}' \
+  -d '{"prompt":"hello","model":"anthropic:claude-sonnet-5-5"}' \
   localhost:50051 seshat.SeshatService/Query
 ```
 
@@ -147,7 +148,7 @@ grpcurl \
   -plaintext \
   -import-path pkg/grpc/proto \
   -proto seshat.proto \
-  -d '{"prompt":"hello","model":"anthropic:claude-sonnet-4-6"}' \
+  -d '{"prompt":"hello","model":"anthropic:claude-sonnet-5-5"}' \
   localhost:50051 seshat.SeshatService/QueryStream
 ```
 

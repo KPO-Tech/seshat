@@ -27,7 +27,7 @@ Good uses:
 
 Do not use it when:
 - the answer should come from the local codebase
-- you already have the exact page and should use WebFetch instead
+- you already have the exact page and should use web_fetch instead
 - a simpler local tool can answer the question
 
 Execution guidance:
@@ -40,7 +40,7 @@ Execution guidance:
 
 Suggested workflow:
 1. Search to find the best candidate sources.
-2. If the claim is important, verify the exact page with WebFetch or browser tools.
+2. If the claim is important, verify the exact page with web_fetch or browser tools.
 3. Only then present the conclusion as established fact.
 
 After using this tool, include a Sources section in the final answer with relevant URLs as markdown links.`

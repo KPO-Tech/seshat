@@ -68,3 +68,97 @@ func WithTTSBaseURL(url string) OpenAITTSOption { return internalproviders.WithT
 func WithTTSHTTPClient(hc *http.Client) OpenAITTSOption {
 	return internalproviders.WithTTSHTTPClient(hc)
 }
+
+type (
+	// Profile describes a provider that serves speech over the OpenAI-compatible
+	// audio API: its endpoint, key variables and STT/TTS models.
+	Profile = internalproviders.Profile
+	// Capability lists the models a provider offers for one direction.
+	Capability = internalproviders.Capability
+)
+
+// ResponseFormatOmit makes an STT client send no response_format field.
+const ResponseFormatOmit = internalproviders.ResponseFormatOmit
+
+// Profiles returns the audio providers this build knows (OpenAI, Groq, Mistral).
+func Profiles() []Profile { return internalproviders.Profiles() }
+
+// ProfileFor returns the audio profile of a provider ID.
+func ProfileFor(id string) (Profile, bool) { return internalproviders.ProfileFor(id) }
+
+// WithSTTProviderName sets the name an STT client reports from Provider().
+func WithSTTProviderName(name string) OpenAISTTOption {
+	return internalproviders.WithSTTProviderName(name)
+}
+
+// WithSTTResponseFormat forces the response_format an STT client sends; empty
+// chooses from the model, ResponseFormatOmit sends none.
+func WithSTTResponseFormat(format string) OpenAISTTOption {
+	return internalproviders.WithSTTResponseFormat(format)
+}
+
+// WithTTSProviderName sets the name a TTS client reports from Provider().
+func WithTTSProviderName(name string) OpenAITTSOption {
+	return internalproviders.WithTTSProviderName(name)
+}
+
+type (
+	// ElevenLabsTTS synthesises speech with ElevenLabs (its own API, not
+	// OpenAI-compatible). A voice_id is optional: without one the first voice
+	// of the account is used.
+	ElevenLabsTTS = internalproviders.ElevenLabsTTS
+	// ElevenLabsTTSOption configures an ElevenLabsTTS client.
+	ElevenLabsTTSOption = internalproviders.ElevenLabsTTSOption
+	// ElevenLabsSTT transcribes audio with ElevenLabs Scribe.
+	ElevenLabsSTT = internalproviders.ElevenLabsSTT
+	// ElevenLabsSTTOption configures an ElevenLabsSTT client.
+	ElevenLabsSTTOption = internalproviders.ElevenLabsSTTOption
+)
+
+// APIElevenLabs is the Profile.API value of ElevenLabs.
+const APIElevenLabs = internalproviders.APIElevenLabs
+
+// NewElevenLabsTTS creates an ElevenLabs text-to-speech client.
+func NewElevenLabsTTS(apiKey string, opts ...ElevenLabsTTSOption) *ElevenLabsTTS {
+	return internalproviders.NewElevenLabsTTS(apiKey, opts...)
+}
+
+// NewElevenLabsSTT creates an ElevenLabs Scribe client.
+func NewElevenLabsSTT(apiKey string, opts ...ElevenLabsSTTOption) *ElevenLabsSTT {
+	return internalproviders.NewElevenLabsSTT(apiKey, opts...)
+}
+
+// WithElevenLabsTTSModel sets the model (default eleven_multilingual_v2).
+func WithElevenLabsTTSModel(model string) ElevenLabsTTSOption {
+	return internalproviders.WithElevenLabsTTSModel(model)
+}
+
+// WithElevenLabsTTSVoice sets the voice_id.
+func WithElevenLabsTTSVoice(voice string) ElevenLabsTTSOption {
+	return internalproviders.WithElevenLabsTTSVoice(voice)
+}
+
+// WithElevenLabsTTSFormat sets mp3, wav, opus, pcm or a full output_format.
+func WithElevenLabsTTSFormat(format string) ElevenLabsTTSOption {
+	return internalproviders.WithElevenLabsTTSFormat(format)
+}
+
+// WithElevenLabsTTSBaseURL overrides the API root (for example a regional host).
+func WithElevenLabsTTSBaseURL(baseURL string) ElevenLabsTTSOption {
+	return internalproviders.WithElevenLabsTTSBaseURL(baseURL)
+}
+
+// WithElevenLabsSTTModel sets the Scribe model (default scribe_v2).
+func WithElevenLabsSTTModel(model string) ElevenLabsSTTOption {
+	return internalproviders.WithElevenLabsSTTModel(model)
+}
+
+// WithElevenLabsSTTLanguage sets an ISO-639 language code; empty auto-detects.
+func WithElevenLabsSTTLanguage(language string) ElevenLabsSTTOption {
+	return internalproviders.WithElevenLabsSTTLanguage(language)
+}
+
+// WithElevenLabsSTTBaseURL overrides the API root.
+func WithElevenLabsSTTBaseURL(baseURL string) ElevenLabsSTTOption {
+	return internalproviders.WithElevenLabsSTTBaseURL(baseURL)
+}

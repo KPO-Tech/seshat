@@ -28,10 +28,10 @@ const (
 		"- Renaming a symbol across a file (use replace_all)\n" +
 		"- Any edit where you are changing less than the whole file\n\n" +
 		"## When NOT to use\n\n" +
-		"- Complete file rewrites — use FileWrite instead\n" +
-		"- Creating a new file — use FileWrite instead\n\n" +
+		"- Complete file rewrites — use write_file instead\n" +
+		"- Creating a new file — use write_file instead\n\n" +
 		"## Rules\n\n" +
-		"- You must read the file with FileRead before editing. This tool errors if you have not read the file first.\n" +
+		"- You must read the file with read_file before editing. This tool errors if you have not read the file first.\n" +
 		"- Match indentation exactly as it appears in the file (tabs vs. spaces). Never include line-number prefixes from Read output in old_string or new_string.\n" +
 		"- old_string must be unique in the file. If it appears more than once, provide more surrounding lines for context, or use replace_all.\n" +
 		"- Use replace_all to rename a variable or string across the entire file.\n" +

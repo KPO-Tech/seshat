@@ -24,12 +24,12 @@ const (
 	ToolDescription = "Write the full content of a file. Creates a new file or completely replaces an existing one.\n\n" +
 		"## When to use\n\n" +
 		"- Creating a new file that does not yet exist\n" +
-		"- Rewriting a file from scratch when the changes are so extensive that FileEdit would require many individual edits\n\n" +
+		"- Rewriting a file from scratch when the changes are so extensive that edit_file would require many individual edits\n\n" +
 		"## When NOT to use\n\n" +
-		"- Partial modifications to existing files — use FileEdit instead (safer, only sends the diff)\n" +
+		"- Partial modifications to existing files — use edit_file instead (safer, only sends the diff)\n" +
 		"- Never create documentation (*.md) or README files unless explicitly requested\n\n" +
 		"## Rules\n\n" +
-		"- If the file already exists, you must read it with FileRead first. This tool errors if you modify an existing file without reading it first.\n" +
+		"- If the file already exists, you must read it with read_file first. This tool errors if you modify an existing file without reading it first.\n" +
 		"- This replaces the entire file content. Double-check you are not discarding sections you intended to keep.\n"
 	patchContextLines = 3
 )

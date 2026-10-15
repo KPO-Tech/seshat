@@ -118,7 +118,11 @@ func (a *AskUserToolMessageItem) HandleMouseClick(btn ansi.MouseButton, x, y int
 		return true
 	}
 	a.optionCursor[a.currentQuestion] = optIdx
-	a.selectCurrentOption()
+	// A click cannot return the submit command, so it only moves on to the
+	// next question; the last one is confirmed with Enter.
+	if a.selectCurrentOption() && a.currentQuestion < len(a.activeReq.Questions)-1 {
+		a.goToNextQuestion()
+	}
 	return true
 }
 
@@ -180,7 +184,9 @@ func (a *AskUserToolMessageItem) HandleKeyEvent(key tea.KeyMsg) (bool, tea.Cmd) 
 			return true, nil
 		}
 	case "enter":
-		a.selectCurrentOption()
+		if a.selectCurrentOption() {
+			return true, a.advance()
+		}
 		return true, nil
 	case "tab", "right", "l":
 		return true, a.advance()
@@ -207,6 +213,9 @@ func (a *AskUserToolMessageItem) handleCustomInputKey(key tea.KeyMsg) (bool, tea
 		a.customMode = false
 		a.clearCache()
 		a.Bump()
+		if !a.currentSurveyQuestion().MultiSelect {
+			return true, a.advance()
+		}
 		return true, nil
 	case "esc":
 		a.customMode = false
@@ -239,10 +248,14 @@ func (a *AskUserToolMessageItem) moveOptionCursor(delta int) {
 	a.Bump()
 }
 
-func (a *AskUserToolMessageItem) selectCurrentOption() {
+// selectCurrentOption records the option under the cursor. It reports true when
+// a pick-one answer was recorded, which is when the survey should move on by
+// itself. Choosing "Other" opens the text field and a multi-select question
+// toggles the option, so both report false.
+func (a *AskUserToolMessageItem) selectCurrentOption() bool {
 	question := a.currentSurveyQuestion()
 	if len(question.Options) == 0 {
-		return
+		return false
 	}
 	if a.currentOptionIsOther() {
 		a.customMode = true
@@ -250,16 +263,17 @@ func (a *AskUserToolMessageItem) selectCurrentOption() {
 		a.customInput.Focus()
 		a.clearCache()
 		a.Bump()
-		return
+		return false
 	}
 	if question.MultiSelect {
 		a.toggleCurrentOption()
-		return
+		return false
 	}
 	a.singleSelections[a.currentQuestion] = a.optionCursor[a.currentQuestion]
 	a.customAnswers[a.currentQuestion] = ""
 	a.clearCache()
 	a.Bump()
+	return true
 }
 
 func (a *AskUserToolMessageItem) toggleCurrentOption() {
@@ -295,15 +309,19 @@ func (a *AskUserToolMessageItem) goToPreviousQuestion() {
 	a.Bump()
 }
 
+func (a *AskUserToolMessageItem) goToNextQuestion() {
+	a.currentQuestion++
+	a.customMode = false
+	a.clearCache()
+	a.Bump()
+}
+
 func (a *AskUserToolMessageItem) advance() tea.Cmd {
 	if !a.currentQuestionAnswered() {
 		return nil
 	}
 	if a.currentQuestion < len(a.activeReq.Questions)-1 {
-		a.currentQuestion++
-		a.customMode = false
-		a.clearCache()
-		a.Bump()
+		a.goToNextQuestion()
 		return nil
 	}
 	if a.canSubmit() {
@@ -556,33 +574,36 @@ func (r *askUserRenderContext) RenderTool(sty *styles.Styles, width int, opts *T
 			parts = append(parts, sty.Tool.Body.Render(strings.Join(optLines, "\n")))
 		}
 
-		// Build hint line.
-		var hintParts []string
-		if a.customMode {
-			hintParts = append(hintParts, "Type · Enter confirm · Esc cancel")
-		} else {
-			if question.MultiSelect {
-				hintParts = append(hintParts, "↑↓ navigate")
-				hintParts = append(hintParts, "Space/Enter toggle")
-				if n := a.multiSelectCount(a.currentQuestion); n > 0 {
-					hintParts = append(hintParts, sty.Tool.AskUserCount.Render(fmt.Sprintf("%d selected", n)))
-				}
-			} else {
-				hintParts = append(hintParts, "↑↓ navigate")
-				hintParts = append(hintParts, "Enter select")
-			}
-			if a.currentQuestion > 0 {
-				hintParts = append(hintParts, "← back")
-			}
-			if a.currentQuestion == len(a.activeReq.Questions)-1 {
-				hintParts = append(hintParts, "Ctrl+Y submit")
-			} else {
-				hintParts = append(hintParts, "Tab/→ next")
-			}
-		}
 		parts = append(parts, "")
-		parts = append(parts, sty.Tool.Body.Render(sty.Tool.AskUserFooter.Render(strings.Join(hintParts, " · "))))
+		parts = append(parts, sty.Tool.Body.Render(sty.Tool.AskUserFooter.Render(strings.Join(a.hintParts(sty, question), " · "))))
 	}
 
 	return strings.Join(parts, "\n")
+}
+
+// hintParts lists the key hints under the current question.
+func (a *AskUserToolMessageItem) hintParts(sty *styles.Styles, question tools.AskUserQuestion) []string {
+	if a.customMode {
+		return []string{"Type · Enter confirm · Esc cancel"}
+	}
+	last := a.currentQuestion == len(a.activeReq.Questions)-1
+	hints := []string{"↑↓ navigate"}
+	switch {
+	case question.MultiSelect:
+		hints = append(hints, "Space/Enter toggle")
+		if n := a.multiSelectCount(a.currentQuestion); n > 0 {
+			hints = append(hints, sty.Tool.AskUserCount.Render(fmt.Sprintf("%d selected", n)))
+		}
+	case last:
+		hints = append(hints, "Enter select & send")
+	default:
+		hints = append(hints, "Enter select & next")
+	}
+	if a.currentQuestion > 0 {
+		hints = append(hints, "← back")
+	}
+	if last {
+		return append(hints, "Ctrl+Y submit")
+	}
+	return append(hints, "Tab/→ next")
 }

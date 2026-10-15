@@ -93,7 +93,7 @@ Require a document reader/renderer to be configured on `ClientConfig` (`Document
 
 | Tool | Description |
 |---|---|
-| `bash` | Execute a shell command. Captures stdout/stderr, supports background jobs and timeouts. Includes a safety scanner for dangerous patterns. |
+| `bash` | Execute a shell command. Captures stdout/stderr, supports background jobs and timeouts. Includes a safety scanner for dangerous patterns. On Windows it runs commands in Git Bash (never the WSL launcher), or in PowerShell when Git Bash is missing; `SESHAT_BASH_SHELL` names another shell. |
 | `bash_write_stdin` | Write data to a running background job's stdin. |
 | `bash_job_output` | Read buffered stdout/stderr from a background job. |
 | `bash_job_kill` | Send SIGTERM/SIGKILL to a background job. |
@@ -249,11 +249,30 @@ Always registered; `IsEnabled()` returns `false` when no provider is configured.
 
 | Tool | Env var | Description |
 |---|---|---|
-| `generate_image` | `OPENAI_API_KEY` | Generate an image from a text prompt. Returns base64 or URL. |
-| `text_to_speech` | `OPENAI_API_KEY` | Synthesise speech audio from text. Returns base64-encoded audio. |
-| `speech_to_text` | `OPENAI_API_KEY` | Transcribe audio to text via Whisper. Input: base64-encoded audio. |
+| `generate_image` | `OPENAI_API_KEY` / Gemini key | Generate an image from a text prompt. Returns base64 or URL. |
+| `text_to_speech` | provider key | Synthesise speech audio from text. Returns base64-encoded audio. |
+| `speech_to_text` | provider key | Transcribe audio to text. Input: base64-encoded audio. |
 
-Provider implemented: **OpenAI** (DALL-E 3 for images, TTS-1/TTS-1-HD for synthesis, Whisper for transcription).
+Speech is configured like a chat provider: `text_to_speech` and `speech_to_text` in the configuration name a `provider`, an optional `model`, and optionally a `base_url` and `api_key` (otherwise the provider's entry in `providers`, then its environment variable, is used). The audio catalog (`internal/audio/providers/catalog.go`, also `audioproviders.Profiles()` in the SDK) lists what each provider offers; the first model is the default:
+
+| Provider | Speech to text | Text to speech | Key |
+|---|---|---|---|
+| `openai` | `whisper-1` (segments and timings), `gpt-transcribe`, `gpt-4o-transcribe`, `gpt-4o-mini-transcribe` | `gpt-4o-mini-tts`, `tts-1`, `tts-1-hd` | `OPENAI_API_KEY` |
+| `groq` | `whisper-large-v3-turbo`, `whisper-large-v3` | — | `GROQ_API_KEY` |
+| `mistral` | `voxtral-mini-latest` | — | `MISTRAL_API_KEY` |
+| `elevenlabs` | `scribe_v2` (word timings) | `eleven_multilingual_v2`, `eleven_v4`, `eleven_v4_turbo`, `eleven_v3`, `eleven_flash_v2_5`, `eleven_flash_v2` | `ELEVENLABS_API_KEY` |
+
+Any other ID works when `base_url` points at an OpenAI-compatible server (`/audio/transcriptions`, `/audio/speech`), for example a local whisper.cpp server, and then needs no key. ElevenLabs has its own API and its own clients (`internal/audio/providers/elevenlabs.go`): `voice` is an ElevenLabs `voice_id` (without one, the first voice of the account is used), `format` takes `mp3`, `wav`, `opus`, `pcm` or a full ElevenLabs `output_format` such as `mp3_44100_192`. A provider with yet another API (Deepgram) needs its own client in the same folder. The transcription request asks for `verbose_json` from Whisper models and `json` from the others, which reject `verbose_json` and so return text without segments.
+
+Image generation is configured the same way (`image_generation`: `provider`, `model`, `base_url`, `api_key`), from the catalog in `internal/image/providers/catalog.go`; the first model is the default:
+
+| Provider | Models | Key |
+|---|---|---|
+| `openai` | `gpt-image-2.5-flare` (fast), `gpt-image-2.5-sunburst` (precise edits), `gpt-image-2`, `gpt-image-1`, `gpt-image-1-mini`; `dall-e-3` still works when named | `OPENAI_API_KEY` |
+| `gemini` | `gemini-nano-banana-2.1`, `gemini-3.1-flash-image`, `gemini-3-pro-image`, `gemini-3.1-flash-lite-image`; an `imagen-*` model uses the Imagen call | `GOOGLE_API_KEY` |
+| `openrouter` | `google/gemini-nano-banana-2.1`, `openai/gpt-image-2.5-flare`, `openai/gpt-image-2.5-sunburst`, `black-forest-labs/flux-3-image`, `bytedance-seed/seedream-5-0-pro`, `recraft/recraft-v4.1`, `x-ai/grok-imagine-image-2.0`, `qwen/qwen-image-3` (the full list: `GET https://openrouter.ai/api/v1/images/models`) | `OPENROUTER_API_KEY` |
+
+Any other ID works as an OpenAI-compatible image server when `base_url` is given, without a key. The GPT Image models take quality `low`, `medium`, `high` or `auto` (the 2.5 ones also `xhigh` and `max`) and no `response_format`; DALL-E takes `standard` or `hd`.
 
 ---
 
@@ -318,10 +337,10 @@ Available when long-term memory is configured.
 
 | Tool | Description |
 |---|---|
-| `task_create` | Create a session-scoped tracked task for execution progress. |
+| `task_create` | Create a session-scoped tracked task for execution progress. Pass `tasks` to create a whole list in one call. |
 | `task_list` | List tracked session tasks and, when requested, background runtime tasks. |
-| `task_get` | Fetch details for a tracked session task. |
-| `task_update` | Update tracked task status, details, and dependencies. |
+| `task_get` | Fetch details for a tracked session task, or for a background task or agent. With `wait_seconds` (up to 600) it waits for a background agent to finish and returns its final answer, so there is no need to sleep in a shell; a task that is still running when the time is up comes back with `timedOut`. |
+| `task_update` | Update tracked task status, details, and dependencies. Pass `updates` to change several tasks in one call (finish one, start the next). |
 | `task_stop` | Stop tracking a session task. |
 | `task_output` | Get the output of a background runtime task. |
 

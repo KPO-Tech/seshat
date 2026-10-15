@@ -7,7 +7,7 @@ import "time"
 // workflow struct itself; Options covers cross-cutting execution concerns.
 type Options struct {
 	// Model overrides the Runner's default model for this execution only.
-	// Format: "provider:model" (e.g. "anthropic:claude-sonnet-4-6").
+	// Format: "provider:model" (e.g. "anthropic:claude-sonnet-5-5").
 	Model string
 
 	// DryRun skips actual LLM execution and returns an empty Result.

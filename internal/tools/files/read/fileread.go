@@ -1064,7 +1064,7 @@ func (t *Tool) BackfillInput(ctx context.Context, input map[string]any) map[stri
 const ToolName = "read_file"
 
 // Description is the description of the file read tool.
-var Description = fmt.Sprintf(`Read the contents of a file. Supports text files, images, PDFs, and - when the configured document reader is configured - DOCX, PPTX, XLSX documents and audio transcription (WAV, MP3). For large text files, use offset/limit to read specific ranges. A PDF is read page by page with a marker before each page. A read stops at a size limit and says which page to continue from, so a long PDF is read in several calls with the pages parameter. The result says which pages hold images or have no readable text.
+var Description = fmt.Sprintf(`Read the contents of a file. Supports text files, images, PDFs, Word (DOCX), PowerPoint (PPTX) and Excel (XLSX) documents, and Jupyter notebooks. For large text files, use offset/limit to read specific ranges. A PDF is read page by page with a marker before each page: pages that have a text layer are read directly, and pages that have none (scans) are read with the configured document reader when there is one. A read stops at a size limit and says which page to continue from, so a long PDF is read in several calls with the pages parameter. The result says which pages hold images or have no readable text. WAV and MP3 audio is transcribed only when a document reader is configured.
 
 Reads a file from the local filesystem. You can access any file directly by using this tool. Assume this tool is able to read all files on the machine. If the user provides a path to a file assume that path is valid. It is okay to read a file that does not exist; an error will be returned.
 
@@ -1075,11 +1075,10 @@ Usage:
 - Results are returned using cat -n format, with line numbers starting at 1
 - When you already know which part of the file you need, only read that part. This can be important for larger files.
 - This tool allows reading images (eg PNG, JPG, etc). When reading an image file the contents are presented visually.
-- This tool reads PDFs best when the configured document reader is configured: DocumentReader converts PDF text, tables, headings, and layout to markdown suitable for classic text LLMs.
-- Without the configured document reader, PDFs fall back to raw PDF bytes/page extraction; this is less useful for classic text-only models and should be treated as a degraded fallback.
+- PDFs: the text layer is read without any service. A configured document reader adds OCR for scanned pages, and keeps tables, headings and layout in the markdown. Without one, a page that has no text layer is reported as having no readable text.
 - This tool can read Jupyter notebooks (.ipynb files) and returns all cells with their outputs, combining code, text, and visualizations.
-- When the configured document reader is configured, this tool can convert DOCX, PPTX, XLSX documents and transcribe WAV/MP3 audio files to markdown automatically.
-- This tool can only read files, not directories. To read a directory, use an ls command via the Bash tool.
+- DOCX, PPTX and XLSX documents are read directly. A configured document reader can add the text of pictures when a document is mostly images, and it is needed to transcribe WAV/MP3 audio files.
+- This tool can only read files, not directories. To read a directory, use glob or an ls command via the bash tool.
 - You will regularly be asked to read screenshots. If the user provides a path to a screenshot, always use this tool to view the file at the path.
 - If you read a file that exists but has empty contents you will receive a warning in place of file contents.`, MaxLinesToRead)
 

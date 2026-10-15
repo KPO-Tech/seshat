@@ -122,10 +122,16 @@ func (e *Engine) NewSessionFromState(
 	}
 
 	surfaceBuilder := tool.NewSurfaceBuilder(e.toolRegistry)
+	surfaceProfile := sessionToolSurfaceProfile(metadata)
+	var allowedNames []string
+	if surfaceProfile == tool.ToolSurfaceProfileMonoRun {
+		allowedNames = e.config.MainAgentTools
+	}
 	tools, err := surfaceBuilder.BuildToolMap(ctx, tool.SurfaceBuildRequest{
 		IncludeReadOnly:    true,
 		IncludeDestructive: true,
-		SurfaceProfile:     sessionToolSurfaceProfile(metadata),
+		SurfaceProfile:     surfaceProfile,
+		AllowedNames:       allowedNames,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("failed to build tool surface: %w", err)
@@ -298,6 +304,14 @@ func (s *Session) submitWithMessage(ctx context.Context, userMsg types.Message, 
 
 	turnCtx, cancel := context.WithCancel(ctx)
 	emitter := func(event types.RuntimeEvent) {
+		// What runs inside the turn (a provider retrying, a tool) does not know
+		// which session it is in.
+		if event.SessionID == "" {
+			event.SessionID = s.state.SessionID
+		}
+		if event.TurnID == "" {
+			event.TurnID = s.state.TurnID
+		}
 		s.emitRuntimeEvent(event)
 	}
 	turnCtx = context.WithValue(turnCtx, types.RuntimeEventEmitterKey, emitter)
@@ -330,6 +344,8 @@ func (s *Session) submitWithMessage(ctx context.Context, userMsg types.Message, 
 		}
 		// Do NOT call AdvanceTurn on error: counting an errored loop as a
 		// completed turn would increment TurnNumber and prematurely exhaust MaxTurns.
+		// The work the turn did is kept, though: see keepInterruptedTurn.
+		s.keepInterruptedTurn(loopResult.Messages, persistedMessages, loopResult.Error)
 		return nil, fmt.Errorf("query loop failed: %w", loopResult.Error)
 	}
 	s.state.RegisterDiscoveredDeferredTools(loopResult.DiscoveredDeferred)

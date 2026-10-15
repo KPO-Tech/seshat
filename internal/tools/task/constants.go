@@ -71,6 +71,13 @@ Use this tool to:
 Parameters:
 - task_id: The ID of the task to inspect
 - taskType (optional): 'todo' or 'background' to force one mode
+- wait_seconds (optional, background only): wait up to this many seconds (at most 600) for the
+  task or agent to finish. This is how to wait for a background agent: do not sleep in a shell.
+  Several waits can run in the same response.
+
+For a finished background task the result also carries its output (for an agent, its final
+answer) and, for an agent, the description it was given. If the wait ran out before the task
+finished, the result says timedOut and the status is still running.
 `
 
 	ToolDescriptionTaskCreate = `
@@ -97,6 +104,10 @@ leaving the codebase in a broken intermediate state.
 - Single-step operations that fit in one or two tool calls
 - Pure read/research tasks with no implementation
 - When the user gave you a literal list of commands to run
+
+## Several tasks at once
+
+Pass the "tasks" field (a list of subject/description items) to create the whole list in one call, in order, instead of one call per task.
 
 ## Task Fields
 
@@ -133,6 +144,10 @@ Never skip ahead — finish what you started before moving on.
 - **any → deleted**: Task is no longer needed (scope change, duplicate, etc.)
 
 Only mark **completed** when FULLY accomplished. Partial work stays in_progress.
+
+## Several tasks at once
+
+Pass the "updates" field (a list of items, each with taskId and the fields to change) to update several tasks in one call, in order. The usual use: mark the finished task completed and the next one in_progress together.
 
 ## Fields
 

@@ -197,6 +197,9 @@ func (o *Orchestrator) callToolSafe(
 			callRes = tool.NewErrorResult(fmt.Errorf("tool panic: %v", r))
 		}
 	}()
+	// The tool may start sub-agents or background tasks: tell them which session
+	// they belong to, so they are recorded as its children.
+	ctx = types.WithCallingSessionID(ctx, state.callInput.SessionID)
 	result, err := state.tool.Call(ctx, state.callInput, permissionCheck)
 	if err != nil {
 		return tool.NewErrorResult(err)

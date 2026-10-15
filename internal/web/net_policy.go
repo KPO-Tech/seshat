@@ -67,42 +67,6 @@ func ResolveAndRejectLocalNetworkTarget(ctx context.Context, parsed *url.URL, re
 	return nil
 }
 
-// RejectLocalDialTarget validates a host:port dial target before a transport
-// opens a socket. This closes the gap where a public hostname resolves to a
-// private address after initial URL validation.
-func RejectLocalDialTarget(ctx context.Context, address string, resolver HostResolver) error {
-	host, _, err := net.SplitHostPort(strings.TrimSpace(address))
-	if err != nil {
-		host = strings.TrimSpace(address)
-	}
-	host = policyHost(host)
-	if err := rejectHostAndIP(host); err != nil {
-		return err
-	}
-	if host == "" {
-		return fmt.Errorf("missing host")
-	}
-	if _, err := netip.ParseAddr(host); err == nil {
-		return nil
-	}
-	if resolver == nil {
-		resolver = DefaultResolver()
-	}
-	addrs, err := resolver.LookupNetIP(ctx, "ip", host)
-	if err != nil {
-		return fmt.Errorf("resolve dial host %q: %w", host, err)
-	}
-	if len(addrs) == 0 {
-		return fmt.Errorf("resolve dial host %q: no addresses returned", host)
-	}
-	for _, addr := range addrs {
-		if err := rejectResolvedAddr(addr); err != nil {
-			return err
-		}
-	}
-	return nil
-}
-
 func rejectHostAndIP(host string) error {
 	switch host {
 	case "", "localhost", "localhost.localdomain", "host.docker.internal":
@@ -147,4 +111,68 @@ func rejectResolvedAddr(ip netip.Addr) error {
 		return fmt.Errorf("unspecified IP targets are not allowed")
 	}
 	return nil
+}
+
+// RejectLocalDialTarget validates a host:port dial target before a transport
+// opens a socket. This closes the gap where a public hostname resolves to a
+// private address after initial URL validation. A transport that dials the
+// target itself must use ResolveDialTarget and dial what it returns: validating
+// here and then dialing the name resolves the name a second time.
+func RejectLocalDialTarget(ctx context.Context, address string, resolver HostResolver) error {
+	_, err := ResolveDialTarget(ctx, address, resolver)
+	return err
+}
+
+// ResolveDialTarget validates a host:port dial target and returns the addresses
+// (as "ip:port") that the connection may be opened to. All of them have been
+// checked; a transport must dial one of them and never the name.
+//
+// Checking a name and then dialing it is the classic DNS rebinding gap: the
+// resolver answers a public address to the check and a private one to the dial
+// that follows a moment later (a record with a zero TTL), and the dial reaches
+// 127.0.0.1 or a cloud metadata address. Dialing the address that was checked
+// leaves nothing to resolve a second time. TLS is unaffected: the transport
+// still verifies the certificate against the host of the URL.
+func ResolveDialTarget(ctx context.Context, address string, resolver HostResolver) ([]string, error) {
+	address = strings.TrimSpace(address)
+	host, port, err := net.SplitHostPort(address)
+	if err != nil {
+		host, port = address, ""
+	}
+	host = policyHost(host)
+	if err := rejectHostAndIP(host); err != nil {
+		return nil, err
+	}
+	if host == "" {
+		return nil, fmt.Errorf("missing host")
+	}
+	if _, err := netip.ParseAddr(host); err == nil {
+		return []string{joinHostPort(host, port)}, nil
+	}
+	if resolver == nil {
+		resolver = DefaultResolver()
+	}
+	addrs, err := resolver.LookupNetIP(ctx, "ip", host)
+	if err != nil {
+		return nil, fmt.Errorf("resolve dial host %q: %w", host, err)
+	}
+	if len(addrs) == 0 {
+		return nil, fmt.Errorf("resolve dial host %q: no addresses returned", host)
+	}
+	targets := make([]string, 0, len(addrs))
+	for _, addr := range addrs {
+		if err := rejectResolvedAddr(addr); err != nil {
+			return nil, err
+		}
+		targets = append(targets, joinHostPort(addr.String(), port))
+	}
+	return targets, nil
+}
+
+// joinHostPort is net.JoinHostPort that leaves a host alone when there is no port.
+func joinHostPort(host, port string) string {
+	if port == "" {
+		return host
+	}
+	return net.JoinHostPort(host, port)
 }

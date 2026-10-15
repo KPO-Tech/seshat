@@ -162,13 +162,7 @@ func (m *Manager) CreateAgentTask(ctx context.Context, prompt string, tools []to
 		return nil, fmt.Errorf("query engine not configured for agent tasks")
 	}
 	taskID := TaskID(fmt.Sprintf("agent_%d", time.Now().UnixNano()))
-	subagentMetadata := &types.SessionMetadata{
-		Status:        types.SessionStatusActive,
-		CreatedAt:     time.Now(),
-		UpdatedAt:     time.Now(),
-		Additional:    map[string]any{"tool_surface_profile": tool.ToolSurfaceProfileSubagent},
-		SchemaVersion: types.SessionMetadataSchemaVersion,
-	}
+	subagentMetadata := types.NewSubagentSessionMetadata(tool.ToolSurfaceProfileSubagent, types.CallingSessionIDFromContext(ctx), time.Now())
 	session, err := m.client.NewSessionFromState(ctx, "", subagentMetadata, nil)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create agent session: %w", err)

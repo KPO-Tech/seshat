@@ -234,15 +234,17 @@ func (t *EnterPlanModeTool) resolveSessionID(input tool.CallInput) (types.Sessio
 }
 
 // EnterPlanModePrompt is the system prompt for the EnterPlanMode tool.
-const EnterPlanModePrompt = `Use this tool before implementation when the task requires analysis and user alignment before you touch any file.
+const EnterPlanModePrompt = `Plan mode is a read-only mode: while it is on you cannot change files, only read, investigate and design.
 
-If the user explicitly asks you to enter plan mode, call ` + "`enter_plan_mode`" + ` before continuing with analysis or implementation.
+If the user explicitly asks you to enter plan mode, or to design or investigate without changing anything, call ` + "`enter_plan_mode`" + `.
 
-## Enter plan mode when
+You do NOT need plan mode to propose a plan. To put a plan in front of the user for review and approval, call ` + "`submit_plan`" + ` directly: it works in any mode, execute included.
 
-This mode exists to obtain the user's alignment, not to organise work. Enter it when a
-choice belongs to the user and settling that choice before any file is touched costs less
-than settling it after:
+## Enter plan mode on your own only when
+
+You want the read-only guard while you design. This mode exists to obtain the user's
+alignment, not to organise work. Enter it when a choice belongs to the user and settling
+that choice before any file is touched costs less than settling it after:
 
 - Several defensible designs exist and the user has not indicated which one they want
 - The work is hard to undo or expensive to redo: data migrations, auth or permission

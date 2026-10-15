@@ -7,23 +7,23 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"strings"
 
 	"github.com/KPO-Tech/seshat-runtime/internal/image"
 )
 
 const (
-	// Imagen 3 is Google's dedicated high-quality image generation model.
-	// Gemini 2.0 Flash also supports inline image generation via generateContent
-	// but Imagen produces superior results for pure image-gen use cases.
-	geminiDefaultModel   = "imagen-3.0-generate-002"
+	// Gemini image models (Nano Banana) are called through generateContent;
+	// an imagen-* model keeps the older predict call.
+	geminiDefaultModel   = "gemini-nano-banana-2.1"
 	geminiDefaultBaseURL = "https://generativelanguage.googleapis.com/v1beta"
 	geminiDefaultCount   = 1
 	geminiDefaultAspect  = "1:1"
 )
 
-// GeminiClient generates images using Google Imagen via the Gemini API.
-// Supported models: imagen-3.0-generate-002, imagen-3.0-fast-generate-001,
-// imagegeneration@006 (Vertex AI only).
+// GeminiClient generates images with the Gemini API: the Gemini image models
+// (gemini-nano-banana-2.1, gemini-3.1-flash-image, ...) through generateContent,
+// and an imagen-* model through the Imagen predict call.
 type GeminiClient struct {
 	apiKey      string
 	baseURL     string
@@ -75,9 +75,87 @@ func NewGemini(apiKey string, opts ...GeminiOption) *GeminiClient {
 // Provider implements image.Generation.
 func (c *GeminiClient) Provider() string { return "gemini" }
 
-// GenerateImage calls the Imagen predict API and returns the result.
-// Endpoint: POST /v1beta/models/{model}:predict?key=API_KEY
+// GenerateImage generates an image: generateContent for a Gemini image model,
+// the Imagen predict call for an imagen-* model.
 func (c *GeminiClient) GenerateImage(ctx context.Context, prompt string) (*image.GenerationResponse, error) {
+	if !strings.HasPrefix(strings.ToLower(c.model), "imagen") {
+		return c.generateContent(ctx, prompt)
+	}
+	return c.predict(ctx, prompt)
+}
+
+// generateContent calls POST /models/{model}:generateContent. The key goes in
+// the x-goog-api-key header, not the URL, so it never lands in a logged URL.
+func (c *GeminiClient) generateContent(ctx context.Context, prompt string) (*image.GenerationResponse, error) {
+	generation := map[string]any{"responseModalities": []string{"IMAGE"}}
+	if c.aspectRatio != "" {
+		generation["imageConfig"] = map[string]any{"aspectRatio": c.aspectRatio}
+	}
+	body, err := json.Marshal(map[string]any{
+		"contents":         []map[string]any{{"parts": []map[string]any{{"text": prompt}}}},
+		"generationConfig": generation,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("gemini image: marshal request: %w", err)
+	}
+	endpoint := fmt.Sprintf("%s/models/%s:generateContent", c.baseURL, c.model)
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, endpoint, bytes.NewReader(body))
+	if err != nil {
+		return nil, fmt.Errorf("gemini image: create request: %w", err)
+	}
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("x-goog-api-key", c.apiKey)
+
+	resp, err := c.httpClient.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("gemini image: http: %w", err)
+	}
+	defer resp.Body.Close()
+	raw, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, fmt.Errorf("gemini image: read response: %w", err)
+	}
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("gemini image: API error %d: %s", resp.StatusCode, string(raw))
+	}
+
+	var apiResp struct {
+		Candidates []struct {
+			Content struct {
+				Parts []struct {
+					InlineData *struct {
+						MimeType string `json:"mimeType"`
+						Data     string `json:"data"`
+					} `json:"inlineData"`
+				} `json:"parts"`
+			} `json:"content"`
+		} `json:"candidates"`
+	}
+	if err := json.Unmarshal(raw, &apiResp); err != nil {
+		return nil, fmt.Errorf("gemini image: decode response: %w", err)
+	}
+	var results []image.GenerationResult
+	for _, cand := range apiResp.Candidates {
+		for _, part := range cand.Content.Parts {
+			if part.InlineData == nil || part.InlineData.Data == "" {
+				continue
+			}
+			mime := part.InlineData.MimeType
+			if mime == "" {
+				mime = "image/png"
+			}
+			results = append(results, image.GenerationResult{ImageBase64: part.InlineData.Data, MIMEType: mime})
+		}
+	}
+	if len(results) == 0 {
+		return nil, fmt.Errorf("gemini image: the response held no image (the prompt may have been blocked): %s", string(raw))
+	}
+	return &image.GenerationResponse{Images: results, Model: c.model}, nil
+}
+
+// predict calls the Imagen predict API.
+// Endpoint: POST /v1beta/models/{model}:predict?key=API_KEY
+func (c *GeminiClient) predict(ctx context.Context, prompt string) (*image.GenerationResponse, error) {
 	body, err := json.Marshal(map[string]any{
 		"instances": []map[string]any{
 			{"prompt": prompt},

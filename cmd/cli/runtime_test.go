@@ -181,3 +181,23 @@ func TestParsePermissionModeCaseInsensitive(t *testing.T) {
 		})
 	}
 }
+
+func TestResolveModelWithoutAModelUsesTheProviderDefault(t *testing.T) {
+	// Nothing configured and no key anywhere: no provider either, which is the
+	// "configure me" state the interface handles; it must not turn into a
+	// provider that then asks for a key at startup.
+	for _, name := range []string{"ANTHROPIC_API_KEY", "OPENAI_API_KEY", "GOOGLE_API_KEY", "GOOGLE_GEMINI_API_KEY", "ZHIPUAI_API_KEY", "Z_AI_API_KEY",
+		"OPENROUTER_API_KEY", "MINIMAX_API_KEY", "DEEPSEEK_API_KEY", "MISTRAL_API_KEY", "MOONSHOT_API_KEY", "KIMI_API_KEY", "OPENCODE_API_KEY", "CODEX_API_KEY"} {
+		t.Setenv(name, "")
+	}
+	model := resolveModel(engineconfig.Config{})
+	if model.Provider != "" || model.Model != "" {
+		t.Fatalf("resolveModel(empty) = %q:%q, want nothing", model.Provider, model.Model)
+	}
+
+	t.Setenv("ZHIPUAI_API_KEY", "k")
+	model = resolveModel(engineconfig.Config{})
+	if model.Provider != sdk.APIProviderZAi || model.Model != "glm-5.3" {
+		t.Fatalf("with only a Z.ai key, resolveModel(empty) = %s:%s, want z-ai:glm-5.3", model.Provider, model.Model)
+	}
+}

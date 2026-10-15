@@ -309,6 +309,12 @@ type ClientConfig struct {
 	// alone if the environment variable is also set - unset that variable
 	// too for a host that wants this field to be the single source of truth.
 	EnableToolSearch bool `json:"enable_tool_search,omitempty"`
+
+	// MainAgentTools, when non-empty, limits the tools the main agent sees to
+	// exactly these names (e.g. a host's general-purpose agent with a short,
+	// curated list). Sub-agents started through the agent tools are not
+	// limited by it. Empty (the default) offers every enabled tool.
+	MainAgentTools []string `json:"main_agent_tools,omitempty"`
 }
 
 // PreToolHookConfig is a single shell hook that runs before a tool call.
@@ -332,7 +338,7 @@ func DefaultClientConfig() *ClientConfig {
 	return &ClientConfig{
 		Model: ModelIdentifier{
 			Provider: APIProviderAnthropic,
-			Model:    providers.DefaultLegacySonnetModel,
+			Model:    providers.DefaultSonnetModel,
 		},
 		PermissionMode:    PermissionModeOnRequest,
 		MaxTurns:          100,

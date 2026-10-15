@@ -3622,15 +3622,29 @@ func (m *UI) renderWorkingStatusLine(width int) string {
 	if elapsed < 0 {
 		elapsed = 0
 	}
-	dots := []string{".", "..", "..."}[elapsed%3]
-	var dStr string
-	if elapsed < 60 {
-		dStr = fmt.Sprintf("%ds", elapsed)
-	} else {
-		dStr = fmt.Sprintf("%dm%ds", elapsed/60, elapsed%60)
+	notice := ""
+	if m.session != nil {
+		notice = m.session.Notice
 	}
-	text := fmt.Sprintf("%s%s (%s)", m.workPhase, dots, dStr)
-	return m.com.Styles.Editor.WorkingStatus.Width(width).Render(text)
+	return m.com.Styles.Editor.WorkingStatus.Width(width).Render(workingStatusText(m.workPhase, elapsed, notice))
+}
+
+// workingStatusText is the line shown above the input while the agent works: the
+// phase with a moving ellipsis and the time it has lasted, or, while the runtime
+// waits to retry a request the provider refused, what it is waiting for. A wait
+// of that kind looks like a model that is thinking and has stopped.
+func workingStatusText(phase string, elapsed int, notice string) string {
+	var duration string
+	if elapsed < 60 {
+		duration = fmt.Sprintf("%ds", elapsed)
+	} else {
+		duration = fmt.Sprintf("%dm%ds", elapsed/60, elapsed%60)
+	}
+	if notice != "" {
+		return fmt.Sprintf("%s (%s)", notice, duration)
+	}
+	dots := []string{".", "..", "..."}[elapsed%3]
+	return fmt.Sprintf("%s%s (%s)", phase, dots, duration)
 }
 
 func (m *UI) editorAttachmentsHeight(width int) int {
@@ -4027,10 +4041,11 @@ func (m *UI) openFilesDialog() tea.Cmd {
 }
 
 // formatPlanApprovalMessage builds the message sent to the agent when the user
-// approves the plan via ctrl+y. Plan mode has already been exited by the time
-// this message is sent, so the agent should NOT call exit_plan_mode.
+// approves the plan via ctrl+y. If plan mode was on it has already been exited by
+// the time this message is sent, so the agent should NOT call exit_plan_mode; a
+// plan submitted in execute mode has no mode to leave.
 func formatPlanApprovalMessage() string {
-	return "Plan approved. Plan mode has been exited automatically — do not call exit_plan_mode. Proceed with implementation."
+	return "Plan approved. If plan mode was on, it has been exited automatically: do not call exit_plan_mode. Proceed with the plan."
 }
 
 // handlePlanReviewSubmit turns an answered plan review into the single message

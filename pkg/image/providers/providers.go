@@ -9,12 +9,23 @@ import (
 )
 
 type (
-	// OpenAIClient generates images using OpenAI DALL-E (dall-e-3, dall-e-2).
+	// OpenAIClient generates images through an OpenAI-compatible endpoint:
+	// the GPT Image models (gpt-image-2.5-flare, ...) and DALL-E.
 	OpenAIClient = internalproviders.OpenAIClient
 	// OpenAIOption configures an OpenAIClient.
 	OpenAIOption = internalproviders.OpenAIOption
 
-	// GeminiClient generates images using Google Imagen via the Gemini API.
+	// OpenRouterClient generates images through the OpenRouter image API.
+	OpenRouterClient = internalproviders.OpenRouterClient
+	// OpenRouterOption configures an OpenRouterClient.
+	OpenRouterOption = internalproviders.OpenRouterOption
+
+	// Profile describes an image provider: protocol, endpoint, key variables
+	// and models (the first model is the default).
+	Profile = internalproviders.Profile
+
+	// GeminiClient generates images with the Gemini API (Nano Banana models,
+	// or Imagen with an imagen-* model).
 	GeminiClient = internalproviders.GeminiClient
 	// GeminiOption configures a GeminiClient.
 	GeminiOption = internalproviders.GeminiOption
@@ -27,13 +38,15 @@ func NewOpenAI(apiKey string, opts ...OpenAIOption) *OpenAIClient {
 	return internalproviders.NewOpenAI(apiKey, opts...)
 }
 
-// WithOpenAIModel sets the DALL-E model (e.g. "dall-e-3", "dall-e-2").
+// WithOpenAIModel sets the model (e.g. "gpt-image-2.5-flare", or "dall-e-3").
 func WithOpenAIModel(model string) OpenAIOption { return internalproviders.WithOpenAIModel(model) }
 
 // WithOpenAISize sets the image dimensions (e.g. "1024x1024", "1792x1024").
 func WithOpenAISize(size string) OpenAIOption { return internalproviders.WithOpenAISize(size) }
 
-// WithOpenAIQuality sets the quality ("standard" or "hd").
+// WithOpenAIQuality sets the quality: low, medium, high or auto for GPT Image
+// models, standard or hd for dall-e-3. A value of the other family is replaced
+// by that family's default.
 func WithOpenAIQuality(q string) OpenAIOption { return internalproviders.WithOpenAIQuality(q) }
 
 // WithOpenAIBaseURL overrides the default endpoint (self-hosted server, or a proxy).
@@ -44,13 +57,14 @@ func WithOpenAIHTTPClient(hc *http.Client) OpenAIOption {
 	return internalproviders.WithOpenAIHTTPClient(hc)
 }
 
-// NewGemini creates a Google Imagen image generation client.
+// NewGemini creates a Gemini image generation client.
 // apiKey is a Google AI Studio API key (AIza...).
 func NewGemini(apiKey string, opts ...GeminiOption) *GeminiClient {
 	return internalproviders.NewGemini(apiKey, opts...)
 }
 
-// WithGeminiModel sets the Imagen model.
+// WithGeminiModel sets the model (default gemini-nano-banana-2.1; an imagen-*
+// model uses the Imagen predict call).
 func WithGeminiModel(model string) GeminiOption { return internalproviders.WithGeminiModel(model) }
 
 // WithGeminiCount sets the number of images to generate (1-4).
@@ -67,4 +81,35 @@ func WithGeminiBaseURL(url string) GeminiOption { return internalproviders.WithG
 // WithGeminiHTTPClient injects a custom HTTP client.
 func WithGeminiHTTPClient(hc *http.Client) GeminiOption {
 	return internalproviders.WithGeminiHTTPClient(hc)
+}
+
+// Profiles returns the image providers this build knows (OpenAI, Gemini, OpenRouter).
+func Profiles() []Profile { return internalproviders.Profiles() }
+
+// ProfileFor returns the image profile of a provider ID.
+func ProfileFor(id string) (Profile, bool) { return internalproviders.ProfileFor(id) }
+
+// WithOpenAIProviderName sets the name an OpenAI-compatible client reports from Provider().
+func WithOpenAIProviderName(name string) OpenAIOption {
+	return internalproviders.WithOpenAIProviderName(name)
+}
+
+// NewOpenRouter creates an OpenRouter image generation client.
+func NewOpenRouter(apiKey string, opts ...OpenRouterOption) *OpenRouterClient {
+	return internalproviders.NewOpenRouter(apiKey, opts...)
+}
+
+// WithOpenRouterModel sets the model (for example "black-forest-labs/flux-3-image").
+func WithOpenRouterModel(model string) OpenRouterOption {
+	return internalproviders.WithOpenRouterModel(model)
+}
+
+// WithOpenRouterAspectRatio sets the aspect ratio ("1:1", "16:9", ...).
+func WithOpenRouterAspectRatio(ratio string) OpenRouterOption {
+	return internalproviders.WithOpenRouterAspectRatio(ratio)
+}
+
+// WithOpenRouterBaseURL overrides the API root.
+func WithOpenRouterBaseURL(url string) OpenRouterOption {
+	return internalproviders.WithOpenRouterBaseURL(url)
 }

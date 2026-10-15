@@ -7,7 +7,7 @@ const ToolNameMCP = "mcp"
 const SearchHintMCP = "execute a tool from a connected MCP server"
 
 // Descriptions
-const DescriptionMCP = `Executes tools from Model Context Protocol (MCP) servers. MCP tools are provided by external servers and wrapped as native tools. Use ToolSearch to discover available MCP tools.
+const DescriptionMCP = `Executes tools from Model Context Protocol (MCP) servers. MCP tools are provided by external servers and wrapped as native tools. MCP tools appear in your tool list with the prefix mcp__; when tool_search is in your tool list, use it to discover the ones that are deferred.
 
 MCP is an open protocol that allows AI models to interact with external tools and services.
 When you call an MCP tool, the request is forwarded to the MCP server which executes the tool and returns the result.
@@ -19,10 +19,9 @@ How MCP tools work:
 4. Tool schemas are fetched dynamically when needed.
 
 How to use MCP tools:
-1. Use ToolSearch to discover available MCP tools from connected servers.
-2. MCP tools appear with prefix mcp__ in the tool list.
-3. Each tool has its own input schema defined by the MCP server.
-4. Execute the tool by passing the required arguments.
+1. MCP tools appear in the tool list with the prefix mcp__. When tool_search is in your tool list, use it to discover tools that are not listed.
+2. Each tool has its own input schema defined by the MCP server.
+3. Execute the tool by passing the required arguments.
 
 Notes:
 - MCP tools are read-only unless the tool itself modifies data.

@@ -21,7 +21,7 @@ const ToolName = "ask_user_question"
 // Description is the tool description.
 const Description = `Asks the user multiple choice questions to gather information, clarify ambiguity, understand preferences, make decisions or offer them choices.
 
-Use this tool when progress is blocked by missing user input.
+Use this tool whenever you need the user to answer something: when progress is blocked by missing input, and also when the user asks you to question them first (for example to frame a research subject or a project). In that case use this tool, not plain text, so the user gets selectable answers. The tool pauses until they answer.
 
 This tool is for real clarification, preference gathering, or decision points during execution. It is not for narration, status updates, or asking for approval that another tool already handles.
 

@@ -695,7 +695,7 @@ func (t *AgentTool) runAgentBackground(ctx context.Context, agentType, prompt st
 			"background":  true,
 			"description": task.Description,
 		},
-		Content: fmt.Sprintf("Agent '%s' started in background (task ID: %s)\n\nA completion update will arrive once it finishes; you can also poll with TaskGet('%s') or TaskList in the meantime.", agentType, task.ID, task.ID),
+		Content: fmt.Sprintf("Agent '%s' started in background (task ID: %s)\n\nThe result is not delivered by itself: call task_get(task_id='%s', wait_seconds=N). It waits for the agent and returns its final answer. Do not wait with a sleep in a shell.", agentType, task.ID, task.ID),
 	}, nil
 }
 
