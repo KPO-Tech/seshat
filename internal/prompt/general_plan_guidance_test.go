@@ -8,7 +8,7 @@ import (
 // A session waited for six background agents with "Start-Sleep 120" in a shell,
 // because task_get could only poll. The prompt points to the wait that exists now.
 func TestGeneralPromptWaitsForAgentsWithTaskGet(t *testing.T) {
-	for _, want := range []string{"`task_get` and `wait_seconds`", "Never wait with `sleep`"} {
+	for _, want := range []string{"`task_get` and its wait option", "Never wait by running a sleep command"} {
 		if !strings.Contains(generalAgentText, want) {
 			t.Errorf("the general prompt lost %q", want)
 		}
