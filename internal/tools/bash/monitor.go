@@ -99,7 +99,7 @@ func (t *MonitorTool) Call(ctx context.Context, input tool.CallInput, permission
 			return tool.CallResult{Error: fmt.Errorf("permission denied: %s", result.Reason)}, nil
 		}
 	}
-	task, err := t.taskManager.StartBackgroundTask(ctx, command, t.workingDir, envfilter.Environ(), "bash")
+	task, err := t.taskManager.StartBackgroundTask(ctx, command, t.workingDir, envfilter.Environ(), DetectShell())
 	if err != nil {
 		return tool.CallResult{Error: fmt.Errorf("failed to start monitor: %w", err)}, nil
 	}
