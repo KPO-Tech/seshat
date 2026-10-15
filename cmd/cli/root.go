@@ -41,6 +41,8 @@ func execute(ctx context.Context, args []string, stdin io.Reader, stdout, stderr
 		return runMemory(args[1:], stdout, stderr)
 	case "trust":
 		return runTrust(args[1:], stdout, stderr)
+	case "terminal-setup":
+		return runTerminalSetup(args[1:], stdout, stderr)
 	case "login":
 		return runLogin(ctx, args[1:], stdout, stderr)
 	case "version", "--version", "-v":
@@ -74,6 +76,9 @@ func printUsage(out io.Writer) {
 	fmt.Fprintln(out, "")
 	fmt.Fprintln(out, "  seshat doctor  [--json]")
 	fmt.Fprintln(out, "                Check local config, storage, provider credentials, and helper tools.")
+	fmt.Fprintln(out, "")
+	fmt.Fprintln(out, "  seshat terminal-setup [--check]")
+	fmt.Fprintln(out, "                Make shift+Enter and ctrl+Enter insert a newline (Windows Terminal, VS Code).")
 	fmt.Fprintln(out, "")
 	fmt.Fprintln(out, "  seshat repomap [--tokens N] [--focus PATH] [--focus-symbol NAME] [--cwd DIR]")
 	fmt.Fprintln(out, "                Print a compact structural map of the repository.")
