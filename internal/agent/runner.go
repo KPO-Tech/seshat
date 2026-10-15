@@ -220,13 +220,9 @@ func RunAgent(config *RunConfig) (*RunResult, error) {
 			}, nil
 		}
 	} else {
-		subagentMetadata := &types.SessionMetadata{
-			Status:        types.SessionStatusActive,
-			CreatedAt:     time.Now(),
-			UpdatedAt:     time.Now(),
-			Additional:    map[string]any{"tool_surface_profile": tool.ToolSurfaceProfileSubagent},
-			SchemaVersion: types.SessionMetadataSchemaVersion,
-		}
+		// Record which session launched this one, so the session list shows the
+		// conversation and not the sub-agents it started.
+		subagentMetadata := types.NewSubagentSessionMetadata(tool.ToolSurfaceProfileSubagent, launchingSession(config, ctx), time.Now())
 		if len(config.ForkFromMessages) > 0 {
 			inheritedMessages := append([]types.Message(nil), config.ForkFromMessages...)
 			session, err = runtimeEngine.NewSessionFromState(ctx, "", subagentMetadata, inheritedMessages)
@@ -658,4 +654,13 @@ func (r *Runner) executeHook(ctx context.Context, event types.HookEvent, data ma
 			slog.Info("agent runner: hook requested stop", "event", event, "message", result.Message)
 		}
 	}
+}
+
+// launchingSession is the session that launched this run: the one the caller named,
+// or else the one whose tool call is running in ctx.
+func launchingSession(config *RunConfig, ctx context.Context) types.SessionID {
+	if config.ParentSessionID != "" {
+		return config.ParentSessionID
+	}
+	return types.CallingSessionIDFromContext(ctx)
 }

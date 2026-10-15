@@ -50,6 +50,7 @@ func sessionsList(ctx context.Context, dbPath string, args []string, stdout, std
 	flags.SetOutput(stderr)
 	statusFilter := flags.String("status", "", "filter by status: active|closed")
 	limitN := flags.Int("n", 0, "show at most N sessions (default: all)")
+	withSubagents := flags.Bool("subagents", false, "also list the sessions that sub-agents and background agents ran in")
 	if err := flags.Parse(args); err != nil {
 		return err
 	}
@@ -76,6 +77,9 @@ func sessionsList(ctx context.Context, dbPath string, args []string, stdout, std
 	// Apply filters.
 	filtered := sessions[:0]
 	for _, s := range sessions {
+		if s.Subagent && !*withSubagents {
+			continue // a sub-agent's session is not a conversation to pick from
+		}
 		if *statusFilter != "" && !strings.EqualFold(string(s.Status), *statusFilter) {
 			continue
 		}

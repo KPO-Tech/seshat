@@ -31,6 +31,28 @@ const (
 const SessionMetadataSchemaVersion = 1
 
 // SessionMetadata contains metadata about a session
+// SessionMetaParentSessionID is the SessionMetadata.Additional key under which a
+// sub-agent session records the session that launched it.
+const SessionMetaParentSessionID = "parent_session_id"
+
+// NewSubagentSessionMetadata is the metadata of a session a sub-agent or a
+// background agent task runs in: the given tool surface profile, and the session
+// that launched it when that is known. Both places that create such a session use
+// it, so the session list can tell a conversation from an agent's session.
+func NewSubagentSessionMetadata(surfaceProfile string, parent SessionID, now time.Time) *SessionMetadata {
+	metadata := &SessionMetadata{
+		Status:        SessionStatusActive,
+		CreatedAt:     now,
+		UpdatedAt:     now,
+		Additional:    map[string]any{"tool_surface_profile": surfaceProfile},
+		SchemaVersion: SessionMetadataSchemaVersion,
+	}
+	if parent != "" {
+		metadata.Additional[SessionMetaParentSessionID] = string(parent)
+	}
+	return metadata
+}
+
 type SessionMetadata struct {
 	// ID is the unique session identifier
 	ID SessionID `json:"id"`

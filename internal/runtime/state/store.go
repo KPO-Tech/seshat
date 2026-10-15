@@ -380,6 +380,13 @@ func (s *Store) GetSessionInfo(sessionID types.SessionID) (*SessionInfo, error) 
 				info.Preview = v
 			}
 		}
+		if profile, _ := metadata.Additional["tool_surface_profile"].(string); profile == "subagent" {
+			info.Subagent = true
+		}
+		if parent, _ := metadata.Additional[types.SessionMetaParentSessionID].(string); parent != "" {
+			info.ParentID = types.SessionID(parent)
+			info.Subagent = true
+		}
 	}
 	return info, nil
 }
