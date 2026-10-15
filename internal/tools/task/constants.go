@@ -71,6 +71,13 @@ Use this tool to:
 Parameters:
 - task_id: The ID of the task to inspect
 - taskType (optional): 'todo' or 'background' to force one mode
+- wait_seconds (optional, background only): wait up to this many seconds (at most 600) for the
+  task or agent to finish. This is how to wait for a background agent: do not sleep in a shell.
+  Several waits can run in the same response.
+
+For a finished background task the result also carries its output (for an agent, its final
+answer) and, for an agent, the description it was given. If the wait ran out before the task
+finished, the result says timedOut and the status is still running.
 `
 
 	ToolDescriptionTaskCreate = `

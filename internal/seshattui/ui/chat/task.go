@@ -350,8 +350,13 @@ func (t *TaskGetToolRenderContext) RenderTool(sty *styles.Styles, width int, opt
 	}
 	lines := []string{
 		fmt.Sprintf("Status: %s", meta.TaskGet.Background.Status),
-		fmt.Sprintf("Command: %s", meta.TaskGet.Background.Command),
 		fmt.Sprintf("Started: %s", formatUnix(meta.TaskGet.Background.StartTime)),
+	}
+	// A background agent has no command: show what it was asked to do instead.
+	if meta.TaskGet.Background.Command != "" {
+		lines = append(lines[:1], append([]string{fmt.Sprintf("Command: %s", meta.TaskGet.Background.Command)}, lines[1:]...)...)
+	} else if description := strings.TrimSpace(meta.TaskGet.Background.Description); description != "" {
+		lines = append(lines[:1], append([]string{fmt.Sprintf("Task: %s", firstTaskLine(description, 120))}, lines[1:]...)...)
 	}
 	if meta.TaskGet.Background.EndTime != nil {
 		lines = append(lines, fmt.Sprintf("Ended: %s", formatUnix(*meta.TaskGet.Background.EndTime)))
@@ -555,6 +560,18 @@ func renderTaskListBody(sty *styles.Styles, bodyWidth int, meta taskListToolMeta
 		return toolOutputPlainContent(sty, opts.Result.Content, bodyWidth, opts.ExpandedContent)
 	}
 	return strings.Join(sections, "\n\n")
+}
+
+// firstTaskLine is the first line of s, cut to at most n runes.
+func firstTaskLine(s string, n int) string {
+	if i := strings.IndexAny(s, "\r\n"); i >= 0 {
+		s = s[:i]
+	}
+	runes := []rune(strings.TrimSpace(s))
+	if len(runes) > n {
+		return string(runes[:n-1]) + "…"
+	}
+	return string(runes)
 }
 
 func formatUnix(ts int64) string {
