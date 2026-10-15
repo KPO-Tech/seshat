@@ -1235,8 +1235,25 @@ func (w *SeshatWorkspace) currentSpeechToTextConfig() *sdk.SpeechToTextConfig {
 
 // ─── Config mutations (stubs — UI writes, we ignore) ─────────────────────────
 
-func (w *SeshatWorkspace) UpdatePreferredModel(_ config.Scope, _ config.SelectedModelType, m config.SelectedModel) error {
+// credKeyModel is the credentials-DB key under which the selected model is kept;
+// cmd/cli reads it back at startup (loadCredsIntoConfig) when no model is set
+// elsewhere, so it must stay the same string as there.
+const credKeyModel = "model"
+
+// UpdatePreferredModel records the model the user picked. Only the large model
+// is the one the session runs on: the interface also sets a small model right
+// after a large one is chosen (for titles and summaries), and that call must not
+// replace it. The choice is written to the credentials DB so the next start
+// opens on it instead of on the provider default.
+func (w *SeshatWorkspace) UpdatePreferredModel(_ config.Scope, modelType config.SelectedModelType, m config.SelectedModel) error {
+	if modelType != config.SelectedModelTypeLarge {
+		return nil
+	}
+	if strings.TrimSpace(m.Provider) == "" || strings.TrimSpace(m.Model) == "" {
+		return nil
+	}
 	w.model = m.Provider + ":" + m.Model
+	w.persistCredential(credKeyModel, w.model)
 	w.cfgMu.Lock()
 	w.cfg = nil // invalidate cached config
 	w.cfgMu.Unlock()

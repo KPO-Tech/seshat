@@ -181,3 +181,22 @@ func TestParsePermissionModeCaseInsensitive(t *testing.T) {
 		})
 	}
 }
+
+func TestResolveModelWithoutAModelUsesTheProviderDefault(t *testing.T) {
+	// Nothing configured and no key anywhere: the header used to read "anthropic:"
+	// with an empty model.
+	for _, name := range []string{"ANTHROPIC_API_KEY", "OPENAI_API_KEY", "GOOGLE_API_KEY", "GOOGLE_GEMINI_API_KEY", "ZHIPUAI_API_KEY", "Z_AI_API_KEY",
+		"OPENROUTER_API_KEY", "MINIMAX_API_KEY", "DEEPSEEK_API_KEY", "MISTRAL_API_KEY", "MOONSHOT_API_KEY", "KIMI_API_KEY", "OPENCODE_API_KEY", "CODEX_API_KEY"} {
+		t.Setenv(name, "")
+	}
+	model := resolveModel(engineconfig.Config{})
+	if model.Provider != sdk.APIProviderAnthropic || model.Model != "claude-sonnet-5-5" {
+		t.Fatalf("resolveModel(empty) = %s:%s, want anthropic:claude-sonnet-5-5", model.Provider, model.Model)
+	}
+
+	t.Setenv("ZHIPUAI_API_KEY", "k")
+	model = resolveModel(engineconfig.Config{})
+	if model.Provider != sdk.APIProviderZAi || model.Model != "glm-5.3" {
+		t.Fatalf("with only a Z.ai key, resolveModel(empty) = %s:%s, want z-ai:glm-5.3", model.Provider, model.Model)
+	}
+}
