@@ -1,6 +1,10 @@
 CMD_CLI        := ./cmd/cli
 CMD_GRPC       := ./cmd/grpc
 
+# ".exe" on Windows, empty elsewhere. Without it `go build -o bin/seshat` writes a
+# file named "seshat" next to the real seshat.exe, which keeps being the one that runs.
+GOEXE          := $(shell go env GOEXE)
+
 # Make built binaries discoverable from the repo root.
 export PATH := $(CURDIR)/bin:$(PATH)
 
@@ -37,11 +41,11 @@ setup:
 build: build-cli build-grpc
 
 build-cli:
-	go build -o bin/seshat $(CMD_CLI)
+	go build -o bin/seshat$(GOEXE) $(CMD_CLI)
 
 
 build-grpc:
-	go build -o bin/seshat-grpc $(CMD_GRPC)
+	go build -o bin/seshat-grpc$(GOEXE) $(CMD_GRPC)
 
 build_linux:
 	go build -o /tmp/seshat $(CMD_CLI)

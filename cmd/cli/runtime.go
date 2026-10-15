@@ -444,5 +444,15 @@ func resolveModel(config engineconfig.Config) sdk.ModelIdentifier {
 		provider = model.Provider
 	}
 	model.Provider = provider
+	// No model was configured or remembered: take the provider default rather than
+	// starting on a provider name with an empty model.
+	if strings.TrimSpace(model.Model) == "" {
+		if model.Provider == "" {
+			model.Provider = sdk.APIProviderAnthropic
+		}
+		if def, ok := providers.DefaultModelIdentifier(model.Provider); ok {
+			model.Model = def.Model
+		}
+	}
 	return model
 }
