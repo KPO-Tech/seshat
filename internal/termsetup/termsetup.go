@@ -162,7 +162,7 @@ func patchFile(target, path string, patch patcher, opts Options) Result {
 	if len(data) > 0 {
 		backup := path + backupSuffix
 		if _, statErr := os.Stat(backup); os.IsNotExist(statErr) {
-			if err := os.WriteFile(backup, data, 0o600); err != nil {
+			if err := os.WriteFile(backup, data, 0o600); err != nil { // #nosec G703 -- path is a settings file this package found under the user's own config folders, and the backup is that name plus a fixed suffix
 				res.Status, res.Detail = Failed, "could not back the file up, nothing was changed: "+err.Error()
 				return res
 			}
