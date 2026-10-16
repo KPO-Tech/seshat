@@ -59,7 +59,7 @@ internal/
 
 ```bash
 make build          # builds CLI + gRPC → bin/
-go build ./cmd/cli
+go build ./tui/cmd/cli
 go build ./cmd/grpc
 go test ./...
 ```

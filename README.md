@@ -207,7 +207,7 @@ Downloads the Windows build (amd64 or arm64), checks it against `SHA256SUMS.txt`
 
 ```bash
 # Install the CLI binary
-go install github.com/KPO-Tech/seshat-runtime/cmd/cli@latest
+go install github.com/KPO-Tech/seshat-runtime/tui/cmd/cli@latest
 ```
 
 **SDK — embed in your Go application:**
@@ -234,7 +234,7 @@ curl -fsSL https://raw.githubusercontent.com/KPO-Tech/seshat-runtime/main/script
 #   irm https://raw.githubusercontent.com/KPO-Tech/seshat-runtime/main/scripts/install.ps1 | iex
 
 # Developers — binary only via Go toolchain:
-go install github.com/KPO-Tech/seshat-runtime/cmd/cli@latest
+go install github.com/KPO-Tech/seshat-runtime/tui/cmd/cli@latest
 ```
 
 **Configure a provider**

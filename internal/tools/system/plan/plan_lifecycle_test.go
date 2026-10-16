@@ -9,7 +9,6 @@ import (
 	"github.com/KPO-Tech/seshat-runtime/internal/modes"
 	modeexec "github.com/KPO-Tech/seshat-runtime/internal/modes/execution"
 	"github.com/KPO-Tech/seshat-runtime/internal/permissions"
-	"github.com/KPO-Tech/seshat-runtime/internal/seshattui/workspace"
 	tool "github.com/KPO-Tech/seshat-runtime/internal/tools/registry"
 	plan "github.com/KPO-Tech/seshat-runtime/internal/tools/system/plan"
 	"github.com/KPO-Tech/seshat-runtime/internal/types"
@@ -83,13 +82,9 @@ func TestPlanLifecycleFromSubmissionToApprovedExit(t *testing.T) {
 		t.Fatal("expected the revised plan to await review again")
 	}
 
-	// 4. The user approves, through the entry point the review dialog uses. This
-	//    workspace has no active session, so the mode change it would also make
-	//    cannot happen ("session not active") - the decision itself still has to
-	//    be on record, which is what the dialog's fallback path relies on.
-	if _, err := workspace.NewSeshatWorkspace(nil, "", "").ApprovePlan(string(sessionID)); err == nil {
-		t.Fatal("expected ApprovePlan to report that it could not change an inactive session's mode")
-	}
+	// 4. The user approves. The terminal interface records the decision through this same call, from its review
+	//    dialog (its own test, in the tui module, checks that the dialog does).
+	modeexec.MarkPlanApproved(sessionID)
 	if modeexec.PlanAwaitingApproval(sessionID) {
 		t.Fatal("expected the approval to be recorded even though the mode change failed")
 	}

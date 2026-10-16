@@ -81,7 +81,7 @@ jobs:
             -trimpath \
             -ldflags="-s -w -X main.version=${{ github.event.inputs.tag || github.ref_name }}" \
             -o dist/seshat-${{ matrix.suffix }}${{ matrix.ext }} \
-            ./cmd/cli
+            ./tui/cmd/cli
 
       - name: Build gRPC server
         env:

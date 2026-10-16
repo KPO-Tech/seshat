@@ -9,7 +9,7 @@
 #   INSTALL_DIR=...      Binary destination (default: ~/.local/bin)
 #
 # Developer / SDK usage (no installer needed):
-#   go install github.com/KPO-Tech/seshat-runtime/cmd/cli@latest
+#   go install github.com/KPO-Tech/seshat-runtime/tui/cmd/cli@latest
 #   go get     github.com/KPO-Tech/seshat-runtime@latest   # in your go.mod
 
 set -euo pipefail

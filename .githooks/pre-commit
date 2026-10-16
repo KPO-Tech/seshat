@@ -16,7 +16,7 @@ fi
 echo "  ✓ gofmt"
 
 echo "→ go vet..."
-if ! go vet ./... 2>&1; then
+if ! go vet ./... ./tui/... 2>&1; then
     echo "✗ go vet failed"
     exit 1
 fi
@@ -24,7 +24,7 @@ echo "  ✓ go vet"
 
 if command -v golangci-lint &>/dev/null; then
     echo "→ golangci-lint (fast)..."
-    if ! golangci-lint run --fast --timeout=2m ./... 2>&1; then
+    if ! (golangci-lint run --fast --timeout=2m ./... && cd tui && golangci-lint run --fast --timeout=2m ./...) 2>&1; then
         echo "✗ golangci-lint failed"
         exit 1
     fi

@@ -9,6 +9,10 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Changed
+
+- **The terminal command and its interface moved to a module of their own, `tui/`.** Part of the interface comes from Crush and is under the Functional Source License, and anyone who imported the engine as a Go module received that code with it. The engine module now holds none of it. Build the command with `go build ./tui/cmd/cli` (it was `./cmd/cli`); `go install github.com/KPO-Tech/seshat-runtime/tui/cmd/cli@latest` replaces the old path once the `tui` module has a release tag. Importers of `pkg/*` are not affected; the engine's `go.mod` is smaller.
+
 ## [1.9.0] - 2026-10-16
 
 ### Added

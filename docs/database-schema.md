@@ -48,7 +48,7 @@ The CLI sets `SESHAT_RUNTIME_ROOT=~/.config/seshat-cli` before calling
 ## 2. Database Connection Configuration
 
 **Driver**: SQLite only for the CLI. Multi-driver support exists in the codebase
-(`postgres`, `mysql`) but `cmd/cli` always calls `db.DefaultSQLiteConfig(path)`.
+(`postgres`, `mysql`) but `tui/cmd/cli` always calls `db.DefaultSQLiteConfig(path)`.
 
 **Open sequence** (`internal/db/db.go`):
 
@@ -222,7 +222,7 @@ CREATE UNIQUE INDEX idx_session_files_tool_use_unique
     ON session_files(tool_use_id) WHERE tool_use_id != '';
 ```
 
-**Write paths** (both in `cmd/cli/tui.go` only, never in internal packages):
+**Write paths** (both in `tui/cmd/cli/tui.go` only, never in internal packages):
 
 - `recordSessionFile()` — called async when a tool completes during a live turn
 - `backfillSessionFiles()` — called once on session load if no rows exist yet (idempotent)

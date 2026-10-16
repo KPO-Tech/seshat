@@ -124,7 +124,7 @@ ref, err := storage.StoreAudioRef(ctx, store, audioBytes, sessionID, "speech.mp3
    }
    ```
 
-3. Add a `SessionMyTypeDir` function in `pkg/runtimepath/runtimepath.go` and expose it in `cmd/cli/appdir/appdir.go`.
+3. Add a `SessionMyTypeDir` function in `pkg/runtimepath/runtimepath.go` and expose it in `tui/cmd/cli/appdir/appdir.go`.
 
 4. Add the new directory to `appdir.EnsureSessionDir` so it's created when a session opens.
 
@@ -153,7 +153,7 @@ For S3 storage, `client.DeleteSession` additionally calls `store.List("workspace
 
 ## Path helpers
 
-Access paths from application code via `cmd/cli/appdir`:
+Access paths from application code via `tui/cmd/cli/appdir`:
 
 ```go
 appdir.Root()                          // ~/.config/seshat-cli/
@@ -170,4 +170,4 @@ appdir.SessionLogPath(id)              // workspaces/{id}/session.log
 
 Internal packages use `pkg/runtimepath` directly (same functions, with an explicit `root` param).
 
-> **Note:** `appdir` is application-level — only `cmd/cli` imports it. Internal packages (`internal/…`) receive paths as explicit parameters and do not import `appdir`.
+> **Note:** `appdir` is application-level — only `tui/cmd/cli` imports it. Internal packages (`internal/…`) receive paths as explicit parameters and do not import `appdir`.
