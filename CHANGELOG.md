@@ -9,6 +9,10 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Changed
+
+- **The landing page of the terminal interface shows the current Seshat Runtime mark, smaller.** It was a braille drawing of the old logo that took more than 25 rows and ran behind the settings dialogs. The current mark now takes 12 rows and 18 columns, drawn with braille dots that keep the thin flame blades, in the colors of the logo. In a terminal that supports the Kitty graphics protocol it is shown as the real image instead. The mark is left out when the window is shorter than 24 rows, so the tagline and the shortcuts stay on screen. Only the Kitty path could not be tried here: it reuses what the file picker preview already uses.
+
 ## [1.8.0] - 2026-10-15
 
 ### Security
