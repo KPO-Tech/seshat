@@ -7,6 +7,7 @@
 # Options (env vars):
 #   VERSION=v0.1.0       Install a specific version (default: latest)
 #   INSTALL_DIR=...      Binary destination (default: ~/.local/bin)
+#   SESHAT_TITLE_MODEL=1 Install the local session-title model without asking (0 skips it)
 #
 # Developer / SDK usage (no installer needed):
 #   go install github.com/KPO-Tech/seshat-runtime/tui/cmd/cli@latest
@@ -172,6 +173,33 @@ case ":$PATH:" in
         ;;
 esac
 
+# ── Optional: local model that names your sessions ────────────────────────────
+step "Session titles"
+
+# SESHAT_TITLE_MODEL=1 installs it without asking, SESHAT_TITLE_MODEL=0 skips it. Otherwise the question is asked
+# when there is a terminal to answer on (the script itself comes through a pipe, so the answer is read from it).
+TITLE_CHOICE="${SESHAT_TITLE_MODEL:-ask}"
+if "$INSTALL_DIR/$BINARY" title-model status >/dev/null 2>&1; then
+    if [ "$TITLE_CHOICE" = "ask" ]; then
+        if [ -r /dev/tty ] && [ -t 1 ]; then
+            printf "Name your sessions with a small model that runs on this machine?\n"
+            printf "  About 500 MB to download (once), CPU only, works offline. Without it the\n"
+            printf "  chat provider names them. Install it now? [y/N] "
+            read -r _reply </dev/tty || _reply=""
+            case "$_reply" in y|Y|yes|YES|o|O|oui) TITLE_CHOICE=1 ;; *) TITLE_CHOICE=0 ;; esac
+        else
+            TITLE_CHOICE=0
+        fi
+    fi
+    if [ "$TITLE_CHOICE" = "1" ]; then
+        "$INSTALL_DIR/$BINARY" title-model install || warn "The title model was not installed. Sessions are named by the chat provider; try again with: seshat title-model install"
+    else
+        info "Skipped. To add it later: seshat title-model install"
+    fi
+else
+    info "This version has no local title model."
+fi
+
 # ── Done ──────────────────────────────────────────────────────────────────────
 echo ""
 echo -e "${GREEN}${BOLD}✓ Seshat $VERSION installed successfully${NC}"
@@ -191,6 +219,7 @@ echo "  Get started:"
 echo "    seshat config     # configure your AI provider + API key"
 echo "    seshat chat       # start chatting"
 echo "    seshat update     # install a newer release (seshat also offers it at start-up)"
+echo "    seshat title-model install   # name sessions with a small local model (optional)"
 echo ""
 echo "  Docs: https://github.com/$REPO"
 echo ""
