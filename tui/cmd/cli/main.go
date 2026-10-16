@@ -7,6 +7,7 @@ import (
 	"os/signal"
 
 	"github.com/KPO-Tech/seshat-runtime/pkg/runtimepath"
+	"github.com/KPO-Tech/seshat-runtime/tui/internal/titlemodel"
 	"github.com/KPO-Tech/seshat-runtime/tui/internal/updater"
 )
 
@@ -27,9 +28,12 @@ func main() {
 
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt)
 	defer stop()
+	// The local title model, if it was started, is a child process of this run.
+	defer titlemodel.CloseShared()
 
 	if err := execute(ctx, os.Args[1:], os.Stdin, os.Stdout, os.Stderr); err != nil {
 		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
+		titlemodel.CloseShared() // os.Exit skips the deferred call
 		os.Exit(1)
 	}
 }

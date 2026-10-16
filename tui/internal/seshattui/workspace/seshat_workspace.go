@@ -916,6 +916,7 @@ func (w *SeshatWorkspace) UpdateAgentModel(ctx context.Context) error {
 		ResponseChunkFn:          w.OnChunk,
 		RuntimeEventFn:           w.OnRuntimeEvent,
 		OnSessionTitled:          w.OnSessionTitled,
+		TitleGenerator:           localTitleGenerator(),
 		WorkingDir:               w.workDir,
 		ProviderConfig:           provCfg,
 		ImageGeneration:          w.currentImageGenerationConfig(),

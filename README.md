@@ -213,6 +213,8 @@ Downloads the Windows build (amd64 or arm64), checks it against `SHA256SUMS.txt`
 
 **Updating.** The installed binary updates itself. When you start `seshat` in a terminal and a newer release exists, it says so and asks `Update now? [Y]es / [l]ater / [s]kip this version`. `seshat update` does the same on demand (`--check` only looks, `--yes` skips the question). The download is checked against the release's `SHA256SUMS.txt` before it replaces the binary, and the old binary stays in place if anything fails. The release is looked up at most once a day, with a 2-second limit; `SESHAT_NO_UPDATE_CHECK=1` turns the offer off. Development builds and non-interactive runs (pipes, CI) are never asked. Re-running the install script also updates.
 
+**Session titles, offline (optional).** By default the chat provider names each session after the first message. `seshat title-model install` (the installers offer it) adds a small local model instead, about 500 MB once, CPU only: titles take under a second, cost nothing and keep the first message on your machine. `seshat title-model status|disable|enable|remove` manage it, and the provider still names the session whenever the local model is missing or fails.
+
 **Developers — Go toolchain:**
 
 ```bash
