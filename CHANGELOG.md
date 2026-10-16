@@ -9,6 +9,8 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [1.8.1] - 2026-10-16
+
 ### Changed
 
 - **The landing page of the terminal interface shows the current Seshat Runtime mark, smaller.** It was a braille drawing of the old logo that took more than 25 rows and ran behind the settings dialogs. The current mark now takes 12 rows and 18 columns, drawn with braille dots that keep the thin flame blades, in the colors of the logo. In a terminal that supports the Kitty graphics protocol it is shown as the real image instead. The mark is left out when the window is shorter than 24 rows, so the tagline and the shortcuts stay on screen. Only the Kitty path could not be tried here: it reuses what the file picker preview already uses.
@@ -784,7 +786,8 @@ a real ChatGPT-account session (documented in
 - `internal/tools/special/brief`: a "send message to the user" tool from the pre-rename codebase, never registered at any point in its history.
 - `internal/tools/special/config/configTool.go`: an arbitrary key/value settings store predating the current `contract.Tool` interface (incompatible signatures — could never have been registered as-is), replaced by the real `get_config` tool.
 
-[Unreleased]: https://github.com/KPO-Tech/seshat-runtime/compare/v1.8.0...HEAD
+[Unreleased]: https://github.com/KPO-Tech/seshat-runtime/compare/v1.8.1...HEAD
+[1.8.1]: https://github.com/KPO-Tech/seshat-runtime/compare/v1.8.0...v1.8.1
 [1.8.0]: https://github.com/KPO-Tech/seshat-runtime/compare/v1.7.0...v1.8.0
 [1.7.0]: https://github.com/KPO-Tech/seshat-runtime/compare/v1.6.0...v1.7.0
 [1.6.0]: https://github.com/KPO-Tech/seshat-runtime/compare/v1.5.0...v1.6.0
