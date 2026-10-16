@@ -102,28 +102,38 @@ If you want a ready-to-use product built on this engine, see [SeshatOS](https://
       <br><sub><b>Welcome</b> — up and running in 10 seconds</sub>
     </td>
     <td align="center" width="50%">
-      <img src="docs/captures/commands_pannel.png" alt="Settings panel" width="100%">
-      <br><sub><b>Settings panel</b> — every shortcut, one keystroke away (<code>ctrl+p</code>)</sub>
+      <img src="docs/captures/settings.png" alt="Settings panel" width="100%">
+      <br><sub><b>Settings</b> — every section, one keystroke away (<code>ctrl+p</code>)</sub>
     </td>
   </tr>
   <tr>
     <td align="center" width="50%">
-      <img src="docs/captures/model_selction.png" alt="Model selection" width="100%">
-      <br><sub><b>Model selection</b> — switch across 20+ models in 2 keystrokes</sub>
+      <img src="docs/captures/providers.png" alt="Provider families" width="100%">
+      <br><sub><b>Providers</b> — language models, image, speech and web search</sub>
     </td>
     <td align="center" width="50%">
-      <img src="docs/captures/provider_config.png" alt="Provider configuration" width="100%">
-      <br><sub><b>Provider config</b> — API keys encrypted, scoped per provider</sub>
+      <img src="docs/captures/models.png" alt="Model selection" width="100%">
+      <br><sub><b>Model selection</b> — switch models in 2 keystrokes (<code>ctrl+l</code>)</sub>
     </td>
   </tr>
   <tr>
     <td align="center" width="50%">
-      <img src="docs/captures/working1.png" alt="Agent working" width="100%">
-      <br><sub><b>Agent at work</b> — full reasoning trace, thinking blocks + tool calls</sub>
+      <img src="docs/captures/questions.png" alt="Agent asking clarifying questions" width="100%">
+      <br><sub><b>Asks before it acts</b> — clarifying questions with options, then a plan</sub>
     </td>
     <td align="center" width="50%">
-      <img src="docs/captures/working2.png" alt="Agent completing task" width="100%">
-      <br><sub><b>Streaming results</b> — streamed responses with markdown + tool timings</sub>
+      <img src="docs/captures/web-research.png" alt="Agent fetching web pages" width="100%">
+      <br><sub><b>Checks the source</b> — fetches pages and shows what it read</sub>
+    </td>
+  </tr>
+  <tr>
+    <td align="center" width="50%">
+      <img src="docs/captures/plan-review.png" alt="Plan review" width="100%">
+      <br><sub><b>Plan review</b> — read, comment and approve the plan before work starts</sub>
+    </td>
+    <td align="center" width="50%">
+      <img src="docs/captures/agent-working.png" alt="Agent working with sub-agent tasks" width="100%">
+      <br><sub><b>Agent at work</b> — task list, sub-agents and streamed results</sub>
     </td>
   </tr>
 </table>
