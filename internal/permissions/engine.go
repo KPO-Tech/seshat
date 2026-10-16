@@ -8,6 +8,7 @@ import (
 	"strings"
 	"sync"
 
+	modeexec "github.com/KPO-Tech/seshat-runtime/internal/modes/execution"
 	auto "github.com/KPO-Tech/seshat-runtime/internal/permissions/auto"
 	tool "github.com/KPO-Tech/seshat-runtime/internal/tools/registry"
 	"github.com/KPO-Tech/seshat-runtime/internal/types"
@@ -408,8 +409,9 @@ func (e *Engine) checkGlobalPermission(ctx context.Context, pctx *PermissionCont
 	// Step 3.5: Heuristic auto-allow for always-safe tools.
 	// Read-only and network-read tools are auto-approved in all interactive modes
 	// so that grep, web_search, tree, etc. never trigger a permission card.
-	if pctx.Mode != types.PermissionModeNever && isAlwaysSafeTool(pctx.ToolName) {
-		result := heuristicAllowResult(pctx.ToolName, "always-safe tool", pctx.ToolInput)
+	// exit_plan_mode is handled here too (see safeToolResult): it is not "safe", the user decides on the plan.
+	if pctx.Mode != types.PermissionModeNever && isHeuristicTool(pctx.ToolName) {
+		result := safeToolResult(pctx)
 		if err := e.RunPostPermissionHooks(ctx, pctx, &result); err != nil {
 			return types.PermissionResult{}, err
 		}
@@ -1114,7 +1116,9 @@ func isAlwaysSafeTool(name string) bool {
 		// only fires in onRequest mode), these two need to work in Auto mode
 		// too, where without this they depend entirely on the auto-mode
 		// classifier's LLM call succeeding just to flip a mode flag.
-		"enter_plan_mode", "exit_plan_mode":
+		// exit_plan_mode is not listed: leaving plan mode grants write access, so
+		// planExitDecision asks the user (Step 3.4) unless they already approved.
+		"enter_plan_mode":
 		return true
 	}
 	return false
@@ -1129,7 +1133,7 @@ func isSafeWorkflowTool(name string) bool {
 		"agent",
 		"task_create", "task_update", "task_get",
 		"task_list", "task_output", "task_stop",
-		"enter_plan_mode", "exit_plan_mode", "submit_plan":
+		"enter_plan_mode", "submit_plan":
 		return true
 	}
 	return false
@@ -1146,4 +1150,45 @@ func heuristicAllowResult(toolName, reason string, input map[string]any) types.P
 			Reason: reason,
 		},
 	)
+}
+
+// planExitDecision returns the Ask that shows the user the plan before exit_plan_mode runs, and true, unless
+// the user already approved the plan in the review dialog (submit_plan): then they were shown it and
+// nothing more is asked. A submitted plan that is still under review never gets here, the tool refuses it.
+// The Ask goes through the prompt function of the host; a host with none denies it, as for any other tool.
+// isHeuristicTool says whether Step 3.5 decides the tool without a rule: the always-safe tools, and exit_plan_mode.
+func isHeuristicTool(name string) bool {
+	return isAlwaysSafeTool(name) || name == "exit_plan_mode"
+}
+
+// safeToolResult is the Step 3.5 decision: an allow, except for exit_plan_mode, which leaves plan mode (the
+// write access) and so asks the user to approve the plan unless they already did in the review dialog.
+func safeToolResult(pctx *PermissionContext) types.PermissionResult {
+	if pctx.ToolName == "exit_plan_mode" {
+		if result, ask := planExitDecision(pctx); ask {
+			return result
+		}
+		return heuristicAllowResult(pctx.ToolName, "the user approved the plan", pctx.ToolInput)
+	}
+	return heuristicAllowResult(pctx.ToolName, "always-safe tool", pctx.ToolInput)
+}
+
+// planApprovalSource marks the Ask of planExitDecision, whose reason is the question shown to the user.
+const planApprovalSource = "plan_approval"
+
+func planExitDecision(pctx *PermissionContext) (types.PermissionResult, bool) {
+	if modeexec.PlanApproved(pctx.SessionID) {
+		return types.PermissionResult{}, false
+	}
+	plan, _ := pctx.ToolInput["plan"].(string)
+	if strings.TrimSpace(plan) == "" {
+		plan = "(no plan text was given)"
+	}
+	if len(plan) > 800 {
+		plan = plan[:800] + "\n\n[... truncated ...]"
+	}
+	return types.AskWithDecisionReason(
+		"Approve this plan and start implementation?\n\n---\n"+plan,
+		&types.PermissionDecisionReason{Type: types.PermissionDecisionReasonOther, Source: planApprovalSource, Reason: "leaving plan mode grants write access"},
+	), true
 }
