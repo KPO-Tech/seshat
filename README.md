@@ -102,28 +102,38 @@ If you want a ready-to-use product built on this engine, see [SeshatOS](https://
       <br><sub><b>Welcome</b> — up and running in 10 seconds</sub>
     </td>
     <td align="center" width="50%">
-      <img src="docs/captures/commands_pannel.png" alt="Settings panel" width="100%">
-      <br><sub><b>Settings panel</b> — every shortcut, one keystroke away (<code>ctrl+p</code>)</sub>
+      <img src="docs/captures/settings.png" alt="Settings panel" width="100%">
+      <br><sub><b>Settings</b> — every section, one keystroke away (<code>ctrl+p</code>)</sub>
     </td>
   </tr>
   <tr>
     <td align="center" width="50%">
-      <img src="docs/captures/model_selction.png" alt="Model selection" width="100%">
-      <br><sub><b>Model selection</b> — switch across 20+ models in 2 keystrokes</sub>
+      <img src="docs/captures/providers.png" alt="Provider families" width="100%">
+      <br><sub><b>Providers</b> — language models, image, speech and web search</sub>
     </td>
     <td align="center" width="50%">
-      <img src="docs/captures/provider_config.png" alt="Provider configuration" width="100%">
-      <br><sub><b>Provider config</b> — API keys encrypted, scoped per provider</sub>
+      <img src="docs/captures/models.png" alt="Model selection" width="100%">
+      <br><sub><b>Model selection</b> — switch models in 2 keystrokes (<code>ctrl+l</code>)</sub>
     </td>
   </tr>
   <tr>
     <td align="center" width="50%">
-      <img src="docs/captures/working1.png" alt="Agent working" width="100%">
-      <br><sub><b>Agent at work</b> — full reasoning trace, thinking blocks + tool calls</sub>
+      <img src="docs/captures/questions.png" alt="Agent asking clarifying questions" width="100%">
+      <br><sub><b>Asks before it acts</b> — clarifying questions with options, then a plan</sub>
     </td>
     <td align="center" width="50%">
-      <img src="docs/captures/working2.png" alt="Agent completing task" width="100%">
-      <br><sub><b>Streaming results</b> — streamed responses with markdown + tool timings</sub>
+      <img src="docs/captures/web-research.png" alt="Agent fetching web pages" width="100%">
+      <br><sub><b>Checks the source</b> — fetches pages and shows what it read</sub>
+    </td>
+  </tr>
+  <tr>
+    <td align="center" width="50%">
+      <img src="docs/captures/plan-review.png" alt="Plan review" width="100%">
+      <br><sub><b>Plan review</b> — read, comment and approve the plan before work starts</sub>
+    </td>
+    <td align="center" width="50%">
+      <img src="docs/captures/agent-working.png" alt="Agent working with sub-agent tasks" width="100%">
+      <br><sub><b>Agent at work</b> — task list, sub-agents and streamed results</sub>
     </td>
   </tr>
 </table>
@@ -185,6 +195,14 @@ Options:
 VERSION=v0.1.0 bash <(curl -fsSL ...)   # pin a specific version
 ```
 
+**Windows (PowerShell) — one command, no administrator rights:**
+
+```powershell
+irm https://raw.githubusercontent.com/KPO-Tech/seshat-runtime/main/scripts/install.ps1 | iex
+```
+
+Downloads the Windows build (amd64 or arm64), checks it against `SHA256SUMS.txt`, installs `seshat.exe` into `%LOCALAPPDATA%\Programs\seshat`, adds that folder to your user PATH and installs ripgrep (winget, scoop or choco) when it is missing. Set `$env:SESHAT_VERSION = "v1.9.0"` before the command to pin a version, `$env:SESHAT_INSTALL_DIR` to choose the folder, `$env:SESHAT_SKIP_RIPGREP = "1"` to skip ripgrep.
+
 **Developers — Go toolchain:**
 
 ```bash
@@ -211,6 +229,9 @@ An AI agent in your terminal. Multi-provider, local-first, skills-aware. Guide: 
 ```bash
 # End users — full setup in one command:
 curl -fsSL https://raw.githubusercontent.com/KPO-Tech/seshat-runtime/main/scripts/install.sh | bash
+
+# Windows (PowerShell):
+#   irm https://raw.githubusercontent.com/KPO-Tech/seshat-runtime/main/scripts/install.ps1 | iex
 
 # Developers — binary only via Go toolchain:
 go install github.com/KPO-Tech/seshat-runtime/cmd/cli@latest
@@ -530,7 +551,7 @@ Override with `SESHAT_RUNTIME_ROOT=/your/path seshat chat`.
 >
 > **macOS** — code is written to support macOS and basic testing has been done, but **macOS support is not yet fully validated**. If you hit an issue, please [open a report](https://github.com/KPO-Tech/seshat-runtime/issues).
 >
-> **Windows** — PowerShell setup script included and paths are handled (`%APPDATA%`), but **Windows support has not been tested yet**. Contributions and test reports welcome.
+> **Windows** — released builds for amd64 and arm64, and an installer (`scripts/install.ps1`). The terminal interface is used on Windows Terminal; other Windows setups have had less testing. Reports are welcome. To build from source, use `scripts\setup.ps1`.
 
 See [`CONTRIBUTING.md`](./CONTRIBUTING.md) for the full contribution guide.
 

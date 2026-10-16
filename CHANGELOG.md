@@ -9,6 +9,12 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [1.9.0] - 2026-10-16
+
+### Added
+
+- **Seshat can be installed on Windows with one command.** Releases had binaries for Linux and macOS only, and `scripts/setup.ps1` was a developer script that needs Go and a clone of the repository. Releases now include `seshat-windows-amd64.exe`, `seshat-windows-arm64.exe` and the matching `seshat-grpc` builds, and `scripts/install.ps1` installs them: `irm https://raw.githubusercontent.com/KPO-Tech/seshat-runtime/main/scripts/install.ps1 | iex`. It picks the build for the processor, checks it against `SHA256SUMS.txt` (a wrong checksum stops the install before anything is written), installs `seshat.exe` into `%LOCALAPPDATA%Programs\seshat`, adds that folder to the user PATH and installs ripgrep with winget, scoop or choco when it is missing. It never asks for administrator rights. `SESHAT_VERSION`, `SESHAT_INSTALL_DIR` and `SESHAT_SKIP_RIPGREP` set the version, the folder and the ripgrep step. The installer was run against a local folder laid out like a release (install, PATH, and a refused wrong checksum); the Windows builds themselves are published by the next release.
+
 ## [1.8.1] - 2026-10-16
 
 ### Changed
@@ -786,7 +792,8 @@ a real ChatGPT-account session (documented in
 - `internal/tools/special/brief`: a "send message to the user" tool from the pre-rename codebase, never registered at any point in its history.
 - `internal/tools/special/config/configTool.go`: an arbitrary key/value settings store predating the current `contract.Tool` interface (incompatible signatures — could never have been registered as-is), replaced by the real `get_config` tool.
 
-[Unreleased]: https://github.com/KPO-Tech/seshat-runtime/compare/v1.8.1...HEAD
+[Unreleased]: https://github.com/KPO-Tech/seshat-runtime/compare/v1.9.0...HEAD
+[1.9.0]: https://github.com/KPO-Tech/seshat-runtime/compare/v1.8.1...v1.9.0
 [1.8.1]: https://github.com/KPO-Tech/seshat-runtime/compare/v1.8.0...v1.8.1
 [1.8.0]: https://github.com/KPO-Tech/seshat-runtime/compare/v1.7.0...v1.8.0
 [1.7.0]: https://github.com/KPO-Tech/seshat-runtime/compare/v1.6.0...v1.7.0
