@@ -182,7 +182,15 @@ The engine is intentionally kept minimal and fast. If you need something from th
 
 The full guide is on the website: [Installation — seshat-ai.com](https://seshat-ai.com/en/docs/getting-started/installation). It covers the install script and what it does, its options, the Go toolchain, building from source and using Seshat as a library. The commands below are the short version.
 
-**End users — one command, fully configured:**
+| System | Command (copy, paste, run) | Needs |
+|---|---|---|
+| **Linux** (amd64, arm64) | `curl -fsSL https://raw.githubusercontent.com/KPO-Tech/seshat-runtime/main/scripts/install.sh \| bash` | `curl` or `wget` |
+| **macOS** (Intel, Apple silicon) | the same command as Linux | `curl` |
+| **Windows** (amd64, arm64) | `irm https://raw.githubusercontent.com/KPO-Tech/seshat-runtime/main/scripts/install.ps1 \| iex` in PowerShell | nothing, no administrator rights |
+
+You do not need Go: the script downloads a ready-made binary. Afterwards the command is `seshat` on every system, and `seshat update` keeps it current (see *Updating* below).
+
+**Linux and macOS — one command, fully configured:**
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/KPO-Tech/seshat-runtime/main/scripts/install.sh | bash
