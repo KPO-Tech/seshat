@@ -401,7 +401,7 @@ func (m *Manager) findRootDir(patterns []string) string {
 }
 
 // SendRequest sends a request to the appropriate LSP server for a file
-func (m *Manager) SendRequest(ctx context.Context, filePath string, method string, params interface{}) (interface{}, error) {
+func (m *Manager) SendRequest(ctx context.Context, filePath string, method string, params any) (any, error) {
 	server, err := m.InitializeForFile(ctx, filePath)
 	if err != nil {
 		return nil, err

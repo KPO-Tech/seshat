@@ -53,13 +53,13 @@ type CalculationResult struct {
 
 // StatisticsResult is the result of a statistical operation.
 type StatisticsResult struct {
-	Result interface{} `json:"result"`
-	Count  int         `json:"count"`
+	Result any `json:"result"`
+	Count  int `json:"count"`
 }
 
 // FinancialResult is the result of a financial calculation.
 type FinancialResult struct {
-	Result      float64                `json:"result"`
-	Breakdown   map[string]interface{} `json:"breakdown,omitempty"`
-	Description string                 `json:"description,omitempty"`
+	Result      float64        `json:"result"`
+	Breakdown   map[string]any `json:"breakdown,omitempty"`
+	Description string         `json:"description,omitempty"`
 }

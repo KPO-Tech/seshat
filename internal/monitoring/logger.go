@@ -159,13 +159,13 @@ func (l *Logger) SetContext(ctx context.Context) map[string]string {
 }
 
 // formatMessage formats a log message with context
-func (l *Logger) formatMessage(level LogLevel, msg string, context map[string]string, fields map[string]interface{}) string {
+func (l *Logger) formatMessage(level LogLevel, msg string, context map[string]string, fields map[string]any) string {
 	timestamp := time.Now().UTC().Format(time.RFC3339)
 
 	var formatted string
 	if l.jsonFormat {
 		// JSON format
-		logData := map[string]interface{}{
+		logData := map[string]any{
 			"timestamp":   timestamp,
 			"level":       level,
 			"message":     msg,
@@ -204,7 +204,7 @@ func (l *Logger) formatMessage(level LogLevel, msg string, context map[string]st
 }
 
 // writeMessage writes a formatted log message
-func (l *Logger) writeMessage(level LogLevel, msg string, context map[string]string, fields map[string]interface{}) {
+func (l *Logger) writeMessage(level LogLevel, msg string, context map[string]string, fields map[string]any) {
 	l.mu.Lock()
 	defer l.mu.Unlock()
 
@@ -236,54 +236,54 @@ func (l *Logger) shouldLog(level LogLevel) bool {
 }
 
 // Debug logs a debug message
-func (l *Logger) Debug(msg string, fields map[string]interface{}) {
+func (l *Logger) Debug(msg string, fields map[string]any) {
 	l.writeMessage(LogLevelDebug, msg, nil, fields)
 }
 
 // DebugWithContext logs a debug message with context
-func (l *Logger) DebugWithContext(ctx context.Context, msg string, fields map[string]interface{}) {
+func (l *Logger) DebugWithContext(ctx context.Context, msg string, fields map[string]any) {
 	context := l.SetContext(ctx)
 	l.writeMessage(LogLevelDebug, msg, context, fields)
 }
 
 // Info logs an info message
-func (l *Logger) Info(msg string, fields map[string]interface{}) {
+func (l *Logger) Info(msg string, fields map[string]any) {
 	l.writeMessage(LogLevelInfo, msg, nil, fields)
 }
 
 // InfoWithContext logs an info message with context
-func (l *Logger) InfoWithContext(ctx context.Context, msg string, fields map[string]interface{}) {
+func (l *Logger) InfoWithContext(ctx context.Context, msg string, fields map[string]any) {
 	context := l.SetContext(ctx)
 	l.writeMessage(LogLevelInfo, msg, context, fields)
 }
 
 // Warn logs a warning message
-func (l *Logger) Warn(msg string, fields map[string]interface{}) {
+func (l *Logger) Warn(msg string, fields map[string]any) {
 	l.writeMessage(LogLevelWarn, msg, nil, fields)
 }
 
 // WarnWithContext logs a warning message with context
-func (l *Logger) WarnWithContext(ctx context.Context, msg string, fields map[string]interface{}) {
+func (l *Logger) WarnWithContext(ctx context.Context, msg string, fields map[string]any) {
 	context := l.SetContext(ctx)
 	l.writeMessage(LogLevelWarn, msg, context, fields)
 }
 
 // Error logs an error message
-func (l *Logger) Error(msg string, fields map[string]interface{}) {
+func (l *Logger) Error(msg string, fields map[string]any) {
 	l.writeMessage(LogLevelError, msg, nil, fields)
 }
 
 // ErrorWithContext logs an error message with context
-func (l *Logger) ErrorWithContext(ctx context.Context, msg string, fields map[string]interface{}) {
+func (l *Logger) ErrorWithContext(ctx context.Context, msg string, fields map[string]any) {
 	context := l.SetContext(ctx)
 	l.writeMessage(LogLevelError, msg, context, fields)
 }
 
 // ErrorWithStack logs an error message with stack trace
-func (l *Logger) ErrorWithStack(msg string, err error, fields map[string]interface{}) {
+func (l *Logger) ErrorWithStack(msg string, err error, fields map[string]any) {
 	stack := getStackTrace()
 	if fields == nil {
-		fields = make(map[string]interface{})
+		fields = make(map[string]any)
 	}
 	fields["error"] = err.Error()
 	fields["stack"] = stack
@@ -291,13 +291,13 @@ func (l *Logger) ErrorWithStack(msg string, err error, fields map[string]interfa
 }
 
 // Fatal logs a fatal message and exits
-func (l *Logger) Fatal(msg string, fields map[string]interface{}) {
+func (l *Logger) Fatal(msg string, fields map[string]any) {
 	l.writeMessage(LogLevelFatal, msg, nil, fields)
 	os.Exit(1)
 }
 
 // FatalWithContext logs a fatal message with context and exits
-func (l *Logger) FatalWithContext(ctx context.Context, msg string, fields map[string]interface{}) {
+func (l *Logger) FatalWithContext(ctx context.Context, msg string, fields map[string]any) {
 	context := l.SetContext(ctx)
 	l.writeMessage(LogLevelFatal, msg, context, fields)
 	os.Exit(1)
@@ -330,7 +330,7 @@ func getHostname() string {
 
 // LogRequest logs HTTP request information
 func (l *Logger) LogRequest(ctx context.Context, method, url string, statusCode int, duration time.Duration) {
-	fields := map[string]interface{}{
+	fields := map[string]any{
 		"http_method": method,
 		"http_url":    url,
 		"http_status": statusCode,
@@ -341,7 +341,7 @@ func (l *Logger) LogRequest(ctx context.Context, method, url string, statusCode 
 
 // LogToolExecution logs tool execution information
 func (l *Logger) LogToolExecution(ctx context.Context, toolName string, duration time.Duration, success bool) {
-	fields := map[string]interface{}{
+	fields := map[string]any{
 		"tool_name":   toolName,
 		"duration_ms": duration.Milliseconds(),
 		"success":     success,
@@ -355,7 +355,7 @@ func (l *Logger) LogToolExecution(ctx context.Context, toolName string, duration
 
 // LogCircuitBreakerState logs circuit breaker state changes
 func (l *Logger) LogCircuitBreakerState(ctx context.Context, from, to string, reason string) {
-	fields := map[string]interface{}{
+	fields := map[string]any{
 		"from_state": from,
 		"to_state":   to,
 		"reason":     reason,
@@ -365,7 +365,7 @@ func (l *Logger) LogCircuitBreakerState(ctx context.Context, from, to string, re
 
 // LogError logs application errors with context
 func (l *Logger) LogError(ctx context.Context, err error, operation string) {
-	fields := map[string]interface{}{
+	fields := map[string]any{
 		"operation": operation,
 		"error":     err.Error(),
 	}
@@ -385,8 +385,8 @@ func NewRequestLogger(logger *Logger) *RequestLogger {
 }
 
 // LogRequest logs HTTP request details
-func (rl *RequestLogger) LogRequest(ctx context.Context, req interface{}, resp interface{}, err error, duration time.Duration) {
-	rl.logger.InfoWithContext(ctx, "HTTP request", map[string]interface{}{
+func (rl *RequestLogger) LogRequest(ctx context.Context, req any, resp any, err error, duration time.Duration) {
+	rl.logger.InfoWithContext(ctx, "HTTP request", map[string]any{
 		"duration_ms":  duration.Milliseconds(),
 		"has_response": resp != nil,
 		"has_error":    err != nil,
@@ -399,7 +399,7 @@ func (rl *RequestLogger) LogRequest(ctx context.Context, req interface{}, resp i
 	if resp != nil {
 		// Try to extract common response fields
 		if r, ok := resp.(*http.Response); ok {
-			fields := map[string]interface{}{
+			fields := map[string]any{
 				"status_code": r.StatusCode,
 			}
 			rl.logger.InfoWithContext(ctx, "HTTP response", fields)

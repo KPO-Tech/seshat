@@ -35,7 +35,7 @@ func (ec *ExpressionCalculator) Evaluate(req ExpressionRequest) (CalculationResu
 		return CalculationResult{}, fmt.Errorf("invalid expression: %w", err)
 	}
 
-	parameters := map[string]interface{}{
+	parameters := map[string]any{
 		"pi": math.Pi,
 		"e":  math.E,
 		"PI": math.Pi,
@@ -138,7 +138,7 @@ func (ec *ExpressionCalculator) isValidVariableName(name string) bool {
 
 func (ec *ExpressionCalculator) mathFunctions() map[string]govaluate.ExpressionFunction {
 	fn1 := func(name string, f func(float64) float64) govaluate.ExpressionFunction {
-		return func(args ...interface{}) (interface{}, error) {
+		return func(args ...any) (any, error) {
 			if len(args) != 1 {
 				return nil, fmt.Errorf("%s expects 1 argument", name)
 			}
@@ -156,7 +156,7 @@ func (ec *ExpressionCalculator) mathFunctions() map[string]govaluate.ExpressionF
 		"tan":  fn1("tan", math.Tan),
 		"atan": fn1("atan", math.Atan),
 		"abs":  fn1("abs", math.Abs),
-		"asin": func(args ...interface{}) (interface{}, error) {
+		"asin": func(args ...any) (any, error) {
 			if len(args) != 1 {
 				return nil, fmt.Errorf("asin expects 1 argument")
 			}
@@ -169,7 +169,7 @@ func (ec *ExpressionCalculator) mathFunctions() map[string]govaluate.ExpressionF
 			}
 			return math.Asin(v), nil
 		},
-		"acos": func(args ...interface{}) (interface{}, error) {
+		"acos": func(args ...any) (any, error) {
 			if len(args) != 1 {
 				return nil, fmt.Errorf("acos expects 1 argument")
 			}
@@ -182,7 +182,7 @@ func (ec *ExpressionCalculator) mathFunctions() map[string]govaluate.ExpressionF
 			}
 			return math.Acos(v), nil
 		},
-		"log": func(args ...interface{}) (interface{}, error) {
+		"log": func(args ...any) (any, error) {
 			if len(args) != 1 {
 				return nil, fmt.Errorf("log expects 1 argument")
 			}
@@ -195,7 +195,7 @@ func (ec *ExpressionCalculator) mathFunctions() map[string]govaluate.ExpressionF
 			}
 			return math.Log10(v), nil
 		},
-		"ln": func(args ...interface{}) (interface{}, error) {
+		"ln": func(args ...any) (any, error) {
 			if len(args) != 1 {
 				return nil, fmt.Errorf("ln expects 1 argument")
 			}
@@ -208,7 +208,7 @@ func (ec *ExpressionCalculator) mathFunctions() map[string]govaluate.ExpressionF
 			}
 			return math.Log(v), nil
 		},
-		"sqrt": func(args ...interface{}) (interface{}, error) {
+		"sqrt": func(args ...any) (any, error) {
 			if len(args) != 1 {
 				return nil, fmt.Errorf("sqrt expects 1 argument")
 			}
@@ -221,7 +221,7 @@ func (ec *ExpressionCalculator) mathFunctions() map[string]govaluate.ExpressionF
 			}
 			return math.Sqrt(v), nil
 		},
-		"exp": func(args ...interface{}) (interface{}, error) {
+		"exp": func(args ...any) (any, error) {
 			if len(args) != 1 {
 				return nil, fmt.Errorf("exp expects 1 argument")
 			}
@@ -234,7 +234,7 @@ func (ec *ExpressionCalculator) mathFunctions() map[string]govaluate.ExpressionF
 			}
 			return math.Exp(v), nil
 		},
-		"pow": func(args ...interface{}) (interface{}, error) {
+		"pow": func(args ...any) (any, error) {
 			if len(args) != 2 {
 				return nil, fmt.Errorf("pow expects 2 arguments")
 			}
@@ -252,7 +252,7 @@ func (ec *ExpressionCalculator) mathFunctions() map[string]govaluate.ExpressionF
 			}
 			return r, nil
 		},
-		"factorial": func(args ...interface{}) (interface{}, error) {
+		"factorial": func(args ...any) (any, error) {
 			if len(args) != 1 {
 				return nil, fmt.Errorf("factorial expects 1 argument")
 			}

@@ -421,12 +421,12 @@ func IsMcpServerDisabled(name string, cwd string) bool {
 		return false
 	}
 
-	var config map[string]interface{}
+	var config map[string]any
 	if err := json.Unmarshal(data, &config); err != nil {
 		return false
 	}
 
-	disabled, ok := config["disabledMcpServers"].([]interface{})
+	disabled, ok := config["disabledMcpServers"].([]any)
 	if !ok {
 		return false
 	}
@@ -442,19 +442,19 @@ func IsMcpServerDisabled(name string, cwd string) bool {
 func SetMcpServerEnabled(name string, enabled bool, cwd string) error {
 	projectConfigPath := filepath.Join(cwd, ".seshat", "config.json")
 
-	var config map[string]interface{}
+	var config map[string]any
 	data, err := os.ReadFile(projectConfigPath)
 	if err == nil {
 		json.Unmarshal(data, &config)
 	} else {
-		config = make(map[string]interface{})
+		config = make(map[string]any)
 	}
 
-	var disabledList []interface{}
-	if d, ok := config["disabledMcpServers"].([]interface{}); ok {
+	var disabledList []any
+	if d, ok := config["disabledMcpServers"].([]any); ok {
 		disabledList = d
 	} else {
-		disabledList = []interface{}{}
+		disabledList = []any{}
 	}
 
 	found := false

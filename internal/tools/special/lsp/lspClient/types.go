@@ -285,30 +285,30 @@ type ServerInfo struct {
 
 // ServerCapabilities server capabilities
 type ServerCapabilities struct {
-	TextDocumentSync                 interface{}           `json:"textDocumentSync,omitempty"`
+	TextDocumentSync                 any                   `json:"textDocumentSync,omitempty"`
 	HoverProvider                    bool                  `json:"hoverProvider,omitempty"`
 	CompletionProvider               *CompletionOptions    `json:"completionProvider,omitempty"`
 	SignatureHelpProvider            *SignatureHelpOptions `json:"signatureHelpProvider,omitempty"`
 	DefinitionProvider               bool                  `json:"definitionProvider,omitempty"`
-	TypeDefinitionProvider           interface{}           `json:"typeDefinitionProvider,omitempty"`
-	ImplementationProvider           interface{}           `json:"implementationProvider,omitempty"`
+	TypeDefinitionProvider           any                   `json:"typeDefinitionProvider,omitempty"`
+	ImplementationProvider           any                   `json:"implementationProvider,omitempty"`
 	ReferencesProvider               bool                  `json:"referencesProvider,omitempty"`
 	DocumentHighlightProvider        bool                  `json:"documentHighlightProvider,omitempty"`
 	DocumentSymbolProvider           bool                  `json:"documentSymbolProvider,omitempty"`
-	WorkspaceSymbolProvider          interface{}           `json:"workspaceSymbolProvider,omitempty"`
+	WorkspaceSymbolProvider          any                   `json:"workspaceSymbolProvider,omitempty"`
 	CodeActionProvider               bool                  `json:"codeActionProvider,omitempty"`
 	CodeLensProvider                 *CodeLensOptions      `json:"codeLensProvider,omitempty"`
 	DocumentFormattingProvider       bool                  `json:"documentFormattingProvider,omitempty"`
 	DocumentRangeFormattingProvider  bool                  `json:"documentRangeFormattingProvider,omitempty"`
-	DocumentOnTypeFormattingProvider interface{}           `json:"documentOnTypeFormattingProvider,omitempty"`
-	RenameProvider                   interface{}           `json:"renameProvider,omitempty"`
+	DocumentOnTypeFormattingProvider any                   `json:"documentOnTypeFormattingProvider,omitempty"`
+	RenameProvider                   any                   `json:"renameProvider,omitempty"`
 	DocumentLinkProvider             *DocumentLinkOptions  `json:"documentLinkProvider,omitempty"`
-	ColorProvider                    interface{}           `json:"colorProvider,omitempty"`
-	FoldingRangeProvider             interface{}           `json:"foldingRangeProvider,omitempty"`
-	SelectionRangeProvider           interface{}           `json:"selectionRangeProvider,omitempty"`
-	LinkedEditingRangeProvider       interface{}           `json:"linkedEditingRangeProvider,omitempty"`
+	ColorProvider                    any                   `json:"colorProvider,omitempty"`
+	FoldingRangeProvider             any                   `json:"foldingRangeProvider,omitempty"`
+	SelectionRangeProvider           any                   `json:"selectionRangeProvider,omitempty"`
+	LinkedEditingRangeProvider       any                   `json:"linkedEditingRangeProvider,omitempty"`
 	CallHierarchyProvider            bool                  `json:"callHierarchyProvider,omitempty"`
-	SemanticTokensProvider           interface{}           `json:"semanticTokensProvider,omitempty"`
+	SemanticTokensProvider           any                   `json:"semanticTokensProvider,omitempty"`
 	MonikerProvider                  bool                  `json:"monikerProvider,omitempty"`
 }
 
@@ -341,8 +341,8 @@ type WorkspaceFolder struct {
 
 // Hover represents hover information
 type Hover struct {
-	Contents interface{} `json:"contents"` // MarkupContent | string | MarkedString[]
-	Range    *Range      `json:"range,omitempty"`
+	Contents any    `json:"contents"` // MarkupContent | string | MarkedString[]
+	Range    *Range `json:"range,omitempty"`
 }
 
 // DocumentSymbol represents a document symbol
@@ -441,7 +441,7 @@ func PathFromURI(uri string) string {
 const DefaultTimeout = 30 * time.Second
 
 // RequestWithTimeout sends a request with a timeout
-func (c *Client) RequestWithTimeout(ctx context.Context, method string, params interface{}, result interface{}, timeout time.Duration) error {
+func (c *Client) RequestWithTimeout(ctx context.Context, method string, params any, result any, timeout time.Duration) error {
 	ctx, cancel := context.WithTimeout(ctx, timeout)
 	defer cancel()
 	return c.Request(ctx, method, params, result)

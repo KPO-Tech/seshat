@@ -53,7 +53,7 @@ type System struct {
 	logger *Logger
 
 	// Registry of all metrics
-	allMetrics map[string]interface{}
+	allMetrics map[string]any
 	mu         sync.RWMutex
 }
 
@@ -65,7 +65,7 @@ func NewSystem(logger *Logger) *System {
 
 	system := &System{
 		logger:     logger,
-		allMetrics: make(map[string]interface{}),
+		allMetrics: make(map[string]any),
 	}
 
 	// Initialize API metrics
@@ -191,7 +191,7 @@ func (m *System) registerMetrics() {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
-	metrics := []interface{}{
+	metrics := []any{
 		m.apiRequestsTotal, m.apiRequestsSuccess, m.apiRequestsFailure,
 		m.apiLatency, m.apiRateLimitHits, m.apiCircuitBreakerTrips,
 		m.toolCallsTotal, m.toolCallsSuccess, m.toolCallsFailure,
@@ -235,7 +235,7 @@ func (m *System) RecordAPIRequest() {
 
 	// Add tool name as label
 	if m.logger != nil {
-		m.logger.Info("API request", map[string]interface{}{
+		m.logger.Info("API request", map[string]any{
 			"request_count": m.apiRequestsTotal.Value(),
 		})
 	}
@@ -247,7 +247,7 @@ func (m *System) RecordAPISuccess(duration time.Duration) {
 	m.apiLatency.Record(duration)
 
 	if m.logger != nil {
-		m.logger.Info("API request succeeded", map[string]interface{}{
+		m.logger.Info("API request succeeded", map[string]any{
 			"success_count": m.apiRequestsSuccess.Value(),
 			"duration_ms":   duration.Milliseconds(),
 		})
@@ -261,7 +261,7 @@ func (m *System) RecordAPIFailure(err error, duration time.Duration) {
 	m.totalErrors.Inc()
 
 	if m.logger != nil {
-		m.logger.Error("API request failed", map[string]interface{}{
+		m.logger.Error("API request failed", map[string]any{
 			"failure_count": m.apiRequestsFailure.Value(),
 			"error":         err.Error(),
 			"duration_ms":   duration.Milliseconds(),
@@ -281,7 +281,7 @@ func (m *System) RecordCacheStats(readTokens, creationTokens int) {
 		m.cacheWrites.Inc()
 	}
 	if m.logger != nil && (readTokens > 0 || creationTokens > 0) {
-		m.logger.Info("Prompt cache stats", map[string]interface{}{
+		m.logger.Info("Prompt cache stats", map[string]any{
 			"cache_read_tokens":     readTokens,
 			"cache_creation_tokens": creationTokens,
 			"total_cache_hits":      m.cacheHits.Value(),
@@ -304,7 +304,7 @@ func (m *System) RecordCircuitBreakerTrip(provider string) {
 	m.apiCircuitBreakerTrips.Inc()
 
 	if m.logger != nil {
-		m.logger.Info("Circuit breaker tripped", map[string]interface{}{
+		m.logger.Info("Circuit breaker tripped", map[string]any{
 			"provider":    provider,
 			"trips_count": m.apiCircuitBreakerTrips.Value(),
 		})
@@ -321,7 +321,7 @@ func (m *System) RecordToolCall(toolName string) {
 
 	// Add tool name as label
 	if m.logger != nil {
-		m.logger.Info("Tool called", map[string]interface{}{
+		m.logger.Info("Tool called", map[string]any{
 			"tool_name":  toolName,
 			"call_count": m.toolCallsTotal.Value(),
 		})
@@ -334,7 +334,7 @@ func (m *System) RecordToolSuccess(toolName string, duration time.Duration) {
 	m.toolLatency.Record(duration)
 
 	if m.logger != nil {
-		m.logger.Info("Tool call succeeded", map[string]interface{}{
+		m.logger.Info("Tool call succeeded", map[string]any{
 			"tool_name":     toolName,
 			"success_count": m.toolCallsSuccess.Value(),
 			"duration_ms":   duration.Milliseconds(),
@@ -349,7 +349,7 @@ func (m *System) RecordToolFailure(toolName string, err error, duration time.Dur
 	m.totalErrors.Inc()
 
 	if m.logger != nil {
-		m.logger.Error("Tool execution failed", map[string]interface{}{
+		m.logger.Error("Tool execution failed", map[string]any{
 			"tool_name":     toolName,
 			"failure_count": m.toolCallsFailure.Value(),
 			"error":         err.Error(),
@@ -363,7 +363,7 @@ func (m *System) RecordToolPermissionDenial(toolName string) {
 	m.toolPermissionDenials.Inc()
 
 	if m.logger != nil {
-		m.logger.Warn("Tool permission denied", map[string]interface{}{
+		m.logger.Warn("Tool permission denied", map[string]any{
 			"tool_name":    toolName,
 			"denial_count": m.toolPermissionDenials.Value(),
 		})
@@ -379,7 +379,7 @@ func (m *System) RecordQueryTurn() {
 	m.queryTurnsTotal.Inc()
 
 	if m.logger != nil {
-		m.logger.Info("Query turn started", map[string]interface{}{
+		m.logger.Info("Query turn started", map[string]any{
 			"turn_count": m.queryTurnsTotal.Value(),
 		})
 	}
@@ -390,7 +390,7 @@ func (m *System) RecordQueryIteration() {
 	m.queryIterationsTotal.Inc()
 
 	if m.logger != nil {
-		m.logger.Debug("Query iteration", map[string]interface{}{
+		m.logger.Debug("Query iteration", map[string]any{
 			"iteration_count": m.queryIterationsTotal.Value(),
 		})
 	}
@@ -401,7 +401,7 @@ func (m *System) RecordQuerySuccess(duration time.Duration) {
 	m.queryLatency.Record(duration)
 
 	if m.logger != nil {
-		m.logger.Info("Query turn completed successfully", map[string]interface{}{
+		m.logger.Info("Query turn completed successfully", map[string]any{
 			"duration_ms": duration.Milliseconds(),
 		})
 	}
@@ -414,7 +414,7 @@ func (m *System) RecordQueryFailure(err error, duration time.Duration) {
 	m.totalErrors.Inc()
 
 	if m.logger != nil {
-		m.logger.Error("Query turn failed", map[string]interface{}{
+		m.logger.Error("Query turn failed", map[string]any{
 			"error":       err.Error(),
 			"duration_ms": duration.Milliseconds(),
 		})
@@ -430,7 +430,7 @@ func (m *System) RecordCircuitBreakerStateTransition(from, to string, reason str
 	m.circuitBreakerStateTransitions.Inc()
 
 	if m.logger != nil {
-		m.logger.Info("Circuit breaker state changed", map[string]interface{}{
+		m.logger.Info("Circuit breaker state changed", map[string]any{
 			"from":   from,
 			"to":     to,
 			"reason": reason,
@@ -461,7 +461,7 @@ func (m *System) UpdateActiveSessions(count float64) {
 	m.activeSessions.Set(count)
 
 	if m.logger != nil {
-		m.logger.Debug("Active sessions updated", map[string]interface{}{
+		m.logger.Debug("Active sessions updated", map[string]any{
 			"count": count,
 		})
 	}
@@ -472,7 +472,7 @@ func (m *System) UpdateActiveConnections(count float64) {
 	m.activeConnections.Set(count)
 
 	if m.logger != nil {
-		m.logger.Debug("Active connections updated", map[string]interface{}{
+		m.logger.Debug("Active connections updated", map[string]any{
 			"count": count,
 		})
 	}
@@ -483,7 +483,7 @@ func (m *System) UpdateMemoryUsage(mb float64) {
 	m.memoryUsage.Set(mb)
 
 	if m.logger != nil {
-		m.logger.Debug("Memory usage updated", map[string]interface{}{
+		m.logger.Debug("Memory usage updated", map[string]any{
 			"memory_mb": mb,
 		})
 	}
@@ -494,7 +494,7 @@ func (m *System) RecordError(err error, context string) {
 	m.totalErrors.Inc()
 
 	if m.logger != nil {
-		m.logger.Error("Error recorded", map[string]interface{}{
+		m.logger.Error("Error recorded", map[string]any{
 			"context": context,
 			"error":   err.Error(),
 		})
@@ -506,11 +506,11 @@ func (m *System) RecordError(err error, context string) {
 // ============================================================================
 
 // GetAllMetrics returns all current metric values
-func (m *System) GetAllMetrics() map[string]interface{} {
+func (m *System) GetAllMetrics() map[string]any {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
 
-	metrics := make(map[string]interface{})
+	metrics := make(map[string]any)
 
 	for name, metric := range m.allMetrics {
 		switch m := metric.(type) {
@@ -519,7 +519,7 @@ func (m *System) GetAllMetrics() map[string]interface{} {
 		case *Gauge:
 			metrics[name] = m.Value()
 		case *Timer:
-			metrics[name] = map[string]interface{}{
+			metrics[name] = map[string]any{
 				"count":   m.Count(),
 				"average": m.Average(),
 				"p50":     m.Percentile(50).Milliseconds(),
@@ -545,7 +545,7 @@ func (m *System) GetMetricsSnapshot(format string) (string, error) {
 }
 
 // formatMetricsJSON formats metrics as JSON
-func formatMetricsJSON(metrics map[string]interface{}) string {
+func formatMetricsJSON(metrics map[string]any) string {
 	data, err := json.Marshal(metrics)
 	if err != nil {
 		return fmt.Sprintf(`{"error":%q}`, err.Error())
@@ -554,7 +554,7 @@ func formatMetricsJSON(metrics map[string]interface{}) string {
 }
 
 // formatMetricsText formats metrics as plain text
-func formatMetricsText(metrics map[string]interface{}) string {
+func formatMetricsText(metrics map[string]any) string {
 	result := ""
 	for key, value := range metrics {
 		result += fmt.Sprintf("%s: %v\n", key, value)
