@@ -195,6 +195,14 @@ Options:
 VERSION=v0.1.0 bash <(curl -fsSL ...)   # pin a specific version
 ```
 
+**Windows (PowerShell) — one command, no administrator rights:**
+
+```powershell
+irm https://raw.githubusercontent.com/KPO-Tech/seshat-runtime/main/scripts/install.ps1 | iex
+```
+
+Downloads the Windows build (amd64 or arm64), checks it against `SHA256SUMS.txt`, installs `seshat.exe` into `%LOCALAPPDATA%\Programs\seshat`, adds that folder to your user PATH and installs ripgrep (winget, scoop or choco) when it is missing. Set `$env:SESHAT_VERSION = "v1.9.0"` before the command to pin a version, `$env:SESHAT_INSTALL_DIR` to choose the folder, `$env:SESHAT_SKIP_RIPGREP = "1"` to skip ripgrep.
+
 **Developers — Go toolchain:**
 
 ```bash
@@ -221,6 +229,9 @@ An AI agent in your terminal. Multi-provider, local-first, skills-aware. Guide: 
 ```bash
 # End users — full setup in one command:
 curl -fsSL https://raw.githubusercontent.com/KPO-Tech/seshat-runtime/main/scripts/install.sh | bash
+
+# Windows (PowerShell):
+#   irm https://raw.githubusercontent.com/KPO-Tech/seshat-runtime/main/scripts/install.ps1 | iex
 
 # Developers — binary only via Go toolchain:
 go install github.com/KPO-Tech/seshat-runtime/cmd/cli@latest
@@ -540,7 +551,7 @@ Override with `SESHAT_RUNTIME_ROOT=/your/path seshat chat`.
 >
 > **macOS** — code is written to support macOS and basic testing has been done, but **macOS support is not yet fully validated**. If you hit an issue, please [open a report](https://github.com/KPO-Tech/seshat-runtime/issues).
 >
-> **Windows** — PowerShell setup script included and paths are handled (`%APPDATA%`), but **Windows support has not been tested yet**. Contributions and test reports welcome.
+> **Windows** — released builds for amd64 and arm64, and an installer (`scripts/install.ps1`). The terminal interface is used on Windows Terminal; other Windows setups have had less testing. Reports are welcome. To build from source, use `scripts\setup.ps1`.
 
 See [`CONTRIBUTING.md`](./CONTRIBUTING.md) for the full contribution guide.
 
