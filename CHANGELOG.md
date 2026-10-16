@@ -9,6 +9,10 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added
+
+- **`seshat` updates itself, and offers to when a release is published.** At start-up in a terminal it checks (once a day, 2 seconds at most, silent when offline) whether a newer release exists, and asks `Update now? [Y]es / [l]ater / [s]kip this version`. `seshat update` installs the latest release on demand (`--check`, `--yes`). The binary is downloaded from the GitHub release, checked against `SHA256SUMS.txt`, and put in place of the running one; on any failure the old binary is kept. Development builds, pipes and CI are never asked, and `SESHAT_NO_UPDATE_CHECK=1` turns the offer off.
+
 ### Changed
 
 - **The terminal command and its interface moved to a module of their own, `tui/`.** Part of the interface comes from Crush and is under the Functional Source License, and anyone who imported the engine as a Go module received that code with it. The engine module now holds none of it. Build the command with `go build ./tui/cmd/cli` (it was `./cmd/cli`); `go install github.com/KPO-Tech/seshat-runtime/tui/cmd/cli@latest` replaces the old path once the `tui` module has a release tag. Importers of `pkg/*` are not affected; the engine's `go.mod` is smaller.

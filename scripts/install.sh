@@ -190,6 +190,7 @@ fi
 echo "  Get started:"
 echo "    seshat config     # configure your AI provider + API key"
 echo "    seshat chat       # start chatting"
+echo "    seshat update     # install a newer release (seshat also offers it at start-up)"
 echo ""
 echo "  Docs: https://github.com/$REPO"
 echo ""

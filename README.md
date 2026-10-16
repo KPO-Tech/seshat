@@ -203,6 +203,8 @@ irm https://raw.githubusercontent.com/KPO-Tech/seshat-runtime/main/scripts/insta
 
 Downloads the Windows build (amd64 or arm64), checks it against `SHA256SUMS.txt`, installs `seshat.exe` into `%LOCALAPPDATA%\Programs\seshat`, adds that folder to your user PATH and installs ripgrep (winget, scoop or choco) when it is missing. Set `$env:SESHAT_VERSION = "v1.9.0"` before the command to pin a version, `$env:SESHAT_INSTALL_DIR` to choose the folder, `$env:SESHAT_SKIP_RIPGREP = "1"` to skip ripgrep.
 
+**Updating.** The installed binary updates itself. When you start `seshat` in a terminal and a newer release exists, it says so and asks `Update now? [Y]es / [l]ater / [s]kip this version`. `seshat update` does the same on demand (`--check` only looks, `--yes` skips the question). The download is checked against the release's `SHA256SUMS.txt` before it replaces the binary, and the old binary stays in place if anything fails. The release is looked up at most once a day, with a 2-second limit; `SESHAT_NO_UPDATE_CHECK=1` turns the offer off. Development builds and non-interactive runs (pipes, CI) are never asked. Re-running the install script also updates.
+
 **Developers — Go toolchain:**
 
 ```bash

@@ -7,6 +7,7 @@ import (
 	"os/signal"
 
 	"github.com/KPO-Tech/seshat-runtime/pkg/runtimepath"
+	"github.com/KPO-Tech/seshat-runtime/tui/internal/updater"
 )
 
 // version is set at build time via -ldflags "-X main.version=v1.2.3".
@@ -17,6 +18,11 @@ func main() {
 	// isolated from the seshat-product backend (seshat). SESHAT_RUNTIME_ROOT takes precedence.
 	if os.Getenv(runtimepath.EnvRuntimeRoot) == "" {
 		os.Setenv(runtimepath.EnvRuntimeRoot, runtimepath.DefaultConfigDir("seshat-cli"))
+	}
+
+	// A replacement leaves the previous binary aside (Windows cannot delete a running one): remove it now.
+	if exe, err := updater.CurrentExecutable(); err == nil {
+		updater.CleanupOld(exe)
 	}
 
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt)
