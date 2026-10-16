@@ -8,29 +8,6 @@ import (
 	"github.com/KPO-Tech/seshat-runtime/internal/seshattui/workspace"
 )
 
-// seshatBrailleLogo is the braille-art rendering of the Seshat logo.
-const seshatBrailleLogo = `` +
-	`⠀⠀⠀⠀⠀⠀⠀⢀⢠⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⢠⢸⣸⡜⡜⡜⣜⢸⠠⠀⠀⠀⠀⠀` + "\n" +
-	`⠀⠀⠀⢀⣸⡞⡇⡇⡇⡇⡇⡗⡜⢼⢸⢠⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⣐⢼⢨⢠⣸⡞⠇⠁⠀⠀⠀⠀⠀⠂⣟⠨⠀⠀⠀⠀` + "\n" +
-	`⠀⠀⢀⣿⠁⠀⠀⠀⠀⢰⣸⡜⡜⢼⢺⣣⣷⣼⢸⡼⡜⡟⡇⡇⡇⡇⡟⡜⣜⣿⠫⡇⠁⠀⠀⠀⠀⠀⠀⠀⠀⠀⡒⣿⠀⠀⠀⠀` + "\n" +
-	`⠀⠀⡒⣿⠀⠀⠀⠀⣒⢯⣰⢼⠀⢰⡺⡏⠇⠃⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠂⣟⠨⠀⠀⠀⡐⣟⣯⡧⣝⠨⠀⣒⡿⠀⠀⠀⠀` + "\n" +
-	`⠀⠀⠀⣗⢬⠀⠀⠀⠀⡗⠇⣿⡎⠇⠀⠀⠀⠀⠀⠀⠀⢀⢸⣸⢼⢸⢸⢸⠠⠀⡂⡝⡞⡏⡇⡗⣿⡧⠇⣒⣿⠀⣾⠍⠀⠀⠀⠀` + "\n" +
-	`⠀⠀⠀⠀⡗⢼⠠⠀⠀⠀⠀⣿⠨⠀⠀⠀⠀⠀⠀⢀⣸⡏⠁⠀⠀⣿⢨⣺⠭⠀⠀⠀⠀⠀⠀⠀⠂⣟⢨⣺⠍⣺⠏⠀⠀⠀⠀⠀` + "\n" +
-	`⠀⠀⠀⠀⠀⠂⣿⠌⠀⢠⢰⣻⠍⠀⢰⣸⡜⡜⡜⣾⣝⢸⢸⢠⢠⢸⢻⡿⣽⡜⡜⡜⢼⢨⠀⠀⠀⠀⡗⢯⣺⠏⠀⠀⠀⠀⠀⠀` + "\n" +
-	`⠀⠀⠀⠀⠀⣺⡿⣾⡯⠇⠁⠀⠀⣾⠇⠀⠀⠀⣲⢯⢰⣸⡞⡇⡇⡝⢼⢨⣳⢭⠀⠀⠀⡃⣽⠀⠀⠀⠀⣗⢯⠀⠀⠀⠀⠀⠀⠀` + "\n" +
-	`⠀⠀⠀⠀⠀⠀⢀⣿⠁⠀⠀⠀⠀⣿⠠⠀⢀⢰⣿⡇⠃⠀⠀⠀⠀⠀⠀⠃⡇⣿⢨⠠⠀⢀⣿⠀⠀⠀⠀⠂⣿⠠⠀⠀⠀⠀⠀⠀` + "\n" +
-	`⠀⠀⠀⠀⠀⠀⣒⡿⠀⠀⠀⠀⠀⡂⣝⣸⡏⢓⣿⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⣿⠫⡗⢼⡾⠅⠀⠀⠀⠀⠀⣟⠭⠀⠀⠀⠀⠀⠀` + "\n" +
-	`⠀⠀⠀⠀⠀⠀⣒⣽⠀⠀⠀⠀⢰⣸⣾⡷⢼⣢⣿⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⣿⢥⣸⡏⣝⠨⠀⠀⠀⠀⠀⣾⠭⠀⠀⠀⠀⠀⠀` + "\n" +
-	`⠀⠀⠀⠀⠀⠀⠂⣿⠠⠀⠀⠀⣟⢸⣺⠍⠂⡃⣿⢸⢠⠀⠀⠀⠀⠀⠀⢠⢸⣿⠇⠁⠀⠂⣿⠀⠀⠀⠀⢀⣿⠁⠀⠀⠀⠀⠀⠀` + "\n" +
-	`⠀⠀⠀⠀⠀⠀⠀⣳⢽⠀⠀⠀⠀⣟⢩⠀⠀⠀⣓⢯⡃⡗⣜⢸⢸⡼⡏⠇⣳⠯⢰⢸⢨⢰⡿⠀⠀⢀⢰⣺⡿⣾⡯⠀⠀⠀⠀⠀` + "\n" +
-	`⠀⠀⠀⠀⠀⠀⣰⡯⣳⢼⠀⠀⠀⠀⡃⡗⡜⡜⡜⣟⡾⡇⡇⠃⠃⡇⡇⣝⡿⡞⢿⢠⣻⠏⠀⣐⣯⠇⠃⠀⡐⣿⠠⠀⠀⠀⠀⠀` + "\n" +
-	`⠀⠀⠀⠀⠀⣰⡯⣐⡯⡃⣽⠠⠀⠀⠀⠀⠀⠀⠀⠂⡗⢼⠠⠀⠀⢀⣸⡏⠁⠀⠂⠃⠁⠀⠀⡂⣿⠀⠀⠀⠀⠂⡗⢼⠀⠀⠀⠀` + "\n" +
-	`⠀⠀⠀⠀⣐⡿⠀⣿⠭⢰⢺⣿⢼⢸⣸⡼⣜⠨⠀⠀⠀⠂⡇⡗⡏⡇⠁⠀⠀⠀⠀⠀⠀⠀⢰⡸⣿⢰⢼⠀⠀⠀⠀⡓⢽⠀⠀⠀` + "\n" +
-	`⠀⠀⠀⠀⣾⠭⠀⡂⣝⢺⣻⣽⠌⠀⠀⠀⡂⣽⠠⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⢠⢰⣸⡮⠇⠀⡗⠏⣳⠭⠀⠀⠀⠀⣿⠬⠀⠀` + "\n" +
-	`⠀⠀⠀⠀⣿⠬⠀⠀⠀⠀⠀⠀⠀⠀⠀⢀⢸⣢⣿⡝⡜⣼⢸⢸⢸⢸⣼⡜⡞⡇⡟⢿⢫⡧⡗⡜⡜⡏⠇⠀⠀⠀⠀⢀⣿⠁⠀⠀` + "\n" +
-	`⠀⠀⠀⠀⡂⣽⠠⠀⠀⠀⠀⠀⢀⢰⡼⡏⠃⡃⡗⠍⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠃⡇⡗⡜⢼⢸⢸⢸⢸⢸⡼⡏⠁⠀⠀⠀` + "\n" +
-	`⠀⠀⠀⠀⠀⠂⡇⡝⡜⡜⡜⡏⡇⠃⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠃⠁⠀⠀⠀⠀⠀⠀⠀`
-
 // selectedLargeModel returns the currently selected large language model.
 func (m *UI) selectedLargeModel() *workspace.AgentModel {
 	if m.com.Workspace.AgentIsReady() {
@@ -51,7 +28,12 @@ func (m *UI) landingView() string {
 	muted := t.Sidebar.WorkingDir
 	subtle := t.Section.Title
 
-	logo := orange.Render(seshatBrailleLogo)
+	// The mark only appears when the window is tall enough to keep the tagline
+	// and the shortcuts on screen with it.
+	logo := ""
+	if height >= landingMarkMinHeight {
+		logo = m.renderLandingMark()
+	}
 	wordmark := orange.Bold(true).Render("SESHAT")
 	tagline := muted.Render("One runtime. Any LLM. Any language.")
 	cwd := subtle.Render(m.com.Workspace.WorkingDir())
@@ -63,16 +45,12 @@ func (m *UI) landingView() string {
 		orange.Bold(true).Render("ctrl+c") + " " + muted.Render("quit"),
 	}, "  ")
 
-	block := lipgloss.JoinVertical(lipgloss.Center,
-		logo,
-		wordmark,
-		"",
-		tagline,
-		"",
-		shortcuts,
-		"",
-		cwd,
-	)
+	parts := []string{}
+	if logo != "" {
+		parts = append(parts, logo, "")
+	}
+	parts = append(parts, wordmark, "", tagline, "", shortcuts, "", cwd)
+	block := lipgloss.JoinVertical(lipgloss.Center, parts...)
 
 	return lipgloss.NewStyle().
 		Width(width).

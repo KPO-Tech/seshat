@@ -211,6 +211,10 @@ type UI struct {
 	// caps hold different terminal capabilities that we query for.
 	caps common.Capabilities
 
+	// landingMarkSentAt is when the landing page mark was last sent to a terminal
+	// that supports the Kitty graphics protocol.
+	landingMarkSentAt time.Time
+
 	// Editor components
 	textarea textarea.Model
 
@@ -589,6 +593,7 @@ func (m *UI) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	}
 	// Update terminal capabilities
 	m.caps.Update(msg)
+	cmds = m.withLandingMark(cmds)
 	switch msg := msg.(type) {
 	case tea.EnvMsg:
 		// Is this Windows Terminal?

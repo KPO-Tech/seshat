@@ -30,6 +30,14 @@
 
 <h1 align="center">Seshat Runtime</h1>
 
+<p align="center">
+  <img src="docs/images/seshat-demo.gif" alt="Seshat delegates a research task to five sub-agents working in parallel, then shows them in the terminal interface" width="860">
+</p>
+
+<p align="center">
+  <i>One request, five sub-agents working in parallel. Replayed from a real session of the terminal interface (the pace is reconstructed).</i>
+</p>
+
 ---
 
 ## What Seshat Is Today
