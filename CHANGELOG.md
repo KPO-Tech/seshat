@@ -9,6 +9,10 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Changed
+
+- **The skill list in the `skill` tool is capped at 8,000 characters.** Before, every skill added its description, when-to-use and triggers to every request with no limit. Now each description is cut at 1,024 characters, and a list over the budget degrades by levels: descriptions only, then descriptions shortened evenly, then names only, then as many names as fit with a count of the rest. A shortened list says so. Lists within the budget are unchanged.
+
 ### Fixed
 
 - **MCP tools reached the model with no parameters.** The schema an MCP server sends for a tool is a whole JSON schema, but it was nested a second time as the `properties` of a new one, so the model saw `{"properties":{"properties":{}}}` and had to guess every argument name. The server's schema is now converted as is, with its properties and required list.
