@@ -186,15 +186,17 @@ func (w *Wrapper) formatMCPResult(result *ToolCallResult) (string, error) {
 	return "", nil
 }
 
+// buildInputSchema converts the schema an MCP server sent for a tool. The server's value already is a whole JSON
+// schema (type, properties, required), so it is converted as is; an object type is assumed when the server omits it.
 func (w *Wrapper) buildInputSchema(mcpSchema map[string]any) schema.JSONSchema {
-	if mcpSchema == nil {
+	if len(mcpSchema) == 0 {
 		return schema.JSONSchema{Type: "object"}
 	}
-	rawSchema := map[string]any{"type": "object", "properties": mcpSchema}
-	if required, ok := mcpSchema["required"].([]string); ok {
-		rawSchema["required"] = required
+	converted := schema.FromMap(mcpSchema)
+	if converted.Type == "" {
+		converted.Type = "object"
 	}
-	return schema.FromMap(rawSchema)
+	return converted
 }
 
 func (w *Wrapper) generateAliases(mcpTool Tool) []string {
