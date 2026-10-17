@@ -42,6 +42,12 @@ const (
 	// compacted, saved N tokens" notice.
 	RuntimeEventTypeCompaction RuntimeEventType = "context.compacted"
 
+	// RuntimeEventTypeContextUsage reports how full the model's context window is, so a host can draw a gauge that
+	// moves during a turn instead of waiting for turn.completed. Emitted at the start of every loop iteration (an
+	// estimate, or the provider's own figure plus the messages added since) and again when a model response arrives
+	// (the figure the provider reported).
+	RuntimeEventTypeContextUsage RuntimeEventType = "context.usage"
+
 	// Goal events — mirrors Codex ThreadGoalUpdatedNotification / ThreadGoalUpdatedEvent.
 	RuntimeEventTypeGoalUpdated RuntimeEventType = "goal.updated"
 
@@ -98,6 +104,9 @@ type RuntimeEvent struct {
 
 	// CompactionEvent carries structured payload for context.compacted events.
 	CompactionEvent *CompactionRuntimeEvent `json:"compaction_event,omitempty"`
+
+	// ContextUsageEvent carries structured payload for context.usage events.
+	ContextUsageEvent *ContextUsageRuntimeEvent `json:"context_usage_event,omitempty"`
 
 	Error string `json:"error,omitempty"`
 }
@@ -179,6 +188,21 @@ type StageRuntimeEvent struct {
 type CompactionRuntimeEvent struct {
 	PreCompactTokens  int `json:"pre_compact_tokens"`
 	PostCompactTokens int `json:"post_compact_tokens"`
+}
+
+// ContextUsageRuntimeEvent is the structured payload for context.usage events.
+type ContextUsageRuntimeEvent struct {
+	// UsedTokens is the size of the next request: system prompt, tool definitions and messages.
+	UsedTokens int `json:"used_tokens"`
+	// WindowTokens is the model's context window.
+	WindowTokens int `json:"window_tokens"`
+	// AutoCompactAtTokens is the size at which the conversation is compacted before the next request.
+	AutoCompactAtTokens int `json:"auto_compact_at_tokens"`
+	// BlockingLimitTokens is the size above which a request is refused locally.
+	BlockingLimitTokens int `json:"blocking_limit_tokens"`
+	// Source is "estimate" when the figure is counted by the runtime, or "reported" when it starts from what the
+	// provider said the last request held.
+	Source string `json:"source"`
 }
 
 // BrowserRuntimeEvent is the structured payload emitted for browser lifecycle and interaction activity.

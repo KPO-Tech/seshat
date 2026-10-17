@@ -94,8 +94,8 @@ func (e *Engine) BlockingLimitTokens(model types.ModelIdentifier) int {
 }
 
 // CheckBlockingLimit implements CompactionStrategy.CheckBlockingLimit.
-func (e *Engine) CheckBlockingLimit(systemPrompt string, messages []types.Message, model types.ModelIdentifier) error {
-	used := e.CalculateUsage(systemPrompt, messages)
+func (e *Engine) CheckBlockingLimit(systemPrompt string, messages []types.Message, model types.ModelIdentifier, tracking *TrackingState) error {
+	used := e.UsedTokens(systemPrompt, messages, tracking)
 	limit := e.BlockingLimitTokens(model)
 	if used > limit {
 		return types.NewError(types.ErrCodeCompactFull, fmt.Sprintf(
@@ -112,14 +112,42 @@ func (e *Engine) TargetTokens(model types.ModelIdentifier) int {
 	return int(float64(effective) * e.config.CompactTargetPercentage)
 }
 
-// CalculateUsage calculates total token usage for the current request.
+// CalculateUsage estimates the tokens of a system prompt and messages. It ignores the tool definitions and anything the
+// provider reported; UsedTokens is the figure to decide on.
 func (e *Engine) CalculateUsage(systemPrompt string, messages []types.Message) int {
 	return e.contextManager.EstimateRequestTokens(systemPrompt, messages)
 }
 
-// ShouldCompact returns true if compaction should be attempted.
-func (e *Engine) ShouldCompact(systemPrompt string, messages []types.Message, model types.ModelIdentifier) bool {
+// UsedTokens is the size of the request about to be sent. With a provider-reported anchor it is that figure plus an
+// estimate of the messages added since; without one it is the estimate plus the tool definitions.
+func (e *Engine) UsedTokens(systemPrompt string, messages []types.Message, tracking *TrackingState) int {
+	if tracking != nil && tracking.Anchor != nil && tracking.Anchor.Tokens > 0 &&
+		tracking.Anchor.MessageCount <= len(messages) {
+		return tracking.Anchor.Tokens + e.contextManager.CalculateMessagesTokens(messages[tracking.Anchor.MessageCount:])
+	}
 	used := e.CalculateUsage(systemPrompt, messages)
+	if tracking != nil {
+		used += tracking.ExtraTokens
+	}
+	return used
+}
+
+// Budget reports the window of a model and the two thresholds that matter to a host showing a context gauge. A nil
+// engine (a host that wires none) reports a zero budget.
+func (e *Engine) Budget(model types.ModelIdentifier) ContextBudget {
+	if e == nil {
+		return ContextBudget{}
+	}
+	return ContextBudget{
+		WindowTokens:        types.GetContextWindow(model).MaxTokens,
+		AutoCompactAtTokens: e.AutoCompactThresholdTokens(model),
+		BlockingLimitTokens: e.BlockingLimitTokens(model),
+	}
+}
+
+// ShouldCompact returns true if compaction should be attempted.
+func (e *Engine) ShouldCompact(systemPrompt string, messages []types.Message, model types.ModelIdentifier, tracking *TrackingState) bool {
+	used := e.UsedTokens(systemPrompt, messages, tracking)
 	return used >= e.AutoCompactThresholdTokens(model)
 }
 
@@ -131,12 +159,18 @@ func (e *Engine) Compact(
 	model types.ModelIdentifier,
 	sessionID types.SessionID,
 	turnID types.TurnID,
+	tracking *TrackingState,
 ) (CompactionResult, error) {
-	preCompactTokens := e.CalculateUsage(systemPrompt, messages)
+	preCompactTokens := e.UsedTokens(systemPrompt, messages, tracking)
 	targetTokens := e.TargetTokens(model)
+	// What replaces the messages is not covered by the provider's figure, so it is measured by estimate.
+	rewritten := &TrackingState{}
+	if tracking != nil {
+		rewritten.ExtraTokens = tracking.ExtraTokens
+	}
 
 	microCompacted := e.microCompact(messages)
-	postMicroTokens := e.CalculateUsage(systemPrompt, microCompacted)
+	postMicroTokens := e.UsedTokens(systemPrompt, microCompacted, rewritten)
 	if postMicroTokens <= targetTokens {
 		return CompactionResult{
 			Messages:            microCompacted,
@@ -155,7 +189,7 @@ func (e *Engine) Compact(
 	}
 
 	compactedMessages := e.buildPostCompactMessages(microCompacted, summary, targetTokens)
-	postCompactTokens := e.CalculateUsage(systemPrompt, compactedMessages)
+	postCompactTokens := e.UsedTokens(systemPrompt, compactedMessages, rewritten)
 	metadata, err := e.buildCompactionMetadata("summary", preCompactTokens, postCompactTokens, targetTokens, compactedMessages)
 	if err != nil {
 		return CompactionResult{}, fmt.Errorf("failed to build compaction metadata: %w", err)
@@ -194,31 +228,31 @@ func (e *Engine) AutoCompact(
 		return CompactionResult{
 			Messages:            messages,
 			DidCompact:          false,
-			PreCompactTokens:    e.CalculateUsage(systemPrompt, messages),
-			PostCompactTokens:   e.CalculateUsage(systemPrompt, messages),
+			PreCompactTokens:    e.UsedTokens(systemPrompt, messages, tracking),
+			PostCompactTokens:   e.UsedTokens(systemPrompt, messages, tracking),
 			TargetTokens:        e.TargetTokens(model),
 			ConsecutiveFailures: current.ConsecutiveFailures,
 		}, nil
 	}
-	if !e.ShouldCompact(systemPrompt, messages, model) {
+	if !e.ShouldCompact(systemPrompt, messages, model, tracking) {
 		return CompactionResult{
 			Messages:            messages,
 			DidCompact:          false,
-			PreCompactTokens:    e.CalculateUsage(systemPrompt, messages),
-			PostCompactTokens:   e.CalculateUsage(systemPrompt, messages),
+			PreCompactTokens:    e.UsedTokens(systemPrompt, messages, tracking),
+			PostCompactTokens:   e.UsedTokens(systemPrompt, messages, tracking),
 			TargetTokens:        e.TargetTokens(model),
 			ConsecutiveFailures: current.ConsecutiveFailures,
 		}, nil
 	}
 
-	result, err := e.Compact(ctx, systemPrompt, messages, model, sessionID, turnID)
+	result, err := e.Compact(ctx, systemPrompt, messages, model, sessionID, turnID, &current)
 	if err != nil {
 		current.ConsecutiveFailures++
 		return CompactionResult{
 			Messages:            messages,
 			DidCompact:          false,
-			PreCompactTokens:    e.CalculateUsage(systemPrompt, messages),
-			PostCompactTokens:   e.CalculateUsage(systemPrompt, messages),
+			PreCompactTokens:    e.UsedTokens(systemPrompt, messages, tracking),
+			PostCompactTokens:   e.UsedTokens(systemPrompt, messages, tracking),
 			TargetTokens:        e.TargetTokens(model),
 			ConsecutiveFailures: current.ConsecutiveFailures,
 		}, err
