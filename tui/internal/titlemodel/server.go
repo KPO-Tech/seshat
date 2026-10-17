@@ -23,12 +23,21 @@ const readyTimeout = 90 * time.Second
 type Server struct {
 	cmd     *exec.Cmd
 	baseURL string
+	port    int
 	done    chan struct{}
 	once    sync.Once
 }
 
 // BaseURL is the address of the server's HTTP API.
 func (s *Server) BaseURL() string { return s.baseURL }
+
+// PID is the process id of the server, 0 when there is no process.
+func (s *Server) PID() int {
+	if s.cmd == nil || s.cmd.Process == nil {
+		return 0
+	}
+	return s.cmd.Process.Pid
+}
 
 // freePort asks the system for a port nobody uses on the loopback address.
 func freePort() (int, error) {
@@ -77,7 +86,7 @@ func StartServer(ctx context.Context, serverPath, modelPath string, log io.Write
 	if err := cmd.Start(); err != nil {
 		return nil, fmt.Errorf("start llama-server: %w", err)
 	}
-	s := &Server{cmd: cmd, baseURL: "http://127.0.0.1:" + strconv.Itoa(port), done: make(chan struct{})}
+	s := &Server{cmd: cmd, baseURL: "http://127.0.0.1:" + strconv.Itoa(port), port: port, done: make(chan struct{})}
 	go func() {
 		_ = cmd.Wait()
 		close(s.done)
@@ -118,6 +127,9 @@ func (s *Server) waitReady(ctx context.Context) error {
 		}
 	}
 }
+
+// Port is the loopback port the server listens on.
+func (s *Server) Port() int { return s.port }
 
 // Alive reports whether the process is still running.
 func (s *Server) Alive() bool {

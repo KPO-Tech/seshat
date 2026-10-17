@@ -98,6 +98,9 @@ func titleModelInstall(ctx context.Context, args []string, stdout, stderr io.Wri
 }
 
 func titleModelStatus(stdout io.Writer) error {
+	if titlemodel.CleanupOrphan(titleModelRoot()) {
+		fmt.Fprintln(stdout, "Stopped a title server left behind by an earlier run.")
+	}
 	st := titlemodel.LoadState(titleModelRoot())
 	switch {
 	case st.ModelPath == "" && st.ServerPath == "":

@@ -215,6 +215,8 @@ Downloads the Windows build (amd64 or arm64), checks it against `SHA256SUMS.txt`
 
 **Session titles, offline (optional).** By default the chat provider names each session after the first message. `seshat title-model install` (the installers offer it) adds a small local model instead, about 500 MB once, CPU only: titles take under a second, cost nothing and keep the first message on your machine. `seshat title-model status|disable|enable|remove` manage it, and the provider still names the session whenever the local model is missing or fails.
 
+Everything lives in `<runtime folder>/title-model/` (`~/.config/seshat-cli/` on Linux, `%APPDATA%\seshat-cli\` on Windows): the llama.cpp server, the model, a `state.json` and the server's `server.log`; `seshat title-model remove` deletes the folder. The server listens on the loopback address only, runs while seshat is open (about 600 MB of memory) and stops after ten idle minutes; if seshat is killed, the next run stops the server it left behind. `SESHAT_TITLE_MODEL=1` makes the installers install it without asking.
+
 **Developers — Go toolchain:**
 
 ```bash

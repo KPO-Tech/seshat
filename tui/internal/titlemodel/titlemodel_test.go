@@ -351,4 +351,19 @@ func TestRealModel(t *testing.T) {
 		}
 		t.Logf("%d: %q in %v (first one includes loading the model)", i, title, time.Since(start))
 	}
+
+	// What a later run would do after this one was killed: find the record and stop the server it left behind.
+	if !CleanupOrphan(root) {
+		t.Fatal("the real server left behind was not found and stopped")
+	}
+	g.mu.Lock()
+	server := g.server
+	g.mu.Unlock()
+	deadline := time.Now().Add(5 * time.Second)
+	for server.Alive() && time.Now().Before(deadline) {
+		time.Sleep(50 * time.Millisecond)
+	}
+	if server.Alive() {
+		t.Fatal("the real server is still running after the cleanup")
+	}
 }

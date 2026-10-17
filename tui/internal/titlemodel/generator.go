@@ -88,9 +88,16 @@ func NewGenerator(root string, st State) *Generator {
 			logWriter = logFile
 			defer logFile.Close()
 		}
+		// A server left behind by a run that was killed holds the memory the new one needs.
+		CleanupOrphan(root)
 		// The server keeps writing to the file after this function returns; the descriptor is inherited by the
 		// child, so closing ours is fine.
-		return StartServer(ctx, st.ServerPath, st.ModelPath, logWriter)
+		server, err := StartServer(ctx, st.ServerPath, st.ModelPath, logWriter)
+		if err != nil {
+			return nil, err
+		}
+		writeRecord(root, serverRecord{PID: server.PID(), Port: server.Port(), ModelPath: st.ModelPath})
+		return server, nil
 	}
 	return g
 }
@@ -221,7 +228,7 @@ func (g *Generator) touch() {
 		if g.server == server {
 			g.server = nil
 		}
-		server.Stop()
+		g.stop(server)
 	})
 }
 
@@ -234,7 +241,16 @@ func (g *Generator) Close() {
 		g.timer.Stop()
 	}
 	if g.server != nil {
-		g.server.Stop()
+		g.stop(g.server)
 		g.server = nil
+	}
+}
+
+// stop ends a server and forgets its record.
+func (g *Generator) stop(server *Server) {
+	pid := server.PID()
+	server.Stop()
+	if pid != 0 {
+		removeRecord(g.root, pid)
 	}
 }
