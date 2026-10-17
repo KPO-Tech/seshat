@@ -221,6 +221,7 @@ func newClient(
 		ResponseChunkFn:          chunkFn,
 		RuntimeEventFn:           runtimeEventFn,
 		OnSessionTitled:          titledFn,
+		TitleGenerator:           localTitleGenerator(),
 		WorkingDir:               options.WorkingDir,
 		BrowserRemoteControlURL:  options.BrowserRemoteControlURL,
 		BrowserExecutablePath:    options.BrowserExecutablePath,

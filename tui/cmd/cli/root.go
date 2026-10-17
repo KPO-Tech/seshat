@@ -9,12 +9,22 @@ import (
 
 func execute(ctx context.Context, args []string, stdin io.Reader, stdout, stderr io.Writer) error {
 	if len(args) == 0 {
+		if offerUpdate(ctx, stdin, stdout) {
+			return nil
+		}
 		return runChat(ctx, nil, stdin, stdout, stderr)
 	}
 
 	switch strings.TrimSpace(args[0]) {
 	case "chat":
+		if offerUpdate(ctx, stdin, stdout) {
+			return nil
+		}
 		return runChat(ctx, args[1:], stdin, stdout, stderr)
+	case "update":
+		return runUpdate(ctx, args[1:], stdin, stdout, stderr)
+	case "title-model":
+		return runTitleModel(ctx, args[1:], stdout, stderr)
 	case "config":
 		return runConfig(args[1:], stdin, stdout, stderr)
 	case "companion":
@@ -111,6 +121,14 @@ func printUsage(out io.Writer) {
 	fmt.Fprintln(out, "  seshat login   [--provider openai|anthropic] [--client-id ID]")
 	fmt.Fprintln(out, "                Authenticate via browser using your ChatGPT subscription.")
 	fmt.Fprintln(out, "                Runs a device-code flow — no API key required.")
+	fmt.Fprintln(out, "")
+	fmt.Fprintln(out, "  seshat update  [--check] [--yes]")
+	fmt.Fprintln(out, "                Install the latest release over this binary (checked against the release's SHA256SUMS.txt).")
+	fmt.Fprintln(out, "                seshat also offers it at start-up, once a day; SESHAT_NO_UPDATE_CHECK=1 turns that off.")
+	fmt.Fprintln(out, "")
+	fmt.Fprintln(out, "  seshat title-model install [--model ID] | status | enable | disable | remove")
+	fmt.Fprintln(out, "                Name sessions with a small model that runs on this machine (about 500 MB, CPU only,")
+	fmt.Fprintln(out, "                optional). Without it the chat provider names them.")
 	fmt.Fprintln(out, "")
 	fmt.Fprintln(out, "  seshat version  Print the current version.")
 }

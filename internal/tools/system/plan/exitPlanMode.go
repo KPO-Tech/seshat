@@ -232,44 +232,14 @@ func (t *ExitPlanModeTool) CheckPermissions(ctx context.Context, input map[strin
 		)
 	}
 
-	// Include a plan preview in the approval message so the user can see what they're approving.
-	plan, _ := input["plan"].(string)
-	if plan == "" {
-		return types.Ask("Exit plan mode? (no plan content found)")
-	}
-	preview := plan
-	if len(preview) > 800 {
-		preview = preview[:800] + "\n\n[... truncated — full plan will be saved to disk ...]"
-	}
-	return types.Ask(fmt.Sprintf("Approve this plan and start implementation?\n\n---\n%s", preview))
+	// Nothing under review: the global permission engine asks the user (see below).
+	return types.AllowWithInput("not under review", input)
 }
 
-// KNOWN DEFECT, documented 2026-10-12 (TODO.md, "the plan-approval gate does
-// not reach the user"): neither Ask below is ever shown to anybody. A bare
-// types.Ask carries no DecisionReason, and resolveToolPermissions only
-// preserves an Ask that has a Rule or safetyCheck reason or that comes from a
-// tool implementing RequiresUserInteraction. Everything else reaches its final
-// default branch and is replaced by an Allow, so the plan preview this function
-// builds is discarded. isAlwaysSafeTool allows it a second time.
-//
-// The Deny above is the enforced half of that gate: a plan the user has not
-// approved cannot be implemented. What remains unenforced is the preview itself
-// (nobody is shown the plan to decide on) and the case of a session that never
-// submitted a plan at all - see TODO.md for the three separate mechanisms that
-// were built to deliver the approval and are still inert.
-//
-// The consequence is that plan mode's read-only guarantee is advisory: the
-// model can leave the mode on its own and start writing, because leaving is
-// what grants write access (write_file/edit_file deny while ExecutionMode is
-// plan). See exitPlanModeApproval_test.go for the pinned reproduction.
-//
-// Making the ask survive is not enough on its own: routing it as a real Ask
-// stops the tool in the permission stage, and the SDK's plan round-trip then
-// never flips the session back to execute even though its host prompt function
-// answers "approved" (TestPersistedSessionsCarryPlanModeAcrossRestore,
-// pkg/sdk/client_test.go). The gate therefore also needs the approval path to
-// re-run the tool so its ContextModifier applies - that is the work of the
-// defect, not a one-line change here.
+// The question to the user is not asked here: a local Ask is not shown to anybody. permissions.planExitDecision
+// (the global permission engine) asks through the host's prompt function, with the plan in the message, unless the
+// user already approved the plan in the review dialog. This function only refuses the exit while a submitted plan is
+// still under review.
 
 // IsConcurrencySafe returns whether this tool use can run concurrently.
 func (t *ExitPlanModeTool) IsConcurrencySafe(input map[string]any) bool {
@@ -315,14 +285,9 @@ func (t *ExitPlanModeTool) BackfillInput(ctx context.Context, input map[string]a
 	return input
 }
 
-// RequiresUserInteraction is deliberately false, and it is not a working gate.
-//
-// The comment here used to assert that "the runtime already routes ask-decisions
-// through the prompt bridge for non-agent sessions". That belief is what let the
-// approval go missing: a bare Ask is replaced by an Allow in
-// resolveToolPermissions before any prompt bridge sees it, so the user is never
-// asked and the plan preview is never shown (see the KNOWN DEFECT note and
-// exitPlanModeApproval_test.go).
+// RequiresUserInteraction is false: a local Ask would stop the tool in the permission stage with nobody to answer.
+// The approval is asked by the global permission engine (permissions.planExitDecision), which reaches the host's
+// prompt function.
 func (t *ExitPlanModeTool) RequiresUserInteraction() bool {
 	return false
 }

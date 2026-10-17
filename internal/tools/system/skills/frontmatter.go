@@ -32,7 +32,7 @@ func ParseFrontmatter(content string, filePath string) (FrontmatterData, string)
 	return frontmatter, markdownContent
 }
 
-func ParseBooleanFrontmatter(value interface{}) bool {
+func ParseBooleanFrontmatter(value any) bool {
 	if value == nil {
 		return false
 	}
@@ -48,12 +48,12 @@ func ParseBooleanFrontmatter(value interface{}) bool {
 	}
 }
 
-func ParseStringList(value interface{}) []string {
+func ParseStringList(value any) []string {
 	if value == nil {
 		return nil
 	}
 	switch v := value.(type) {
-	case []interface{}:
+	case []any:
 		result := make([]string, 0, len(v))
 		for _, item := range v {
 			if s, ok := item.(string); ok {
@@ -90,7 +90,7 @@ func ParseStringList(value interface{}) []string {
 //	1 = basic    — skill content only, no extra context
 //	2 = standard — + working directory header
 //	3 = full     — + working directory + full context hint
-func ParsePreambleTier(value interface{}) int {
+func ParsePreambleTier(value any) int {
 	if value == nil {
 		return 0
 	}
@@ -117,18 +117,18 @@ func ParsePreambleTier(value interface{}) int {
 	return 0
 }
 
-func ParseArgumentNames(value interface{}) []string {
+func ParseArgumentNames(value any) []string {
 	if value == nil {
 		return nil
 	}
 	switch v := value.(type) {
-	case []interface{}:
+	case []any:
 		result := make([]string, 0, len(v))
 		for _, item := range v {
 			switch entry := item.(type) {
 			case string:
 				result = append(result, entry)
-			case map[string]interface{}:
+			case map[string]any:
 				// The documented structured form: {name, description, default}
 				// (docs/skills.md). Only the name feeds argument substitution
 				// today - description is for human/model documentation, and
@@ -176,24 +176,24 @@ func ParseEffortValue(value string) string {
 	return value
 }
 
-func ParseShellFrontmatter(value interface{}, skillName string) *FrontmatterShell {
+func ParseShellFrontmatter(value any, skillName string) *FrontmatterShell {
 	if value == nil {
 		return nil
 	}
 
 	switch v := value.(type) {
-	case map[string]interface{}:
+	case map[string]any:
 		shell := &FrontmatterShell{}
-		if before, ok := v["before"].([]interface{}); ok {
+		if before, ok := v["before"].([]any); ok {
 			shell.Before = interfaceToStringList(before)
 		}
-		if after, ok := v["after"].([]interface{}); ok {
+		if after, ok := v["after"].([]any); ok {
 			shell.After = interfaceToStringList(after)
 		}
-		if onError, ok := v["on_error"].([]interface{}); ok {
+		if onError, ok := v["on_error"].([]any); ok {
 			shell.OnError = interfaceToStringList(onError)
 		}
-		if onComplete, ok := v["on_complete"].([]interface{}); ok {
+		if onComplete, ok := v["on_complete"].([]any); ok {
 			shell.OnComplete = interfaceToStringList(onComplete)
 		}
 		return shell
@@ -202,39 +202,39 @@ func ParseShellFrontmatter(value interface{}, skillName string) *FrontmatterShel
 	}
 }
 
-func ParseHooksFromFrontmatter(value interface{}) *HooksSettings {
+func ParseHooksFromFrontmatter(value any) *HooksSettings {
 	if value == nil {
 		return nil
 	}
 
 	switch v := value.(type) {
-	case map[string]interface{}:
+	case map[string]any:
 		hooks := &HooksSettings{}
-		if beforeTool, ok := v["before_tool"].([]interface{}); ok {
+		if beforeTool, ok := v["before_tool"].([]any); ok {
 			hooks.BeforeTool = interfaceToStringList(beforeTool)
 		}
-		if afterTool, ok := v["after_tool"].([]interface{}); ok {
+		if afterTool, ok := v["after_tool"].([]any); ok {
 			hooks.AfterTool = interfaceToStringList(afterTool)
 		}
-		if before, ok := v["before"].([]interface{}); ok {
+		if before, ok := v["before"].([]any); ok {
 			hooks.Before = interfaceToStringList(before)
 		}
-		if after, ok := v["after"].([]interface{}); ok {
+		if after, ok := v["after"].([]any); ok {
 			hooks.After = interfaceToStringList(after)
 		}
-		if onError, ok := v["on_error"].([]interface{}); ok {
+		if onError, ok := v["on_error"].([]any); ok {
 			hooks.OnError = interfaceToStringList(onError)
 		}
-		if onCancel, ok := v["on_cancel"].([]interface{}); ok {
+		if onCancel, ok := v["on_cancel"].([]any); ok {
 			hooks.OnCancel = interfaceToStringList(onCancel)
 		}
-		if onComplete, ok := v["on_complete"].([]interface{}); ok {
+		if onComplete, ok := v["on_complete"].([]any); ok {
 			hooks.OnComplete = interfaceToStringList(onComplete)
 		}
-		if toolAllowed, ok := v["tool_allowed"].([]interface{}); ok {
+		if toolAllowed, ok := v["tool_allowed"].([]any); ok {
 			hooks.ToolAllowed = interfaceToStringList(toolAllowed)
 		}
-		if toolDenied, ok := v["tool_denied"].([]interface{}); ok {
+		if toolDenied, ok := v["tool_denied"].([]any); ok {
 			hooks.ToolDenied = interfaceToStringList(toolDenied)
 		}
 		return hooks
@@ -243,7 +243,7 @@ func ParseHooksFromFrontmatter(value interface{}) *HooksSettings {
 	}
 }
 
-func interfaceToStringList(arr []interface{}) []string {
+func interfaceToStringList(arr []any) []string {
 	result := make([]string, 0, len(arr))
 	for _, item := range arr {
 		if s, ok := item.(string); ok {
@@ -253,13 +253,13 @@ func interfaceToStringList(arr []interface{}) []string {
 	return result
 }
 
-func SplitPathInFrontmatter(paths interface{}) []string {
+func SplitPathInFrontmatter(paths any) []string {
 	if paths == nil {
 		return nil
 	}
 
 	switch v := paths.(type) {
-	case []interface{}:
+	case []any:
 		result := make([]string, 0, len(v))
 		for _, item := range v {
 			if s, ok := item.(string); ok {
@@ -306,12 +306,12 @@ func ExtractDescriptionFromMarkdown(content string, fallbackLabel string) string
 
 // ParseRequires converts a frontmatter requires value into a slice of
 // SkillRequirement. Accepts either a YAML list of maps or a single map.
-func ParseRequires(value interface{}) []SkillRequirement {
+func ParseRequires(value any) []SkillRequirement {
 	if value == nil {
 		return nil
 	}
 
-	toReq := func(m map[string]interface{}) (SkillRequirement, bool) {
+	toReq := func(m map[string]any) (SkillRequirement, bool) {
 		r := SkillRequirement{}
 		if v, ok := m["type"].(string); ok {
 			r.Type = v
@@ -325,7 +325,7 @@ func ParseRequires(value interface{}) []SkillRequirement {
 		if v, ok := m["optional"].(bool); ok {
 			r.Optional = v
 		}
-		if pkgs, ok := m["packages"].([]interface{}); ok {
+		if pkgs, ok := m["packages"].([]any); ok {
 			for _, p := range pkgs {
 				if s, ok := p.(string); ok {
 					r.Packages = append(r.Packages, s)
@@ -336,17 +336,17 @@ func ParseRequires(value interface{}) []SkillRequirement {
 	}
 
 	switch v := value.(type) {
-	case []interface{}:
+	case []any:
 		var result []SkillRequirement
 		for _, item := range v {
-			if m, ok := item.(map[string]interface{}); ok {
+			if m, ok := item.(map[string]any); ok {
 				if r, ok := toReq(m); ok {
 					result = append(result, r)
 				}
 			}
 		}
 		return result
-	case map[string]interface{}:
+	case map[string]any:
 		if r, ok := toReq(v); ok {
 			return []SkillRequirement{r}
 		}
@@ -354,7 +354,7 @@ func ParseRequires(value interface{}) []SkillRequirement {
 	return nil
 }
 
-func CoerceDescriptionToString(value interface{}, skillName string) *string {
+func CoerceDescriptionToString(value any, skillName string) *string {
 	if value == nil {
 		return nil
 	}

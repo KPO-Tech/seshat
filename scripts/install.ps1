@@ -7,6 +7,7 @@
 #   $env:SESHAT_VERSION = "v1.9.0"        Install a specific version (default: latest)
 #   $env:SESHAT_INSTALL_DIR = "C:\tools"  Binary destination (default: %LOCALAPPDATA%\Programs\seshat)
 #   $env:SESHAT_SKIP_RIPGREP = "1"        Do not try to install ripgrep
+#   $env:SESHAT_TITLE_MODEL = "1"         Install the local session-title model without asking ("0" skips it)
 #
 # What it does:
 #   1. Picks the Windows build that matches the processor (amd64 or arm64)
@@ -157,6 +158,36 @@ if ($env:SESHAT_SKIP_RIPGREP -eq "1") {
     }
 }
 
+# -- Optional: local model that names your sessions ---------------------------
+Write-Step "Session titles"
+
+# $env:SESHAT_TITLE_MODEL = "1" installs it without asking, "0" skips it. Otherwise the question is asked when
+# someone can answer it.
+$titleChoice = $env:SESHAT_TITLE_MODEL
+& $target title-model status *> $null
+if ($LASTEXITCODE -ne 0) {
+    Write-Info "This version has no local title model."
+} else {
+    if (-not $titleChoice) {
+        $titleChoice = "0"
+        if ([Environment]::UserInteractive -and -not [Console]::IsInputRedirected) {
+            Write-Host "Name your sessions with a small model that runs on this machine?"
+            Write-Host "  About 500 MB to download (once), CPU only, works offline. Without it the"
+            Write-Host "  chat provider names them."
+            $reply = Read-Host "  Install it now? [y/N]"
+            if ($reply -match "^(y|yes|o|oui)$") { $titleChoice = "1" }
+        }
+    }
+    if ($titleChoice -eq "1") {
+        & $target title-model install
+        if ($LASTEXITCODE -ne 0) {
+            Write-Warn "The title model was not installed. Sessions are named by the chat provider; try again with: seshat title-model install"
+        }
+    } else {
+        Write-Info "Skipped. To add it later: seshat title-model install"
+    }
+}
+
 # -- Done ----------------------------------------------------------------------
 $runtimeRoot = if ($env:SESHAT_RUNTIME_ROOT) { $env:SESHAT_RUNTIME_ROOT } else { Join-Path $env:APPDATA "seshat-cli" }
 Write-Host ""
@@ -169,6 +200,8 @@ Write-Host ""
 Write-Host "  Get started (in a new terminal if seshat is not found):"
 Write-Host "    seshat config      # configure your AI provider and API key"
 Write-Host "    seshat chat        # start chatting"
+Write-Host "    seshat update      # install a newer release (seshat also offers it at start-up)"
+Write-Host "    seshat title-model install   # name sessions with a small local model (optional)"
 Write-Host "    seshat terminal-setup   # make shift+Enter insert a newline (Windows Terminal, VS Code)"
 Write-Host ""
 Write-Host "  Docs: https://github.com/$Repo"
