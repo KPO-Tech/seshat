@@ -22,7 +22,7 @@ func (fc *FinancialCalculator) Calculate(req FinancialRequest) (FinancialResult,
 	}
 
 	var result float64
-	var breakdown map[string]interface{}
+	var breakdown map[string]any
 	var description string
 	var err error
 
@@ -98,7 +98,7 @@ func (fc *FinancialCalculator) InternalRateOfReturn(cashFlows []float64) (float6
 	return 0, fmt.Errorf("IRR calculation did not converge")
 }
 
-func (fc *FinancialCalculator) compoundInterest(req FinancialRequest) (float64, map[string]interface{}, error) {
+func (fc *FinancialCalculator) compoundInterest(req FinancialRequest) (float64, map[string]any, error) {
 	if req.Principal <= 0 {
 		return 0, nil, fmt.Errorf("principal must be positive")
 	}
@@ -128,7 +128,7 @@ func (fc *FinancialCalculator) compoundInterest(req FinancialRequest) (float64, 
 	finalAmount, _ := principal.Mul(decimal.NewFromFloat(compoundFactor)).Float64()
 	interestEarned := finalAmount - req.Principal
 
-	breakdown := map[string]interface{}{
+	breakdown := map[string]any{
 		"principal":          req.Principal,
 		"rate_percent":       req.Rate,
 		"time_years":         req.Time,
@@ -140,7 +140,7 @@ func (fc *FinancialCalculator) compoundInterest(req FinancialRequest) (float64, 
 	return finalAmount, breakdown, nil
 }
 
-func (fc *FinancialCalculator) simpleInterest(req FinancialRequest) (float64, map[string]interface{}, error) {
+func (fc *FinancialCalculator) simpleInterest(req FinancialRequest) (float64, map[string]any, error) {
 	if req.Principal <= 0 {
 		return 0, nil, fmt.Errorf("principal must be positive")
 	}
@@ -152,7 +152,7 @@ func (fc *FinancialCalculator) simpleInterest(req FinancialRequest) (float64, ma
 	}
 	interest := req.Principal * (req.Rate / 100) * req.Time
 	finalAmount := req.Principal + interest
-	breakdown := map[string]interface{}{
+	breakdown := map[string]any{
 		"principal":    req.Principal,
 		"rate_percent": req.Rate,
 		"time_years":   req.Time,
@@ -162,7 +162,7 @@ func (fc *FinancialCalculator) simpleInterest(req FinancialRequest) (float64, ma
 	return interest, breakdown, nil
 }
 
-func (fc *FinancialCalculator) loanPayment(req FinancialRequest) (float64, map[string]interface{}, error) {
+func (fc *FinancialCalculator) loanPayment(req FinancialRequest) (float64, map[string]any, error) {
 	if req.Principal <= 0 {
 		return 0, nil, fmt.Errorf("principal must be positive")
 	}
@@ -181,7 +181,7 @@ func (fc *FinancialCalculator) loanPayment(req FinancialRequest) (float64, map[s
 
 	if periodRate == 0 {
 		payment := req.Principal / totalPayments
-		return payment, map[string]interface{}{
+		return payment, map[string]any{
 			"loan_amount": req.Principal, "rate_percent": req.Rate,
 			"term_years": req.Time, "payments_per_year": periods,
 			"monthly_payment": payment, "total_paid": payment * totalPayments, "total_interest": 0.0,
@@ -193,7 +193,7 @@ func (fc *FinancialCalculator) loanPayment(req FinancialRequest) (float64, map[s
 	totalPaid := payment * totalPayments
 	totalInterest := totalPaid - req.Principal
 
-	breakdown := map[string]interface{}{
+	breakdown := map[string]any{
 		"loan_amount": req.Principal, "rate_percent": req.Rate,
 		"term_years": req.Time, "payments_per_year": periods,
 		"monthly_payment": payment, "total_paid": totalPaid,
@@ -202,7 +202,7 @@ func (fc *FinancialCalculator) loanPayment(req FinancialRequest) (float64, map[s
 	return payment, breakdown, nil
 }
 
-func (fc *FinancialCalculator) returnOnInvestment(req FinancialRequest) (float64, map[string]interface{}, error) {
+func (fc *FinancialCalculator) returnOnInvestment(req FinancialRequest) (float64, map[string]any, error) {
 	if req.Principal <= 0 {
 		return 0, nil, fmt.Errorf("initial investment must be positive")
 	}
@@ -210,7 +210,7 @@ func (fc *FinancialCalculator) returnOnInvestment(req FinancialRequest) (float64
 		return 0, nil, fmt.Errorf("final value must be positive")
 	}
 	roi := ((req.FutureValue - req.Principal) / req.Principal) * 100
-	breakdown := map[string]interface{}{
+	breakdown := map[string]any{
 		"initial_investment": req.Principal,
 		"final_value":        req.FutureValue,
 		"gain_loss":          req.FutureValue - req.Principal,
@@ -223,7 +223,7 @@ func (fc *FinancialCalculator) returnOnInvestment(req FinancialRequest) (float64
 	return roi, breakdown, nil
 }
 
-func (fc *FinancialCalculator) presentValue(req FinancialRequest) (float64, map[string]interface{}, error) {
+func (fc *FinancialCalculator) presentValue(req FinancialRequest) (float64, map[string]any, error) {
 	if req.FutureValue <= 0 {
 		return 0, nil, fmt.Errorf("future value must be positive")
 	}
@@ -242,7 +242,7 @@ func (fc *FinancialCalculator) presentValue(req FinancialRequest) (float64, map[
 	discountFactor := math.Pow(1+periodRate, totalPeriods)
 	pv := req.FutureValue / discountFactor
 
-	breakdown := map[string]interface{}{
+	breakdown := map[string]any{
 		"future_value": req.FutureValue, "discount_rate": req.Rate,
 		"time_years": req.Time, "compounds_per_year": periods,
 		"present_value": pv, "discount_amount": req.FutureValue - pv, "discount_factor": discountFactor,
@@ -250,7 +250,7 @@ func (fc *FinancialCalculator) presentValue(req FinancialRequest) (float64, map[
 	return pv, breakdown, nil
 }
 
-func (fc *FinancialCalculator) futureValue(req FinancialRequest) (float64, map[string]interface{}, error) {
+func (fc *FinancialCalculator) futureValue(req FinancialRequest) (float64, map[string]any, error) {
 	result, breakdown, err := fc.compoundInterest(req)
 	if err != nil {
 		return 0, nil, err

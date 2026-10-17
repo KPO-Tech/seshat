@@ -16,7 +16,7 @@ import (
 // RPCMessage represents a JSON-RPC message
 type RPCMessage struct {
 	JSONRPC string          `json:"jsonrpc"`
-	ID      interface{}     `json:"id,omitempty"`
+	ID      any             `json:"id,omitempty"`
 	Method  string          `json:"method,omitempty"`
 	Params  json.RawMessage `json:"params,omitempty"`
 	Result  json.RawMessage `json:"result,omitempty"`
@@ -130,7 +130,7 @@ func (c *Client) Initialize(ctx context.Context, rootPath string) (*InitializeRe
 
 // Shutdown sends the shutdown request
 func (c *Client) Shutdown(ctx context.Context) error {
-	var result interface{}
+	var result any
 	err := c.Request(ctx, "shutdown", nil, &result)
 	if err != nil {
 		return err
@@ -147,7 +147,7 @@ func (c *Client) Close() error {
 
 // TextDocumentDefinitions sends a textDocument/definition request
 func (c *Client) TextDocumentDefinition(ctx context.Context, uri string, position Position) ([]Location, error) {
-	var result interface{}
+	var result any
 	err := c.Request(ctx, "textDocument/definition", TextDocumentPositionParams{
 		TextDocument: TextDocumentIdentifier{URI: uri},
 		Position:     position,
@@ -161,7 +161,7 @@ func (c *Client) TextDocumentDefinition(ctx context.Context, uri string, positio
 
 // TextDocumentReferences sends a textDocument/references request
 func (c *Client) TextDocumentReferences(ctx context.Context, uri string, position Position) ([]Location, error) {
-	var result interface{}
+	var result any
 	err := c.Request(ctx, "textDocument/references", ReferenceParams{
 		TextDocumentPositionParams: TextDocumentPositionParams{
 			TextDocument: TextDocumentIdentifier{URI: uri},
@@ -191,7 +191,7 @@ func (c *Client) TextDocumentHover(ctx context.Context, uri string, position Pos
 
 // TextDocumentDocumentSymbol sends a textDocument/documentSymbol request
 func (c *Client) TextDocumentDocumentSymbol(ctx context.Context, uri string) ([]DocumentSymbol, error) {
-	var result interface{}
+	var result any
 	err := c.Request(ctx, "textDocument/documentSymbol", DocumentSymbolParams{
 		TextDocument: TextDocumentIdentifier{URI: uri},
 	}, &result)
@@ -205,10 +205,10 @@ func (c *Client) TextDocumentDocumentSymbol(ctx context.Context, uri string) ([]
 
 	// Can be either []DocumentSymbol or []SymbolInformation
 	switch arr := result.(type) {
-	case []interface{}:
+	case []any:
 		symbols := make([]DocumentSymbol, 0, len(arr))
 		for _, item := range arr {
-			if data, ok := item.(map[string]interface{}); ok {
+			if data, ok := item.(map[string]any); ok {
 				sym := documentSymbolFromMap(data)
 				symbols = append(symbols, sym)
 			}
@@ -233,7 +233,7 @@ func (c *Client) WorkspaceSymbol(ctx context.Context, query string) ([]SymbolInf
 
 // TextDocumentImplementation sends a textDocument/implementation request
 func (c *Client) TextDocumentImplementation(ctx context.Context, uri string, position Position) ([]Location, error) {
-	var result interface{}
+	var result any
 	err := c.Request(ctx, "textDocument/implementation", TextDocumentPositionParams{
 		TextDocument: TextDocumentIdentifier{URI: uri},
 		Position:     position,
@@ -330,7 +330,7 @@ func (c *Client) RegisterNotification(method string, handler NotificationHandler
 }
 
 // Request sends a request and waits for response
-func (c *Client) Request(ctx context.Context, method string, params interface{}, result interface{}) error {
+func (c *Client) Request(ctx context.Context, method string, params any, result any) error {
 	c.mu.Lock()
 	id := c.nextID
 	c.nextID++
@@ -389,7 +389,7 @@ func (c *Client) Request(ctx context.Context, method string, params interface{},
 }
 
 // Notify sends a notification (no response expected)
-func (c *Client) Notify(ctx context.Context, method string, params interface{}) error {
+func (c *Client) Notify(ctx context.Context, method string, params any) error {
 	msg := RPCMessage{
 		JSONRPC: "2.0",
 		Method:  method,
@@ -518,51 +518,51 @@ func (c *Client) handleMessage(msg *RPCMessage) {
 
 // Helper functions
 
-func locationsFromResult(result interface{}) ([]Location, error) {
+func locationsFromResult(result any) ([]Location, error) {
 	if result == nil {
 		return nil, nil
 	}
 
 	// Can be Location, []Location, or nil
 	switch v := result.(type) {
-	case []interface{}:
+	case []any:
 		locations := make([]Location, 0, len(v))
 		for _, item := range v {
-			if loc, ok := item.(map[string]interface{}); ok {
+			if loc, ok := item.(map[string]any); ok {
 				locations = append(locations, locationFromMap(loc))
 			}
 		}
 		return locations, nil
-	case map[string]interface{}:
+	case map[string]any:
 		return []Location{locationFromMap(v)}, nil
 	}
 
 	return nil, nil
 }
 
-func locationFromMap(m map[string]interface{}) Location {
+func locationFromMap(m map[string]any) Location {
 	loc := Location{}
 	if uri, ok := m["uri"].(string); ok {
 		loc.URI = uri
 	}
-	if rng, ok := m["range"].(map[string]interface{}); ok {
+	if rng, ok := m["range"].(map[string]any); ok {
 		loc.Range = rangeFromMap(rng)
 	}
 	return loc
 }
 
-func rangeFromMap(m map[string]interface{}) Range {
+func rangeFromMap(m map[string]any) Range {
 	r := Range{}
-	if start, ok := m["start"].(map[string]interface{}); ok {
+	if start, ok := m["start"].(map[string]any); ok {
 		r.Start = positionFromMap(start)
 	}
-	if end, ok := m["end"].(map[string]interface{}); ok {
+	if end, ok := m["end"].(map[string]any); ok {
 		r.End = positionFromMap(end)
 	}
 	return r
 }
 
-func positionFromMap(m map[string]interface{}) Position {
+func positionFromMap(m map[string]any) Position {
 	p := Position{}
 	if line, ok := m["line"].(float64); ok {
 		p.Line = int(line)
@@ -573,7 +573,7 @@ func positionFromMap(m map[string]interface{}) Position {
 	return p
 }
 
-func documentSymbolFromMap(m map[string]interface{}) DocumentSymbol {
+func documentSymbolFromMap(m map[string]any) DocumentSymbol {
 	sym := DocumentSymbol{}
 	if name, ok := m["name"].(string); ok {
 		sym.Name = name
@@ -584,16 +584,16 @@ func documentSymbolFromMap(m map[string]interface{}) DocumentSymbol {
 	if kind, ok := m["kind"].(float64); ok {
 		sym.Kind = int(kind)
 	}
-	if rng, ok := m["range"].(map[string]interface{}); ok {
+	if rng, ok := m["range"].(map[string]any); ok {
 		sym.Range = rangeFromMap(rng)
 	}
-	if selRng, ok := m["selectionRange"].(map[string]interface{}); ok {
+	if selRng, ok := m["selectionRange"].(map[string]any); ok {
 		sym.SelectionRange = rangeFromMap(selRng)
 	}
-	if children, ok := m["children"].([]interface{}); ok {
+	if children, ok := m["children"].([]any); ok {
 		sym.Children = make([]DocumentSymbol, 0, len(children))
 		for _, child := range children {
-			if childMap, ok := child.(map[string]interface{}); ok {
+			if childMap, ok := child.(map[string]any); ok {
 				sym.Children = append(sym.Children, documentSymbolFromMap(childMap))
 			}
 		}

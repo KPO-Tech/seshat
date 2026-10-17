@@ -100,7 +100,7 @@ type HookLifecycleEvent struct {
 	HookID    string
 	Timestamp time.Time
 	Error     error
-	Metadata  map[string]interface{}
+	Metadata  map[string]any
 }
 
 // NewHookLifecycleManager creates a new hook lifecycle manager
@@ -166,7 +166,7 @@ func (m *HookLifecycleManager) RegisterHook(hook HookRegistration) error {
 		EventType: "hook_registered",
 		HookID:    hook.ID,
 		Timestamp: time.Now(),
-		Metadata: map[string]interface{}{
+		Metadata: map[string]any{
 			"event":     string(hook.Event),
 			"priority":  hook.Priority,
 			"permanent": hook.IsPermanent,
@@ -229,7 +229,7 @@ func (m *HookLifecycleManager) ExecuteHook(
 		HookID:    hook.ID,
 		Timestamp: time.Now(),
 		Error:     err,
-		Metadata: map[string]interface{}{
+		Metadata: map[string]any{
 			"executionTime": executionTime,
 			"event":         string(hook.Event),
 		},
@@ -385,7 +385,7 @@ func (m *HookLifecycleManager) handleHookError(hook HookRegistration, err error)
 			HookID:    hook.ID,
 			Timestamp: time.Now(),
 			Error:     err,
-			Metadata: map[string]interface{}{
+			Metadata: map[string]any{
 				"errorCount": currentHook.ErrorCount,
 				"maxRetries": m.config.MaxExecutionRetries,
 			},
@@ -432,7 +432,7 @@ func (m *HookLifecycleManager) performCleanup() {
 			EventType: "cleanup_expired_hooks",
 			HookID:    "system",
 			Timestamp: time.Now(),
-			Metadata: map[string]interface{}{
+			Metadata: map[string]any{
 				"cleanedCount": expiredCount,
 			},
 		})
@@ -445,7 +445,7 @@ func (m *HookLifecycleManager) performCleanup() {
 			EventType: "cleanup_dead_hooks",
 			HookID:    "system",
 			Timestamp: time.Now(),
-			Metadata: map[string]interface{}{
+			Metadata: map[string]any{
 				"cleanedCount": deadCount,
 			},
 		})
