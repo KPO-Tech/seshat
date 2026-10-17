@@ -25,7 +25,7 @@ func (sc *StatisticsCalculator) Calculate(req StatisticsRequest) (StatisticsResu
 		return StatisticsResult{}, err
 	}
 
-	var result interface{}
+	var result any
 	var err error
 
 	switch req.Operation {
@@ -69,7 +69,7 @@ func (sc *StatisticsCalculator) CalculatePercentile(data []float64, percentile f
 }
 
 // Summary returns a comprehensive statistical summary of the dataset.
-func (sc *StatisticsCalculator) Summary(data []float64) (map[string]interface{}, error) {
+func (sc *StatisticsCalculator) Summary(data []float64) (map[string]any, error) {
 	if err := sc.validateData(data); err != nil {
 		return nil, err
 	}
@@ -78,7 +78,7 @@ func (sc *StatisticsCalculator) Summary(data []float64) (map[string]interface{},
 	sort.Float64s(sorted)
 
 	dataRange, _ := sc.Range(data)
-	summary := map[string]interface{}{
+	summary := map[string]any{
 		"count":       len(data),
 		"mean":        sc.mean(data),
 		"median":      sc.median(data),
@@ -123,7 +123,7 @@ func (sc *StatisticsCalculator) median(data []float64) float64 {
 	return stat.Quantile(0.5, stat.Empirical, sorted, nil)
 }
 
-func (sc *StatisticsCalculator) mode(data []float64) (interface{}, error) {
+func (sc *StatisticsCalculator) mode(data []float64) (any, error) {
 	if len(data) == 0 {
 		return nil, fmt.Errorf("cannot calculate mode of empty data set")
 	}
@@ -150,7 +150,7 @@ func (sc *StatisticsCalculator) mode(data []float64) (interface{}, error) {
 	if len(modes) == 1 {
 		return modes[0], nil
 	}
-	return map[string]interface{}{"modes": modes, "frequency": maxFreq, "type": "multimodal"}, nil
+	return map[string]any{"modes": modes, "frequency": maxFreq, "type": "multimodal"}, nil
 }
 
 func (sc *StatisticsCalculator) standardDeviation(data []float64) float64 {

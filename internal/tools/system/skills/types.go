@@ -52,40 +52,40 @@ const (
 )
 
 type FrontmatterData struct {
-	Name                   interface{} `yaml:"name"`
-	Description            interface{} `yaml:"description"`
-	WhenToUse              string      `yaml:"when_to_use"`
-	ArgumentHint           string      `yaml:"argument-hint"`
-	Arguments              interface{} `yaml:"arguments"`
-	AllowedTools           interface{} `yaml:"allowed-tools"`
-	Model                  string      `yaml:"model"`
-	DisableModelInvocation interface{} `yaml:"disable-model-invocation"`
-	UserInvocable          interface{} `yaml:"user-invocable"`
-	Version                string      `yaml:"version"`
-	Context                string      `yaml:"context"`
-	Agent                  string      `yaml:"agent"`
-	Effort                 string      `yaml:"effort"`
-	Paths                  interface{} `yaml:"paths"`
-	Hooks                  interface{} `yaml:"hooks"`
-	Shell                  interface{} `yaml:"shell"`
+	Name                   any    `yaml:"name"`
+	Description            any    `yaml:"description"`
+	WhenToUse              string `yaml:"when_to_use"`
+	ArgumentHint           string `yaml:"argument-hint"`
+	Arguments              any    `yaml:"arguments"`
+	AllowedTools           any    `yaml:"allowed-tools"`
+	Model                  string `yaml:"model"`
+	DisableModelInvocation any    `yaml:"disable-model-invocation"`
+	UserInvocable          any    `yaml:"user-invocable"`
+	Version                string `yaml:"version"`
+	Context                string `yaml:"context"`
+	Agent                  string `yaml:"agent"`
+	Effort                 string `yaml:"effort"`
+	Paths                  any    `yaml:"paths"`
+	Hooks                  any    `yaml:"hooks"`
+	Shell                  any    `yaml:"shell"`
 
 	// Triggers is a list of natural-language phrases that should auto-activate
 	// this skill (e.g. ["browse this page", "take a screenshot"]). Inspired by
 	// gstack. When the user's prompt contains any trigger phrase, the skill is
 	// expanded automatically — no /slash-command needed.
-	Triggers interface{} `yaml:"triggers,omitempty"`
+	Triggers any `yaml:"triggers,omitempty"`
 
 	// PreambleTier controls how much context is prepended to the expanded skill
 	// prompt. Accepts int (1/2/3) or string ("basic"/"standard"/"full").
 	//   1 / basic    — skill content only (default)
 	//   2 / standard — + working directory info
 	//   3 / full     — + working directory + user preferences block
-	PreambleTier interface{} `yaml:"preamble-tier,omitempty"`
+	PreambleTier any `yaml:"preamble-tier,omitempty"`
 
 	// Requires lists external dependencies the skill needs (Node.js, Python
 	// packages, system tools). The agent checks them at runtime and requests
 	// user permission before installing any missing dependency.
-	Requires interface{} `yaml:"requires,omitempty"`
+	Requires any `yaml:"requires,omitempty"`
 }
 
 type HooksSettings struct {

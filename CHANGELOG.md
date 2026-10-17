@@ -9,6 +9,10 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Security
+
+- **`exit_plan_mode` asks the user to approve the plan.** Leaving plan mode is what grants write access, and the question the tool built was replaced by an allow before any prompt saw it, so the model could end plan mode alone. The permission engine now asks through the host's prompt function, with the plan in the message, unless the user already approved the plan in the review dialog (`submit_plan`). A host with no prompt function refuses the exit, as it does for any other tool that needs a question; an SDK host that wants plan mode without a prompt calls `Session.ApprovePlan` or `ClearPlanMode`. `never` and `bypass` modes are unchanged.
+
 ### Added
 
 - **Sessions can be named by a small model that runs on your machine.** `seshat title-model install` downloads the llama.cpp server (a 12 to 19 MB CPU build) and Qwen2.5 0.5B Instruct (about 470 MB, or Gemma 3 270M with `--model gemma-3-270m`), checks both against SHA-256 sums fixed in seshat, then starts the model once to prove it answers. Titles are then made offline, for free, without showing the first message to the provider: about 0.4 s once the model is loaded and under 2 s the first time, measured on a laptop CPU. The server starts at the first title, stops after ten idle minutes and when seshat exits, and a server left behind by a run that was killed is found and stopped by the next run (it is only stopped if the port in its record still answers as a llama-server that has loaded this very model file, since process ids are reused). When the model is not installed, is turned off (`seshat title-model disable`) or fails, the chat provider names the session as before. Both installers offer it at the end (`SESHAT_TITLE_MODEL=1` installs it without asking, `0` skips it); it is never downloaded without being asked for.

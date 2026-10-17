@@ -154,8 +154,8 @@ func (im *IntegrationManager) Search(query MemoryQuery) (*MemorySearchResult, er
 }
 
 // Stats returns combined statistics from both layers.
-func (im *IntegrationManager) Stats() map[string]interface{} {
-	stats := make(map[string]interface{})
+func (im *IntegrationManager) Stats() map[string]any {
+	stats := make(map[string]any)
 
 	if im.enableCatalog && im.catalog != nil {
 		stats["catalog"] = im.catalog.Stats()

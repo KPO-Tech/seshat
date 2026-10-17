@@ -238,9 +238,13 @@ func (i *Integrator) ResolverWithContext(
 			})
 		}
 
+		message := fmt.Sprintf("Allow tool '%s'?", toolName)
+		if result.DecisionReason != nil && result.DecisionReason.Source == planApprovalSource && result.Reason != "" {
+			message = result.Reason
+		}
 		promptReq := types.PromptRequest{
 			Type:    types.PromptTypeConfirm,
-			Message: fmt.Sprintf("Allow tool '%s'?", toolName),
+			Message: message,
 			Metadata: map[string]any{
 				"tool_name":         toolName,
 				"tool_input":        toolInput,
