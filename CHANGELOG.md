@@ -9,6 +9,10 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Security
+
+- **A command with hidden characters is refused.** Direction controls (U+202A to U+202E, U+2066 to U+2069, the direction marks), tag characters and control characters (escape, NUL, C1) in a shell command can make it read differently from what it does, which defeats approval by reading. The bash tool now denies such a command before any prompt. Emoji joiners and variation selectors are not affected. The new `internal/textsafe` package also strips terminal escape sequences from text, for the displays that use it.
+
 ### Added
 
 - **`install.sh` checks for ripgrep.** The glob and grep tools run ripgrep, and the Linux and macOS installer did not say so (the Windows one already installs it). It now installs it with Homebrew when there is one, and otherwise prints the exact command for the package manager it finds (apt, dnf, pacman, zypper or apk) instead of running `sudo` for you. `SESHAT_SKIP_RIPGREP=1` skips the check, as on Windows.
