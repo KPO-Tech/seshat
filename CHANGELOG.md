@@ -9,6 +9,10 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Security
+
+- **The terminal UI opens only http(s) links.** The sign-in address comes from the provider's answer and was handed to the system opener as it was, which also starts programs for `file:` and other registered schemes. Anything that is not an http or https link with a host is now refused with the address in the error.
+
 ### Added
 
 - **`install.sh` checks for ripgrep.** The glob and grep tools run ripgrep, and the Linux and macOS installer did not say so (the Windows one already installs it). It now installs it with Homebrew when there is one, and otherwise prints the exact command for the package manager it finds (apt, dnf, pacman, zypper or apk) instead of running `sudo` for you. `SESHAT_SKIP_RIPGREP=1` skips the check, as on Windows.
