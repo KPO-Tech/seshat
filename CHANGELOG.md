@@ -9,6 +9,8 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [1.10.0] - 2026-10-17
+
 ### Security
 
 - **`exit_plan_mode` asks the user to approve the plan.** Leaving plan mode is what grants write access, and the question the tool built was replaced by an allow before any prompt saw it, so the model could end plan mode alone. The permission engine now asks through the host's prompt function, with the plan in the message, unless the user already approved the plan in the review dialog (`submit_plan`). A host with no prompt function refuses the exit, as it does for any other tool that needs a question; an SDK host that wants plan mode without a prompt calls `Session.ApprovePlan` or `ClearPlanMode`. `never` and `bypass` modes are unchanged.
