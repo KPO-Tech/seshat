@@ -12,6 +12,7 @@ import (
 	"github.com/KPO-Tech/seshat-runtime/internal/execution"
 	"github.com/KPO-Tech/seshat-runtime/internal/prompt"
 	tool "github.com/KPO-Tech/seshat-runtime/internal/tools/registry"
+	contextusage "github.com/KPO-Tech/seshat-runtime/internal/tools/special/context_usage"
 	"github.com/KPO-Tech/seshat-runtime/internal/types"
 )
 
@@ -474,6 +475,7 @@ func (s *Session) Close() error {
 		s.runtimeEventQueue.Close()
 	}
 	s.state.MarkClosed()
+	contextusage.Forget(s.state.SessionID)
 	messages := s.state.CloneMessages()
 
 	if s.engine.memoryService != nil {

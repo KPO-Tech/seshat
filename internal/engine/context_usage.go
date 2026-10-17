@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 
 	compact "github.com/KPO-Tech/seshat-runtime/internal/runtime/memory"
+	contextusage "github.com/KPO-Tech/seshat-runtime/internal/tools/special/context_usage"
 	"github.com/KPO-Tech/seshat-runtime/internal/types"
 )
 
@@ -81,17 +82,25 @@ func (l *Loop) emitContextUsage(ctx context.Context, state *MutableState, req Ru
 	if budget.WindowTokens <= 0 {
 		return
 	}
+	usage := &types.ContextUsageRuntimeEvent{
+		UsedTokens:          reporter.UsedTokens(req.SystemPrompt, state.Messages, compactionTracking(state, req)),
+		WindowTokens:        budget.WindowTokens,
+		AutoCompactAtTokens: budget.AutoCompactAtTokens,
+		BlockingLimitTokens: budget.BlockingLimitTokens,
+		Source:              source,
+	}
+	contextusage.Record(req.SessionID, contextusage.Snapshot{
+		UsedTokens:          usage.UsedTokens,
+		WindowTokens:        usage.WindowTokens,
+		AutoCompactAtTokens: usage.AutoCompactAtTokens,
+		BlockingLimitTokens: usage.BlockingLimitTokens,
+		Source:              usage.Source,
+	})
 	emit(types.RuntimeEvent{
-		Type:      types.RuntimeEventTypeContextUsage,
-		SessionID: req.SessionID,
-		TurnID:    req.TurnID,
-		ContextUsageEvent: &types.ContextUsageRuntimeEvent{
-			UsedTokens:          reporter.UsedTokens(req.SystemPrompt, state.Messages, compactionTracking(state, req)),
-			WindowTokens:        budget.WindowTokens,
-			AutoCompactAtTokens: budget.AutoCompactAtTokens,
-			BlockingLimitTokens: budget.BlockingLimitTokens,
-			Source:              source,
-		},
+		Type:              types.RuntimeEventTypeContextUsage,
+		SessionID:         req.SessionID,
+		TurnID:            req.TurnID,
+		ContextUsageEvent: usage,
 	})
 }
 
