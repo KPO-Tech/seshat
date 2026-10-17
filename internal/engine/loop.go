@@ -805,6 +805,7 @@ func (l *Loop) maybeAutoCompact(ctx context.Context, state *MutableState, req Ru
 	}
 
 	if !hookDenied {
+		l.emitCompacting(ctx, state, req)
 		result, err := l.compactor.AutoCompact(
 			ctx,
 			req.SystemPrompt,
@@ -831,6 +832,7 @@ func (l *Loop) maybeAutoCompact(ctx context.Context, state *MutableState, req Ru
 			state.PreviousResponseMessageCount = 0
 			// The provider's figure described the messages that were just replaced.
 			state.UsageAnchor = nil
+			l.emitCompacted(ctx, req, result.PreCompactTokens, result.PostCompactTokens)
 		}
 		// Post-compact notification, like every other *_complete hook in this
 		// file: fire-and-forget, not stop-capable (there is nothing left to gate

@@ -119,6 +119,9 @@ func NewClient(config *ClientConfig) (*Client, error) {
 	orchestrator := execution.NewOrchestrator()
 	compactConfig := compact.DefaultConfig()
 	compactConfig.SummaryModel = config.CompactSummaryModel
+	if err := applyCompactionShares(compactConfig, config.CompactThreshold, config.CompactTarget); err != nil {
+		return nil, err
+	}
 	compactor := compact.NewEngine(apiClient, compactConfig)
 	promptAssembler := prompt.NewAssembler()
 	promptAssembler.SetDefaultSections(prompt.DefaultSystemPromptSections())
