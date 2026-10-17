@@ -215,6 +215,7 @@ const (
 	RuntimeEventTypeProviderRetry        = types.RuntimeEventTypeProviderRetry
 	RuntimeEventTypeCompaction           = types.RuntimeEventTypeCompaction
 	RuntimeEventTypeContextUsage         = types.RuntimeEventTypeContextUsage
+	RuntimeEventTypeCompacting           = types.RuntimeEventTypeCompacting
 
 	// HookEvent constants — lifecycle events emitted throughout the engine.
 	HookEventSessionStart       = types.HookEventSessionStart

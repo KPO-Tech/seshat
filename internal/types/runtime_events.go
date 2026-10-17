@@ -42,6 +42,11 @@ const (
 	// compacted, saved N tokens" notice.
 	RuntimeEventTypeCompaction RuntimeEventType = "context.compacted"
 
+	// RuntimeEventTypeCompacting is emitted when the runtime starts compacting the conversation, before the summary
+	// is requested, so a host can say so during the pause instead of showing a frozen turn. context.compacted follows
+	// when it is done (a failed attempt is followed by nothing).
+	RuntimeEventTypeCompacting RuntimeEventType = "context.compacting"
+
 	// RuntimeEventTypeContextUsage reports how full the model's context window is, so a host can draw a gauge that
 	// moves during a turn instead of waiting for turn.completed. Emitted at the start of every loop iteration (an
 	// estimate, or the provider's own figure plus the messages added since) and again when a model response arrives

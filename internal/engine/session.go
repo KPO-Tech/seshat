@@ -394,19 +394,6 @@ func (s *Session) submitWithMessage(ctx context.Context, userMsg types.Message, 
 	// rest of this turn's stream, since - unlike a separate async
 	// condense call - compaction here already ran synchronously inside
 	// the turn that just completed.
-	if loopResult.Compacted {
-		s.emitRuntimeEvent(types.RuntimeEvent{
-			Type:       types.RuntimeEventTypeCompaction,
-			SessionID:  s.state.SessionID,
-			TurnID:     s.state.TurnID,
-			TurnNumber: response.TurnNumber,
-			CompactionEvent: &types.CompactionRuntimeEvent{
-				PreCompactTokens:  loopResult.CompactPreTokens,
-				PostCompactTokens: loopResult.CompactPostTokens,
-			},
-		})
-	}
-
 	return response, nil
 }
 

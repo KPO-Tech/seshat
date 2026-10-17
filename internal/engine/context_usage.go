@@ -22,6 +22,7 @@ const (
 type usageReporter interface {
 	UsedTokens(systemPrompt string, messages []types.Message, tracking *compact.TrackingState) int
 	Budget(model types.ModelIdentifier) compact.ContextBudget
+	ShouldCompact(systemPrompt string, messages []types.Message, model types.ModelIdentifier, tracking *compact.TrackingState) bool
 }
 
 // toolDefinitionTokens estimates what the tool definitions of a request cost, to be added to the messages' size.
@@ -91,5 +92,47 @@ func (l *Loop) emitContextUsage(ctx context.Context, state *MutableState, req Ru
 			BlockingLimitTokens: budget.BlockingLimitTokens,
 			Source:              source,
 		},
+	})
+}
+
+// runtimeEventEmitter returns the host's emitter carried by ctx, if any.
+func runtimeEventEmitter(ctx context.Context) func(types.RuntimeEvent) {
+	emit, _ := ctx.Value(types.RuntimeEventEmitterKey).(func(types.RuntimeEvent))
+	return emit
+}
+
+// emitCompacting tells the host that a compaction is about to run, when the strategy says one is due.
+func (l *Loop) emitCompacting(ctx context.Context, state *MutableState, req RunRequest) {
+	emit := runtimeEventEmitter(ctx)
+	reporter, ok := l.compactor.(usageReporter)
+	if emit == nil || !ok {
+		return
+	}
+	tracking := compactionTracking(state, req)
+	if !reporter.ShouldCompact(req.SystemPrompt, state.Messages, req.Model, tracking) {
+		return
+	}
+	emit(types.RuntimeEvent{
+		Type:      types.RuntimeEventTypeCompacting,
+		SessionID: req.SessionID,
+		TurnID:    req.TurnID,
+		CompactionEvent: &types.CompactionRuntimeEvent{
+			PreCompactTokens: reporter.UsedTokens(req.SystemPrompt, state.Messages, tracking),
+		},
+	})
+}
+
+// emitCompacted tells the host that the conversation was compacted, as soon as it was rather than at the end of the
+// turn.
+func (l *Loop) emitCompacted(ctx context.Context, req RunRequest, pre, post int) {
+	emit := runtimeEventEmitter(ctx)
+	if emit == nil {
+		return
+	}
+	emit(types.RuntimeEvent{
+		Type:            types.RuntimeEventTypeCompaction,
+		SessionID:       req.SessionID,
+		TurnID:          req.TurnID,
+		CompactionEvent: &types.CompactionRuntimeEvent{PreCompactTokens: pre, PostCompactTokens: post},
 	})
 }

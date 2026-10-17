@@ -67,3 +67,84 @@ func TestContextUsageStaysSilentWithoutAnEmitter(t *testing.T) {
 	// No emitter in the context: must not panic.
 	loop.emitContextUsage(context.Background(), &MutableState{}, RunRequest{})
 }
+
+// reportingStrategy is a fakeCompactionStrategy that also reports usage, as the default Engine does.
+type reportingStrategy struct {
+	fakeCompactionStrategy
+	due bool
+}
+
+func (r *reportingStrategy) UsedTokens(string, []types.Message, *compact.TrackingState) int {
+	return 900
+}
+func (r *reportingStrategy) Budget(types.ModelIdentifier) compact.ContextBudget {
+	return compact.ContextBudget{WindowTokens: 1_000, AutoCompactAtTokens: 850, BlockingLimitTokens: 970}
+}
+func (r *reportingStrategy) ShouldCompact(string, []types.Message, types.ModelIdentifier, *compact.TrackingState) bool {
+	return r.due
+}
+
+func TestCompactionIsAnnouncedAndReportedWhenItHappens(t *testing.T) {
+	strategy := &reportingStrategy{due: true}
+	strategy.didCompact = true
+	strategy.compactedMessages = []types.Message{types.UserMessage("c1", "summary")}
+	strategy.preTokens, strategy.postTokens = 900, 300
+
+	loop := NewLoop(nil, nil, strategy, nil, permissions.NewIntegrator(permissions.NewEngine()), nil,
+		&LoopConfig{MaxIterations: 1, AutoCompact: true}, nil)
+	loop.callModelFn = func(ctx context.Context, state *MutableState, req RunRequest) (*types.APIResponse, error) {
+		return &types.APIResponse{Role: types.RoleAssistant, Content: []types.ContentBlock{types.TextContent{Text: "ok"}},
+			StopReason: types.StopReasonEndTurn, Model: req.Model, ID: "r1"}, nil
+	}
+	var seen []types.RuntimeEventType
+	var compacted *types.CompactionRuntimeEvent
+	ctx := context.WithValue(context.Background(), types.RuntimeEventEmitterKey, func(ev types.RuntimeEvent) {
+		seen = append(seen, ev.Type)
+		if ev.Type == types.RuntimeEventTypeCompaction {
+			compacted = ev.CompactionEvent
+		}
+	})
+	result := loop.Run(ctx, RunRequest{
+		Messages:  []types.Message{types.UserMessage("m1", "hi")},
+		SessionID: "s1", TurnID: "t1",
+		Model: types.ModelIdentifier{Provider: types.APIProviderAnthropic, Model: "claude-3-5-sonnet-20241022"},
+	})
+	if result.Error != nil {
+		t.Fatalf("Run failed: %v", result.Error)
+	}
+	order := map[types.RuntimeEventType]int{}
+	for i, typ := range seen {
+		if _, ok := order[typ]; !ok {
+			order[typ] = i
+		}
+	}
+	compacting, hasCompacting := order[types.RuntimeEventTypeCompacting]
+	done, hasDone := order[types.RuntimeEventTypeCompaction]
+	usage, hasUsage := order[types.RuntimeEventTypeContextUsage]
+	if !hasCompacting || !hasDone || !hasUsage || !(compacting < done && done < usage) {
+		t.Fatalf("want compacting, then compacted, then the usage after it; got %v", seen)
+	}
+	if compacted == nil || compacted.PreCompactTokens != 900 || compacted.PostCompactTokens != 300 {
+		t.Errorf("compacted event = %+v, want 900 -> 300", compacted)
+	}
+}
+
+func TestNoCompactingEventWhenNothingIsDue(t *testing.T) {
+	strategy := &reportingStrategy{due: false}
+	loop := NewLoop(nil, nil, strategy, nil, permissions.NewIntegrator(permissions.NewEngine()), nil,
+		&LoopConfig{MaxIterations: 1, AutoCompact: true}, nil)
+	loop.callModelFn = func(ctx context.Context, state *MutableState, req RunRequest) (*types.APIResponse, error) {
+		return &types.APIResponse{Role: types.RoleAssistant, Content: []types.ContentBlock{types.TextContent{Text: "ok"}},
+			StopReason: types.StopReasonEndTurn, Model: req.Model, ID: "r1"}, nil
+	}
+	ctx := context.WithValue(context.Background(), types.RuntimeEventEmitterKey, func(ev types.RuntimeEvent) {
+		if ev.Type == types.RuntimeEventTypeCompacting || ev.Type == types.RuntimeEventTypeCompaction {
+			t.Errorf("unexpected %s event", ev.Type)
+		}
+	})
+	loop.Run(ctx, RunRequest{
+		Messages:  []types.Message{types.UserMessage("m1", "hi")},
+		SessionID: "s1", TurnID: "t1",
+		Model: types.ModelIdentifier{Provider: types.APIProviderAnthropic, Model: "claude-3-5-sonnet-20241022"},
+	})
+}
