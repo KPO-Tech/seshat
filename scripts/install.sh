@@ -8,6 +8,7 @@
 #   VERSION=v0.1.0       Install a specific version (default: latest)
 #   INSTALL_DIR=...      Binary destination (default: ~/.local/bin)
 #   SESHAT_TITLE_MODEL=1 Install the local session-title model without asking (0 skips it)
+#   SESHAT_SKIP_RIPGREP=1 Do not check for ripgrep
 #
 # Developer / SDK usage (no installer needed):
 #   go install github.com/KPO-Tech/seshat-runtime/tui/cmd/cli@latest
@@ -172,6 +173,31 @@ case ":$PATH:" in
         fi
         ;;
 esac
+
+# ── ripgrep (used by the glob and grep tools) ─────────────────────────────────
+step "Checking ripgrep"
+
+# The glob and grep tools run ripgrep. Installing a package needs administrator rights on most systems, so the
+# script does not do it behind your back: it installs with Homebrew when there is one (no rights needed) and
+# otherwise says the exact command for your package manager. SESHAT_SKIP_RIPGREP=1 skips the check.
+if [ "${SESHAT_SKIP_RIPGREP:-}" = "1" ]; then
+    info "Skipped (SESHAT_SKIP_RIPGREP=1)"
+elif command -v rg &>/dev/null; then
+    success "ripgrep is already installed"
+elif command -v brew &>/dev/null; then
+    info "Installing ripgrep with Homebrew"
+    brew install ripgrep >/dev/null 2>&1 && success "ripgrep installed" \
+        || warn "Could not install ripgrep with Homebrew. The glob and grep tools need it: brew install ripgrep"
+else
+    if   command -v apt-get &>/dev/null; then RG_CMD="sudo apt install ripgrep"
+    elif command -v dnf     &>/dev/null; then RG_CMD="sudo dnf install ripgrep"
+    elif command -v pacman  &>/dev/null; then RG_CMD="sudo pacman -S ripgrep"
+    elif command -v zypper  &>/dev/null; then RG_CMD="sudo zypper install ripgrep"
+    elif command -v apk     &>/dev/null; then RG_CMD="sudo apk add ripgrep"
+    else RG_CMD="see https://github.com/BurntSushi/ripgrep#installation"
+    fi
+    warn "ripgrep is not installed. The glob and grep tools need it: $RG_CMD"
+fi
 
 # ── Optional: local model that names your sessions ────────────────────────────
 step "Session titles"
