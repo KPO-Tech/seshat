@@ -9,6 +9,14 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Changed
+
+- **The skill list in the `skill` tool is capped at 8,000 characters.** Before, every skill added its description, when-to-use and triggers to every request with no limit. Now each description is cut at 1,024 characters, and a list over the budget degrades by levels: descriptions only, then descriptions shortened evenly, then names only, then as many names as fit with a count of the rest. A shortened list says so. Lists within the budget are unchanged.
+
+### Fixed
+
+- **MCP tools reached the model with no parameters.** The schema an MCP server sends for a tool is a whole JSON schema, but it was nested a second time as the `properties` of a new one, so the model saw `{"properties":{"properties":{}}}` and had to guess every argument name. The server's schema is now converted as is, with its properties and required list.
+
 ### Removed
 
 - **The tools that wrote Word, Excel and PDF files are gone** (`docx_edit`, `excel_edit`, `write_pdf`). They were too limited to be worth their 1,300 tokens in every request. `read_file` is unchanged and still reads PDF, Word, PowerPoint and Excel. To write those formats, use a skill (for example a document skill from the skill store) or Python through `bash`. The `fpdf` dependency goes with them.
@@ -23,6 +31,7 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- **MCP tool definitions are capped.** A tool whose name, description and input schema together exceed 8,000 bytes is left out, and so are the tools of a server past 64,000 bytes in total; each is logged. Both caps are settable per server (`max_tool_spec_bytes`, `max_server_spec_bytes`, a negative value removes the cap). One chatty server can no longer fill the context window on every request.
 - **`context.usage` event, and a compaction that counts what the request really holds.** The runtime now reports how full the window is at the start of every loop iteration and again when a model response arrives (`used_tokens`, `window_tokens`, `auto_compact_at_tokens`, `blocking_limit_tokens`, and a `source` of `estimate` or `reported`), so a host can draw a gauge that moves during a turn instead of waiting for `turn.completed`. The same figure now drives compaction: it adds the tool definitions (about 16,000 tokens for the desktop agent, which the estimate used to ignore) and starts from the size the provider reported for the last request, plus an estimate of what was added since. Before, a conversation could be far past the limit by the provider's count while the estimate said it fit. `CompactionStrategy.CheckBlockingLimit` takes the tracking state as a new last argument.
 - **A host can give its main agent a short list of loaded tools and a longer list it finds on demand.** `ClientConfig.MainAgentDeferredTools` sits next to `MainAgentTools`: the tools of the first list are in every request, the tools of the second are not, but the agent finds them with `tool_search` (by keywords, or by name with `select:`) and uses them from the next request on; a tool in neither list is not offered to the main agent at all. Sub-agents get no such list and cannot find through `tool_search` what their own tools leave out. `builtin.EnterpriseAgentToolNames` and `builtin.EnterpriseAgentDeferredToolNames` are the lists of a general agent in a company setting (the desktop): about 16,000 tokens loaded instead of the 36,000 of the whole registry, with git worktrees and eight browser tools (`BrowserCoreToolNames`) loaded, and git, scheduling, document conversion, calculations and the rest of the browser found on demand. A test keeps the loaded list under 20,000 tokens. The terminal UI is unchanged.
 
