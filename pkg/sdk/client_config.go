@@ -333,6 +333,12 @@ func SandboxAvailable() bool {
 	return bashTool.SandboxAvailable()
 }
 
+// SandboxBackend names the confinement local bash commands get on this host: "landlock", "srt" or "none". "none"
+// means commands run with the user's full rights; a host application should say so rather than show a lock.
+func SandboxBackend() string {
+	return bashTool.SandboxBackend()
+}
+
 // DefaultClientConfig returns default client configuration.
 func DefaultClientConfig() *ClientConfig {
 	return &ClientConfig{
