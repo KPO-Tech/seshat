@@ -13,6 +13,15 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 - **`exit_plan_mode` asks the user to approve the plan.** Leaving plan mode is what grants write access, and the question the tool built was replaced by an allow before any prompt saw it, so the model could end plan mode alone. The permission engine now asks through the host's prompt function, with the plan in the message, unless the user already approved the plan in the review dialog (`submit_plan`). A host with no prompt function refuses the exit, as it does for any other tool that needs a question; an SDK host that wants plan mode without a prompt calls `Session.ApprovePlan` or `ClearPlanMode`. `never` and `bypass` modes are unchanged.
 
+### Added
+
+- **Sessions can be named by a small model that runs on your machine.** `seshat title-model install` downloads the llama.cpp server (a 12 to 19 MB CPU build) and Qwen2.5 0.5B Instruct (about 470 MB, or Gemma 3 270M with `--model gemma-3-270m`), checks both against SHA-256 sums fixed in seshat, then starts the model once to prove it answers. Titles are then made offline, for free, without showing the first message to the provider: about 0.4 s once the model is loaded and under 2 s the first time, measured on a laptop CPU. The server starts at the first title, stops after ten idle minutes and when seshat exits, and a server left behind by a run that was killed is found and stopped by the next run (it is only stopped if the port in its record still answers as a llama-server that has loaded this very model file, since process ids are reused). When the model is not installed, is turned off (`seshat title-model disable`) or fails, the chat provider names the session as before. Both installers offer it at the end (`SESHAT_TITLE_MODEL=1` installs it without asking, `0` skips it); it is never downloaded without being asked for.
+- **`seshat` updates itself, and offers to when a release is published.** At start-up in a terminal it checks (once a day, 2 seconds at most, silent when offline) whether a newer release exists, and asks `Update now? [Y]es / [l]ater / [s]kip this version`. `seshat update` installs the latest release on demand (`--check`, `--yes`). The binary is downloaded from the GitHub release, checked against `SHA256SUMS.txt`, and put in place of the running one; on any failure the old binary is kept. Development builds, pipes and CI are never asked, and `SESHAT_NO_UPDATE_CHECK=1` turns the offer off.
+
+### Changed
+
+- **The terminal command and its interface moved to a module of their own, `tui/`.** Part of the interface comes from Crush and is under the Functional Source License, and anyone who imported the engine as a Go module received that code with it. The engine module now holds none of it. Build the command with `go build ./tui/cmd/cli` (it was `./cmd/cli`); `go install github.com/KPO-Tech/seshat-runtime/tui/cmd/cli@latest` replaces the old path once the `tui` module has a release tag. Importers of `pkg/*` are not affected; the engine's `go.mod` is smaller.
+
 ## [1.9.0] - 2026-10-16
 
 ### Added

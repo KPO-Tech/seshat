@@ -182,7 +182,15 @@ The engine is intentionally kept minimal and fast. If you need something from th
 
 The full guide is on the website: [Installation — seshat-ai.com](https://seshat-ai.com/en/docs/getting-started/installation). It covers the install script and what it does, its options, the Go toolchain, building from source and using Seshat as a library. The commands below are the short version.
 
-**End users — one command, fully configured:**
+| System | Command (copy, paste, run) | Needs |
+|---|---|---|
+| **Linux** (amd64, arm64) | `curl -fsSL https://raw.githubusercontent.com/KPO-Tech/seshat-runtime/main/scripts/install.sh \| bash` | `curl` or `wget` |
+| **macOS** (Intel, Apple silicon) | the same command as Linux | `curl` |
+| **Windows** (amd64, arm64) | `irm https://raw.githubusercontent.com/KPO-Tech/seshat-runtime/main/scripts/install.ps1 \| iex` in PowerShell | nothing, no administrator rights |
+
+You do not need Go: the script downloads a ready-made binary. Afterwards the command is `seshat` on every system, and `seshat update` keeps it current (see *Updating* below).
+
+**Linux and macOS — one command, fully configured:**
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/KPO-Tech/seshat-runtime/main/scripts/install.sh | bash
@@ -203,11 +211,17 @@ irm https://raw.githubusercontent.com/KPO-Tech/seshat-runtime/main/scripts/insta
 
 Downloads the Windows build (amd64 or arm64), checks it against `SHA256SUMS.txt`, installs `seshat.exe` into `%LOCALAPPDATA%\Programs\seshat`, adds that folder to your user PATH and installs ripgrep (winget, scoop or choco) when it is missing. Set `$env:SESHAT_VERSION = "v1.9.0"` before the command to pin a version, `$env:SESHAT_INSTALL_DIR` to choose the folder, `$env:SESHAT_SKIP_RIPGREP = "1"` to skip ripgrep.
 
+**Updating.** The installed binary updates itself. When you start `seshat` in a terminal and a newer release exists, it says so and asks `Update now? [Y]es / [l]ater / [s]kip this version`. `seshat update` does the same on demand (`--check` only looks, `--yes` skips the question). The download is checked against the release's `SHA256SUMS.txt` before it replaces the binary, and the old binary stays in place if anything fails. The release is looked up at most once a day, with a 2-second limit; `SESHAT_NO_UPDATE_CHECK=1` turns the offer off. Development builds and non-interactive runs (pipes, CI) are never asked. Re-running the install script also updates.
+
+**Session titles, offline (optional).** By default the chat provider names each session after the first message. `seshat title-model install` (the installers offer it) adds a small local model instead, about 500 MB once, CPU only: titles take under a second, cost nothing and keep the first message on your machine. `seshat title-model status|disable|enable|remove` manage it, and the provider still names the session whenever the local model is missing or fails.
+
+Everything lives in `<runtime folder>/title-model/` (`~/.config/seshat-cli/` on Linux, `%APPDATA%\seshat-cli\` on Windows): the llama.cpp server, the model, a `state.json` and the server's `server.log`; `seshat title-model remove` deletes the folder. The server listens on the loopback address only, runs while seshat is open (about 600 MB of memory) and stops after ten idle minutes; if seshat is killed, the next run stops the server it left behind. `SESHAT_TITLE_MODEL=1` makes the installers install it without asking.
+
 **Developers — Go toolchain:**
 
 ```bash
 # Install the CLI binary
-go install github.com/KPO-Tech/seshat-runtime/cmd/cli@latest
+go install github.com/KPO-Tech/seshat-runtime/tui/cmd/cli@latest
 ```
 
 **SDK — embed in your Go application:**
@@ -234,7 +248,7 @@ curl -fsSL https://raw.githubusercontent.com/KPO-Tech/seshat-runtime/main/script
 #   irm https://raw.githubusercontent.com/KPO-Tech/seshat-runtime/main/scripts/install.ps1 | iex
 
 # Developers — binary only via Go toolchain:
-go install github.com/KPO-Tech/seshat-runtime/cmd/cli@latest
+go install github.com/KPO-Tech/seshat-runtime/tui/cmd/cli@latest
 ```
 
 **Configure a provider**

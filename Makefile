@@ -1,4 +1,4 @@
-CMD_CLI        := ./cmd/cli
+CMD_CLI        := ./tui/cmd/cli
 CMD_GRPC       := ./cmd/grpc
 
 # ".exe" on Windows, empty elsewhere. Without it `go build -o bin/seshat` writes a
@@ -53,10 +53,10 @@ build_linux:
 # ── Test ───────────────────────────────────────────────────────────────────────
 
 test:
-	go test ./... -timeout 300s
+	go test ./... ./tui/... -timeout 300s
 
 test-race:
-	go test -race ./... -timeout 300s
+	go test -race ./... ./tui/... -timeout 300s
 
 # ── Code quality ───────────────────────────────────────────────────────────────
 
@@ -64,15 +64,17 @@ fmt:
 	gofmt -w .
 
 vet:
-	go vet ./...
+	go vet ./... ./tui/...
 
 lint:
 	@which golangci-lint > /dev/null 2>&1 \
 		|| (echo "golangci-lint not installed — run: go install github.com/golangci/golangci-lint/cmd/golangci-lint@latest" && exit 1)
 	golangci-lint run ./...
+	cd tui && golangci-lint run ./...
 
 tidy:
-	go mod tidy
+	GOWORK=off go mod tidy
+	cd tui && GOWORK=off go mod tidy
 
 # ── Maintenance ────────────────────────────────────────────────────────────────
 
