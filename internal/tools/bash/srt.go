@@ -106,7 +106,7 @@ func probeSrt(srt string) string {
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
-	out, err := exec.CommandContext(ctx, srt, append([]string{"--settings", file, "--", shell}, args...)...).CombinedOutput()
+	out, err := exec.CommandContext(ctx, srt, append([]string{"--settings", file, "--", shell}, args...)...).CombinedOutput() // #nosec G702 -- srt is the executable the user installed or named in SESHAT_SRT; the arguments are fixed
 	if err == nil {
 		return ""
 	}
