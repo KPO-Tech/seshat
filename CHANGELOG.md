@@ -11,7 +11,7 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Security
 
-- **A command with hidden characters is refused.** Direction controls (U+202A to U+202E, U+2066 to U+2069, the direction marks), tag characters and control characters (escape, NUL, C1) in a shell command can make it read differently from what it does, which defeats approval by reading. The bash tool now denies such a command before any prompt. Emoji joiners and variation selectors are not affected. The new `internal/textsafe` package also strips terminal escape sequences from text, for the displays that use it.
+- **A command with hidden characters is refused.** Direction controls (U+202A to U+202E, U+2066 to U+2069, the direction marks), tag characters and control characters (escape, NUL, C1) in a shell command can make it read differently from what it does, which defeats approval by reading. The bash tool now denies such a command before any prompt. Emoji joiners and variation selectors are not affected. In the terminal UI the command shown for approval reveals any invisible character as `«U+XXXX»`, and the output of shell commands has its terminal escape sequences removed (clipboard writes, hidden links, cursor moves), with a progress bar redrawn by carriage returns shown as its last state.
 
 ### Added
 
