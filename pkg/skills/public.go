@@ -49,7 +49,7 @@ func ParseFrontmatter(content string, filePath string) (FrontmatterData, string)
 }
 
 // ParseBooleanFrontmatter reads a boolean from a YAML header value: a boolean as it is, the text "true" (any case) or "1" as true, a non-zero integer as true, and anything else as false.
-func ParseBooleanFrontmatter(value interface{}) bool {
+func ParseBooleanFrontmatter(value any) bool {
 	return internalskills.ParseBooleanFrontmatter(value)
 }
 

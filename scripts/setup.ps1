@@ -76,7 +76,7 @@ Write-Step "Building Seshat..."
 
 Set-Location $RepoRoot
 New-Item -ItemType Directory -Force -Path bin | Out-Null
-go build -o "bin\seshat.exe" ".\cmd\cli"
+go build -o "bin\seshat.exe" ".\tui\cmd\cli"
 Write-Ok "bin\seshat.exe"
 go build -o "bin\seshat-grpc.exe" ".\cmd\grpc"
 Write-Ok "bin\seshat-grpc.exe"

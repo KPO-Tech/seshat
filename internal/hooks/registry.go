@@ -371,7 +371,7 @@ func (r *Registry) CleanupDeadHooks() int {
 }
 
 // GetHookStats returns statistics for all hooks
-func (r *Registry) GetHookStats() map[string]interface{} {
+func (r *Registry) GetHookStats() map[string]any {
 	if r == nil {
 		return nil
 	}
@@ -379,7 +379,7 @@ func (r *Registry) GetHookStats() map[string]interface{} {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 
-	stats := make(map[string]interface{})
+	stats := make(map[string]any)
 	totalHooks := 0
 	activeHooks := 0
 	pausedHooks := 0

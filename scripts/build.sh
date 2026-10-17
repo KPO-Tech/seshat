@@ -18,7 +18,7 @@ rm -rf bin/
 
 echo -e "${YELLOW}Building CLI binary...${NC}"
 mkdir -p bin
-go build -o bin/seshat ./cmd/cli
+go build -o bin/seshat ./tui/cmd/cli
 
 if [ $? -eq 0 ]; then
     echo -e "${GREEN}✓ Build successful!${NC}"

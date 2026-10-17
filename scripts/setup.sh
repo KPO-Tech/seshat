@@ -117,7 +117,7 @@ step "Building Seshat..."
 
 cd "$REPO_ROOT"
 mkdir -p bin
-go build -o bin/seshat ./cmd/cli
+go build -o bin/seshat ./tui/cmd/cli
 go build -o bin/seshat-grpc ./cmd/grpc
 ok "bin/seshat"
 ok "bin/seshat-grpc"

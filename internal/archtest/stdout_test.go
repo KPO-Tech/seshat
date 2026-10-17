@@ -14,7 +14,7 @@ import (
 // interactiveStdout are the files of internal/ that talk to a person on the standard output on purpose: a login prompt, a question to
 // answer on the console, a console sink. Everything else in internal/ is a library of an engine that can be embedded (gRPC, MCP over
 // stdio, the SDK), where text on the standard output corrupts the host's own protocol: it reports through log/slog or returns the
-// information. internal/seshattui is the terminal interface itself and is not looked at.
+// information. the terminal interface (the tui module) is not under internal/ and is not looked at.
 var interactiveStdout = map[string]bool{
 	"internal/tools/special/ask_user/askUserQuestionTool.go": true,
 	"internal/providers/auth.go":                             true,
@@ -34,7 +34,7 @@ func TestInternalLibraryCodeDoesNotPrintToStdout(t *testing.T) {
 		}
 		rel = filepath.ToSlash(rel)
 		if d.IsDir() {
-			if rel == "internal/seshattui" || rel == "internal/archtest" {
+			if rel == "internal/archtest" {
 				return filepath.SkipDir
 			}
 			return nil

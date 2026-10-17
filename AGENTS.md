@@ -6,7 +6,7 @@ This file provides guidance for AI agents (Seshat, Claude Code, Codex, or simila
 
 ## Project overview
 
-seshat is an open-source Go AI agent runtime. It has no concept of users, organizations, or billing — those live in the products built on top of it: [SeshatOS](https://github.com/KPO-Tech/SeshatOS) (local) and [SeshatCloud](https://github.com/KPO-Tech/SeshatCloud) (multi-tenant), both separate repositories. The engine exposes three entry points: `cmd/cli` (terminal), `cmd/grpc` (gRPC server), and `pkg/sdk` (Go SDK for embedding).
+seshat is an open-source Go AI agent runtime. It has no concept of users, organizations, or billing — those live in the products built on top of it: [SeshatOS](https://github.com/KPO-Tech/SeshatOS) (local) and [SeshatCloud](https://github.com/KPO-Tech/SeshatCloud) (multi-tenant), both separate repositories. The engine exposes three entry points: `tui/cmd/cli` (terminal), `cmd/grpc` (gRPC server), and `pkg/sdk` (Go SDK for embedding).
 
 ---
 
@@ -21,14 +21,21 @@ seshat is an open-source Go AI agent runtime. It has no concept of users, organi
 Always run these before finishing:
 
 ```bash
-go build ./...          # must pass — no exceptions
-go vet ./...            # must pass — no exceptions
-go test -race ./...     # must pass — fix failures, do not skip
-golangci-lint run ./... # pass or explain why an existing violation is pre-existing
+go build ./... ./tui/...          # must pass — no exceptions
+go vet ./... ./tui/...            # must pass — no exceptions
+go test -race ./... ./tui/...     # must pass — fix failures, do not skip
+golangci-lint run ./...           # pass or explain why an existing violation is pre-existing
+(cd tui && golangci-lint run ./...)
 gofmt -w .              # always run after editing Go files
 ```
 
 If `go test` fails, investigate and fix the root cause. Do not disable tests or add `t.Skip()` to work around failures.
+
+---
+
+## Two Go modules
+
+The repository holds two modules, tied by `go.work` (committed): the engine (`github.com/KPO-Tech/seshat-runtime`, Apache-2.0) and the terminal interface in `tui/` (`github.com/KPO-Tech/seshat-runtime/tui`). `tui/` holds the `seshat` terminal command (`tui/cmd/cli`) and the interface it runs (`tui/internal/seshattui`, partly derived from Crush under the Functional Source License, see `NOTICE`). The engine never imports `tui/` (`internal/archtest/tui_isolation_test.go`); `tui/` imports the engine, `pkg/` and the `internal/` packages it needs (Go allows that because the import paths share the `seshat-runtime` prefix). `./...` does not cross into `tui/`, so every command that builds, vets or tests names `./tui/...` too. `tui/go.mod` requires a released version of the engine: after tagging an engine release, bump it there (`cd tui && go get github.com/KPO-Tech/seshat-runtime@vX.Y.Z && go mod tidy`) before tagging the terminal command.
 
 ---
 
@@ -98,7 +105,17 @@ Semantic versioning: **patch** for fixes and non-breaking additions, **minor** f
 5. Sync back: `chore/sync-dev-with-main-roundN` off `origin/dev`, merge `origin/main`, PR into `dev`
    (title `chore: sync dev with main (round N)`), merge. The round number is **not continuous** —
    find the last one with `git log --all --oneline --grep="sync dev with main"`.
-6. `SeshatOS` (`seshat-backend`) and `SeshatCloud` (`seshat-server`) bump in their own PRs:
+6. The terminal command is its own module, so it is tagged after the engine, in two steps of its own:
+   - bump it: `chore/bump-tui-engine-X.Y.Z` off `origin/dev`, `cd tui && go get github.com/KPO-Tech/seshat-runtime@vX.Y.Z && go mod tidy`,
+     build and test **without** the workspace (`cd tui && GOWORK=off go build ./... && GOWORK=off go test ./...`), PR into `dev`, merge, then
+     `dev` into `main` as for any change;
+   - tag it **on `main`**: `git tag -a tui/vX.Y.Z origin/main -m "tui/vX.Y.Z"`, then push the tag alone (it needs a clear yes, like the engine tag).
+     `.github/workflows/release-tui.yml` then checks, without `go.work`, that `tui/go.mod` names the latest engine release and that the module
+     builds and passes its tests; a red run means the tag is not announced and a new one follows (a tag is never moved).
+   Use the same number for both tags when you can (`v1.10.0` and `tui/v1.10.0`) so that the command's version is easy to read. The release binaries
+   (`seshat-<os>-<arch>`, which the installers and `seshat update` download) come from the engine tag: `release.yml` builds them from the workspace.
+   Until `tui/vX.Y.Z` exists, `go install github.com/KPO-Tech/seshat-runtime/tui/cmd/cli@latest` does not work; the installers and the binaries do.
+7. `SeshatOS` (`seshat-backend`) and `SeshatCloud` (`seshat-server`) bump in their own PRs:
    `go get github.com/KPO-Tech/seshat-runtime@vX.Y.Z`, `go mod tidy`, checks, commit. Never add a
    `replace` directive for the engine.
 
