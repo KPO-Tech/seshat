@@ -9,6 +9,10 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Security
+
+- **The key that encrypts stored credentials moves to the operating system's credential store.** It used to sit in `secret.key` next to the data it protects, which any program running as the same user could read. It now lives in the Windows Credential Manager, the macOS Keychain or the Secret Service (GNOME Keyring, KWallet). A key found in an existing `secret.key` is moved there without changing, so stored credentials keep opening, and the file is deleted only after the store has returned the same key. Where there is no usable store (a container, a server without a desktop session) the key stays in `secret.key` with mode 0600 as before, and `SESHAT_KEYCHAIN=off` forces that. The new `pkg/keychain` package exposes the store to SDK hosts.
+
 ### Added
 
 - **`install.sh` checks for ripgrep.** The glob and grep tools run ripgrep, and the Linux and macOS installer did not say so (the Windows one already installs it). It now installs it with Homebrew when there is one, and otherwise prints the exact command for the package manager it finds (apt, dnf, pacman, zypper or apk) instead of running `sudo` for you. `SESHAT_SKIP_RIPGREP=1` skips the check, as on Windows.
