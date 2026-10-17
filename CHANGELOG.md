@@ -9,6 +9,10 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Removed
+
+- **The tools that wrote Word, Excel and PDF files are gone** (`docx_edit`, `excel_edit`, `write_pdf`). They were too limited to be worth their 1,300 tokens in every request. `read_file` is unchanged and still reads PDF, Word, PowerPoint and Excel. To write those formats, use a skill (for example a document skill from the skill store) or Python through `bash`. The `fpdf` dependency goes with them.
+
 ### Security
 
 - **The terminal UI opens only http(s) links.** The sign-in address comes from the provider's answer and was handed to the system opener as it was, which also starts programs for `file:` and other registered schemes. Anything that is not an http or https link with a host is now refused with the address in the error.

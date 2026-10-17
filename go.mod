@@ -15,7 +15,6 @@ require (
 	github.com/disintegration/imaging v1.6.2
 	github.com/dop251/goja v0.0.0-20260901132549-43234fa61381
 	github.com/glebarez/sqlite v1.11.0
-	github.com/go-pdf/fpdf v0.9.0
 	github.com/go-rod/rod v0.116.2
 	github.com/go-shiori/go-readability v0.0.0-20251205110129-5db1dc9836f0
 	github.com/go-sql-driver/mysql v1.10.1
