@@ -8,14 +8,11 @@ import (
 	automationTool "github.com/KPO-Tech/seshat-runtime/internal/tools/automation"
 	bashTool "github.com/KPO-Tech/seshat-runtime/internal/tools/bash"
 	documentreaderTool "github.com/KPO-Tech/seshat-runtime/internal/tools/files/documentreader"
-	docxTool "github.com/KPO-Tech/seshat-runtime/internal/tools/files/docx"
 	editTool "github.com/KPO-Tech/seshat-runtime/internal/tools/files/edit"
-	excelTool "github.com/KPO-Tech/seshat-runtime/internal/tools/files/excel"
 	fsTool "github.com/KPO-Tech/seshat-runtime/internal/tools/files/fs"
 	globTool "github.com/KPO-Tech/seshat-runtime/internal/tools/files/glob"
 	grepTool "github.com/KPO-Tech/seshat-runtime/internal/tools/files/grep"
 	patchTool "github.com/KPO-Tech/seshat-runtime/internal/tools/files/patch"
-	pdfwriteTool "github.com/KPO-Tech/seshat-runtime/internal/tools/files/pdfwrite"
 	fileReadTool "github.com/KPO-Tech/seshat-runtime/internal/tools/files/read"
 	searchsessionTool "github.com/KPO-Tech/seshat-runtime/internal/tools/files/searchsession"
 	writeTool "github.com/KPO-Tech/seshat-runtime/internal/tools/files/write"
@@ -119,9 +116,6 @@ func RegisterBuiltinToolsWithConfig(reg *tool.Registry, config *Config) error {
 		searchsessionTool.NewTool(config.WorkingDir),
 		writeTool.NewWriteTool(config.WorkingDir),
 		editTool.NewEditTool(config.WorkingDir),
-		excelTool.NewTool(config.WorkingDir),
-		docxTool.NewTool(config.WorkingDir),
-		pdfwriteTool.NewTool(config.WorkingDir),
 		configTool.NewTool(config.WorkingDir),
 		repomapTool.NewTool(config.WorkingDir),
 		workflowTool.NewTool(),
