@@ -174,6 +174,14 @@ func ClearPlanReview(sessionID types.SessionID) {
 	s.reviewMu.Unlock()
 }
 
+// PlanApproved reports whether the user accepted the plan submitted with submit_plan.
+func PlanApproved(sessionID types.SessionID) bool {
+	s := planCache.GetState(sessionID)
+	s.reviewMu.RLock()
+	defer s.reviewMu.RUnlock()
+	return s.planSubmitted && s.planApproved
+}
+
 // PlanAwaitingApproval reports whether a plan was submitted and the user has not
 // approved it yet - the window in which leaving plan mode would run ahead of the
 // person reading the plan.

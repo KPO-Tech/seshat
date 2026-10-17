@@ -155,8 +155,9 @@ func TestResubmittingAPlanClearsThePreviousApproval(t *testing.T) {
 	}
 }
 
-// A session that never submitted a plan has nothing to approve, and plan mode
-// would have no exit at all if the gate assumed otherwise.
+// A session that never submitted a plan has nothing under review, so the tool itself does not refuse (plan
+// mode keeps its exit); the permission engine asks the user to approve the plan instead. Without a prompt
+// function that ask is refused, with one that approves the exit runs.
 func TestExitPlanModeIsNotGatedWithoutASubmission(t *testing.T) {
 	t.Setenv("SESHAT_RUNTIME_ROOT", t.TempDir())
 	modeexec.ClearAllStates()
@@ -167,11 +168,42 @@ func TestExitPlanModeIsNotGatedWithoutASubmission(t *testing.T) {
 	}
 
 	req, _, _ := reviewGateRequest(t, sessionID, types.PermissionModeOnRequest)
+	integrator := permissions.NewIntegrator(permissions.NewEngine())
+	integrator.SetPromptFn(func(context.Context, types.PromptRequest) (types.PromptResponse, error) {
+		return types.PromptResponse{Value: true}, nil
+	})
+	req.PermissionCheck = integrator.CanUseTool(sessionID, "t1", types.PermissionModeOnRequest)
 	result, err := execution.NewOrchestrator().Execute(context.Background(), req)
 	if err != nil {
 		t.Fatalf("Execute failed: %v", err)
 	}
 	if len(result.Errors) != 0 {
-		t.Fatalf("expected the exit to be permitted without a submission, got %+v", result.Errors)
+		t.Fatalf("expected the exit to be permitted once the user approves, got %+v", result.Errors)
+	}
+}
+
+// A plan the user approved in the review dialog is not asked about a second time.
+func TestExitPlanModeDoesNotAskAgainAfterTheReviewApproved(t *testing.T) {
+	t.Setenv("SESHAT_RUNTIME_ROOT", t.TempDir())
+	modeexec.ClearAllStates()
+
+	sessionID := types.SessionID("review-approved-no-reask")
+	modeexec.MarkPlanSubmitted(sessionID)
+	modeexec.MarkPlanApproved(sessionID)
+
+	req, _, _ := reviewGateRequest(t, sessionID, types.PermissionModeOnRequest)
+	asked := false
+	integrator := permissions.NewIntegrator(permissions.NewEngine())
+	integrator.SetPromptFn(func(context.Context, types.PromptRequest) (types.PromptResponse, error) {
+		asked = true
+		return types.PromptResponse{Value: false}, nil
+	})
+	req.PermissionCheck = integrator.CanUseTool(sessionID, "t1", types.PermissionModeOnRequest)
+	result, err := execution.NewOrchestrator().Execute(context.Background(), req)
+	if err != nil {
+		t.Fatalf("Execute failed: %v", err)
+	}
+	if asked || len(result.Errors) != 0 {
+		t.Fatalf("expected no second question after the review approved (asked=%v, errors=%+v)", asked, result.Errors)
 	}
 }
