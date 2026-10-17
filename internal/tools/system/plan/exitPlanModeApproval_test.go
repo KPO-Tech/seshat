@@ -12,30 +12,11 @@ import (
 	"github.com/KPO-Tech/seshat-runtime/internal/types"
 )
 
-// TestExitPlanModeApprovalDoesNotReachTheUser pins a KNOWN DEFECT (TODO.md,
-// "the plan-approval gate does not reach the user"). It asserts the wrong
-// behavior on purpose so the hole is executable rather than a comment, and so
-// that landing the fix forces this test to be inverted.
-//
-// The tool builds the exact message the user is supposed to decide on,
-// including an 800-character preview of the plan. resolveToolPermissions
-// replaces it with an Allow, because a bare types.Ask carries no
-// DecisionReason and only a Rule-sourced, safetyCheck-sourced or
-// RequiresUserInteraction ask survives that branch; isAlwaysSafeTool then
-// allows exit_plan_mode a second time.
-//
-// Leaving plan mode is what grants write access - write_file and edit_file deny
-// outright while ExecutionMode is plan - so while this test passes, plan mode's
-// read-only guarantee is advisory: the model can end the mode on its own, and
-// the preview is shown to nobody.
-//
-// Making the ask survive is necessary but not sufficient. Routing it as a real
-// Ask stops the tool in the permission stage, and the SDK's plan round-trip then
-// never returns the session to execute even when its host prompt function
-// answers "approved" (TestPersistedSessionsCarryPlanModeAcrossRestore,
-// pkg/sdk/client_test.go), so the fix also needs the approval path to re-run
-// the tool so its ContextModifier applies.
-func TestExitPlanModeApprovalDoesNotReachTheUser(t *testing.T) {
+// TestExitPlanModeAsksTheUserToApproveThePlan pins the plan-approval gate. Leaving plan mode is what grants
+// write access, so a session whose plan the user has not approved (no submit_plan review) must put the plan
+// in front of the user: the permission engine asks through the prompt function of the host, with the plan
+// preview in the message. A host with no prompt function refuses, and one that answers yes lets the tool run.
+func TestExitPlanModeAsksTheUserToApproveThePlan(t *testing.T) {
 	for _, mode := range []types.PermissionMode{
 		types.PermissionModeOnRequest,
 		types.PermissionModeAuto,
@@ -43,52 +24,52 @@ func TestExitPlanModeApprovalDoesNotReachTheUser(t *testing.T) {
 		t.Run(string(mode), func(t *testing.T) {
 			t.Setenv("SESHAT_RUNTIME_ROOT", t.TempDir())
 
-			exit := NewExitPlanModeTool(&ExitPlanModeConfig{SessionID: "s1"})
 			planInput := map[string]any{"plan": "# Plan\n\n1. Change the thing\n2. Verify it"}
+			run := func(promptFn types.PromptFn) execution.ExecuteResult {
+				exit := NewExitPlanModeTool(&ExitPlanModeConfig{SessionID: "s1"})
+				integrator := permissions.NewIntegrator(permissions.NewEngine())
+				if promptFn != nil {
+					integrator.SetPromptFn(promptFn)
+				}
+				result, err := execution.NewOrchestrator().Execute(context.Background(), execution.ExecuteRequest{
+					ToolUses:          []types.ToolUseContent{{ID: "t1", Name: ToolNameExitPlanMode, Input: planInput}},
+					Tools:             map[string]tool.Tool{ToolNameExitPlanMode: exit},
+					PermissionCheck:   integrator.CanUseTool("s1", "t1", mode),
+					PermissionContext: &types.PermissionContext{ExecutionMode: string(modes.ExecutionModePlan)},
+					SessionID:         types.SessionID("s1"),
+					TurnID:            types.TurnID("t1"),
+					PermissionMode:    mode,
+				})
+				if err != nil {
+					t.Fatalf("Execute failed: %v", err)
+				}
+				return result
+			}
 
-			// What the tool intends to ask.
-			declared := exit.CheckPermissions(context.Background(), planInput, tool.ToolUseContext{
-				SessionID:     "s1",
-				ExecutionMode: string(modes.ExecutionModePlan),
-			})
-			if declared.Behavior != types.PermissionBehaviorAsk {
-				t.Fatalf("expected the tool to declare an Ask, got %q", declared.Behavior)
-			}
-			if !strings.Contains(declared.Reason, "Approve this plan") || !strings.Contains(declared.Reason, "Change the thing") {
-				t.Fatalf("expected the declared ask to carry the plan preview, got %q", declared.Reason)
+			// No prompt function: nobody can approve, so the exit is refused.
+			if refused := run(nil); len(refused.Errors) != 1 {
+				t.Fatalf("expected the exit to be refused without a prompt function, got %+v", refused.Errors)
 			}
 
-			// What the pipeline actually does with it.
-			orch := execution.NewOrchestrator()
-			integrator := permissions.NewIntegrator(permissions.NewEngine())
-			result, err := orch.Execute(context.Background(), execution.ExecuteRequest{
-				ToolUses: []types.ToolUseContent{{
-					ID:    "t1",
-					Name:  ToolNameExitPlanMode,
-					Input: planInput,
-				}},
-				Tools:             map[string]tool.Tool{ToolNameExitPlanMode: exit},
-				PermissionCheck:   integrator.CanUseTool("s1", "t1", mode),
-				PermissionContext: &types.PermissionContext{ExecutionMode: string(modes.ExecutionModePlan)},
-				SessionID:         types.SessionID("s1"),
-				TurnID:            types.TurnID("t1"),
-				PermissionMode:    mode,
+			// A prompt function that declines refuses it too, and it was shown the plan.
+			var shown string
+			declined := run(func(_ context.Context, request types.PromptRequest) (types.PromptResponse, error) {
+				shown = request.Message
+				return types.PromptResponse{Value: false}, nil
 			})
-			if err != nil {
-				t.Fatalf("Execute failed: %v", err)
+			if len(declined.Errors) != 1 {
+				t.Fatalf("expected the exit to be refused when the user declines, got %+v", declined.Errors)
 			}
-			if len(result.Errors) != 0 {
-				t.Fatalf("expected the ask to be discarded (the defect), got %+v", result.Errors)
+			if !strings.Contains(shown, "Approve this plan") || !strings.Contains(shown, "Change the thing") {
+				t.Fatalf("expected the user to be shown the plan, got %q", shown)
 			}
-			if len(result.Traces) != 1 {
-				t.Fatalf("expected 1 trace, got %d", len(result.Traces))
-			}
-			local := result.Traces[0].LocalPermission
-			if local.Behavior != types.PermissionBehaviorAllow {
-				t.Fatalf("expected the declared Ask to be replaced by an Allow (the defect), got %q", local.Behavior)
-			}
-			if local.Reason != "" {
-				t.Fatalf("expected no reason to survive to the user, got %q", local.Reason)
+
+			// The user approves: the tool runs.
+			approved := run(func(context.Context, types.PromptRequest) (types.PromptResponse, error) {
+				return types.PromptResponse{Value: true}, nil
+			})
+			if len(approved.Errors) != 0 {
+				t.Fatalf("expected the exit to run once the user approves, got %+v", approved.Errors)
 			}
 		})
 	}
