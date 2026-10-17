@@ -1,0 +1,63 @@
+name: Release tui
+
+# The terminal command is the module `tui` (see AGENTS.md, "Two Go modules"). `go install
+# github.com/KPO-Tech/seshat-runtime/tui/cmd/cli@vX.Y.Z` resolves a tag of the form `tui/vX.Y.Z` and builds it against
+# the engine version written in tui/go.mod, not against the engine next to it in the repository. This workflow runs when
+# such a tag is pushed and checks, without go.work, that exactly that build works and that the engine it names is the
+# latest engine release. It publishes nothing: the binaries come from the engine release (release.yml), which builds the
+# command from the workspace. A red run means the tag must not be announced; a bad tag is followed by a new one, never
+# moved.
+
+on:
+  push:
+    tags:
+      - "tui/v*"
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    name: Verify the tui module as a consumer sees it
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      - name: Require the tag to be on main
+        run: |
+          git fetch origin main --tags
+          if ! git merge-base --is-ancestor "${{ github.sha }}" origin/main; then
+            echo "tui release tags must point to a commit already reachable from origin/main."
+            exit 1
+          fi
+
+      - name: Set up Go
+        uses: actions/setup-go@v7
+        with:
+          go-version-file: tui/go.mod
+          cache: true
+          cache-dependency-path: tui/go.sum
+
+      - name: The engine named in tui/go.mod is the latest engine release
+        working-directory: tui
+        env:
+          GOWORK: "off"
+        run: |
+          required="$(go list -m -f '{{.Version}}' github.com/KPO-Tech/seshat-runtime)"
+          latest="$(git tag --list 'v*' --sort=-v:refname | head -n1)"
+          echo "tui/go.mod requires the engine $required; the latest engine release is $latest"
+          if [ "$required" != "$latest" ]; then
+            echo "Bump it first: cd tui && go get github.com/KPO-Tech/seshat-runtime@$latest && go mod tidy, merge, then tag again."
+            exit 1
+          fi
+
+      - name: Build, vet and test without go.work
+        working-directory: tui
+        env:
+          GOWORK: "off"
+        run: |
+          go build ./...
+          go vet ./...
+          go test ./... -timeout 300s

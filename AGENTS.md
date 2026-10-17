@@ -105,7 +105,17 @@ Semantic versioning: **patch** for fixes and non-breaking additions, **minor** f
 5. Sync back: `chore/sync-dev-with-main-roundN` off `origin/dev`, merge `origin/main`, PR into `dev`
    (title `chore: sync dev with main (round N)`), merge. The round number is **not continuous** —
    find the last one with `git log --all --oneline --grep="sync dev with main"`.
-6. `SeshatOS` (`seshat-backend`) and `SeshatCloud` (`seshat-server`) bump in their own PRs:
+6. The terminal command is its own module, so it is tagged after the engine, in two steps of its own:
+   - bump it: `chore/bump-tui-engine-X.Y.Z` off `origin/dev`, `cd tui && go get github.com/KPO-Tech/seshat-runtime@vX.Y.Z && go mod tidy`,
+     build and test **without** the workspace (`cd tui && GOWORK=off go build ./... && GOWORK=off go test ./...`), PR into `dev`, merge, then
+     `dev` into `main` as for any change;
+   - tag it **on `main`**: `git tag -a tui/vX.Y.Z origin/main -m "tui/vX.Y.Z"`, then push the tag alone (it needs a clear yes, like the engine tag).
+     `.github/workflows/release-tui.yml` then checks, without `go.work`, that `tui/go.mod` names the latest engine release and that the module
+     builds and passes its tests; a red run means the tag is not announced and a new one follows (a tag is never moved).
+   Use the same number for both tags when you can (`v1.10.0` and `tui/v1.10.0`) so that the command's version is easy to read. The release binaries
+   (`seshat-<os>-<arch>`, which the installers and `seshat update` download) come from the engine tag: `release.yml` builds them from the workspace.
+   Until `tui/vX.Y.Z` exists, `go install github.com/KPO-Tech/seshat-runtime/tui/cmd/cli@latest` does not work; the installers and the binaries do.
+7. `SeshatOS` (`seshat-backend`) and `SeshatCloud` (`seshat-server`) bump in their own PRs:
    `go get github.com/KPO-Tech/seshat-runtime@vX.Y.Z`, `go mod tidy`, checks, commit. Never add a
    `replace` directive for the engine.
 
