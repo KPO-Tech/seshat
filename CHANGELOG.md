@@ -17,6 +17,8 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- **Shell commands can be confined on macOS and Windows with `srt`.** Landlock only exists on Linux, so on the other systems commands ran with the user's full rights. When Anthropic's `srt` ([sandbox-runtime](https://github.com/anthropic-experimental/sandbox-runtime), Apache-2.0, `npm i -g @anthropic-ai/sandbox-runtime`) is installed and works, the bash tool runs every command through it: writes only in the workspace and the temp folder, no reading of `~/.ssh`, `~/.aws`, `~/.gnupg` and similar, network only to common code hosts and package registries (`SESHAT_SRT_ALLOWED_DOMAINS` and `SESHAT_SRT_ALLOW_WRITE` add to the lists, `SESHAT_SRT=off` turns it off). srt is tried once with a trivial command first: if it is installed but cannot confine (on Windows it needs a one-time `srt windows-install` with a UAC prompt, and is alpha), Seshat logs what srt said and runs as before rather than failing every command. `SandboxBackend()` (Go SDK) and `sandbox_backend` in the config tool report `landlock`, `srt` or `none`, so an interface can say honestly when nothing confines the commands.
+
 - **`install.sh` checks for ripgrep.** The glob and grep tools run ripgrep, and the Linux and macOS installer did not say so (the Windows one already installs it). It now installs it with Homebrew when there is one, and otherwise prints the exact command for the package manager it finds (apt, dnf, pacman, zypper or apk) instead of running `sudo` for you. `SESHAT_SKIP_RIPGREP=1` skips the check, as on Windows.
 
 ## [1.10.0] - 2026-10-17
